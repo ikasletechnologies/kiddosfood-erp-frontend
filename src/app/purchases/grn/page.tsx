@@ -290,460 +290,420 @@ export default function GRNPage() {
   );
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950 p-6 space-y-8 animate-in fade-in duration-500">
+    <div className="min-h-screen bg-gray-50 text-gray-800">
       <WarehouseFormSidebar
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}
         onSuccess={handleWarehouseCreated}
       />
-      <div className="max-w-[1500px] mx-auto space-y-8">
 
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-              <PackageIcon size={28} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Goods Receipt (GRN)</h1>
-              <p className="text-sm text-gray-500 mt-0.5 font-medium flex items-center gap-1.5">
-                <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                Manage vendor shipment verification and stock reconciliation
-              </p>
-            </div>
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <PackageIcon className="h-5 w-5 text-[#f58220]" />
+          <div>
+            <h1 className="text-base font-bold text-gray-800">Goods Receipt (GRN)</h1>
+            <p className="text-xs text-gray-500">Manage vendor shipment verification and stock reconciliation</p>
           </div>
-          <div className="flex items-center gap-3">
-            {view === "NEW" && step === 1 && (
-              <button
-                onClick={() => { setShowScanner(true); setScannedPO(null); setScanInput(""); }}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-95 shrink-0"
-              >
-                <ScanIcon size={18} strokeWidth={3} />
-                Scan PO Label
-              </button>
-            )}
-            <div className="flex p-1 bg-gray-50 dark:bg-white/5 rounded-2xl border border-gray-100 dark:border-white/5">
-              <button
-                onClick={() => { setView("NEW"); setStep(1); }}
-                className={clsx(
-                  "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                  view === "NEW"
-                    ? "bg-white dark:bg-card text-orange-600 shadow-lg shadow-black/[0.03] border border-gray-100 dark:border-white/10"
-                    : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                New Receipt
-              </button>
-              <button
-                onClick={() => setView("HISTORY")}
-                className={clsx(
-                  "px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
-                  view === "HISTORY"
-                    ? "bg-white dark:bg-card text-orange-600 shadow-lg shadow-black/[0.03] border border-gray-100 dark:border-white/10"
-                    : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                Received History
-              </button>
-            </div>
-          </div>
-        </header>
-
-        {view === "HISTORY" ? (
-          /* --- HISTORY VIEW --- */
-          <div className="space-y-6">
-            <div className="bg-white dark:bg-[#12141c] rounded-3xl border border-gray-100 dark:border-white/5 shadow-xl shadow-black/[0.02] overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50/50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
-                  <tr>
-                    {["GRN #", "Vendor", "Reference PO", "Date", "Status", "Items", "Actions"].map(h => (
-                      <th key={h} className={clsx("px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]", h === "Actions" ? "text-right" : "text-left")}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-                  {loading ? (
-                    <tr><td colSpan={6} className="px-8 py-16 text-center"><Loader2Icon className="mx-auto text-orange-500 animate-spin" /></td></tr>
-                  ) : history.length === 0 ? (
-                    <tr><td colSpan={6} className="px-8 py-16 text-center text-gray-400 font-bold uppercase text-xs tracking-widest">No receipt history found</td></tr>
-                  ) : history.map((grn) => (
-                    <tr key={grn.id} className="hover:bg-gray-50/30 dark:hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-8 py-5 font-bold text-xs text-orange-600">{formatERPNumber("GRN", grn.id, grn.createdAt)}</td>
-                      <td className="px-8 py-5">
-                        <div className="text-gray-900 dark:text-white font-black uppercase text-xs">{grn.procurementOrder?.vendor?.name}</div>
-                        <div className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 tracking-tight">Verified Shipment</div>
-                      </td>
-                      <td className="px-8 py-5 font-bold text-gray-500 uppercase text-[10px] tracking-tight">
-                        {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
-                      </td>
-                      <td className="px-8 py-5 text-gray-500 font-bold text-xs">{new Date(grn.receivedAt || grn.createdAt).toLocaleDateString()}</td>
-                      <td className="px-8 py-5">
-                        <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 text-[10px] font-black rounded-xl uppercase tracking-widest border border-emerald-100/50 dark:border-emerald-500/20">
-                          {grn.status}
-                        </span>
-                      </td>
-                      <td className="px-8 py-5">
-                        <div className="flex flex-wrap gap-1.5">
-                          {grn.items?.slice(0, 2).map((item: any) => (
-                            <span key={item.id} className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 text-[9px] rounded-lg font-black uppercase border border-gray-200/50">
-                              {item.inventoryItem?.name} ({item.acceptedQty})
-                            </span>
-                          ))}
-                          {grn.items?.length > 2 && <span className="text-[10px] font-bold text-gray-400 ml-1">+{grn.items.length - 2}</span>}
-                        </div>
-                      </td>
-                      <td className="px-8 py-5 text-right">
-                        <button
-                          onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
-                          className="px-4 py-2 bg-slate-100 dark:bg-white/5 hover:bg-orange-50 dark:hover:bg-orange-500/10 text-slate-600 dark:text-slate-300 hover:text-orange-600 text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors border border-transparent hover:border-orange-200 dark:hover:border-orange-500/20"
-                        >
-                          Generate Bill
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : step === 1 ? (
-          /* --- STEP 1: SELECT PO --- */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start animate-in slide-in-from-bottom-4 duration-500">
-            {/* Left: Pending Purchase Orders */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="relative max-w-lg">
-                <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input
-                  type="text"
-                  placeholder="Search Vendor or PO #"
-                  value={poSearch}
-                  onChange={e => setPoSearch(e.target.value)}
-                  className="w-full pl-12 pr-6 py-4 bg-white dark:bg-[#12141c] border border-gray-100 dark:border-white/5 rounded-2xl text-sm font-bold shadow-xl shadow-black/[0.02] outline-none focus:ring-2 ring-orange-500/10 focus:border-orange-500 transition-all transition-all"
-                />
-              </div>
-
-              {loading ? (
-                <div className="py-24 text-center"><Loader2Icon className="mx-auto text-orange-500 animate-spin" size={32} /></div>
-              ) : filteredPOs.length === 0 ? (
-                <div className="py-32 bg-white dark:bg-[#12141c] rounded-[2.5rem] border border-dashed border-gray-200 dark:border-white/5 text-center text-gray-400 shadow-inner">
-                  <div className="w-16 h-16 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <PackageIcon className="text-gray-300" size={32} />
-                  </div>
-                  <p className="text-xs font-black uppercase tracking-widest">No pending purchase orders available</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredPOs.map(po => (
-                    <button
-                      key={po.id}
-                      onClick={() => selectPO(po)}
-                      className="flex flex-col p-8 bg-white dark:bg-[#12141c] border border-gray-100 dark:border-white/5 rounded-[2.5rem] hover:border-orange-500/50 hover:shadow-2xl hover:shadow-orange-500/[0.05] transition-all text-left group overflow-hidden relative"
-                    >
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-orange-500/5 rounded-bl-[100px] -mr-8 -mt-8" />
-                      <div className="flex items-center justify-between mb-6 relative z-10">
-                        <span className="px-4 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-600 text-[10px] font-black rounded-xl uppercase tracking-widest border border-orange-200/50 dark:border-orange-500/20">
-                          {po.poNumber || "PO-PENDING"}
-                        </span>
-                        <span className="text-[10px] font-black text-gray-400">{new Date(po.createdAt).toLocaleDateString()}</span>
-                      </div>
-                      <h3 className="text-lg font-black text-gray-900 dark:text-white group-hover:text-orange-600 transition-colors uppercase truncate mb-6 relative z-10">
-                        {po.vendor.name}
-                      </h3>
-                      <div className="flex items-center justify-between pt-6 border-t border-gray-50 dark:border-white/5 relative z-10">
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest">Total Value</span>
-                          <span className="text-xl font-black text-gray-900 dark:text-white leading-tight">₹{po.totalAmount.toLocaleString()}</span>
-                        </div>
-                        <div className="w-10 h-10 bg-orange-50 dark:bg-orange-500/10 rounded-xl flex items-center justify-center text-orange-500 group-hover:scale-110 transition-transform">
-                          <ArrowRightIcon size={20} />
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Right: Policy & Stock Impact */}
-            {/* <div className="space-y-6">
-              <div className="bg-orange-50 dark:bg-orange-500/5 border border-orange-100 dark:border-orange-500/10 p-8 rounded-[2.5rem] space-y-4 shadow-sm border-l-4 border-l-orange-500">
-                <div className="flex items-center gap-3 text-orange-600">
-                  <AlertTriangleIcon size={24} />
-                  <p className="text-xs font-black uppercase tracking-tight">Receipt Policy</p>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1 shrink-0" />
-                    <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300 leading-relaxed">
-                      Verify the physical count against the digital manifest before confirming.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1 shrink-0" />
-                    <p className="text-[10px] font-bold text-orange-700 dark:text-orange-300 leading-relaxed">
-                      Reporting damages after receipt may delay credit note processing.
-                    </p>
-                  </div>
-                </div>
-              </div> */}
-
-            {/* <div className="bg-slate-50 dark:bg-white/5 rounded-[2.5rem] p-8">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Stock Impact</p>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500">HQ Stock</span>
-                    <span className="text-[10px] font-black text-emerald-500 flex items-center gap-1">INCREASE <ArrowRightIcon size={10} /></span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500">Account Payable</span>
-                    <span className="text-[10px] font-black text-orange-500 flex items-center gap-1">UPDATED <ArrowRightIcon size={10} /></span>
-                  </div>
-                </div>
-              </div> */}
-          </div>
-      ) : (
-      /* --- STEP 2: VERIFY QUANTITIES --- */
-      <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
-        <div className="bg-white dark:bg-[#12141c] p-8 rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-xl shadow-black/[0.02] flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 rounded-bl-[120px] -mr-12 -mt-12" />
-          <div className="relative z-10">
-            <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Verify Shipment Content</h2>
-            <p className="text-sm text-gray-500 mt-1 font-medium">
-              PO Reference: <span className="font-black text-orange-600">{selectedPO?.poNumber}</span> • Vendor: <span className="font-black text-gray-900 dark:text-gray-200">{selectedPO?.vendor.name}</span>
-            </p>
-          </div>
-          <div className="flex flex-col md:flex-row md:items-center gap-4 relative z-10">
-            <div className="flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Default Warehouse</label>
-                <button
-                  type="button"
-                  onClick={() => setShowWarehouseModal(true)}
-                  className="text-[10px] font-black text-orange-500 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1 uppercase tracking-wider transition-colors"
-                >
-                  <PlusIcon size={11} /> Add New
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={defaultWarehouseId}
-                  onChange={e => handleDefaultWarehouseChange(e.target.value)}
-                  className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900 outline-none focus:border-orange-500"
-                >
-                  <option value="">Select Warehouse</option>
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                  <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setShowWarehouseModal(true)}
-                  className="p-2 border border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-500 hover:text-white text-orange-500 rounded-xl transition-all shadow-sm"
-                  title="Add New Warehouse"
-                >
-                  <PlusIcon size={16} />
-                </button>
-              </div>
-            </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {view === "NEW" && step === 1 && (
             <button
-              onClick={() => setStep(1)}
-              className="px-6 py-3 border-2 border-gray-100 dark:border-white/5 rounded-2xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-all self-end"
+              onClick={() => { setShowScanner(true); setScannedPO(null); setScanInput(""); }}
+              className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors shadow-sm"
             >
-              Change PO Source
+              <ScanIcon size={14} strokeWidth={2.5} />
+              Scan PO Label
+            </button>
+          )}
+          <div className="flex p-1 bg-gray-100 rounded-lg border border-gray-200">
+            <button
+              onClick={() => { setView("NEW"); setStep(1); }}
+              className={clsx(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
+                view === "NEW"
+                  ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                  : "text-gray-600 hover:text-gray-900"
+              )}
+            >
+              New Receipt
+            </button>
+            <button
+              onClick={() => setView("HISTORY")}
+              className={clsx(
+                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors",
+                view === "HISTORY"
+                  ? "bg-white text-gray-900 shadow-sm border border-gray-200"
+                  : "text-gray-600 hover:text-gray-900"
+              )}
+            >
+              Received History
             </button>
           </div>
         </div>
+      </div>
 
-        <div className="bg-white dark:bg-[#12141c] rounded-[2.5rem] border border-gray-100 dark:border-white/5 shadow-xl shadow-black/[0.02] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50/50 dark:bg-white/5 border-b border-gray-100 dark:border-white/5">
-              <tr>
-                <th className="px-8 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Material</th>
-                <th className="px-8 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Traceability</th>
-                <th className="px-8 py-5 text-left text-[10px] font-black text-gray-400 uppercase tracking-widest">Warehouse</th>
-                <th className="px-8 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Ordered</th>
-                <th className="px-8 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Received</th>
-                <th className="px-8 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Rejected</th>
-                <th className="px-8 py-5 text-center text-[10px] font-black text-gray-400 uppercase tracking-widest">Accepted</th>
-                <th className="px-8 py-5"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-white/5">
-              {grnItems.map((item, idx) => {
-                const originalItem = selectedPO?.poItems[idx];
-                return (
-                  <tr key={idx} className="hover:bg-gray-50/30 dark:hover:bg-white/[0.01] transition-colors">
-                    <td className="px-8 py-6">
-                      <div className="font-black text-gray-900 dark:text-white uppercase text-xs">{originalItem?.inventoryItem.name}</div>
-                      <div className="text-[9px] text-gray-400 font-black uppercase tracking-widest mt-1 opacity-70">UNIT: {originalItem?.inventoryItem.unit}</div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="space-y-2">
-                        <div className="flex gap-2 items-center">
-                          <div className="w-32 px-3 py-2 bg-orange-50 dark:bg-orange-500/5 border border-orange-100 dark:border-orange-500/10 rounded-xl flex items-center justify-center cursor-not-allowed">
-                            <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Auto Batch</span>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Lot Number"
-                            value={item.lotNumber || ""}
-                            onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
-                            className="w-32 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none focus:border-orange-500 text-gray-900 dark:text-white"
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <div className="flex flex-col">
-                            <label className="text-[8px] text-gray-400 font-bold uppercase ml-1 mb-0.5">Mfg Date</label>
-                            <input
-                              type="date"
-                              value={item.mfgDate || ""}
-                              onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                              className="w-32 px-2 py-1 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-[10px] outline-none text-gray-900 dark:text-white"
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <label className="text-[8px] text-gray-400 font-bold uppercase ml-1 mb-0.5">Exp Date</label>
-                            <input
-                              type="date"
-                              value={item.expDate || ""}
-                              onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                              className="w-32 px-2 py-1 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-[10px] outline-none text-gray-900 dark:text-white"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={item.warehouseId || ""}
-                          onChange={e => updateItemStr(idx, "warehouseId", e.target.value)}
-                          className="w-44 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none focus:border-orange-500 text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900"
-                        >
-                          <option value="">Select Warehouse</option>
-                          {warehouses.map(w => (
-                            <option key={w.id} value={w.id}>{w.name}</option>
-                          ))}
-                          <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => setShowWarehouseModal(true)}
-                          className="p-2 border border-gray-200 dark:border-white/10 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-500 rounded-xl text-gray-400 transition-all"
-                          title="Add Warehouse"
-                        >
-                          <PlusIcon size={14} />
-                        </button>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-center">
-                      <span className="px-3 py-1.5 bg-gray-50 dark:bg-white/5 rounded-lg text-xs font-black text-gray-400 uppercase">{item.quantity}</span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex justify-center">
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.receivedQty}
-                          onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
-                          className="w-24 text-center px-4 py-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl font-black text-gray-700 dark:text-gray-200 outline-none focus:border-orange-500 focus:ring-4 ring-orange-500/10 transition-all"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex justify-center">
-                        <input
-                          type="number"
-                          min={0}
-                          max={item.receivedQty}
-                          value={item.rejectedQty}
-                          onChange={e => updateItem(idx, "rejectedQty", Number(e.target.value))}
-                          className="w-24 text-center px-4 py-3 bg-red-50/30 dark:bg-red-500/5 border border-red-100 dark:border-red-500/20 rounded-2xl text-red-600 font-black outline-none focus:border-red-400 focus:ring-4 ring-red-500/10 transition-all"
-                        />
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex justify-center">
-                        <span className="w-24 text-center px-4 py-3 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-2xl font-black border border-emerald-100/50 dark:border-emerald-500/20">
-                          {item.acceptedQty}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      {item.rejectedQty > 0 ? (
-                        <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500 mx-auto">
-                          <XCircleIcon size={16} />
-                        </div>
-                      ) : item.acceptedQty < item.quantity ? (
-                        <div className="w-8 h-8 rounded-full bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center text-amber-500 mx-auto">
-                          <AlertTriangleIcon size={16} />
-                        </div>
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center text-emerald-500 mx-auto">
-                          <CheckCircle2Icon size={16} />
-                        </div>
-                      )}
+      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+        {view === "HISTORY" ? (
+          /* ── HISTORY VIEW ── */
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                  <th className="px-4 py-3 text-left">GRN #</th>
+                  <th className="px-4 py-3 text-left">Vendor</th>
+                  <th className="px-4 py-3 text-left">Reference PO</th>
+                  <th className="px-4 py-3 text-left">Date</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3 text-left">Items</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center">
+                      <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            { label: "Ordered", value: grnItems.reduce((s, i) => s + i.quantity, 0), color: "text-gray-900 dark:text-white", bg: "bg-white dark:bg-[#12141c]" },
-            { label: "Received", value: grnItems.reduce((s, i) => s + i.receivedQty, 0), color: "text-orange-500", bg: "bg-orange-50/30 dark:bg-orange-500/5" },
-            { label: "Rejected", value: grnItems.reduce((s, i) => s + i.rejectedQty, 0), color: "text-red-500", bg: "bg-red-50/30 dark:bg-red-500/5" },
-            { label: "Accepted", value: grnItems.reduce((s, i) => s + i.acceptedQty, 0), color: "text-emerald-500", bg: "bg-emerald-50/30 dark:bg-emerald-500/5" },
-          ].map(stat => (
-            <div key={stat.label} className={clsx("rounded-[2rem] p-8 border border-gray-100 dark:border-white/5 shadow-xl shadow-black/[0.02] text-center", stat.bg)}>
-              <div className={clsx("text-4xl font-black tracking-tighter mb-2", stat.color)}>
-                {stat.value}
-              </div>
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em]">{stat.label}</p>
+                ) : history.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-16 text-center text-gray-500 text-sm font-semibold">
+                      No receipt history found
+                    </td>
+                  </tr>
+                ) : history.map((grn) => (
+                  <tr key={grn.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 font-semibold text-xs text-gray-800">
+                      {formatERPNumber("GRN", grn.id, grn.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-gray-800 font-semibold text-sm">{grn.procurementOrder?.vendor?.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">Verified Shipment</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-medium text-gray-700">
+                      {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">
+                      {new Date(grn.receivedAt || grn.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                        {grn.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {grn.items?.slice(0, 2).map((item: any) => (
+                          <span key={item.id} className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded border border-gray-200">
+                            {item.inventoryItem?.name} ({item.acceptedQty})
+                          </span>
+                        ))}
+                        {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 ml-1">+{grn.items.length - 2}</span>}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
+                        className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors"
+                      >
+                        Generate Bill
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : step === 1 ? (
+          /* ── STEP 1: SELECT PO ── */
+          <div className="space-y-4">
+            <div className="relative max-w-md">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search Vendor or PO #..."
+                value={poSearch}
+                onChange={e => setPoSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220]"
+              />
             </div>
-          ))}
-        </div>
 
-        {/* Bottom Actions */}
-        <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-8">
-          <button
-            onClick={handleSaveDraft}
-            className="w-full sm:w-auto px-8 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-          >
-            Save Draft
-          </button>
-          <button
-            onClick={handleSubmitForReview}
-            className="w-full sm:w-auto px-8 py-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-850 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-          >
-            Submit
-          </button>
-          <button
-            onClick={handlePrintGRN}
-            className="w-full sm:w-auto px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-          >
-            Print GRN
-          </button>
-          <button
-            onClick={handleCreateAndApprove}
-            disabled={submitting}
-            className="w-full sm:w-auto px-10 py-4 bg-orange-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-orange-500/20 hover:bg-orange-700 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
-            Approve & Sync
-          </button>
-        </div>
-      </div>
+            {loading ? (
+              <div className="py-16 text-center"><Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" /></div>
+            ) : filteredPOs.length === 0 ? (
+              <div className="py-20 bg-white rounded-lg border border-gray-200 text-center text-gray-500">
+                <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center mx-auto mb-3 text-[#f58220]">
+                  <PackageIcon className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-semibold text-gray-800">No Pending Purchase Orders</p>
+                <p className="text-xs text-gray-500 mt-0.5">There are no approved purchase orders ready for receiving.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredPOs.map(po => (
+                  <div
+                    key={po.id}
+                    onClick={() => selectPO(po)}
+                    className="bg-white border border-gray-200 rounded-lg p-4 hover:border-[#f58220] transition-colors cursor-pointer flex flex-col justify-between group space-y-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 bg-orange-50 text-[#f58220] text-xs font-semibold rounded border border-orange-200">
+                        {po.poNumber || "PO-PENDING"}
+                      </span>
+                      <span className="text-xs text-gray-500">{new Date(po.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#f58220] transition-colors truncate">
+                        {po.vendor.name}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-1">Ready for receiving</p>
+                    </div>
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                      <div>
+                        <span className="text-xs text-gray-500 block">Total Value</span>
+                        <span className="text-sm font-bold text-gray-800">₹{po.totalAmount.toLocaleString()}</span>
+                      </div>
+                      <span className="text-xs font-semibold text-[#f58220] flex items-center gap-1 group-hover:underline">
+                        Select PO <ArrowRightIcon size={14} />
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── STEP 2: VERIFY QUANTITIES ── */
+          <div className="space-y-5">
+            {/* ── Summary KPI Strip (Top) ── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: "Ordered Quantity", value: grnItems.reduce((s, i) => s + i.quantity, 0), color: "text-gray-800", dot: "bg-gray-400" },
+                { label: "Received Quantity", value: grnItems.reduce((s, i) => s + i.receivedQty, 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
+                { label: "Rejected Quantity", value: grnItems.reduce((s, i) => s + i.rejectedQty, 0), color: "text-red-600", dot: "bg-red-500" },
+                { label: "Accepted Quantity", value: grnItems.reduce((s, i) => s + i.acceptedQty, 0), color: "text-green-600", dot: "bg-green-500" },
+              ].map(stat => (
+                <div key={stat.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm">
+                  <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
+                  <div>
+                    <p className="text-xs text-gray-500 font-medium">{stat.label}</p>
+                    <p className={clsx("text-lg font-bold mt-0.5", stat.color)}>{stat.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Verify Shipment Header Card */}
+            <div className="bg-white p-4 rounded-lg border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-bold text-gray-800">Verify Shipment Content</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  PO Reference: <span className="font-semibold text-[#f58220]">{selectedPO?.poNumber}</span> • Vendor: <span className="font-semibold text-gray-800">{selectedPO?.vendor.name}</span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-500 font-medium">Default Warehouse:</label>
+                  <select
+                    value={defaultWarehouseId}
+                    onChange={e => handleDefaultWarehouseChange(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-800 bg-white outline-none focus:border-[#f58220]"
+                  >
+                    <option value="">Select Warehouse</option>
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                    <option value="ADD_NEW" className="font-bold text-[#f58220]">+ Add New Warehouse...</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowWarehouseModal(true)}
+                    className="p-1.5 border border-gray-200 bg-gray-50 hover:bg-orange-50 hover:text-[#f58220] text-gray-500 rounded-lg transition-colors"
+                    title="Add New Warehouse"
+                  >
+                    <PlusIcon size={14} />
+                  </button>
+                </div>
+                <button
+                  onClick={() => setStep(1)}
+                  className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Change PO Source
+                </button>
+              </div>
+            </div>
+
+            {/* Materials Table */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                      <th className="px-4 py-3 text-left">Material</th>
+                      <th className="px-4 py-3 text-left">Traceability</th>
+                      <th className="px-4 py-3 text-left">Warehouse</th>
+                      <th className="px-4 py-3 text-center">Ordered</th>
+                      <th className="px-4 py-3 text-center">Received</th>
+                      <th className="px-4 py-3 text-center">Rejected</th>
+                      <th className="px-4 py-3 text-center">Accepted</th>
+                      <th className="px-4 py-3 text-center"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {grnItems.map((item, idx) => {
+                      const originalItem = selectedPO?.poItems[idx];
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-gray-800 text-xs">{originalItem?.inventoryItem.name}</div>
+                            <div className="text-[11px] text-gray-500 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="px-2 py-1 bg-orange-50 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold">
+                                Auto Batch
+                              </span>
+                              <input
+                                type="text"
+                                placeholder="Lot Number"
+                                value={item.lotNumber || ""}
+                                onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
+                                className="w-28 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800"
+                              />
+                              <input
+                                type="date"
+                                title="Mfg Date"
+                                value={item.mfgDate || ""}
+                                onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
+                                className="w-28 px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800"
+                              />
+                              <input
+                                type="date"
+                                title="Exp Date"
+                                value={item.expDate || ""}
+                                onChange={e => updateItemStr(idx, "expDate", e.target.value)}
+                                className="w-28 px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <select
+                                value={item.warehouseId || ""}
+                                onChange={e => updateItemStr(idx, "warehouseId", e.target.value)}
+                                className="w-36 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800"
+                              >
+                                <option value="">Select Warehouse</option>
+                                {warehouses.map(w => (
+                                  <option key={w.id} value={w.id}>{w.name}</option>
+                                ))}
+                                <option value="ADD_NEW" className="font-bold text-[#f58220]">+ Add New Warehouse...</option>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => setShowWarehouseModal(true)}
+                                className="p-1.5 border border-gray-200 hover:border-orange-300 hover:bg-orange-50 hover:text-[#f58220] rounded-lg text-gray-400 transition-colors"
+                                title="Add Warehouse"
+                              >
+                                <PlusIcon size={14} />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="px-2.5 py-1 bg-gray-100 rounded text-xs font-semibold text-gray-700">{item.quantity}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.receivedQty}
+                              onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
+                              className="w-20 text-center px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg font-semibold text-xs text-gray-800 outline-none focus:border-[#f58220]"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              max={item.receivedQty}
+                              value={item.rejectedQty}
+                              onChange={e => updateItem(idx, "rejectedQty", Number(e.target.value))}
+                              className="w-20 text-center px-2.5 py-1.5 bg-red-50/50 border border-red-200 rounded-lg text-red-600 font-semibold text-xs outline-none focus:border-red-400"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-block w-20 text-center px-2.5 py-1.5 bg-green-50 text-green-700 rounded-lg font-bold text-xs border border-green-200">
+                              {item.acceptedQty}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {item.rejectedQty > 0 ? (
+                              <div className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center text-red-500 mx-auto" title="Some rejected">
+                                <XCircleIcon size={14} />
+                              </div>
+                            ) : item.acceptedQty < item.quantity ? (
+                              <div className="w-6 h-6 rounded-full bg-amber-50 flex items-center justify-center text-amber-500 mx-auto" title="Partial quantity">
+                                <AlertTriangleIcon size={14} />
+                              </div>
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-green-50 flex items-center justify-center text-green-600 mx-auto" title="Fully accepted">
+                                <CheckCircle2Icon size={14} />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ── Bottom Actions Footer Bar ── */}
+            <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="text-xs text-gray-500">
+                <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{grnItems.reduce((s, i) => s + i.acceptedQty, 0)}</span> units
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors"
+                >
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitForReview}
+                  className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-lg transition-colors"
+                >
+                  Submit
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintGRN}
+                  className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-sm font-semibold rounded-lg transition-colors"
+                >
+                  Print GRN
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateAndApprove}
+                  disabled={submitting}
+                  className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
+                  Approve & Sync
+                </button>
+              </div>
+            </div>
+          </div>
         )}
-    </div>
+      </div>
 
       {/* ── Purchase Order Label Scanner Modal ── */ }
-  {
-    showScanner && (
+      {showScanner && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
         <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 p-8 text-white space-y-6">
 
@@ -903,8 +863,7 @@ export default function GRNPage() {
 
         </div>
       </div>
-    )
-  }
-    </div >
+      )}
+    </div>
   );
 }

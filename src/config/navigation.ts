@@ -124,20 +124,8 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     items: [
       {
         icon: ChefHat,
-        label: "Recipe Master",
+        label: "Recipes",
         href: "/production/recipes",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Layers,
-        label: "Formula Scaling",
-        href: "/production/formula-scaling",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Calculator,
-        label: "Recipe Costing",
-        href: "/production/recipe-costing",
         roles: SUPER_ONLY,
       },
     ],

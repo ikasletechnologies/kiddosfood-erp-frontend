@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  IndianRupee, Percent, TrendingUp, AlertTriangle, 
-  ChefHat, HelpCircle, RefreshCw, BarChart2, DollarSign, Sliders
+import {
+  AlertTriangle, ChefHat, BarChart2, Sliders
 } from "lucide-react";
 import { recipesApi, productsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
@@ -26,18 +25,15 @@ interface CostData {
   breakdown: CostBreakdown[];
 }
 
-export default function RecipeCostingPage() {
+export default function RecipeCostingTab() {
   const [recipes, setRecipes] = useState<any[]>([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [costLoading, setCostLoading] = useState(false);
   const [costData, setCostData] = useState<CostData | null>(null);
-  
-  // Cost spike simulation (percentage, e.g. 0% mean original, 10% means +10%)
+
   const [costModifier, setCostModifier] = useState<number>(0);
-  // Custom sale price for margin simulation
   const [customSalePrice, setCustomSalePrice] = useState<number>(0);
-  // Original base product price
   const [productSalePrice, setProductSalePrice] = useState<number>(0);
 
   useEffect(() => {
@@ -57,7 +53,6 @@ export default function RecipeCostingPage() {
     loadRecipes();
   }, []);
 
-  // Fetch recipe cost and product details when selected recipe changes
   useEffect(() => {
     if (!selectedRecipeId) return;
     async function getCostDetails() {
@@ -68,14 +63,13 @@ export default function RecipeCostingPage() {
           productsApi.getAll()
         ]);
         setCostData(cRes.data);
-        
-        // Find product price
+
         const recipe = recipes.find((r) => r.id === selectedRecipeId);
         const product = pRes.data?.find((p: any) => p.id === recipe?.productId);
         const salePrice = product?.customerPrice || product?.basePrice || 100;
         setProductSalePrice(salePrice);
         setCustomSalePrice(salePrice);
-        setCostModifier(0); // Reset simulation
+        setCostModifier(0);
       } catch (err) {
         toast.error("Failed to load cost breakdown");
       } finally {
@@ -87,56 +81,41 @@ export default function RecipeCostingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] flex flex-col items-center justify-center p-6">
-        <div className="w-12 h-12 border-4 border-[#F97316] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Cost Analyzer Loading...</p>
+      <div className="flex flex-col items-center justify-center py-24">
+        <div className="w-10 h-10 border-4 border-[#F97316] border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cost Analyzer Loading...</p>
       </div>
     );
   }
 
-  // Simulations
   const factor = 1 + (costModifier / 100);
   const simulatedTotalCost = costData ? costData.totalCost * factor : 0;
   const simulatedCostPerUnit = costData && costData.yieldQty > 0 ? simulatedTotalCost / costData.yieldQty : 0;
-  
-  // Margins
-  const grossMargin = customSalePrice > 0 
-    ? ((customSalePrice - simulatedCostPerUnit) / customSalePrice) * 100 
+
+  const grossMargin = customSalePrice > 0
+    ? ((customSalePrice - simulatedCostPerUnit) / customSalePrice) * 100
     : 0;
 
   return (
-    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in duration-500">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 border-b border-slate-200 dark:border-slate-800">
+    <div className="space-y-6">
+      {/* Recipe selector */}
+      <div className="flex justify-between items-center bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
         <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#F97316] rounded-xl shadow-lg shadow-orange-600/20 text-white">
-              <IndianRupee size={22} />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
-                Recipe <span className="text-[#F97316]">Costing</span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5 font-semibold tracking-wider uppercase">
-                Real-time commodity cost rollup and profitability simulation
-              </p>
-            </div>
-          </div>
+          <h3 className="text-sm font-bold text-gray-800">Select Recipe to Cost</h3>
+          <p className="text-xs text-gray-500">Analyze ingredient costs, simulate price changes and profit margin</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedRecipeId}
-            onChange={(e) => setSelectedRecipeId(e.target.value)}
-            className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wider focus:outline-none"
-          >
-            {recipes.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
+        <select
+          value={selectedRecipeId}
+          onChange={(e) => setSelectedRecipeId(e.target.value)}
+          className="bg-white border border-gray-200 text-gray-800 rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none min-w-[200px]"
+        >
+          {recipes.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {costLoading ? (
         <div className="flex flex-col items-center justify-center py-20">
@@ -145,10 +124,10 @@ export default function RecipeCostingPage() {
         </div>
       ) : costData ? (
         <div className="space-y-6 md:space-y-8">
-          
+
           {/* Cost Rollup metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
+
             <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Base Cost per Yield</span>
               <div className="flex items-baseline gap-1">
@@ -190,7 +169,7 @@ export default function RecipeCostingPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-            
+
             {/* Simulation controls */}
             <div className="lg:col-span-1 space-y-6">
               <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-6 space-y-6">
@@ -207,7 +186,7 @@ export default function RecipeCostingPage() {
                       {costModifier > 0 ? `+${costModifier}%` : `${costModifier}%`}
                     </span>
                   </div>
-                  <input 
+                  <input
                     type="range"
                     min="-50"
                     max="100"
@@ -229,7 +208,7 @@ export default function RecipeCostingPage() {
                     <span className="text-slate-900 dark:text-white font-mono font-bold">₹{customSalePrice}</span>
                   </div>
                   <div className="relative">
-                    <input 
+                    <input
                       type="number"
                       value={customSalePrice || ""}
                       onChange={(e) => setCustomSalePrice(Number(e.target.value))}
@@ -304,9 +283,12 @@ export default function RecipeCostingPage() {
 
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-slate-900 rounded-[32px] border border-dashed border-slate-200 dark:border-slate-800">
-          <ChefHat size={48} className="text-slate-300 dark:text-slate-700 mb-4" />
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">No Cost Breakdown Data Available</p>
+        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-200 text-center">
+          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3">
+            <ChefHat size={24} />
+          </div>
+          <p className="text-sm font-semibold text-gray-800">No Cost Breakdown Data Available</p>
+          <p className="text-xs text-gray-500 mt-1">Select a recipe from the list above to view itemized costs and profit margin.</p>
         </div>
       )}
     </div>

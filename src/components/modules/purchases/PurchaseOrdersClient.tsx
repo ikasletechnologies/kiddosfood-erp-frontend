@@ -29,14 +29,14 @@ interface POItem {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-100 text-slate-600 border border-slate-200 shadow-sm",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-600 border border-amber-200 shadow-sm shadow-amber-500/10",
-  APPROVED: "bg-orange-50 text-orange-600 border border-orange-200 shadow-sm shadow-orange-500/10",
-  SENT: "bg-blue-50 text-blue-600 border border-blue-200 shadow-sm shadow-blue-500/10",
-  PARTIALLY_RECEIVED: "bg-orange-50 text-orange-600 border border-orange-200 shadow-sm shadow-orange-500/10",
-  RECEIVED: "bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm shadow-emerald-500/10",
-  CLOSED: "bg-emerald-900 text-white border border-emerald-800 shadow-sm",
-  CANCELLED: "bg-red-50 text-red-600 border border-red-200 shadow-sm shadow-red-500/10",
+  DRAFT: "bg-slate-50 text-slate-600 border-slate-200",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-600 border-amber-200",
+  APPROVED: "bg-orange-50 text-orange-600 border-orange-200",
+  SENT: "bg-blue-50 text-blue-600 border-blue-200",
+  PARTIALLY_RECEIVED: "bg-orange-50 text-orange-600 border-orange-200",
+  RECEIVED: "bg-emerald-50 text-emerald-600 border-emerald-200",
+  CLOSED: "bg-emerald-900 text-white border-emerald-800",
+  CANCELLED: "bg-red-50 text-red-600 border-red-200",
 };
 
 const STATUS_ICONS: Record<string, any> = {
@@ -289,201 +289,243 @@ export default function PurchaseOrdersClient() {
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
 
   return (
-    <div className={clsx("w-full mx-auto space-y-6", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-            <ShoppingCart size={22} className="text-orange-500" /> Purchase Orders
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Buy raw materials from vendors</p>
-        </div>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setShowSettings(true)} className="p-2 rounded-xl border border-gray-200 dark:border-white/10 group"><Settings size={16} className="text-gray-400 group-hover:text-orange-500 transition-colors" /></button>
-          <button type="button" onClick={fetchAll} className="p-2 rounded-xl border border-gray-200 dark:border-white/10"><RefreshCw size={16} className="text-gray-400" /></button>
-          <Link href="/purchases/new" onClick={() => localStorage.removeItem('draftPurchaseOrder')} className="flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-xl text-sm font-bold"><Plus size={16} /> New PO</Link>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Total Spend", value: formatCurrency(totalSpend), icon: ShoppingCart, color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-500/10" },
-          { label: "Pending GRNs", value: String(orders.filter(o => o.status === 'APPROVED' || o.status === 'SENT').length), icon: Store, color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-500/10" },
-          { label: "Pending Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), icon: AlertCircle, color: "text-red-500", bg: "bg-red-50 dark:bg-red-500/10" },
-
-        ].map((card) => (
-          <div key={card.label} className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 p-6 flex items-center gap-5">
-            <div className={clsx("w-14 h-14 rounded-2xl flex items-center justify-center shrink-0", card.bg)}><card.icon size={24} className={card.color} /></div>
-            <div><p className="text-[11px] font-black text-gray-400 uppercase tracking-widest">{card.label}</p><p className="text-2xl font-black text-gray-900 dark:text-white mt-1">{card.value}</p></div>
+    <div className={clsx("min-h-screen bg-gray-50 text-gray-800", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="h-5 w-5 text-[#f58220]" />
+          <div>
+            <h1 className="text-base font-bold text-gray-800">Purchase Orders</h1>
+            <p className="text-xs text-gray-500">Buy raw materials from vendors</p>
           </div>
-        ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Company Profile"
+          >
+            <Settings size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={fetchAll}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+          </button>
+          <Link
+            href="/purchases/new"
+            onClick={() => localStorage.removeItem('draftPurchaseOrder')}
+            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
+          >
+            <Plus className="h-4 w-4" /> New PO
+          </Link>
+        </div>
       </div>
 
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search orders..." className="w-full pl-9 pr-4 py-2.5 text-sm bg-white dark:bg-card border border-gray-200 rounded-xl" />
-      </div>
+      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+        {/* ── Summary Strip ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { label: "Total Spend", value: formatCurrency(totalSpend), color: "text-gray-700", dot: "bg-gray-400" },
+            { label: "Pending GRNs", value: String(orders.filter(o => o.status === 'APPROVED' || o.status === 'SENT').length), color: "text-[#f58220]", dot: "bg-[#f58220]" },
+            { label: "Pending Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), color: "text-red-600", dot: "bg-red-500" },
+          ].map((card) => (
+            <div key={card.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+              <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", card.dot)} />
+              <div>
+                <p className="text-xs text-gray-500">{card.label}</p>
+                <p className={clsx("text-lg font-bold mt-0.5", card.color)}>{card.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-      <div className="bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-white/5 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">PO No</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Vendor</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Delivery</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Payment</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Details</th>
-                <th className="px-6 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-20 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="w-16 h-16 rounded-3xl bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-300">
-                        <ShoppingCart size={32} />
-                      </div>
-                      <p className="text-sm font-bold text-slate-400">No Purchase Orders found.</p>
-                      <Link href="/purchases/new" onClick={() => localStorage.removeItem('draftPurchaseOrder')} className="text-xs font-black text-orange-500 uppercase tracking-widest mt-2">Create your first PO</Link>
-                    </div>
-                  </td>
+        {/* ── Filters Row ── */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[240px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search orders..."
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+            />
+          </div>
+
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+            {["ALL", "PENDING_APPROVAL", "APPROVED", "SENT", "RECEIVED", "CLOSED"].map(s => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={clsx(
+                  "px-3 py-2 text-xs font-medium transition-colors",
+                  filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                {s === "ALL" ? "All" : s === "PENDING_APPROVAL" ? "Pending Approval" : s.charAt(0) + s.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Table ── */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                  <th className="text-left px-4 py-3">PO No</th>
+                  <th className="text-left px-4 py-3">Vendor</th>
+                  <th className="text-left px-4 py-3">Amount</th>
+                  <th className="text-center px-4 py-3">Status</th>
+                  <th className="text-left px-4 py-3">Delivery</th>
+                  <th className="text-left px-4 py-3">Payment</th>
+                  <th className="text-center px-4 py-3">Details</th>
+                  <th className="text-right px-4 py-3">Actions</th>
                 </tr>
-              ) : filtered.map((po) => {
-                const currentPaid = po.paid ?? 0;
-                const balance = Math.max(0, (po.totalAmount ?? 0) - currentPaid);
-                const StatusIcon = STATUS_ICONS[po.status] || Clock;
-                return (
-                  <tr key={po.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                    <td className="px-6 py-4">
-                      <p className="text-xs font-black text-gray-900 dark:text-white uppercase">{formatERPNumber("PO", po.poNumber || po.id, po.createdAt)}</p>
-                      <p className="text-[10px] text-gray-400 mt-1">{format(new Date(po.createdAt), "dd MMM yyyy")}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-orange-500 shrink-0"><Store size={14} /></div>
-                        <div>
-                          <p className="text-xs font-black text-gray-900 dark:text-white">{po.vendor?.name || "Unknown"}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{po.vendor?.category || 'General Supplier'}</p>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-[#f58220]">
+                          <ShoppingCart className="h-6 w-6" />
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-xs font-black text-gray-900 dark:text-white">{formatCurrency(po.totalAmount)}</p>
-                        <div className="flex flex-col gap-1 w-24">
-                          <div className="flex justify-between items-center text-[8px] font-black text-slate-400 uppercase tracking-widest">
-                            <span>Fulfillment</span>
-                            <span>{Math.round((po.receivedItemsCount || 0) / (po.totalItemsCount || 1) * 100)}%</span>
-                          </div>
-                          <div className="w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full overflow-hidden">
-                            <div 
-                              className={clsx(
-                                "h-full transition-all duration-500",
-                                po.status === 'RECEIVED' ? "bg-emerald-500" : "bg-orange-500"
-                              )} 
-                              style={{ width: `${Math.min(100, (po.receivedItemsCount || 0) / (po.totalItemsCount || 1) * 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-[7px] font-bold text-slate-400 uppercase">
-                            {po.receivedItemsCount || 0} / {po.totalItemsCount || 0} units
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={clsx("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider whitespace-nowrap", STATUS_STYLES[po.status] || STATUS_STYLES.DRAFT)}>
-                        <StatusIcon size={10} />
-                        {po.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {po.expectedDeliveryDate ? (
-                        <div>
-                          <p className={clsx("text-xs font-black", isBefore(new Date(po.expectedDeliveryDate), new Date()) && po.status !== 'RECEIVED' ? "text-red-500" : "text-gray-900 dark:text-white")}>
-                            {format(new Date(po.expectedDeliveryDate), "dd MMM")}
-                          </p>
-                          <p className="text-[9px] text-gray-400 mt-1 uppercase">Expected</p>
-                        </div>
-                      ) : (
-                        <p className="text-xs font-bold text-gray-300 italic">Not set</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <p className={clsx("text-xs font-black", balance <= 0 ? "text-emerald-500" : "text-orange-500")}>
-                          {balance <= 0 ? "FULLY PAID" : formatCurrency(balance)}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <p className="text-[9px] text-gray-400 uppercase">{balance <= 0 ? "Success" : "Pending"}</p>
-                          {balance > 0 && vendors.find(v => v.id === po.vendorId)?.advance > 0 && (
-                            <button 
-                              onClick={() => handleApplyAdvance(po.id)}
-                              className="text-[9px] font-black text-orange-600 hover:text-orange-700 uppercase underline decoration-dotted"
-                            >
-                              Apply Advance
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <button type="button" onClick={() => setViewingDetailsPO(po)} className="text-orange-600 hover:text-orange-700 text-[10px] font-black uppercase tracking-widest">View Details</button>
-                    </td>
-                    <td className="px-6 py-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1 transition-opacity">
-                        {/* Workflow simplified: removed Submit/Approve/Reject actions */}
-                        {po.status === 'PENDING_APPROVAL' && (
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(po.id)}
-                            className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 transition-all mr-1"
-                          >
-                            Approve PO
-                          </button>
-                        )}
-
-                        {(po.status === 'APPROVED' || po.status === 'SENT' || po.status === 'PARTIALLY_RECEIVED') && (
-                          <button type="button" onClick={() => window.location.href = `/purchases/grn?poId=${po.id}`} className="px-3 py-1.5 bg-orange-50 dark:bg-orange-500/10 text-orange-600 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-orange-100 transition-all">Receive Goods</button>
-                        )}
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            window.location.href = `/purchases/edit/${po.id}`;
-                          }}
-                          className="p-2 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-orange-500 transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!isProfileComplete) {
-                              setProfileRequiredForInvoice(true);
-                              setShowSettings(true);
-                              return;
-                            }
-                            setViewingPO(po);
-                          }}
-                          className="p-2 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-orange-500 transition-colors"
-                          title="Invoice"
-                        >
-                          <Download size={14} />
-                        </button>
-                        <button type="button" onClick={() => { setPayingPO(po); setShowPaymentModal(true); }} className="p-2 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-orange-500 transition-colors" title="Pay">
-                          <Wallet size={14} />
-                        </button>
+                        <p className="text-gray-800 font-semibold text-sm">No Purchase Orders Found</p>
+                        <p className="text-gray-500 text-xs">Create your first PO to start ordering raw materials.</p>
+                        <Link href="/purchases/new" onClick={() => localStorage.removeItem('draftPurchaseOrder')} className="mt-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold rounded-lg transition-colors">
+                          Create New PO
+                        </Link>
                       </div>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                ) : filtered.map((po) => {
+                  const currentPaid = po.paid ?? 0;
+                  const balance = Math.max(0, (po.totalAmount ?? 0) - currentPaid);
+                  const style = STATUS_STYLES[po.status] || STATUS_STYLES.DRAFT;
+                  return (
+                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-semibold text-gray-800 text-xs">{formatERPNumber("PO", po.poNumber || po.id, po.createdAt)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{format(new Date(po.createdAt), "dd MMM yyyy")}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-800 text-sm">{po.vendor?.name || "Unknown"}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{po.vendor?.category || 'General Supplier'}</div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-semibold text-gray-800 text-sm">{formatCurrency(po.totalAmount)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {po.receivedItemsCount || 0} / {po.totalItemsCount || 0} units
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style)}>
+                          {po.status.replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {po.expectedDeliveryDate ? (
+                          <div>
+                            <div className={clsx("text-xs font-medium", isBefore(new Date(po.expectedDeliveryDate), new Date()) && po.status !== 'RECEIVED' ? "text-red-600 font-semibold" : "text-gray-700")}>
+                              {format(new Date(po.expectedDeliveryDate), "dd MMM yyyy")}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-0.5">Expected</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Not set</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className={clsx("text-xs font-semibold", balance <= 0 ? "text-emerald-600" : "text-[#f58220]")}>
+                          {balance <= 0 ? "Paid" : formatCurrency(balance)}
+                        </div>
+                        {balance > 0 && vendors.find(v => v.id === po.vendorId)?.advance > 0 && (
+                          <button 
+                            onClick={() => handleApplyAdvance(po.id)}
+                            className="text-xs text-[#f58220] hover:underline mt-0.5 block font-medium"
+                          >
+                            Apply Advance
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setViewingDetailsPO(po)}
+                          className="text-xs font-semibold text-[#f58220] hover:underline"
+                        >
+                          View Details
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1">
+                          {po.status === 'PENDING_APPROVAL' && (
+                            <button
+                              type="button"
+                              onClick={() => handleApprove(po.id)}
+                              className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold hover:bg-emerald-100 transition-colors mr-1"
+                            >
+                              Approve
+                            </button>
+                          )}
+
+                          {(po.status === 'APPROVED' || po.status === 'SENT' || po.status === 'PARTIALLY_RECEIVED') && (
+                            <button
+                              type="button"
+                              onClick={() => window.location.href = `/purchases/grn?poId=${po.id}`}
+                              className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors mr-1"
+                            >
+                              Receive Goods
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => window.location.href = `/purchases/edit/${po.id}`}
+                            className="p-1.5 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 rounded transition-colors"
+                            title="Edit PO"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!isProfileComplete) {
+                                setProfileRequiredForInvoice(true);
+                                setShowSettings(true);
+                                return;
+                              }
+                              setViewingPO(po);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            title="Download Invoice"
+                          >
+                            <Download className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => { setPayingPO(po); setShowPaymentModal(true); }}
+                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            title="Record Payment"
+                          >
+                            <Wallet className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

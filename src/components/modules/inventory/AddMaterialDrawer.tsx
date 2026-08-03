@@ -45,7 +45,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
     vendorId: "",
     hsnCode: "",
     gstRate: 5,
-    franchiseId: "",
+    franchiseId: user?.franchiseId || "hq-001",
     storageType: "DRY",
     shelfLife: 180,
     batchTracking: true,
@@ -71,9 +71,8 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
           setFranchises(fetchedFranchises);
           setVendors(vRes.data || []);
 
-          if (fetchedFranchises.length > 0 && !form.franchiseId) {
-            setForm(prev => ({ ...prev, franchiseId: fetchedFranchises[0].id }));
-          }
+          const defaultFranchise = user?.franchiseId || (fetchedFranchises.length > 0 ? fetchedFranchises[0].id : "hq-001");
+          setForm(prev => ({ ...prev, franchiseId: prev.franchiseId || defaultFranchise }));
 
           // Fetch all materials for duplicate detection
           const mRes = await rawMaterialsApi.getAll().catch(() => ({ data: [] }));
@@ -117,16 +116,13 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
       setError("Material designation is required");
       return;
     }
-    if (!form.franchiseId) {
-      setError("Franchise identification is required");
-      return;
-    }
 
     setSaving(true);
     setError(null);
     try {
       await rawMaterialsApi.create({
         ...form,
+        franchiseId: form.franchiseId || user?.franchiseId || "hq-001",
         initialStock: Number(form.initialStock) || 0,
         createdBy: user?.id,
         requestedAt: new Date().toISOString(),
