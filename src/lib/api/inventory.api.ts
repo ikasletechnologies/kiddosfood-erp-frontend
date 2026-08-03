@@ -58,8 +58,12 @@ export const inventoryApi = {
     api.post('/api/warehouses', data),
   updateWarehouse: (id: string, data: { name?: string, location?: string, type?: string }) => 
     api.patch(`/api/warehouses/${id}`, data),
-  deleteWarehouse: (id: string) => 
+  deleteWarehouse: (id: string) =>
     api.delete(`/api/warehouses/${id}`),
+  getWarehouseStock: (id: string) => api.get(`/api/warehouses/${id}/stock`),
+  getReconciliationSheet: (franchiseId?: string) => api.get('/api/inventory/reconciliation', { params: { franchiseId } }),
+  submitReconciliation: (entries: { itemId: string; physicalCount: number; note?: string }[]) =>
+    api.post('/api/inventory/reconciliation', { entries }),
 };
 
 // --- Production Workflow ---
@@ -67,13 +71,26 @@ export const productionApi = {
   getHistory: (franchiseId?: string) => api.get('/api/production/history', { params: { franchiseId } }),
   startBatch: (data: any) => api.post('/api/production/batch', data),
   stopBatch: (id: string) => api.post(`/api/production/${id}/stop`),
-  approveBatch: (id: string, data?: { actualYield?: number }) => api.post(`/api/production/${id}/approve`, data),
+  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (franchiseId?: string) => api.get('/api/production/batches-pending-qc', { params: { franchiseId } }),
   inspectBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/qc`, data),
   packageBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/package`, data),
   getPackagings: (franchiseId?: string) => api.get('/api/production/packagings', { params: { franchiseId } }),
   getAllBatches: (franchiseId?: string) => api.get('/api/production/batches-all', { params: { franchiseId } }),
+  advanceStage: (id: string, stage: string) => api.patch(`/api/production/${id}/stage`, { stage }),
+};
+
+export const cartonApi = {
+  getAll: (franchiseId?: string) => api.get('/api/production/cartons', { params: { franchiseId } }),
+  create: (data: {
+    batchId: string;
+    cartonSize: string;
+    unitsPerCarton: number;
+    cartonCount: number;
+    weightPerCarton?: number;
+    franchiseId?: string;
+  }) => api.post('/api/production/cartons', data),
 };
 
 export const productBatchesApi = {

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Play, FileText, DollarSign, Settings } from "lucide-react";
+import { Plus, Play, FileText, DollarSign, Settings, X } from "lucide-react";
 import Link from "next/link";
-import api from "@/lib/api";
+import api, { accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -15,6 +15,10 @@ export default function PayrollPage() {
   const [showForm, setShowForm] = useState(false);
   const [processing, setProcessing] = useState<string | null>(null);
   const [form, setForm] = useState({ month: new Date().getMonth() + 1, year: new Date().getFullYear() });
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [payingPayslip, setPayingPayslip] = useState<any>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [paying, setPaying] = useState(false);
 
   async function loadData() {
     setLoading(true);
@@ -29,7 +33,28 @@ export default function PayrollPage() {
     setLoading(false);
   }
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    accountsApi.getAll().then((res) => {
+      setAccounts(res.data || []);
+      if (res.data?.length > 0) setSelectedAccountId(res.data[0].id);
+    }).catch(() => {});
+  }, []);
+
+  async function handleConfirmPay() {
+    if (!payingPayslip || !selectedAccountId) return;
+    setPaying(true);
+    try {
+      await api.patch(`/api/payroll/payslips/${payingPayslip.id}/mark-paid`, { accountId: selectedAccountId });
+      toast.success("Payslip marked as paid");
+      setPayingPayslip(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -150,17 +175,8 @@ export default function PayrollPage() {
                   <div className="flex gap-2">
                     <Link href={`/hr/payroll/payslips/view?id=${ps.id}`} className="text-blue-600 hover:underline text-xs">View</Link>
                     {ps.status !== "PAID" && (
-                      <button 
-                        onClick={async () => {
-                          if (confirm(`Pay ₹${ps.netSalary.toLocaleString()} to ${ps.employee?.user?.fullName}?`)) {
-                            try {
-                              await api.patch(`/api/payroll/payslips/${ps.id}/mark-paid`);
-                              loadData();
-                            } catch (err) {
-                              toast.error("Payment failed");
-                            }
-                          }
-                        }}
+                      <button
+                        onClick={() => setPayingPayslip(ps)}
                         className="text-green-600 hover:underline text-xs font-bold"
                       >
                         Pay Now
@@ -194,6 +210,42 @@ export default function PayrollPage() {
                 <button type="button" onClick={() => setShowForm(false)} className="flex-1 border border-gray-200 py-2 rounded-lg text-sm font-medium">Cancel</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {payingPayslip && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Pay ₹{payingPayslip.netSalary?.toLocaleString()}</h2>
+              <button onClick={() => setPayingPayslip(null)} className="p-1 text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-gray-500">To {payingPayslip.employee?.user?.fullName}</p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Pay From Account</label>
+                <select
+                  value={selectedAccountId}
+                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name} (₹{(a.balance || 0).toLocaleString()})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleConfirmPay}
+                  disabled={paying || !selectedAccountId}
+                  className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-60"
+                >
+                  {paying ? "Processing..." : "Confirm Payment"}
+                </button>
+                <button type="button" onClick={() => setPayingPayslip(null)} className="flex-1 border border-gray-200 py-2 rounded-lg text-sm font-medium">Cancel</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

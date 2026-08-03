@@ -10,6 +10,13 @@ export const posApi = {
   addPayment: (id: string, data: any) => api.post(`/api/orders/${id}/payment`, data),
 };
 
+// --- POS Day Closing / Settlement ---
+export const posSettlementApi = {
+  getToday: (params: any = {}) => api.get('/api/pos/settlement/today', { params }),
+  getLatest: (params: any = {}) => api.get('/api/pos/settlement/latest', { params }),
+  closeDay: (data: any) => api.post('/api/pos/settlement/close', data),
+};
+
 // --- Sales Module (Quotations, Orders, Returns) ---
 export const salesApi = {
   getQuotations: (params?: any) => api.get('/api/sales/quotations', { params }),
@@ -52,6 +59,7 @@ export const customersApi = {
   create: (data: any) => api.post('/api/customers', data),
   update: (id: string, data: any) => api.patch(`/api/customers/${id}`, data),
   delete: (id: string) => api.delete(`/api/customers/${id}`),
+  getLedgerSummary: (params: any = {}) => api.get('/api/customers/ledger-summary', { params }),
 };
 
 // --- Logistics & Transfers (Internal) ---
@@ -64,4 +72,5 @@ export const logisticsApi = {
   getTransfers: (params: any = {}) => api.get('/api/logistics/transfers', { params }),
   initiateTransfer: (data: any) => api.post('/api/logistics/transfers', data),
   completeTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/complete`),
+  getInTransit: (params: any = {}) => api.get('/api/logistics/transfers/in-transit', { params }),
 };

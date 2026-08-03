@@ -40,6 +40,7 @@ const emptyForm = {
   yieldQty: 1,
   yieldUnit: "units",
   instructions: "",
+  estimatedDurationMinutes: null as number | null,
   items: [] as RecipeItem[],
 };
 
@@ -113,6 +114,7 @@ export default function RecipesPage() {
       yieldQty: recipe.yieldQty ?? 1,
       yieldUnit: recipe.yieldUnit ?? "units",
       instructions: recipe.instructions ?? "",
+      estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
       items: (recipe.recipeItems ?? []).map((i: any) => ({
         inventoryItemId: i.inventoryItemId,
         quantityRequired: i.quantityRequired,
@@ -139,6 +141,7 @@ export default function RecipesPage() {
         yieldQty: form.yieldQty,
         yieldUnit: form.yieldUnit,
         instructions: form.instructions || undefined,
+        estimatedDurationMinutes: form.estimatedDurationMinutes,
         items: form.items,
       });
       toast.success(editingId ? "Recipe updated" : "Recipe created");
@@ -643,6 +646,18 @@ export default function RecipesPage() {
                   <option value="ml">ML</option>
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Estimated Duration (minutes)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="e.g. 120"
+                value={form.estimatedDurationMinutes ?? ""}
+                onChange={e => setForm(f => ({ ...f, estimatedDurationMinutes: e.target.value === '' ? null : (parseInt(e.target.value) || 0) }))}
+                className="w-full h-10 bg-slate-50 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 ring-orange-500/50 transition-all"
+              />
             </div>
           </div>
 

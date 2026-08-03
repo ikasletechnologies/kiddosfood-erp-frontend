@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
+import AccountFormModal from "@/components/modals/AccountFormModal";
 
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -159,6 +160,7 @@ export default function PurchaseBillsPage() {
   const [paymentMode, setPaymentMode] = useState("CASH");
   const [accounts, setAccounts] = useState<any[]>([]);
   const [submittingPayment, setSubmittingPayment] = useState(false);
+  const [showAccountModal, setShowAccountModal] = useState(false);
 
   // form
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
@@ -323,7 +325,14 @@ export default function PurchaseBillsPage() {
   };
 
   const handleMakePayment = async () => {
-    if (!paymentBill || !paymentAccount) return toast.error("Please select an account.");
+    if (!paymentBill || !paymentAccount) {
+      if (accounts.length === 0) {
+        toast.error("No account found. Please add a financial account first.");
+        setShowAccountModal(true);
+        return;
+      }
+      return toast.error("Please select an account.");
+    }
     if (!paymentAmount || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0) return toast.error("Valid amount required.");
     
     try {
@@ -918,18 +927,50 @@ export default function PurchaseBillsPage() {
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Mode</label>
               <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
                 <option value="CASH">Cash</option>
-                <option value="BANK">Bank Transfer</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
                 <option value="UPI">UPI</option>
+                <option value="CARD">Card</option>
+                <option value="CHEQUE">Cheque</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Source Account</label>
-              <select value={paymentAccount} onChange={e => setPaymentAccount(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
-                <option value="">Select Account</option>
-                {accounts.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-gray-500 uppercase">Source Account</label>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountModal(true)}
+                  className="text-[10px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
+                >
+                  + Add New
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={paymentAccount}
+                  onChange={e => {
+                    if (e.target.value === "ADD_NEW") {
+                      setShowAccountModal(true);
+                    } else {
+                      setPaymentAccount(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
+                >
+                  <option value="">Select Account</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                  ))}
+                  <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountModal(true)}
+                  className="p-2 border border-gray-200 hover:border-orange-500 hover:bg-orange-50 text-gray-500 hover:text-orange-600 rounded-lg transition-all"
+                  title="Add New Account"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
           <div>
@@ -940,6 +981,15 @@ export default function PurchaseBillsPage() {
           </div>
         </div>
       </Modal>
+
+      <AccountFormModal
+        isOpen={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+        onSuccess={(newAccount) => {
+          setAccounts(prev => [...prev, newAccount]);
+          setPaymentAccount(newAccount.id);
+        }}
+      />
     </div>
   );
 }

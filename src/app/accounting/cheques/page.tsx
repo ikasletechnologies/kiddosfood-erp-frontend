@@ -24,7 +24,7 @@ import {
   ChevronDown
 } from "lucide-react";
 import { clsx } from "clsx";
-import { chequesApi, franchiseApi } from "@/lib/api";
+import { chequesApi, franchiseApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
 export default function ChequeRegistryPage() {
@@ -55,11 +55,24 @@ export default function ChequeRegistryPage() {
   });
 
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [clearingCheque, setClearingCheque] = useState<any>(null);
+  const [clearAccountId, setClearAccountId] = useState("");
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     fetchData();
     fetchFranchises();
+    fetchAccounts();
   }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      const res = await accountsApi.getAll();
+      setAccounts(res.data);
+      if (res.data.length > 0) setClearAccountId(res.data[0].id);
+    } catch (error) {}
+  };
 
   const fetchData = async () => {
     try {
@@ -121,6 +134,24 @@ export default function ChequeRegistryPage() {
       fetchData();
     } catch (error) {
       toast.error("Failed to update status");
+    }
+  };
+
+  // Clearing moves real money — it needs a cash/bank account to clear into (for a
+  // RECEIVABLE cheque) or out of (for a PAYABLE cheque), so it gets its own modal
+  // instead of firing straight from the table row.
+  const handleConfirmClear = async () => {
+    if (!clearingCheque || !clearAccountId) return;
+    try {
+      setClearing(true);
+      await chequesApi.updateStatus(clearingCheque.id, "CLEARED", clearAccountId);
+      toast.success("Cheque cleared and posted to the ledger");
+      setClearingCheque(null);
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to clear cheque");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -302,8 +333,8 @@ export default function ChequeRegistryPage() {
                         <div className="flex justify-end gap-2">
                           {cheque.status === 'PENDING' && (
                             <>
-                              <button 
-                                onClick={() => handleUpdateStatus(cheque.id, 'CLEARED')}
+                              <button
+                                onClick={() => setClearingCheque(cheque)}
                                 className="p-2.5 bg-emerald-50 hover:bg-emerald-500 text-emerald-500 hover:text-white rounded-xl transition-all"
                                 title="Mark as Cleared"
                               >
@@ -433,6 +464,54 @@ export default function ChequeRegistryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── CLEAR CHEQUE MODAL ── */}
+      {clearingCheque && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="px-8 py-6 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black uppercase tracking-widest">Clear Cheque</h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{clearingCheque.chequeNumber} · ₹{clearingCheque.amount.toLocaleString()}</p>
+              </div>
+              <button type="button" onClick={() => setClearingCheque(null)} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-8 space-y-5">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                Clearing this {clearingCheque.type === "RECEIVABLE" ? "incoming" : "outgoing"} cheque will
+                {clearingCheque.type === "RECEIVABLE" ? " credit " : " debit "}
+                the account below by ₹{clearingCheque.amount.toLocaleString()}.
+              </p>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Clear Into / From Account *</label>
+                <select
+                  value={clearAccountId}
+                  onChange={(e) => setClearAccountId(e.target.value)}
+                  className="w-full px-5 py-3.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:border-orange-500 transition-all">
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name} (₹{(a.balance || 0).toLocaleString()})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="p-8 bg-slate-50 dark:bg-white/5 flex gap-3">
+              <button type="button" onClick={() => setClearingCheque(null)} className="flex-1 py-4 border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-100 transition-all">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmClear}
+                disabled={clearing || !clearAccountId}
+                className="flex-[2] py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg shadow-emerald-500/20 transition-all">
+                {clearing ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                {clearing ? "Clearing..." : "Confirm Clearance"}
+              </button>
+            </div>
           </div>
         </div>
       )}

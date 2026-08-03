@@ -24,6 +24,7 @@ import {
 import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi } from "@/lib/api";
 import { clsx } from "clsx";
 import { formatERPNumber } from "@/lib/utils";
+import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 
 interface POItem {
   id: string;
@@ -72,6 +73,7 @@ export default function GRNPage() {
   const [poSearch, setPoSearch] = useState("");
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<string>("");
+  const [showWarehouseModal, setShowWarehouseModal] = useState(false);
 
   const handleSaveDraft = () => {
     toast.success("GRN Draft saved successfully (reference kept local).");
@@ -94,6 +96,10 @@ export default function GRNPage() {
         setWarehouses(list);
         if (list.length > 0) {
           setDefaultWarehouseId(list[0].id);
+          setGrnItems(prev => prev.map(item => ({
+            ...item,
+            warehouseId: item.warehouseId || list[0].id
+          })));
         }
       })
       .catch(err => {
@@ -102,8 +108,25 @@ export default function GRNPage() {
   }, []);
 
   const handleDefaultWarehouseChange = (whId: string) => {
+    if (whId === "ADD_NEW") {
+      setShowWarehouseModal(true);
+      return;
+    }
     setDefaultWarehouseId(whId);
     setGrnItems(prev => prev.map(item => ({ ...item, warehouseId: whId })));
+  };
+
+  const handleWarehouseCreated = (newWh: { id: string; name: string }) => {
+    setWarehouses(prev => {
+      const exists = prev.some(w => w.id === newWh.id);
+      return exists ? prev : [...prev, newWh];
+    });
+    setDefaultWarehouseId(newWh.id);
+    setGrnItems(prev => prev.map(item => ({
+      ...item,
+      warehouseId: item.warehouseId || newWh.id
+    })));
+    toast.success(`Warehouse "${newWh.name}" added and selected for all items!`);
   };
 
   // Scanner Simulator States
@@ -177,6 +200,10 @@ export default function GRNPage() {
   };
 
   const updateItemStr = (idx: number, field: keyof GRNItem, val: string) => {
+    if (field === "warehouseId" && val === "ADD_NEW") {
+      setShowWarehouseModal(true);
+      return;
+    }
     setGrnItems(prev => {
       const next = [...prev];
       const currentItem = { ...next[idx], [field]: val };
@@ -188,9 +215,24 @@ export default function GRNPage() {
   const handleCreateAndApprove = async () => {
     if (!selectedPO) return;
 
+    // If defaultWarehouseId is set, auto-assign to any items missing warehouseId
+    let itemsToSubmit = grnItems;
+    if (defaultWarehouseId) {
+      itemsToSubmit = grnItems.map(item => ({
+        ...item,
+        warehouseId: item.warehouseId || defaultWarehouseId
+      }));
+      setGrnItems(itemsToSubmit);
+    }
+
     // Verify that a warehouse is selected for all items
-    const missingWarehouse = grnItems.some(item => !item.warehouseId);
+    const missingWarehouse = itemsToSubmit.some(item => !item.warehouseId);
     if (missingWarehouse) {
+      if (warehouses.length === 0) {
+        toast.error("No warehouse available. Please add a warehouse first.");
+        setShowWarehouseModal(true);
+        return;
+      }
       toast.error("Please select a destination warehouse for all items.");
       return;
     }
@@ -249,6 +291,11 @@ export default function GRNPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 p-6 space-y-8 animate-in fade-in duration-500">
+      <WarehouseFormSidebar
+        isOpen={showWarehouseModal}
+        onClose={() => setShowWarehouseModal(false)}
+        onSuccess={handleWarehouseCreated}
+      />
       <div className="max-w-[1500px] mx-auto space-y-8">
 
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -466,17 +513,37 @@ export default function GRNPage() {
           </div>
           <div className="flex flex-col md:flex-row md:items-center gap-4 relative z-10">
             <div className="flex flex-col">
-              <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Default Warehouse</label>
-              <select
-                value={defaultWarehouseId}
-                onChange={e => handleDefaultWarehouseChange(e.target.value)}
-                className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900 outline-none focus:border-orange-500"
-              >
-                <option value="">Select Warehouse</option>
-                {warehouses.map(w => (
-                  <option key={w.id} value={w.id}>{w.name}</option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Default Warehouse</label>
+                <button
+                  type="button"
+                  onClick={() => setShowWarehouseModal(true)}
+                  className="text-[10px] font-black text-orange-500 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1 uppercase tracking-wider transition-colors"
+                >
+                  <PlusIcon size={11} /> Add New
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={defaultWarehouseId}
+                  onChange={e => handleDefaultWarehouseChange(e.target.value)}
+                  className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900 outline-none focus:border-orange-500"
+                >
+                  <option value="">Select Warehouse</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))}
+                  <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowWarehouseModal(true)}
+                  className="p-2 border border-orange-500/20 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-500 hover:text-white text-orange-500 rounded-xl transition-all shadow-sm"
+                  title="Add New Warehouse"
+                >
+                  <PlusIcon size={16} />
+                </button>
+              </div>
             </div>
             <button
               onClick={() => setStep(1)}
@@ -547,16 +614,27 @@ export default function GRNPage() {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                      <select
-                        value={item.warehouseId || ""}
-                        onChange={e => updateItemStr(idx, "warehouseId", e.target.value)}
-                        className="w-44 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none focus:border-orange-500 text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900"
-                      >
-                        <option value="">Select Warehouse</option>
-                        {warehouses.map(w => (
-                          <option key={w.id} value={w.id}>{w.name}</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={item.warehouseId || ""}
+                          onChange={e => updateItemStr(idx, "warehouseId", e.target.value)}
+                          className="w-44 px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none focus:border-orange-500 text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-900"
+                        >
+                          <option value="">Select Warehouse</option>
+                          {warehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                          ))}
+                          <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setShowWarehouseModal(true)}
+                          className="p-2 border border-gray-200 dark:border-white/10 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-500 rounded-xl text-gray-400 transition-all"
+                          title="Add Warehouse"
+                        >
+                          <PlusIcon size={14} />
+                        </button>
+                      </div>
                     </td>
                     <td className="px-8 py-6 text-center">
                       <span className="px-3 py-1.5 bg-gray-50 dark:bg-white/5 rounded-lg text-xs font-black text-gray-400 uppercase">{item.quantity}</span>

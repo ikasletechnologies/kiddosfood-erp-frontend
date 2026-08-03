@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, Check, X, Calendar } from "lucide-react";
 import Link from "next/link";
 import api from "@/lib/api";
+import { toast } from "react-hot-toast";
 
 interface Leave {
   id: string;
@@ -33,6 +34,7 @@ export default function LeavesPage() {
   const [showTypeForm, setShowTypeForm] = useState(false);
   const [form, setForm] = useState({ employeeId: "", leaveTypeId: "", startDate: "", endDate: "", days: "1", reason: "" });
   const [typeForm, setTypeForm] = useState({ name: "", maxDays: "15", isPaid: true });
+  const [balances, setBalances] = useState<any[]>([]);
 
   async function loadData() {
     setLoading(true);
@@ -51,6 +53,15 @@ export default function LeavesPage() {
 
   useEffect(() => { loadData(); }, [statusFilter]);
 
+  useEffect(() => {
+    if (!form.employeeId) { setBalances([]); return; }
+    api.get(`/api/employees/${form.employeeId}/leave-balances`)
+      .then((res) => setBalances(res.data || []))
+      .catch(() => setBalances([]));
+  }, [form.employeeId]);
+
+  const selectedBalance = balances.find((b) => b.leaveTypeId === form.leaveTypeId);
+
   async function handleApply(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -58,14 +69,18 @@ export default function LeavesPage() {
       setShowForm(false);
       setForm({ employeeId: "", leaveTypeId: "", startDate: "", endDate: "", days: "1", reason: "" });
       loadData();
-    } catch {}
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to apply leave");
+    }
   }
 
   async function handleApprove(id: string, status: "APPROVED" | "REJECTED") {
     try {
       await api.patch(`/api/leaves/${id}/approve`, { status });
       loadData();
-    } catch {}
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Failed to update leave status");
+    }
   }
 
   async function handleCreateType(e: React.FormEvent) {
@@ -186,6 +201,11 @@ export default function LeavesPage() {
                   <option value="">Select type...</option>
                   {leaveTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name} (max {t.maxDays}d)</option>)}
                 </select>
+                {selectedBalance && (
+                  <p className={`mt-1.5 text-xs font-semibold ${selectedBalance.remaining <= 0 ? "text-red-600" : "text-gray-500"}`}>
+                    {selectedBalance.remaining} of {selectedBalance.allocated} day(s) remaining in {selectedBalance.year}
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

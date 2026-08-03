@@ -607,7 +607,7 @@ export default function Dashboard() {
   const cashKPIs = [
     { title: "Today Collection", value: formatCurrency(stats?.todayCollection || 0), icon: IndianRupee, colorClass: "emerald", subtext: "Payments collected today", insight: `Returns: ${formatCurrency(stats?.salesReturnsToday || 0)}`, href: "/sales/payment-in" },
     { title: "Pending Receivables", value: formatCurrency(stats?.outstandingAmount || 0), icon: Wallet, colorClass: "amber", subtext: "Outstanding dealer balance", insight: `${stats?.overdueDealersCount || 0} overdue accounts`, href: "/accounting/ledgers?type=receivables" },
-    { title: "Vendor Payables", value: formatCurrency(stats?.vendorPayables || 0), icon: CreditCard, colorClass: "rose", subtext: "Pending supplier invoices", insight: "Liability ledger total", href: "/vendors/payments" },
+    { title: "Vendor Payables", value: formatCurrency(stats?.vendorPayables || 0), icon: CreditCard, colorClass: "rose", subtext: "Pending supplier invoices", insight: "Liability ledger total", href: "/vendors" },
     { title: "Daily Cash Position", value: formatCurrency(stats?.dailyCashPosition || 0), icon: Landmark, colorClass: "blue", subtext: "Total Cash & Bank Balance", insight: "Active liquidity assets", href: "/accounting/cash-flow" },
   ];
 

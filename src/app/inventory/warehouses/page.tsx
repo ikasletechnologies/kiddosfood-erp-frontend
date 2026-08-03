@@ -5,7 +5,8 @@ import {
   Warehouse, Plus, Search, Filter, 
   MapPin, Tag, ChevronRight, 
   MoreVertical, Edit2, Trash2, 
-  Loader2, RefreshCcw, LayoutGrid, List
+  Loader2, RefreshCcw, LayoutGrid, List,
+  PackageSearch, X
 } from "lucide-react";
 import { inventoryApi } from "@/lib/api";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
@@ -19,6 +20,9 @@ export default function WarehousesPage() {
   const [warehouseToEdit, setWarehouseToEdit] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [stockWarehouse, setStockWarehouse] = useState<any>(null);
+  const [stockReport, setStockReport] = useState<any>(null);
+  const [stockLoading, setStockLoading] = useState(false);
 
   const fetchWarehouses = async () => {
     setLoading(true);
@@ -53,7 +57,20 @@ export default function WarehousesPage() {
     }
   };
 
-  const filteredWarehouses = warehouses.filter(w => 
+  const handleViewStock = async (warehouse: any) => {
+    setStockWarehouse(warehouse);
+    setStockLoading(true);
+    try {
+      const res = await inventoryApi.getWarehouseStock(warehouse.id);
+      setStockReport(res.data);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to load warehouse stock");
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
+  const filteredWarehouses = warehouses.filter(w =>
     w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     w.location?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -198,6 +215,12 @@ export default function WarehousesPage() {
                     <MapPin size={14} className="text-slate-400 shrink-0 mt-0.5" />
                     <span>{w.location || "No address provided"}</span>
                   </div>
+                  <button
+                    onClick={() => handleViewStock(w)}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-slate-50 dark:bg-white/5 hover:bg-orange-50 dark:hover:bg-orange-500/10 text-slate-500 hover:text-orange-600 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-colors"
+                  >
+                    <PackageSearch size={13} /> View Stock
+                  </button>
                 </div>
               </div>
             ))}
@@ -237,7 +260,13 @@ export default function WarehousesPage() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
+                        <button
+                          onClick={() => handleViewStock(w)}
+                          className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-orange-500 transition-colors shadow-sm"
+                        >
+                          <PackageSearch size={14} />
+                        </button>
+                        <button
                           onClick={() => handleEdit(w)}
                           className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-orange-500 transition-colors shadow-sm"
                         >
@@ -258,6 +287,64 @@ export default function WarehousesPage() {
           </div>
         )}
       </div>
+
+      {/* Warehouse Stock Modal */}
+      {stockWarehouse && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Warehouse size={18} className="text-orange-500" /> {stockWarehouse.name}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">Current stock balance in this location</p>
+              </div>
+              <button onClick={() => { setStockWarehouse(null); setStockReport(null); }} className="p-2 text-slate-400 hover:text-slate-700 transition-colors">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {stockLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+                  <Loader2 size={26} className="animate-spin text-orange-500" />
+                  <p className="text-[10px] font-bold uppercase tracking-widest">Loading Stock...</p>
+                </div>
+              ) : !stockReport || stockReport.balances.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                  <PackageSearch size={32} className="text-slate-300" />
+                  <p className="text-sm font-semibold text-slate-500">No stock recorded in this warehouse yet.</p>
+                  <p className="text-xs text-slate-400 max-w-xs">
+                    Items tagged directly to this warehouse (via GRN or transfers), or belonging to a franchise
+                    whose primary warehouse this is, will show up here once they have movement.
+                  </p>
+                </div>
+              ) : (
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">
+                      <th className="pb-2">Item</th>
+                      <th className="pb-2 text-right">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50 dark:divide-white/5">
+                    {stockReport.balances.map((b: any) => (
+                      <tr key={b.itemId}>
+                        <td className="py-2.5">
+                          <p className="font-semibold text-slate-800 dark:text-slate-200">{b.name}</p>
+                          <p className="text-[10px] text-slate-400">SKU: {b.sku}</p>
+                        </td>
+                        <td className="py-2.5 text-right font-mono font-bold text-slate-900 dark:text-white">
+                          {b.balance.toLocaleString()} <span className="text-[10px] text-slate-400 font-sans">{b.unit}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

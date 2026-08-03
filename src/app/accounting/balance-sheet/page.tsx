@@ -1,25 +1,196 @@
 "use client";
 
-import RefrensEmptyState from "@/components/ui/RefrensEmptyState";
+import { useState, useEffect, useCallback } from "react";
+import { RefreshCw, Landmark, ChevronDown, ChevronRight } from "lucide-react";
+import { clsx } from "clsx";
+import { reportsApi } from "@/lib/api";
+import { toast } from "react-hot-toast";
+
+interface LineItem {
+  name: string;
+  amount: number;
+  notes?: string;
+}
+
+interface BalanceSheetData {
+  assets: LineItem[];
+  liabilities: LineItem[];
+  details: {
+    sundryDebtors: { name: string; amount: number }[];
+    sundryCreditors: { name: string; amount: number }[];
+    accounts: { name: string; type: string; balance: number }[];
+    cashBalance: number;
+    bankBalance: number;
+    upiBalance: number;
+  };
+}
 
 export default function BalanceSheetPage() {
+  const [data, setData] = useState<BalanceSheetData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [asOfDate, setAsOfDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [showDebtors, setShowDebtors] = useState(false);
+  const [showCreditors, setShowCreditors] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await reportsApi.getBalanceSheet({ endDate: asOfDate });
+      setData(res.data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to load balance sheet");
+    } finally {
+      setLoading(false);
+    }
+  }, [asOfDate]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const formatAmount = (amount: number) => `₹${(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const totalAssets = (data?.assets || []).reduce((s, a) => s + (a.amount || 0), 0);
+  const totalLiabilities = (data?.liabilities || []).reduce((s, l) => s + (l.amount || 0), 0);
+
   return (
-    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8">
-      <div className="p-10">
-        <RefrensEmptyState 
-          title="Analyze Financial Health Balance Sheet"
-          description="Assess what your business owns and owes at a specific point in time to understand your company's financial position and stability."
-          type="illustration"
-          primaryAction={{
-            label: "Enable Advanced Accounting",
-            onAction: () => console.log("Enable")
-          }}
-          secondaryAction={{
-            label: "Learn More",
-            onAction: () => console.log("Learn More")
-          }}
-        />
+    <div className="max-w-5xl mx-auto space-y-8 py-4 animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 border-b border-gray-100 pb-8">
+        <div className="space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-8 bg-blue-500 rounded-full" />
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Balance Sheet</h1>
+          </div>
+          <p className="text-sm font-medium text-slate-500">What the business owns versus what it owes, as of a point in time.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">As of</label>
+          <input
+            type="date"
+            value={asOfDate}
+            onChange={(e) => setAsOfDate(e.target.value)}
+            className="text-sm border border-gray-200 rounded-xl px-3 py-2.5 font-medium text-slate-600"
+          />
+          <button
+            onClick={fetchData}
+            className="w-11 h-11 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90"
+          >
+            <RefreshCw size={16} className={clsx(loading && "animate-spin")} />
+          </button>
+        </div>
       </div>
+
+      {loading ? (
+        <div className="py-40 flex flex-col items-center justify-center gap-6">
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="w-2 h-2 rounded-full bg-slate-200 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+            ))}
+          </div>
+          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Loading Balance Sheet</p>
+        </div>
+      ) : !data ? (
+        <div className="py-32 flex flex-col items-center justify-center gap-3 text-center">
+          <Landmark size={36} className="text-slate-300" />
+          <p className="text-sm font-semibold text-slate-500">No data available.</p>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Assets */}
+          <div className="border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="bg-slate-50 px-6 py-3.5 border-b border-gray-100">
+              <h2 className="font-black text-slate-900 uppercase text-xs tracking-wider">Assets</h2>
+            </div>
+            <div>
+              {data.assets.map((row, idx) => (
+                <div key={idx} className="px-6 py-3 flex justify-between items-center border-b border-gray-50 last:border-0">
+                  <div>
+                    <p className="font-medium text-sm text-slate-700">{row.name}</p>
+                    {row.notes && row.notes !== "—" && <p className="text-[11px] text-slate-400">{row.notes}</p>}
+                  </div>
+                  <p className="font-mono text-sm font-semibold text-slate-800">{formatAmount(row.amount)}</p>
+                </div>
+              ))}
+              {data.details.sundryDebtors.length > 0 && (
+                <div className="px-6 py-3 bg-slate-50/50">
+                  <button
+                    onClick={() => setShowDebtors((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600"
+                  >
+                    {showDebtors ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    Sundry Debtors breakdown ({data.details.sundryDebtors.length})
+                  </button>
+                  {showDebtors && (
+                    <div className="mt-2 space-y-1.5 pl-5">
+                      {data.details.sundryDebtors.map((d, i) => (
+                        <div key={i} className="flex justify-between text-xs text-slate-500">
+                          <span>{d.name}</span>
+                          <span className="font-mono">{formatAmount(d.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+              <p className="font-black text-white text-sm uppercase tracking-wide">Total Assets</p>
+              <p className="font-mono font-black text-white">{formatAmount(totalAssets)}</p>
+            </div>
+          </div>
+
+          {/* Liabilities */}
+          <div className="border border-gray-100 rounded-2xl overflow-hidden">
+            <div className="bg-slate-50 px-6 py-3.5 border-b border-gray-100">
+              <h2 className="font-black text-slate-900 uppercase text-xs tracking-wider">Liabilities &amp; Equity</h2>
+            </div>
+            <div>
+              {data.liabilities.map((row, idx) => (
+                <div key={idx} className="px-6 py-3 flex justify-between items-center border-b border-gray-50 last:border-0">
+                  <div>
+                    <p className="font-medium text-sm text-slate-700">{row.name}</p>
+                    {row.notes && row.notes !== "—" && <p className="text-[11px] text-slate-400">{row.notes}</p>}
+                  </div>
+                  <p className="font-mono text-sm font-semibold text-slate-800">{formatAmount(row.amount)}</p>
+                </div>
+              ))}
+              {data.details.sundryCreditors.length > 0 && (
+                <div className="px-6 py-3 bg-slate-50/50">
+                  <button
+                    onClick={() => setShowCreditors((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600"
+                  >
+                    {showCreditors ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    Sundry Creditors breakdown ({data.details.sundryCreditors.length})
+                  </button>
+                  {showCreditors && (
+                    <div className="mt-2 space-y-1.5 pl-5">
+                      {data.details.sundryCreditors.map((c, i) => (
+                        <div key={i} className="flex justify-between text-xs text-slate-500">
+                          <span>{c.name}</span>
+                          <span className="font-mono">{formatAmount(c.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="bg-slate-900 px-6 py-4 flex justify-between items-center">
+              <p className="font-black text-white text-sm uppercase tracking-wide">Total Liabilities &amp; Equity</p>
+              <p className="font-mono font-black text-white">{formatAmount(totalLiabilities)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {data && Math.abs(totalAssets - totalLiabilities) > 0.01 && (
+        <div className="px-6 py-3 bg-amber-50 border border-amber-100 rounded-xl text-xs font-semibold text-amber-700">
+          Assets and Liabilities differ by {formatAmount(Math.abs(totalAssets - totalLiabilities))} — some ledger
+          categories (Fixed Assets, Capital Account, etc.) aren&apos;t tracked yet, so this is expected until
+          those are added.
+        </div>
+      )}
     </div>
   );
 }

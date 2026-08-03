@@ -299,18 +299,9 @@ export default function EstimationsPage() {
       ]);
       
       let apiEstimations = eRes.status === "fulfilled" ? (eRes.value as any).data || [] : [];
-      
-      // Merge local drafts
-      try {
-        const draftsStr = localStorage.getItem("sale_estimations_drafts");
-        if (draftsStr) {
-          const drafts = JSON.parse(draftsStr);
-          apiEstimations = [...drafts, ...apiEstimations];
-        }
-      } catch (e) {
-        console.error("Error loading drafts", e);
-      }
-      
+
+      // Drafts are already real Quotation rows (status: "DRAFT") saved through the
+      // normal /api/sales/quotations endpoint below — no separate local draft store.
       setEstimations(apiEstimations);
       if (cRes.status === "fulfilled") setCustomers((cRes.value as any).data || []);
       if (pRes.status === "fulfilled") setProducts((pRes.value as any).data || []);
@@ -376,16 +367,7 @@ export default function EstimationsPage() {
 
   const handleDeleteDraft = async (id: string) => {
     try {
-      if (id.startsWith("draft_")) {
-        const draftsStr = localStorage.getItem("sale_estimations_drafts");
-        if (draftsStr) {
-          const drafts = JSON.parse(draftsStr);
-          const newDrafts = drafts.filter((d: any) => d.id !== id);
-          localStorage.setItem("sale_estimations_drafts", JSON.stringify(newDrafts));
-        }
-      } else {
-        await api.delete(`/api/sales/quotations/${id}`);
-      }
+      await api.delete(`/api/sales/quotations/${id}`);
       showToast("Draft deleted", "success");
       fetchData();
     } catch (e: any) {
@@ -510,24 +492,10 @@ export default function EstimationsPage() {
         notes: showDesc ? (description || undefined) : undefined,
       };
 
-      if (draftId && !draftId.startsWith("draft_")) {
+      if (draftId) {
         await api.patch(`/api/sales/quotations/${draftId}`, payload);
       } else {
         await api.post("/api/sales/quotations", payload);
-      }
-      
-      // If we saved an estimation that was previously a draft, remove the draft
-      if (draftId && draftId.startsWith("draft_")) {
-        try {
-          const draftsStr = localStorage.getItem("sale_estimations_drafts");
-          if (draftsStr) {
-            const drafts = JSON.parse(draftsStr);
-            const newDrafts = drafts.filter((d: any) => d.id !== draftId);
-            localStorage.setItem("sale_estimations_drafts", JSON.stringify(newDrafts));
-          }
-        } catch (e) {
-          console.error("Failed to clear draft", e);
-        }
       }
 
       showToast(isDraft ? "Draft saved successfully" : "Estimation saved successfully", "success");

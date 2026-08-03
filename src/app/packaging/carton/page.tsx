@@ -1,21 +1,33 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Package, Search, CheckCircle2, Box, Layers,
-  Barcode, ArrowRight, Printer, Check, Plus
+  Barcode, ArrowRight, Printer, Plus
 } from "lucide-react";
 import { clsx } from "clsx";
 import api from "@/lib/api/base";
+import { cartonApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
 interface Batch {
   id: string;
   batchCode: string;
   productName: string;
-  totalQuantity: number;
+  remainingQty: number;
   unit: string;
   productionDate: string;
+  franchiseId?: string;
+}
+
+interface CartonLot {
+  id: string;
+  cartonCode: string;
+  totalUnits: number;
+  unitsPerCarton: number;
+  cartonCount: number;
+  createdAt: string;
+  batch?: { batchCode?: string };
 }
 
 export default function CartonPackingPage() {
@@ -30,32 +42,46 @@ export default function CartonPackingPage() {
     weightPerCarton: 12.5,
   });
   const [isPacking, setIsPacking] = useState(false);
-  const [packedLog, setPackedLog] = useState<{id: string, code: string, time: string}[]>([]);
+  const [packedLog, setPackedLog] = useState<CartonLot[]>([]);
   const { showToast } = useToast();
 
-  useEffect(() => {
-    async function fetchBatches() {
-      try {
-        const res = await api.get("/api/production/batches");
-        const data = (res.data || [])
-          .filter((b: any) => b.qcStatus === "APPROVED" && b.status === "COMPLETED")
-          .map((b: any) => ({
-            id: b.id,
-            batchCode: b.batchCode || b.id?.slice(-6),
-            productName: b.product?.name || b.recipe?.name || "Unknown Product",
-            totalQuantity: b.outputQuantity || b.plannedQuantity || 0,
-            unit: b.unit || "units",
-            productionDate: b.createdAt,
-          }));
-        setBatches(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
+  const fetchBatches = useCallback(async () => {
+    try {
+      const res = await api.get("/api/production/batches");
+      const data = (res.data || [])
+        .filter((b: any) => b.qcStatus === "APPROVED" && b.status === "COMPLETED")
+        .map((b: any) => ({
+          id: b.id,
+          batchCode: b.batchCode || b.id?.slice(-6),
+          productName: b.product?.name || b.recipe?.name || "Unknown Product",
+          remainingQty: Math.max(0, (b.approvedQty || 0) - (b.cartonedQty || 0)),
+          unit: b.product?.unit || "units",
+          productionDate: b.createdAt,
+          franchiseId: b.franchiseId,
+        }))
+        // Only show batches that still have something left to carton
+        .filter((b: Batch) => b.remainingQty > 0);
+      setBatches(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    fetchBatches();
   }, []);
+
+  const fetchCartons = useCallback(async () => {
+    try {
+      const res = await cartonApi.getAll();
+      setPackedLog(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBatches();
+    fetchCartons();
+  }, [fetchBatches, fetchCartons]);
 
   const filtered = batches.filter(
     (b) =>
@@ -63,19 +89,27 @@ export default function CartonPackingPage() {
       b.productName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleGenerateCarton = () => {
+  const handleGenerateCarton = async () => {
     if (!selectedBatch) return;
     setIsPacking(true);
-    setTimeout(() => {
-      const newCarton = {
-        id: `CRT-${Math.floor(1000 + Math.random() * 9000)}`,
-        code: selectedBatch.batchCode,
-        time: new Date().toLocaleTimeString()
-      };
-      setPackedLog([newCarton, ...packedLog]);
+    try {
+      const res = await cartonApi.create({
+        batchId: selectedBatch.id,
+        cartonSize: cartonConfig.cartonSize,
+        unitsPerCarton: cartonConfig.unitsPerCarton,
+        cartonCount: cartonConfig.cartonCount,
+        weightPerCarton: cartonConfig.weightPerCarton,
+        franchiseId: selectedBatch.franchiseId,
+      });
+      setPackedLog((prev) => [res.data, ...prev]);
+      showToast(`Carton ${res.data.cartonCode} generated and sealed successfully`, "success");
+      await fetchBatches();
+      setSelectedBatch(null);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Failed to generate carton", "error");
+    } finally {
       setIsPacking(false);
-      showToast(`Carton ${newCarton.id} generated and sealed successfully`, "success");
-    }, 1500);
+    }
   };
 
   if (loading) {
@@ -152,7 +186,7 @@ export default function CartonPackingPage() {
                     </p>
                     <p className="text-[10px] text-slate-500 font-bold">{batch.productName}</p>
                     <p className="text-[9px] text-slate-400 font-medium">
-                      Available: {batch.totalQuantity} {batch.unit}
+                      Available: {batch.remainingQty} {batch.unit}
                     </p>
                   </div>
                   <ArrowRight size={14} className={selectedBatch?.id === batch.id ? "text-[#F97316]" : "text-slate-300"} />
@@ -173,8 +207,8 @@ export default function CartonPackingPage() {
                     <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Batch: {selectedBatch.batchCode}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Total Units to Pack</p>
-                    <p className="text-xl font-black text-[#F97316]">{selectedBatch.totalQuantity} <span className="text-xs text-slate-500">{selectedBatch.unit}</span></p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Remaining to Pack</p>
+                    <p className="text-xl font-black text-[#F97316]">{selectedBatch.remainingQty} <span className="text-xs text-slate-500">{selectedBatch.unit}</span></p>
                   </div>
                 </div>
 
@@ -216,7 +250,7 @@ export default function CartonPackingPage() {
                   <div className="space-y-2 flex flex-col justify-end">
                     <button
                       onClick={handleGenerateCarton}
-                      disabled={isPacking}
+                      disabled={isPacking || cartonConfig.unitsPerCarton * cartonConfig.cartonCount > selectedBatch.remainingQty}
                       className="w-full h-[38px] bg-[#F97316] hover:bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#F97316]/20 disabled:opacity-50"
                     >
                       {isPacking ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Plus size={14} />}
@@ -224,6 +258,11 @@ export default function CartonPackingPage() {
                     </button>
                   </div>
                 </div>
+                {cartonConfig.unitsPerCarton * cartonConfig.cartonCount > selectedBatch.remainingQty && (
+                  <p className="text-[10px] font-bold text-rose-500 mt-2">
+                    That's more units than remain in this batch ({selectedBatch.remainingQty} {selectedBatch.unit} left).
+                  </p>
+                )}
               </div>
 
               {/* Generated Cartons Grid */}
@@ -241,9 +280,9 @@ export default function CartonPackingPage() {
                     {packedLog.map((log) => (
                       <div key={log.id} className="bg-white dark:bg-[#12141c] p-4 rounded-2xl border border-slate-200/50 dark:border-white/10 shadow-sm flex items-center justify-between group">
                         <div>
-                          <p className="text-xs font-black text-slate-800 dark:text-white uppercase font-mono">{log.id}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Ref: {log.code} • {cartonConfig.unitsPerCarton} Units</p>
-                          <p className="text-[8px] text-slate-400 mt-0.5">{log.time}</p>
+                          <p className="text-xs font-black text-slate-800 dark:text-white uppercase font-mono">{log.cartonCode}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">Ref: {log.batch?.batchCode || "—"} • {log.totalUnits} Units</p>
+                          <p className="text-[8px] text-slate-400 mt-0.5">{new Date(log.createdAt).toLocaleString()}</p>
                         </div>
                         <button className="w-8 h-8 rounded-full bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 flex items-center justify-center text-slate-400 group-hover:text-[#F97316] group-hover:border-[#F97316]/30 transition-colors">
                           <Printer size={12} />

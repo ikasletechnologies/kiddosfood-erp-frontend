@@ -117,12 +117,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/purchases/invoices",
         roles: SUPER_ONLY,
       },
-      {
-        icon: CreditCard,
-        label: "Vendor Payments",
-        href: "/vendors/payments",
-        roles: SUPER_ONLY,
-      },
     ],
   },
   {
@@ -232,6 +226,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: Send,
         label: "Stock Transfer",
         href: "/franchise/transfers",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: ClipboardList,
+        label: "Stock Reconciliation",
+        href: "/inventory/reconciliation",
         roles: SUPER_ONLY,
       },
     ],

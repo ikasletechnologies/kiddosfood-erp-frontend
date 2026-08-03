@@ -7,7 +7,7 @@ import {
   Calendar, Check, Printer
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi } from "@/lib/api";
+import { customersApi, draftsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -200,18 +200,23 @@ export default function PaymentInPage() {
       }).catch(() => ({ data: [] }));
       
       let apiPayments = (res as any).data?.payments || (res as any).data || [];
-      
-      // Filter out and merge local drafts
-      try {
-        const draftsStr = localStorage.getItem("sale_payments_in_drafts");
-        if (draftsStr) {
-          const drafts = JSON.parse(draftsStr);
-          apiPayments = [...drafts, ...apiPayments];
-        }
-      } catch (e) {
-        console.error("Error loading drafts", e);
-      }
-      
+
+      // Merge server-persisted drafts (previously localStorage-only, so drafts
+      // were invisible to other devices/users and lost if storage was cleared)
+      const dRes = await draftsApi.getDrafts("payment_in").catch(() => ({ data: [] }));
+      const rawDrafts = (dRes as any).data || [];
+      const formattedDrafts = rawDrafts.map((d: any) => ({
+        id: d.id,
+        status: "DRAFT",
+        createdAt: d.createdAt,
+        entity: d.data?.entity || { name: "Unknown Customer" },
+        paymentNumber: "DRAFT",
+        paymentMode: d.data?.paymentMode,
+        paidAmount: d.data?.paidAmount || 0,
+        _rawState: d.data?._rawState,
+      }));
+      apiPayments = [...formattedDrafts, ...apiPayments];
+
       setPayments(apiPayments);
     } finally {
       setLoading(false);
@@ -262,40 +267,32 @@ export default function PaymentInPage() {
       return;
     }
 
-    const draftPayload = {
-      id: draftId || `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      status: "DRAFT",
-      createdAt: new Date().toISOString(),
-      entity: selectedCustomer || { name: "Unknown Customer" },
-      paymentNumber: "DRAFT",
-      paymentMode: paymentMode,
-      paidAmount: Number(amount) || 0,
-      _rawState: {
-        selectedCustomer,
-        customerSearch,
-        amount,
-        paymentMode,
-        description,
-        chequeNo,
-        receiptDate
-      }
-    };
-
     if (isDraft) {
       try {
-        const draftsStr = localStorage.getItem("sale_payments_in_drafts");
-        let drafts = draftsStr ? JSON.parse(draftsStr) : [];
-        if (draftId) {
-          drafts = drafts.filter((d: any) => d.id !== draftId);
-        }
-        drafts.unshift(draftPayload);
-        localStorage.setItem("sale_payments_in_drafts", JSON.stringify(drafts));
-        showToast("Draft saved locally", "success");
+        await draftsApi.saveDraft({
+          id: draftId || undefined,
+          type: "payment_in",
+          data: {
+            entity: selectedCustomer || { name: "Unknown Customer" },
+            paymentMode: paymentMode,
+            paidAmount: Number(amount) || 0,
+            _rawState: {
+              selectedCustomer,
+              customerSearch,
+              amount,
+              paymentMode,
+              description,
+              chequeNo,
+              receiptDate
+            }
+          }
+        });
+        showToast("Draft saved successfully", "success");
         fetchPayments();
         setView("list");
         resetForm();
       } catch (e) {
-        console.error("Failed to save draft locally", e);
+        showToast("Failed to save draft", "error");
       }
       return;
     }
@@ -317,12 +314,7 @@ export default function PaymentInPage() {
       // If we saved a payment that was previously a draft, remove the draft
       if (draftId) {
         try {
-          const draftsStr = localStorage.getItem("sale_payments_in_drafts");
-          if (draftsStr) {
-            const drafts = JSON.parse(draftsStr);
-            const newDrafts = drafts.filter((d: any) => d.id !== draftId);
-            localStorage.setItem("sale_payments_in_drafts", JSON.stringify(newDrafts));
-          }
+          await draftsApi.deleteDraft(draftId);
         } catch (e) {
           console.error("Failed to clear draft", e);
         }
@@ -351,18 +343,13 @@ export default function PaymentInPage() {
   };
 
 
-  const handleDeleteDraft = (id: string) => {
+  const handleDeleteDraft = async (id: string) => {
     try {
-      const draftsStr = localStorage.getItem("sale_payments_in_drafts");
-      if (draftsStr) {
-        const drafts = JSON.parse(draftsStr);
-        const newDrafts = drafts.filter((d: any) => d.id !== id);
-        localStorage.setItem("sale_payments_in_drafts", JSON.stringify(newDrafts));
-        showToast("Draft deleted", "success");
-        fetchPayments();
-      }
+      await draftsApi.deleteDraft(id);
+      showToast("Draft deleted", "success");
+      fetchPayments();
     } catch (e) {
-      console.error(e);
+      showToast("Failed to delete draft", "error");
     }
   };
 

@@ -16,7 +16,7 @@ import {
   Zap as ZapIcon
 } from "lucide-react";
 import { clsx } from "clsx";
-import { posApi } from "@/lib/api";
+import { posApi, posSettlementApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 
@@ -26,6 +26,18 @@ interface SettlementStats {
   card: number;
   total: number;
   orderCount: number;
+}
+
+interface SettlementRecord {
+  id: string;
+  businessDate: string;
+  cashTotal: number;
+  upiTotal: number;
+  cardTotal: number;
+  grandTotal: number;
+  orderCount: number;
+  closedBy?: string;
+  createdAt: string;
 }
 
 export default function SettlementPage() {
@@ -38,21 +50,24 @@ export default function SettlementPage() {
     orderCount: 0,
   });
   const [settling, setSettling] = useState(false);
-  const [settled, setSettled] = useState(false);
+  const [todaySettlement, setTodaySettlement] = useState<SettlementRecord | null>(null);
+  const [latestSettlement, setLatestSettlement] = useState<SettlementRecord | null>(null);
+  const settled = !!todaySettlement;
 
   useEffect(() => {
     fetchTodayStats();
+    fetchSettlementStatus();
   }, []);
 
   const fetchTodayStats = async () => {
     setLoading(true);
     try {
-      const res = await posApi.getOrders({ 
+      const res = await posApi.getOrders({
         date: new Date().toISOString().split('T')[0],
         status: 'COMPLETED'
       });
       const orders = res.data?.data || res.data || [];
-      
+
       const newStats = orders.reduce((acc: SettlementStats, order: any) => {
         const amt = order.totalAmount || 0;
         if (order.paymentMode === 'CASH') acc.cash += amt;
@@ -72,14 +87,37 @@ export default function SettlementPage() {
     }
   };
 
-  const handleSettle = () => {
+  const fetchSettlementStatus = async () => {
+    try {
+      const [todayRes, latestRes] = await Promise.all([
+        posSettlementApi.getToday(),
+        posSettlementApi.getLatest(),
+      ]);
+      setTodaySettlement(todayRes.data);
+      setLatestSettlement(latestRes.data);
+    } catch (e) {
+      console.error("Failed to fetch settlement status", e);
+    }
+  };
+
+  const handleSettle = async () => {
     setSettling(true);
-    // Simulate settlement process
-    setTimeout(() => {
-      setSettling(false);
-      setSettled(true);
+    try {
+      const settlement = await posSettlementApi.closeDay({
+        cashTotal: stats.cash,
+        upiTotal: stats.upi,
+        cardTotal: stats.card,
+        grandTotal: stats.total,
+        orderCount: stats.orderCount,
+      });
+      setTodaySettlement(settlement.data);
+      setLatestSettlement(settlement.data);
       toast.success("Day settled successfully!");
-    }, 2000);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || "Failed to settle the day");
+    } finally {
+      setSettling(false);
+    }
   };
 
   return (
@@ -245,16 +283,18 @@ export default function SettlementPage() {
             <div className="mt-8 pt-8 border-t border-slate-100 dark:border-white/5 space-y-4">
               <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
                 <span>Last Settlement</span>
-                <span className="text-slate-600 dark:text-slate-300">14 May 2026 · 11:45 PM</span>
+                <span className="text-slate-600 dark:text-slate-300">
+                  {latestSettlement
+                    ? `${new Date(latestSettlement.businessDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} · ${new Date(latestSettlement.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                    : "Never"}
+                </span>
               </div>
-              <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <span>Terminal ID</span>
-                <span className="text-slate-600 dark:text-slate-300">POS-TERM-001</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <span>Shift User</span>
-                <span className="text-slate-600 dark:text-slate-300">Admin User</span>
-              </div>
+              {latestSettlement?.closedBy && (
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  <span>Closed By</span>
+                  <span className="text-slate-600 dark:text-slate-300">{latestSettlement.closedBy}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

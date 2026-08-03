@@ -100,13 +100,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         }))
       };
       if (editId) {
-        try {
-          // Delete old PO and create new one to simulate update since backend lacks update endpoint
-          await purchaseOrdersApi.delete(editId);
-        } catch (e) {
-          console.error("Failed to delete old PO during update", e);
-        }
-        await purchaseOrdersApi.create(payload);
+        // Real in-place update — preserves the PO's id/history instead of the
+        // previous delete+recreate workaround. Blocked server-side once the PO
+        // has a GRN/Invoice against it.
+        await purchaseOrdersApi.update(editId, payload);
         localStorage.removeItem('draftPurchaseOrder');
         toast.success("Purchase Order updated successfully!");
       } else {
@@ -241,11 +238,44 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Warehouse size={11} /> Warehouse
-                  </label>
-                  <div className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-gray-50 flex items-center justify-between">
-                    <span className="font-medium">Central Warehouse</span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-gray-500 flex items-center gap-1">
+                      <Warehouse size={11} /> Warehouse
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowWarehouseModal(true)}
+                      className="text-[10px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
+                    >
+                      + Add New
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <select
+                      value={warehouseId}
+                      onChange={(e) => {
+                        if (e.target.value === "ADD_NEW") {
+                          setShowWarehouseModal(true);
+                        } else {
+                          setWarehouseId(e.target.value);
+                        }
+                      }}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
+                    >
+                      <option value="">Select Warehouse</option>
+                      {warehouses.map(w => (
+                        <option key={w.id} value={w.id}>{w.name}</option>
+                      ))}
+                      <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowWarehouseModal(true)}
+                      className="p-2 border border-gray-300 hover:border-orange-500 hover:bg-orange-50 text-gray-500 hover:text-orange-600 rounded-lg transition-all"
+                      title="Add New Warehouse"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
                 <div>

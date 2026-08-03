@@ -6,6 +6,7 @@ import {
   RefreshCw, ChefHat, Play, ShoppingCart, Info, Sparkles 
 } from "lucide-react";
 import Link from "next/link";
+import api from "@/lib/api/base";
 import { recipesApi, franchiseApi, inventoryApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 
@@ -15,7 +16,18 @@ interface PlannedItem {
   recipeName: string;
   quantity: number; // Multiplier/runs
   yieldQty: number;
+  yieldUnit: string;
   recipeItems: any[];
+  operatorId?: string;
+  estimatedDurationMinutes?: number | null;
+}
+
+function formatDuration(minutes?: number | null) {
+  if (!minutes) return "—";
+  if (minutes < 60) return `${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 export default function ProductionPlanningPage() {
@@ -28,20 +40,31 @@ export default function ProductionPlanningPage() {
   const [submitting, setSubmitting] = useState(false);
   const [franchiseInventory, setFranchiseInventory] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [employees, setEmployees] = useState<any[]>([]);
 
   // Selected recipe to add
   const [activeRecipeId, setActiveRecipeId] = useState<string>("");
+  const [inputMode, setInputMode] = useState<"RUNS" | "QUANTITY">("RUNS");
   const [activeQty, setActiveQty] = useState<number>(1);
+  const [targetQuantity, setTargetQuantity] = useState<number>(0);
+  const [activeOperatorId, setActiveOperatorId] = useState<string>("");
+
+  const activeRecipe = recipes.find((r) => r.id === activeRecipeId);
+  const computedRuns = inputMode === "QUANTITY"
+    ? Math.max(1, Math.ceil((targetQuantity || 0) / (activeRecipe?.yieldQty || 1)))
+    : Math.max(1, activeQty || 1);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [rRes, fRes] = await Promise.all([
+        const [rRes, fRes, eRes] = await Promise.all([
           recipesApi.getAll(),
-          franchiseApi.getAll()
+          franchiseApi.getAll(),
+          api.get("/api/employees").catch(() => ({ data: [] }))
         ]);
         setRecipes(rRes.data || []);
         setFranchises(fRes.data || []);
+        setEmployees(eRes.data || []);
         if (rRes.data?.length > 0) {
           setActiveRecipeId(rRes.data[0].id);
         }
@@ -79,14 +102,15 @@ export default function ProductionPlanningPage() {
     if (!foundRecipe) return;
 
     setError(null); // Clear error on changes
+    const runs = computedRuns;
 
     // Check if recipe is already in the queue, if so increment
     const exists = plannedQueue.find((item) => item.recipeId === activeRecipeId);
     if (exists) {
       setPlannedQueue(
-        plannedQueue.map((item) => 
-          item.recipeId === activeRecipeId 
-            ? { ...item, quantity: item.quantity + activeQty }
+        plannedQueue.map((item) =>
+          item.recipeId === activeRecipeId
+            ? { ...item, quantity: item.quantity + runs }
             : item
         )
       );
@@ -97,12 +121,17 @@ export default function ProductionPlanningPage() {
           id: Math.random().toString(),
           recipeId: foundRecipe.id,
           recipeName: foundRecipe.name,
-          quantity: activeQty,
+          quantity: runs,
           yieldQty: foundRecipe.yieldQty,
-          recipeItems: foundRecipe.recipeItems || []
+          yieldUnit: foundRecipe.yieldUnit || "KG",
+          recipeItems: foundRecipe.recipeItems || [],
+          operatorId: activeOperatorId || undefined,
+          estimatedDurationMinutes: foundRecipe.estimatedDurationMinutes,
         }
       ]);
     }
+    setActiveOperatorId("");
+    setTargetQuantity(0);
     toast.success(`${foundRecipe.name} added to schedule`);
   };
 
@@ -181,6 +210,7 @@ export default function ProductionPlanningPage() {
           quantity: item.quantity,
           expiryDate: expiryDate.toISOString().split("T")[0],
           productionType: "FINISHED_GOOD",
+          operatorId: item.operatorId || undefined,
         });
       }
       toast.success("All production schedules initialized!");
@@ -291,14 +321,67 @@ export default function ProductionPlanningPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Number of Runs / Batches</label>
-                <input 
-                  type="number"
-                  min="1"
-                  value={activeQty || ""}
-                  onChange={(e) => setActiveQty(Math.max(1, Number(e.target.value)))}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm font-bold focus:outline-none"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Production Requirement</label>
+                  <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                    {(["QUANTITY", "RUNS"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setInputMode(mode)}
+                        className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${
+                          inputMode === mode ? "bg-white dark:bg-slate-950 text-[#F97316] shadow-sm" : "text-slate-400"
+                        }`}
+                      >
+                        {mode === "QUANTITY" ? "Quantity" : "Runs"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {inputMode === "QUANTITY" ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder={`e.g. 500`}
+                        value={targetQuantity || ""}
+                        onChange={(e) => setTargetQuantity(Math.max(0, Number(e.target.value)))}
+                        className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm font-bold focus:outline-none"
+                      />
+                      <span className="flex items-center px-3 text-[10px] font-black text-slate-400 uppercase">
+                        {activeRecipe?.yieldUnit || "KG"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 bg-slate-50 dark:bg-slate-950 rounded-lg px-3 py-2">
+                      <span className="uppercase tracking-wider">Recipe Yield: {activeRecipe?.yieldQty || 1} {activeRecipe?.yieldUnit || "KG"}</span>
+                      <span className="text-[#F97316] uppercase tracking-wider">Runs Required: {computedRuns}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    min="1"
+                    value={activeQty || ""}
+                    onChange={(e) => setActiveQty(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm font-bold focus:outline-none"
+                  />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Operator (Optional)</label>
+                <select
+                  value={activeOperatorId}
+                  onChange={(e) => setActiveOperatorId(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none"
+                >
+                  <option value="">Not Assigned</option>
+                  {employees.map((e: any) => (
+                    <option key={e.id} value={e.id}>{e.user?.fullName || e.employeeCode}</option>
+                  ))}
+                </select>
               </div>
 
               <button
@@ -320,23 +403,37 @@ export default function ProductionPlanningPage() {
             {plannedQueue.length === 0 ? (
               <p className="text-[10px] text-slate-400 font-semibold uppercase italic py-4">No schedules planned yet.</p>
             ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800/50 max-h-[300px] overflow-y-auto pr-1">
-                {plannedQueue.map((item) => (
-                  <div key={item.id} className="flex justify-between items-center py-3">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white">{item.recipeName}</h4>
-                      <p className="text-[9px] font-semibold text-slate-500 uppercase">
-                        {item.quantity} batches (Yield: {item.quantity * item.yieldQty})
-                      </p>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800/50 max-h-[360px] overflow-y-auto pr-1">
+                {plannedQueue.map((item, idx) => {
+                  const operator = employees.find((e: any) => e.id === item.operatorId);
+                  return (
+                    <div key={item.id} className="flex justify-between items-start py-3 gap-3">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono font-black text-[#F97316] uppercase tracking-wider">
+                            PENDING-{String(idx + 1).padStart(3, "0")}
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{item.recipeName}</h4>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[9px] font-semibold text-slate-500 uppercase">
+                          <span>Yield: {(item.quantity * item.yieldQty).toFixed(1)} {item.yieldUnit} ({item.quantity} runs)</span>
+                          <span>Expected: {formatDuration(item.estimatedDurationMinutes)}</span>
+                          <span className="col-span-2">
+                            Operator: <span className={operator ? "text-slate-700 dark:text-slate-300" : "text-slate-400 italic"}>
+                              {operator ? (operator.user?.fullName || operator.employeeCode) : "Not Assigned"}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeFromQueue(item.id)}
+                        className="p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 rounded-lg transition-colors shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                    <button
-                      onClick={() => removeFromQueue(item.id)}
-                      className="p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

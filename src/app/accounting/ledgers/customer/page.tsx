@@ -9,18 +9,32 @@ import { Search, User, ArrowUpRight, ArrowDownLeft, FileText } from 'lucide-reac
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
+interface LedgerSummary {
+  customerId: string;
+  totalSales: number;
+  totalPaid: number;
+  balance: number;
+}
+
 export default function CustomerLedgerPage() {
   const [customers, setCustomers] = useState<any[]>([]);
+  const [ledgerByCustomerId, setLedgerByCustomerId] = useState<Record<string, LedgerSummary>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const res = await customersApi.getAll();
-        setCustomers(res.data);
+        const [customersRes, ledgerRes] = await Promise.all([
+          customersApi.getAll(),
+          customersApi.getLedgerSummary(),
+        ]);
+        setCustomers(customersRes.data);
+        const byId: Record<string, LedgerSummary> = {};
+        (ledgerRes.data || []).forEach((row: LedgerSummary) => { byId[row.customerId] = row; });
+        setLedgerByCustomerId(byId);
       } catch (err) {
-        console.error('Failed to fetch customers', err);
+        console.error('Failed to fetch customer ledger data', err);
       } finally {
         setLoading(false);
       }
@@ -28,10 +42,12 @@ export default function CustomerLedgerPage() {
     fetchData();
   }, []);
 
-  const filtered = customers.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filtered = customers.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.phone?.includes(searchTerm)
   );
+
+  const formatAmount = (amount: number) => `₹${(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="p-6 space-y-6">
@@ -69,9 +85,14 @@ export default function CustomerLedgerPage() {
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={5} className="text-center py-8">No customers found.</TableCell></TableRow>
               ) : filtered.map((c) => {
-                // Approximate calculations until backend returns pre-aggregated ledger
-                const balance = 0; // Placeholder
-                
+                const ledger = ledgerByCustomerId[c.id];
+                const totalSales = ledger?.totalSales || 0;
+                const totalPaid = ledger?.totalPaid || 0;
+                // Balance here follows CustomerLedger convention: DEBIT (sales) - CREDIT
+                // (payments). Positive = customer owes us (Outstanding); negative =
+                // customer has overpaid / has an advance with us.
+                const balance = ledger?.balance || 0;
+
                 return (
                   <TableRow key={c.id} className="hover:bg-slate-50/50">
                     <TableCell>
@@ -85,23 +106,28 @@ export default function CustomerLedgerPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono">₹---</TableCell>
-                    <TableCell className="font-mono">₹---</TableCell>
+                    <TableCell className="font-mono">{formatAmount(totalSales)}</TableCell>
+                    <TableCell className="font-mono">{formatAmount(totalPaid)}</TableCell>
                     <TableCell>
-                      {balance > 0 ? (
+                      {balance < 0 ? (
                         <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none">
-                          <ArrowUpRight className="w-3 h-3 mr-1" /> ₹{balance} Advance
+                          <ArrowUpRight className="w-3 h-3 mr-1" /> {formatAmount(Math.abs(balance))} Advance
                         </Badge>
-                      ) : balance < 0 ? (
+                      ) : balance > 0 ? (
                         <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-none">
-                          <ArrowDownLeft className="w-3 h-3 mr-1" /> ₹{Math.abs(balance)} Outstanding
+                          <ArrowDownLeft className="w-3 h-3 mr-1" /> {formatAmount(balance)} Outstanding
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-slate-500">Settle</Badge>
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-blue-600 hover:text-blue-700"
+                        onClick={() => window.open(`/reports?report=Party Statement`, '_blank')}
+                      >
                         <FileText className="w-4 h-4 mr-2" /> View Statement
                       </Button>
                     </TableCell>

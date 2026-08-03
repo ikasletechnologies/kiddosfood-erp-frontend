@@ -1,25 +1,7 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import RefrensEmptyState from "@/components/ui/RefrensEmptyState";
-
-export default function IncomeStatementPage() {
-  return (
-    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8">
-      <div className="p-10">
-        <RefrensEmptyState 
-          title="Track Net Income with Income Statement"
-          description="Get detailed insight into revenue streams and expenses to monitor your financial performance."
-          type="illustration"
-          primaryAction={{
-            label: "Enable Advanced Accounting",
-            onAction: () => console.log("Enable")
-          }}
-          secondaryAction={{
-            label: "Learn More",
-            onAction: () => console.log("Learn More")
-          }}
-        />
-      </div>
-    </div>
-  );
+// Was a non-functional empty-state stub — Profit & Loss (accounting/profit-loss)
+// already implements this concept for real against actual data.
+export default function IncomeStatementRedirect() {
+  redirect("/accounting/profit-loss");
 }

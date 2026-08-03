@@ -22,6 +22,7 @@ interface Employee {
   dateOfJoining: string;
   user: { fullName: string; email: string; phone?: string };
   salaryStructure?: { name: string };
+  salaryStructureId?: string | null;
   salary?: number;
   gender?: string;
   address?: string;
@@ -114,20 +115,36 @@ export default function EmployeesClient() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [structures, setStructures] = useState<any[]>([]);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [empRes, userRes] = await Promise.all([
+      const [empRes, userRes, structRes] = await Promise.all([
         api.get("/api/employees", { params: { search, department: departmentFilter } }),
-        api.get("/api/users")
+        api.get("/api/users"),
+        api.get("/api/payroll/structures").catch(() => ({ data: [] }))
       ]);
       setEmployees(empRes.data);
       setUsers(userRes.data);
+      setStructures(structRes.data || []);
     } catch (e) {
       console.error(e);
     }
     setLoading(false);
+  }
+
+  async function handleAssignStructure(employeeId: string, salaryStructureId: string) {
+    setAssigningId(employeeId);
+    try {
+      await api.patch(`/api/employees/${employeeId}`, { salaryStructureId: salaryStructureId || null });
+      await loadData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAssigningId(null);
+    }
   }
 
   useEffect(() => {
@@ -379,12 +396,21 @@ export default function EmployeesClient() {
               </div>
             </div>
             
-            {emp.salaryStructure && (
-              <div className="mt-3 pt-3 border-t border-gray-50 dark:border-white/5 flex items-center justify-between">
-                <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase">Structure</p>
-                <p className="text-[9px] sm:text-[10px] font-black text-orange-600 uppercase tracking-widest">{emp.salaryStructure.name}</p>
-              </div>
-            )}
+            <div className="mt-3 pt-3 border-t border-gray-50 dark:border-white/5 flex items-center justify-between gap-2">
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase shrink-0">Salary Structure</p>
+              <select
+                value={emp.salaryStructureId || ""}
+                disabled={assigningId === emp.id}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => handleAssignStructure(emp.id, e.target.value)}
+                className="text-[9px] sm:text-[10px] font-black text-orange-600 uppercase tracking-widest bg-transparent border border-orange-100 dark:border-orange-500/20 rounded-lg px-2 py-1 outline-none max-w-[140px] truncate"
+              >
+                <option value="">Unassigned</option>
+                {structures.map((s: any) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
         ))}
       </div>

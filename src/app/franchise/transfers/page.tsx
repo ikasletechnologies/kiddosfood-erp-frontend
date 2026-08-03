@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowRightLeft, Clock, CheckCircle2, Package, TrendingUp } from "lucide-react";
+import { ArrowRightLeft, Clock, CheckCircle2, Package, TrendingUp, Truck } from "lucide-react";
 import { clsx } from "clsx";
-import { franchiseApi } from "@/lib/api";
+import { franchiseApi, logisticsApi } from "@/lib/api";
 
 const STATUS_STYLES: Record<string, string> = {
   PENDING:   "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
@@ -15,12 +15,17 @@ const STATUS_STYLES: Record<string, string> = {
 export default function FranchiseTransfersPage() {
   const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [inTransit, setInTransit] = useState<{ totalTransfersInTransit: number; itemTotals: any[] } | null>(null);
 
   useEffect(() => {
     franchiseApi.getTransfers()
       .then((res) => setTransfers(res.data ?? []))
       .catch(() => setTransfers([]))
       .finally(() => setLoading(false));
+
+    logisticsApi.getInTransit()
+      .then((res) => setInTransit(res.data))
+      .catch(() => setInTransit(null));
   }, []);
 
   const handleComplete = async (id: string) => {
@@ -75,6 +80,25 @@ export default function FranchiseTransfersPage() {
           );
         })}
       </div>
+
+      {inTransit && inTransit.itemTotals.length > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30 rounded-2xl p-5 space-y-3">
+          <h3 className="text-[12px] font-black text-blue-700 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2">
+            <Truck size={14} /> Goods in Transit ({inTransit.totalTransfersInTransit} {inTransit.totalTransfersInTransit === 1 ? "transfer" : "transfers"})
+          </h3>
+          <p className="text-[11px] text-blue-600/70 dark:text-blue-400/70 -mt-2">
+            Already deducted from the source branch but not yet received at the destination.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+            {inTransit.itemTotals.map((item: any, i: number) => (
+              <div key={i} className="bg-white dark:bg-card rounded-xl px-3 py-2 text-[12px] flex items-center justify-between">
+                <span className="text-gray-700 dark:text-slate-300 font-medium truncate">{item.name}</span>
+                <span className="font-bold text-gray-900 dark:text-white shrink-0 ml-2">{item.quantity} {item.unit}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="py-20 text-center text-gray-400 text-sm">Loading transfers...</div>

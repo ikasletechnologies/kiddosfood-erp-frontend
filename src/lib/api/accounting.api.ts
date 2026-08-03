@@ -101,5 +101,5 @@ export const chequesApi = {
   getAll: (params?: any) => api.get('/api/cheques', { params }),
   getStats: (params?: any) => api.get('/api/cheques/stats', { params }),
   create: (data: any) => api.post('/api/cheques', data),
-  updateStatus: (id: string, status: string) => api.patch(`/api/cheques/${id}/status`, { status }),
+  updateStatus: (id: string, status: string, accountId?: string) => api.patch(`/api/cheques/${id}/status`, { status, accountId }),
 };

@@ -74,7 +74,7 @@ export default function RequestForQuotationPage() {
   async function convertToPO(quotationId: string) {
      if(!confirm("Convert this quotation to a Purchase Order? Other quotations will be rejected.")) return;
      try {
-        await api.post(`/api/purchase/quotations/${quotationId}/convert-to-po`);
+        await api.post(`/api/purchase/rfqs/${quotationId}/convert-to-po`);
         loadData();
      } catch (e: any) { alert(e.response?.data?.error || "Error"); }
   }

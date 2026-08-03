@@ -25,7 +25,7 @@ interface AuditLog {
   entityId: string;
   details: any;
   createdAt: string;
-  user: { fullName: string, role: { name: string } };
+  user: { fullName: string, role: string };
   franchise?: { name: string };
 }
 
@@ -180,7 +180,7 @@ export default function AuditLogsPage() {
                         </div>
                         <div>
                           <p className="text-sm font-bold text-slate-900 dark:text-white leading-none mb-1">{log.user?.fullName || 'System User'}</p>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{log.user?.role?.name || 'ADMIN'}</p>
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{log.user?.role || 'ADMIN'}</p>
                         </div>
                       </div>
                     </td>
