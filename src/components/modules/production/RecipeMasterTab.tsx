@@ -381,7 +381,6 @@ export default function RecipeMasterTab() {
           {[
             { label: "Total Recipes", value: recipes.length, color: "text-gray-800", dot: "bg-gray-400" },
             { label: "Total Ingredients", value: recipes.reduce((s, r) => s + (r.recipeItems?.length ?? 0), 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
-            { label: "Avg Yield / Recipe", value: recipes.length ? Math.round(recipes.reduce((s, r) => s + (r.yieldQty ?? 0), 0) / recipes.length) : 0, color: "text-green-600", dot: "bg-green-500" },
           ].map(stat => (
             <div key={stat.label} className="bg-white rounded-lg border border-gray-200 px-4 py-2.5 flex items-center gap-3 shadow-sm">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
@@ -467,7 +466,7 @@ export default function RecipeMasterTab() {
                           </span>
                         )}
                         <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
-                          Yield: {recipe.yieldQty} units
+                          Yield: {recipe.yieldQty} {recipe.yieldUnit || "units"}
                         </span>
                         <span className="text-xs text-gray-500">
                           {recipe.recipeItems?.length ?? 0} ingredients
@@ -548,7 +547,12 @@ export default function RecipeMasterTab() {
       )}
 
       {/* Create / Edit Modal */}
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingId ? "Edit Recipe" : "New Recipe"} size="2xl">
+      <Modal
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        title={editingId ? `Edit Recipe${form.recipeCode ? ` — ${form.recipeCode}` : ""}` : "New Recipe"}
+        size="2xl"
+      >
         <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-700">Recipe Name *</label>
@@ -560,34 +564,23 @@ export default function RecipeMasterTab() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Recipe Code</label>
-              <input
-                value={form.recipeCode}
-                onChange={e => setForm(f => ({ ...f, recipeCode: e.target.value }))}
-                placeholder="e.g. REC001"
-                className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Category</label>
-              <select
-                value={form.category}
-                onChange={(e) => {
-                  if (e.target.value === "___NEW___") {
-                    setIsAddingCategory(true);
-                  } else {
-                    setForm(f => ({ ...f, category: e.target.value }));
-                  }
-                }}
-                className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-              >
-                <option value="">Select Category</option>
-                {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                <option value="___NEW___">+ Add New Category</option>
-              </select>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-gray-700">Category</label>
+            <select
+              value={form.category}
+              onChange={(e) => {
+                if (e.target.value === "___NEW___") {
+                  setIsAddingCategory(true);
+                } else {
+                  setForm(f => ({ ...f, category: e.target.value }));
+                }
+              }}
+              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+            >
+              <option value="">Select Category</option>
+              {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="___NEW___">+ Add New Category</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -634,18 +627,6 @@ export default function RecipeMasterTab() {
                   <option value="ml">ML</option>
                 </select>
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Estimated Duration (minutes)</label>
-              <input
-                type="number"
-                min={0}
-                placeholder="e.g. 120"
-                value={form.estimatedDurationMinutes ?? ""}
-                onChange={e => setForm(f => ({ ...f, estimatedDurationMinutes: e.target.value === '' ? null : (parseInt(e.target.value) || 0) }))}
-                className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-              />
             </div>
           </div>
 

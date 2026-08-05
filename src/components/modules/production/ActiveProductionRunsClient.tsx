@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText } from "lucide-react";
-import { productionApi } from "@/lib/api";
+import { productionApi, inventoryApi } from "@/lib/api";
 import { formatERPNumber } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
@@ -60,11 +60,36 @@ export default function ActiveProductionRunsClient() {
   const [actualYield, setActualYield] = useState<number>(0);
   const [remarks, setRemarks] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // Stock the shortage check compares against, scoped to whichever warehouse
+  // each run actually launched against — keyed by warehouseId. Runs from
+  // before warehouse-scoped production existed have no warehouseId, so they
+  // fall back to the item's plain currentStock (see getAvailableFor below).
+  const [warehouseStockByWarehouse, setWarehouseStockByWarehouse] = useState<Record<string, any[]>>({});
 
   const fetchHistory = useCallback(async () => {
     try {
       const res = await productionApi.getHistory();
-      setHistory(res.data || []);
+      const runs = res.data || [];
+      setHistory(runs);
+
+      const warehouseIds = Array.from(new Set(
+        runs
+          .filter((r: any) => r.status === 'IN_PROGRESS' || r.status === 'STOPPED')
+          .map((r: any) => r.warehouseId)
+          .filter(Boolean)
+      )) as string[];
+
+      const stockEntries = await Promise.all(
+        warehouseIds.map(async (whId) => {
+          try {
+            const stockRes = await inventoryApi.getRawMaterialStockSummary(whId);
+            return [whId, stockRes.data || []] as const;
+          } catch {
+            return [whId, []] as const;
+          }
+        })
+      );
+      setWarehouseStockByWarehouse(Object.fromEntries(stockEntries));
     } catch (e) {
       console.error(e);
       toast.error("Failed to load production history");
@@ -76,6 +101,20 @@ export default function ActiveProductionRunsClient() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  // Resolves available stock for one recipe ingredient, scoped to the run's
+  // warehouse when known.
+  const getAvailableFor = (run: any, item: any): number => {
+    const stockList = run.warehouseId ? warehouseStockByWarehouse[run.warehouseId] : undefined;
+    if (stockList) {
+      const match = stockList.find((s: any) =>
+        s.id === item.inventoryItemId ||
+        (s.sku && item.inventoryItem?.sku && s.sku.trim().toLowerCase() === item.inventoryItem.sku.trim().toLowerCase())
+      );
+      if (match) return match.availableStock || 0;
+    }
+    return item.inventoryItem?.currentStock || 0;
+  };
 
   const handleAdvanceStage = async (id: string, stage: string) => {
     try {
@@ -173,8 +212,7 @@ export default function ActiveProductionRunsClient() {
           activeRuns.map((run) => {
             const shortItems = (run.recipe?.recipeItems || []).filter((item: any) => {
               const required = (item.quantityRequired || 0) * (run.quantity || 1);
-              const available = item.inventoryItem?.currentStock || 0;
-              return available < required;
+              return getAvailableFor(run, item) < required;
             });
 
             return (
@@ -296,7 +334,7 @@ export default function ActiveProductionRunsClient() {
                         <tbody className="divide-y divide-rose-200/50 dark:divide-rose-800/30">
                           {shortItems.map((item: any, idx: number) => {
                             const required = (item.quantityRequired || 0) * (run.quantity || 1);
-                            const available = item.inventoryItem?.currentStock || 0;
+                            const available = getAvailableFor(run, item);
                             const short = required - available;
                             return (
                               <tr key={idx} className="text-rose-900 dark:text-rose-200 font-bold">

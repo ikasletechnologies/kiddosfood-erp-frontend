@@ -20,12 +20,12 @@ export default function RawMaterialLedgerClient() {
 
   const fetchItemsList = useCallback(async () => {
     try {
-      const res = await inventoryApi.getRawMaterialStockSummary(user?.franchiseId);
+      const res = await inventoryApi.getRawMaterialStockSummary();
       setItemsList(res.data ?? []);
     } catch (e) {
       console.error("Failed to fetch raw material stock list:", e);
     }
-  }, [user?.franchiseId]);
+  }, []);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);

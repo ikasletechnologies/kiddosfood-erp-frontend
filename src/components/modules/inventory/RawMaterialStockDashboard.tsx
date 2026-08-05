@@ -10,7 +10,6 @@ import {
 import { clsx } from "clsx";
 import { rawMaterialsApi, inventoryApi } from "@/lib/api";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
 
 const WASTE_REASONS = [
   { value: "EXPIRED", label: "Expired", icon: Flame, color: "text-red-600", bg: "bg-red-50 dark:bg-red-500/10", border: "border-red-200" },
@@ -24,6 +23,11 @@ export default function RawMaterialStockDashboard() {
   const [search, setSearch] = useState("");
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Storage is scoped by warehouse, not franchise — "" means every warehouse
+  // combined (same total Item Master shows).
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
   const [updating, setUpdating] = useState(false);
@@ -36,19 +40,23 @@ export default function RawMaterialStockDashboard() {
   const [trashSaving, setTrashSaving] = useState(false);
   const [trashError, setTrashError] = useState("");
 
-  const { user } = useAuth();
+  useEffect(() => {
+    inventoryApi.getWarehouses()
+      .then((res) => setWarehouses(res.data ?? []))
+      .catch((e) => console.error("Failed to fetch warehouses:", e));
+  }, []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await inventoryApi.getRawMaterialStockSummary(user?.franchiseId);
+      const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId || undefined);
       setItems(res.data ?? []);
     } catch (e) {
       console.error("Failed to fetch raw material stock:", e);
     } finally {
       setLoading(false);
     }
-  }, [user?.franchiseId]);
+  }, [selectedWarehouseId]);
 
   const handleUpdateThreshold = async (itemId: string) => {
     setUpdating(true);
@@ -209,15 +217,27 @@ export default function RawMaterialStockDashboard() {
             Raw Materials Only
           </button>
         </div>
-        <div className="relative group w-full md:w-80 px-2">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Search SKU / Material Name..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
-          />
+        <div className="flex items-center gap-2 w-full md:w-auto px-2 md:px-0">
+          <select
+            value={selectedWarehouseId}
+            onChange={(e) => setSelectedWarehouseId(e.target.value)}
+            className="px-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm text-slate-700 dark:text-slate-200 cursor-pointer"
+          >
+            <option value="">All Warehouses</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+          <div className="relative group w-full md:w-80">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search SKU / Material Name..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
+            />
+          </div>
         </div>
       </div>
 
@@ -252,6 +272,25 @@ export default function RawMaterialStockDashboard() {
                         <div className="min-w-0">
                           <p className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-[12px] truncate leading-none mb-1">{item.name}</p>
                           <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.sku}</span>
+                          {!selectedWarehouseId && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {item.warehouseBreakdown && item.warehouseBreakdown.length > 0 ? (
+                                item.warehouseBreakdown.map((b: any) => (
+                                  <span
+                                    key={b.warehouseId}
+                                    className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+                                    title={`${b.qty.toFixed(2)} ${item.unit} in ${b.warehouseName}`}
+                                  >
+                                    {b.warehouseName}: {b.qty.toFixed(1)}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-600">
+                                  Not tagged to any warehouse
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

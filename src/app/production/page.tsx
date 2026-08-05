@@ -32,13 +32,18 @@ function formatDuration(minutes?: number | null) {
 
 export default function ProductionPlanningPage() {
   const [recipes, setRecipes] = useState<any[]>([]);
+  // franchiseId is still sent to the backend (required by the schema) but is
+  // auto-picked and never shown — stock is scoped by warehouse now, not
+  // franchise, so warehouse is the only location concept the user deals with.
   const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
+  const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [plannedQueue, setPlannedQueue] = useState<PlannedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [stockLoading, setStockLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [franchiseInventory, setFranchiseInventory] = useState<any[]>([]);
+  const [warehouseStock, setWarehouseStock] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [employees, setEmployees] = useState<any[]>([]);
 
@@ -50,29 +55,39 @@ export default function ProductionPlanningPage() {
   const [activeOperatorId, setActiveOperatorId] = useState<string>("");
 
   const activeRecipe = recipes.find((r) => r.id === activeRecipeId);
+  // QUANTITY mode scales the recipe proportionally to hit the exact target
+  // output (e.g. 80 out of a 100-unit recipe = 0.8x every ingredient) instead
+  // of rounding up to a whole extra batch — a partial run is a real, valid
+  // production run, not an error. RUNS mode is the opposite: whole multiples
+  // of a full batch, on purpose (activeQty is always a whole run count).
   const computedRuns = inputMode === "QUANTITY"
-    ? Math.max(1, Math.ceil((targetQuantity || 0) / (activeRecipe?.yieldQty || 1)))
+    ? (activeRecipe?.yieldQty ? (targetQuantity || 0) / activeRecipe.yieldQty : 0)
     : Math.max(1, activeQty || 1);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [rRes, fRes, eRes] = await Promise.all([
+        const [rRes, fRes, eRes, wRes] = await Promise.all([
           recipesApi.getAll(),
           franchiseApi.getAll(),
-          api.get("/api/employees").catch(() => ({ data: [] }))
+          api.get("/api/employees").catch(() => ({ data: [] })),
+          inventoryApi.getWarehouses()
         ]);
         setRecipes(rRes.data || []);
         setFranchises(fRes.data || []);
         setEmployees(eRes.data || []);
+        setWarehouses(wRes.data || []);
         if (rRes.data?.length > 0) {
           setActiveRecipeId(rRes.data[0].id);
         }
         if (fRes.data?.length > 0) {
           setSelectedFranchiseId(fRes.data[0].id);
         }
+        if (wRes.data?.length > 0) {
+          setSelectedWarehouseId(wRes.data[0].id);
+        }
       } catch (err) {
-        toast.error("Failed to load recipes and franchises");
+        toast.error("Failed to load recipes and warehouses");
       } finally {
         setLoading(false);
       }
@@ -81,12 +96,12 @@ export default function ProductionPlanningPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedFranchiseId) return;
+    if (!selectedWarehouseId) return;
     async function loadStock() {
       setStockLoading(true);
       try {
-        const res = await inventoryApi.getInventory(selectedFranchiseId);
-        setFranchiseInventory(res.data || []);
+        const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId);
+        setWarehouseStock(res.data || []);
       } catch (err) {
         console.error("Stock load error:", err);
       } finally {
@@ -94,7 +109,7 @@ export default function ProductionPlanningPage() {
       }
     }
     loadStock();
-  }, [selectedFranchiseId]);
+  }, [selectedWarehouseId]);
 
   const addToQueue = () => {
     if (!activeRecipeId) return;
@@ -103,6 +118,11 @@ export default function ProductionPlanningPage() {
 
     setError(null); // Clear error on changes
     const runs = computedRuns;
+
+    if (runs <= 0) {
+      toast.error(inputMode === "QUANTITY" ? "Enter a target quantity greater than 0" : "Enter a run count greater than 0");
+      return;
+    }
 
     // Check if recipe is already in the queue, if so increment
     const exists = plannedQueue.find((item) => item.recipeId === activeRecipeId);
@@ -170,13 +190,13 @@ export default function ProductionPlanningPage() {
     });
 
     return Object.entries(rawMap).map(([id, val]) => {
-      // Find stock available
-      const stockItem = franchiseInventory.find((fi) => {
+      // Find stock available in the selected warehouse
+      const stockItem = warehouseStock.find((fi) => {
         const matchSku = fi.sku && val.sku && fi.sku.trim().toLowerCase() === val.sku.trim().toLowerCase();
         const matchId = fi.id === id;
         return matchSku || matchId;
       });
-      const available = stockItem ? stockItem.currentStock : 0;
+      const available = stockItem ? stockItem.availableStock : 0;
       return {
         id,
         ...val,
@@ -191,8 +211,8 @@ export default function ProductionPlanningPage() {
 
   const handleLaunchProduction = async () => {
     if (plannedQueue.length === 0) return;
-    if (!selectedFranchiseId) {
-      toast.error("Please select a target franchise");
+    if (!selectedWarehouseId) {
+      toast.error("Please select a warehouse / stock location");
       return;
     }
 
@@ -207,6 +227,7 @@ export default function ProductionPlanningPage() {
         await productionApi.startBatch({
           recipeId: item.recipeId,
           franchiseId: selectedFranchiseId,
+          warehouseId: selectedWarehouseId,
           quantity: item.quantity,
           expiryDate: expiryDate.toISOString().split("T")[0],
           productionType: "FINISHED_GOOD",
@@ -257,13 +278,14 @@ export default function ProductionPlanningPage() {
         </div>
         <div className="flex items-center gap-2">
           <select
-            value={selectedFranchiseId}
-            onChange={(e) => setSelectedFranchiseId(e.target.value)}
+            value={selectedWarehouseId}
+            onChange={(e) => setSelectedWarehouseId(e.target.value)}
             className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wider focus:outline-none"
           >
-            {franchises.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
+            {warehouses.length === 0 && <option value="">No warehouses found</option>}
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}{w.location ? ` (${w.location})` : ""}
               </option>
             ))}
           </select>
@@ -354,10 +376,21 @@ export default function ProductionPlanningPage() {
                         {activeRecipe?.yieldUnit || "KG"}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 bg-slate-50 dark:bg-slate-950 rounded-lg px-3 py-2">
-                      <span className="uppercase tracking-wider">Recipe Yield: {activeRecipe?.yieldQty || 1} {activeRecipe?.yieldUnit || "KG"}</span>
-                      <span className="text-[#F97316] uppercase tracking-wider">Runs Required: {computedRuns}</span>
+                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950 rounded-lg px-3 py-2">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
+                        <span className="uppercase tracking-wider">Standard Recipe Yield: {activeRecipe?.yieldQty || 1} {activeRecipe?.yieldUnit || "KG"}</span>
+                        <span className="text-[#F97316] uppercase tracking-wider">Scale Factor: {computedRuns.toFixed(2)}x</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-bold">
+                        <span className="text-slate-400 uppercase tracking-wider">Actual Output (exact)</span>
+                        <span className="text-slate-900 dark:text-white uppercase tracking-wider">
+                          {(targetQuantity || 0).toFixed(1)} {activeRecipe?.yieldUnit || "KG"}
+                        </span>
+                      </div>
                     </div>
+                    <p className="text-[9px] text-slate-400 font-semibold normal-case leading-snug px-0.5">
+                      Every ingredient is scaled by {computedRuns.toFixed(2)}x to hit this quantity exactly — this is a single partial run, not rounded up to a full batch.
+                    </p>
                   </div>
                 ) : (
                   <input
@@ -416,7 +449,7 @@ export default function ProductionPlanningPage() {
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white">{item.recipeName}</h4>
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[9px] font-semibold text-slate-500 uppercase">
-                          <span>Yield: {(item.quantity * item.yieldQty).toFixed(1)} {item.yieldUnit} ({item.quantity} runs)</span>
+                          <span>Yield: {(item.quantity * item.yieldQty).toFixed(1)} {item.yieldUnit} ({item.quantity.toFixed(2)}x scale)</span>
                           <span>Expected: {formatDuration(item.estimatedDurationMinutes)}</span>
                           <span className="col-span-2">
                             Operator: <span className={operator ? "text-slate-700 dark:text-slate-300" : "text-slate-400 italic"}>
@@ -523,7 +556,7 @@ export default function ProductionPlanningPage() {
                       </h4>
                       <p className="text-[10px] text-slate-500 font-semibold uppercase">
                         {allSufficient 
-                          ? 'All required quantities are present in selected franchise stock.' 
+                          ? 'All required quantities are present in the selected warehouse.' 
                           : 'Some ingredients are missing. Launching runs might fail or cause negative stock.'}
                       </p>
                     </div>

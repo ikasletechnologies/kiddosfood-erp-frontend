@@ -35,6 +35,50 @@ api.interceptors.request.use((config) => {
   return config;
 }, (error) => Promise.reject(error));
 
+// Request/Response Logger — prints every call this app makes, dev only so
+// production builds don't spam the browser console (or leak response data
+// into it). Runs after the auth interceptor above so it's registered second
+// and therefore fires second on the way out, first on the way back in.
+const LOGGING_ENABLED = process.env.NODE_ENV !== 'production';
+const redactBody = (body: any) => {
+  if (!body || typeof body !== 'object') return body;
+  const REDACTED_KEYS = ['password', 'accessToken', 'refreshToken', 'token'];
+  const copy: any = Array.isArray(body) ? [...body] : { ...body };
+  for (const key of Object.keys(copy)) {
+    if (REDACTED_KEYS.includes(key)) copy[key] = '********';
+  }
+  return copy;
+};
+
+if (LOGGING_ENABLED) {
+  api.interceptors.request.use((config) => {
+    const method = (config.method || 'get').toUpperCase();
+    console.log(`🚀 [${method}] ${config.baseURL || ''}${config.url}`);
+    if (config.params && Object.keys(config.params).length > 0) console.log('   🔸 Params:', config.params);
+    if (config.data) console.log('   🔸 Body:', redactBody(config.data));
+    return config;
+  }, (error) => {
+    console.error('❌ [REQUEST ERROR]', error);
+    return Promise.reject(error);
+  });
+
+  api.interceptors.response.use((response) => {
+    const method = (response.config.method || 'get').toUpperCase();
+    console.log(`✅ [${response.status}] ${method} ${response.config.url}`);
+    console.log('   🔹 Response:', redactBody(response.data));
+    return response;
+  }, (error) => {
+    if (error.response) {
+      const method = (error.config?.method || 'get').toUpperCase();
+      console.log(`❌ [${error.response.status}] ${method} ${error.config?.url}`);
+      console.log('   🔹 Response:', redactBody(error.response.data));
+    } else {
+      console.error('❌ [NETWORK ERROR]', error.message);
+    }
+    return Promise.reject(error);
+  });
+}
+
 // Response Interceptor: Handle Token Refresh
 api.interceptors.response.use(
   (response) => response,

@@ -596,7 +596,7 @@ export default function RecipesPage() {
               </div>
               <div>
                 <h2 className="text-2xl font-black text-[#1e293b] dark:text-white tracking-tight uppercase">
-                  {editingRecipe ? "Edit Recipe" : "New Recipe"}
+                  {editingRecipe ? `Edit Recipe${formData.recipeCode ? ` — ${formData.recipeCode}` : ""}` : "New Recipe"}
                 </h2>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
                   Define formula and bill of materials
@@ -622,34 +622,23 @@ export default function RecipesPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Recipe Code</label>
-                <input
-                  value={formData.recipeCode}
-                  onChange={(e) => setFormData({ ...formData, recipeCode: e.target.value })}
-                  placeholder="e.g. REC001"
-                  className="w-full h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white placeholder:text-slate-400"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Category</label>
-                <select
-                  value={uniqueCategories.includes(formData.category) ? formData.category : (formData.category ? "___NEW___" : "")}
-                  onChange={(e) => {
-                    if (e.target.value === "___NEW___") {
-                      setIsAddingCategory(true);
-                    } else {
-                      setFormData({ ...formData, category: e.target.value });
-                    }
-                  }}
-                  className="w-full h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
-                >
-                  <option value="">Select Category</option>
-                  {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                  <option value="___NEW___">+ Add New Category</option>
-                </select>
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Category</label>
+              <select
+                value={uniqueCategories.includes(formData.category) ? formData.category : (formData.category ? "___NEW___" : "")}
+                onChange={(e) => {
+                  if (e.target.value === "___NEW___") {
+                    setIsAddingCategory(true);
+                  } else {
+                    setFormData({ ...formData, category: e.target.value });
+                  }
+                }}
+                className="w-full h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
+              >
+                <option value="">Select Category</option>
+                {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="___NEW___">+ Add New Category</option>
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

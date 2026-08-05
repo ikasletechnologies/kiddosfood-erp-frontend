@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { inventoryApi } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
 
 export default function RawMaterialConsumptionClient() {
   const [items, setItems] = useState<any[]>([]);
@@ -15,19 +14,28 @@ export default function RawMaterialConsumptionClient() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
 
-  const { user } = useAuth();
+  // Consumption is scoped by warehouse (where material actually left from),
+  // not franchise. "" means every warehouse combined.
+  const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+
+  useEffect(() => {
+    inventoryApi.getWarehouses()
+      .then((res) => setWarehouses(res.data ?? []))
+      .catch((e) => console.error("Failed to fetch warehouses:", e));
+  }, []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await inventoryApi.getRawMaterialConsumption(user?.franchiseId);
+      const res = await inventoryApi.getRawMaterialConsumption(selectedWarehouseId || undefined);
       setItems(res.data ?? []);
     } catch (e) {
       console.error("Failed to fetch raw material consumption:", e);
     } finally {
       setLoading(false);
     }
-  }, [user?.franchiseId]);
+  }, [selectedWarehouseId]);
 
   useEffect(() => {
     fetchItems();
@@ -152,15 +160,27 @@ export default function RawMaterialConsumptionClient() {
             </button>
           ))}
         </div>
-        <div className="relative group w-full md:w-80 px-2">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input
-            type="text"
-            placeholder="Search Batch / Material / Reason..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
-          />
+        <div className="flex items-center gap-2 w-full md:w-auto px-2 md:px-0">
+          <select
+            value={selectedWarehouseId}
+            onChange={(e) => setSelectedWarehouseId(e.target.value)}
+            className="px-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm text-slate-700 dark:text-slate-200 cursor-pointer"
+          >
+            <option value="">All Warehouses</option>
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+          <div className="relative group w-full md:w-80">
+            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search Batch / Material / Reason..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
+            />
+          </div>
         </div>
       </div>
 

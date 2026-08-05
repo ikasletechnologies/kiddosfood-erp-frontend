@@ -383,7 +383,7 @@ export default function ProductBatchesPage() {
                   <table className="w-full text-left whitespace-nowrap">
                     <thead>
                       <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.01]">
-                        {["Batch ID", "Product", "Qty Produced", "Packed", "Bulk", "Available", "Expiry", "Status", "Actions"].map((h) => (
+                        {["Batch ID", "Product", "Qty Produced", "Unit Cost", "Packed", "Bulk", "Available", "Expiry", "Status", "Actions"].map((h) => (
                           <th key={h} className="px-4 py-3 text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">{h}</th>
                         ))}
                       </tr>
@@ -413,6 +413,9 @@ export default function ProductBatchesPage() {
                             </td>
                             <td className="px-4 py-3 text-[11px] font-bold text-slate-900 tabular-nums">
                               {batch.quantity} <span className="text-[9px] text-slate-400">{batch.product?.unit}</span>
+                            </td>
+                            <td className="px-4 py-3 text-[11px] font-bold text-slate-900 tabular-nums">
+                              {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}
                             </td>
                             <td className="px-4 py-3 text-[11px] font-bold text-slate-900 tabular-nums">
                               {batch.packedQuantity || 0} <span className="text-[9px] text-slate-400">{batch.product?.unit}</span>
@@ -722,27 +725,30 @@ export default function ProductBatchesPage() {
                 </div>
               </div>
 
-              {/* Yield & Variance */}
+              {/* Yield & Cost */}
               <div>
-                <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-3">Production Yield</h3>
-                <div className="grid grid-cols-4 gap-4">
+                <h3 className="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-3">Production Yield &amp; Cost</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Expected</p>
-                    <p className="text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">50 <span className="text-[10px] text-slate-400">KG</span></p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Produced</p>
+                    <p className="text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-[10px] text-slate-400">{selectedBatch.product?.unit || "KG"}</span></p>
                   </div>
                   <div className="p-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Actual</p>
-                    <p className="text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">55 <span className="text-[10px] text-slate-400">KG</span></p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Approved / Rejected</p>
+                    <p className="text-xl font-black text-slate-900 dark:text-white mt-1 tabular-nums">{selectedBatch.approvedQty ?? 0} <span className="text-[10px] text-rose-400">/ {selectedBatch.rejectionQty ?? 0}</span></p>
+                  </div>
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/30 rounded-xl shadow-sm text-center">
+                    <p className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Material Cost</p>
+                    <p className="text-xl font-black text-indigo-700 dark:text-indigo-400 mt-1 tabular-nums">₹{(selectedBatch.production?.materialCost ?? selectedBatch.totalCost ?? 0).toFixed(2)}</p>
                   </div>
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30 rounded-xl shadow-sm text-center">
-                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Yield %</p>
-                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">110%</p>
-                  </div>
-                  <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800/30 rounded-xl shadow-sm text-center">
-                    <p className="text-[9px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-widest">Variance</p>
-                    <p className="text-xl font-black text-amber-700 dark:text-amber-400 mt-1 tabular-nums">+5 <span className="text-[10px] text-amber-600/50">KG</span></p>
+                    <p className="text-[9px] font-black text-emerald-600 dark:text-emerald-500 uppercase tracking-widest">Unit Cost</p>
+                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">₹{(selectedBatch.unitCost ?? 0).toFixed(2)}</p>
                   </div>
                 </div>
+                <p className="text-[9px] font-bold text-slate-400 mt-2">
+                  Unit cost reflects the real price on whichever purchase bill(s) this run actually consumed (FIFO) — it can differ run-to-run of the same recipe as older, cheaper bills run out and newer purchase prices take over.
+                </p>
               </div>
 
               {/* Ingredients Used */}
@@ -753,24 +759,44 @@ export default function ProductBatchesPage() {
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 text-[9px] font-black text-slate-400 uppercase tracking-widest">
                       <tr>
                         <th className="px-4 py-2">Ingredient</th>
-                        <th className="px-4 py-2 text-right">Recipe Qty</th>
-                        <th className="px-4 py-2 text-right">Actual Qty</th>
-                        <th className="px-4 py-2 text-right">Variance</th>
+                        <th className="px-4 py-2 text-right">Qty Used</th>
+                        <th className="px-4 py-2 text-right">Unit Cost</th>
+                        <th className="px-4 py-2 text-right">Total Cost</th>
+                        <th className="px-4 py-2">Purchase Bill(s) Used (FIFO)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50 dark:divide-slate-800/50 text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                      <tr>
-                        <td className="px-4 py-3">Urad Dal (Premium)</td>
-                        <td className="px-4 py-3 text-right">10 Kg</td>
-                        <td className="px-4 py-3 text-right">10.2 Kg</td>
-                        <td className="px-4 py-3 text-right text-rose-500">+0.2 Kg</td>
-                      </tr>
-                      <tr>
-                        <td className="px-4 py-3">Idly Rice</td>
-                        <td className="px-4 py-3 text-right">40 Kg</td>
-                        <td className="px-4 py-3 text-right">40 Kg</td>
-                        <td className="px-4 py-3 text-right text-slate-400">0</td>
-                      </tr>
+                      {(selectedBatch.production?.items ?? []).map((pi: any) => (
+                        <tr key={pi.id}>
+                          <td className="px-4 py-3">{pi.inventoryItem?.name ?? "—"}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">{pi.usedQuantity} {pi.inventoryItem?.unit}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">₹{(pi.unitCost ?? 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">₹{(pi.totalCost ?? 0).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-[10px] text-slate-500 normal-case">
+                            {Array.isArray(pi.batchBreakdown) && pi.batchBreakdown.length > 0
+                              ? pi.batchBreakdown.map((b: any, idx: number) => {
+                                  const isFallback = !b.batchId;
+                                  return (
+                                    <div key={idx} className="whitespace-nowrap">
+                                      <span className={isFallback
+                                        ? "font-bold text-amber-600 dark:text-amber-400"
+                                        : "font-mono font-bold text-slate-600 dark:text-slate-300"}>
+                                        {b.billNumber || "—"}
+                                      </span>
+                                      {": "}
+                                      {b.qty} {pi.inventoryItem?.unit} @ ₹{(b.unitCost ?? 0).toFixed(2)}
+                                    </div>
+                                  );
+                                })
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                      {(!selectedBatch.production?.items || selectedBatch.production.items.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-6 text-center text-slate-400">No ingredient data recorded for this run</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
