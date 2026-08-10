@@ -2,19 +2,16 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  Layers, Search, AlertTriangle, CheckCircle2,
-  RefreshCw, Trash2, X, Edit2, Lock,
-  Calculator, Package, BarChart3, Database,
-  Download, Flame, Wrench, Recycle
+  Layers, Search, AlertTriangle, RefreshCw, Trash2, X, Edit2, Lock,
+  Database, Download, Flame, Wrench, Recycle
 } from "lucide-react";
 import { clsx } from "clsx";
 import { rawMaterialsApi, inventoryApi } from "@/lib/api";
-import Link from "next/link";
 
 const WASTE_REASONS = [
-  { value: "EXPIRED", label: "Expired", icon: Flame, color: "text-red-600", bg: "bg-red-50 dark:bg-red-500/10", border: "border-red-200" },
-  { value: "DAMAGED", label: "Damaged", icon: Wrench, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-500/10", border: "border-amber-200" },
-  { value: "SCRAPPED", label: "Scrapped", icon: Recycle, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200" },
+  { value: "EXPIRED", label: "Expired", icon: Flame, color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },
+  { value: "DAMAGED", label: "Damaged", icon: Wrench, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
+  { value: "SCRAPPED", label: "Scrapped", icon: Recycle, color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200" },
 ];
 
 export default function RawMaterialStockDashboard() {
@@ -140,302 +137,286 @@ export default function RawMaterialStockDashboard() {
   const getStockStatus = (stock: number, threshold: number) => {
     const s = stock || 0;
     const t = threshold || 0;
-    if (s <= 0) return { label: "CRITICAL", color: "bg-red-50 text-red-600 border-red-100 dark:bg-red-500/10 dark:border-red-500/20" };
-    if (s < t) return { label: "LOW STOCK", color: "bg-orange-50 text-orange-600 border-orange-100 dark:bg-orange-500/10 dark:border-orange-500/20" };
-    if (s === t) return { label: "REORDER", color: "bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-500/10 dark:border-amber-500/20" };
-    return { label: "SAFE", color: "bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-500/10 dark:border-emerald-500/20" };
+    if (s <= 0) return { label: "CRITICAL", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" };
+    if (s < t) return { label: "LOW STOCK", color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200" };
+    if (s === t) return { label: "REORDER", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" };
+    return { label: "SAFE", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" };
   };
 
   const totalValue = items.reduce((acc, i) => acc + ((i.availableStock || 0) * (i.costPrice || 0)), 0);
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 p-4 md:p-8">
-      {deleteError && (
-        <div className="flex items-center justify-between p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-2xl text-red-600 text-xs font-bold">
-          <div className="flex items-center gap-3"><AlertTriangle size={14} />{deleteError}</div>
-          <button onClick={() => setDeleteError(null)}><X size={14} /></button>
-        </div>
-      )}
-
-      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-slate-900 rounded-2xl shadow-xl shadow-slate-900/10 shrink-0">
-              <Database size={24} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
-                Raw Material Stock <span className="text-slate-400 font-medium ml-1 italic">& Levels</span>
-              </h1>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <BarChart3 size={12} className="text-orange-500" /> Granular production raw material ledger
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
+          <Layers className="h-5 w-5 text-[#f58220]" />
+          Raw Material Stock
+        </h1>
+        <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl hover:border-emerald-300 hover:text-emerald-600 transition-all shadow-sm text-slate-500"
-            title="Download CSV"
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 bg-white transition-colors"
           >
-            <Download size={16} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Export</span>
+            <Download className="h-3.5 w-3.5" /> Export
           </button>
-          <button onClick={fetchItems} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl hover:border-slate-300 transition-all shadow-sm">
-            <RefreshCw size={16} className={clsx("text-slate-400", loading && "animate-spin")} />
+          <button onClick={fetchItems} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
-      </header>
-
-      {/* Analytics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[
-          { label: "Available Stock Value", value: `₹${(totalValue / 1000).toFixed(1)}K`, sub: "Live Asset Value", icon: Calculator, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Reserved Stock Items", value: items.filter(i => (i.reservedStock || 0) > 0).length, sub: "In production queue", icon: Package, color: "text-amber-500", bg: "bg-amber-500/10" },
-          { label: "Low Stock Alerts", value: items.filter(i => (i.availableStock || 0) <= (i.minimumStock || 0)).length, sub: "Reorder Required", icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
-          { label: "Near Expiry Items", value: items.filter(i => (i.nearExpiryStock || 0) > 0).length, sub: "Expiring in 30 days", icon: Flame, color: "text-orange-500", bg: "bg-orange-500/10" },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{stat.label}</p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{stat.value}</h3>
-              </div>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{stat.sub}</p>
-            </div>
-            <div className={clsx("p-3.5 rounded-xl shrink-0 flex items-center justify-center", stat.bg, stat.color)}>
-              <stat.icon size={20} className="stroke-[2px]" />
-            </div>
-          </div>
-        ))}
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-white/5 p-2 rounded-[2rem] border border-slate-100 dark:border-white/5">
-        <div className="flex gap-1 overflow-x-auto hide-scrollbar">
-          <button className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm border border-slate-100 dark:border-white/10">
-            Raw Materials Only
-          </button>
+      <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
+        {deleteError && (
+          <div className="flex items-center justify-between p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-600 text-sm">
+            <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{deleteError}</div>
+            <button onClick={() => setDeleteError(null)}><X className="h-4 w-4" /></button>
+          </div>
+        )}
+
+        {/* Summary Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Available Stock Value", value: `₹${(totalValue / 1000).toFixed(1)}K`, dot: "bg-blue-500" },
+            { label: "Reserved Stock Items", value: items.filter(i => (i.reservedStock || 0) > 0).length, dot: "bg-amber-500" },
+            { label: "Low Stock Alerts", value: items.filter(i => (i.availableStock || 0) <= (i.minimumStock || 0)).length, dot: "bg-rose-500" },
+            { label: "Near Expiry Items", value: items.filter(i => (i.nearExpiryStock || 0) > 0).length, dot: "bg-orange-500" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+              <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
+              <div>
+                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-lg font-bold text-gray-700">{s.value}</p>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto px-2 md:px-0">
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+            <button className="px-3 py-2 text-xs font-medium bg-[#f58220] text-white whitespace-nowrap">
+              Raw Materials Only
+            </button>
+          </div>
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="px-4 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm text-slate-700 dark:text-slate-200 cursor-pointer"
+            className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 outline-none focus:border-[#f58220]"
           >
             <option value="">All Warehouses</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
-          <div className="relative group w-full md:w-80">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search SKU / Material Name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
             />
           </div>
         </div>
-      </div>
 
-      {/* Dense Table Layout */}
-      <div className="bg-white dark:bg-card/40 border border-slate-200 dark:border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left table-fixed">
-            <thead className="bg-slate-50/50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5">
-              <tr className="text-slate-400">
-                <th className="w-[20%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Material</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Available Stock</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Reserved Stock</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Near Expiry</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Damaged Stock</th>
-                <th className="w-[15%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Reorder Level</th>
-                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Status</th>
-                <th className="w-[7%] px-8 py-4"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 dark:divide-white/5">
-              {filtered.map((item) => {
-                const status = getStockStatus(item.availableStock || 0, item.minimumStock);
-                return (
-                  <tr key={item.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
-                    <td className="px-8 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center font-black text-[9px] border shrink-0",
-                          status.label === "CRITICAL" ? "bg-red-50 text-red-500 border-red-100" : "bg-slate-50 text-slate-500 border-slate-200"
-                        )}>
-                          {item.name.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-[12px] truncate leading-none mb-1">{item.name}</p>
-                          <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.sku}</span>
-                          {!selectedWarehouseId && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {item.warehouseBreakdown && item.warehouseBreakdown.length > 0 ? (
-                                item.warehouseBreakdown.map((b: any) => (
-                                  <span
-                                    key={b.warehouseId}
-                                    className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400"
-                                    title={`${b.qty.toFixed(2)} ${item.unit} in ${b.warehouseName}`}
-                                  >
-                                    {b.warehouseName}: {b.qty.toFixed(1)}
+        {/* Table */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                  <th className="text-left px-4 py-3">Material</th>
+                  <th className="text-center px-4 py-3">Available Stock</th>
+                  <th className="text-center px-4 py-3">Reserved Stock</th>
+                  <th className="text-center px-4 py-3">Near Expiry</th>
+                  <th className="text-center px-4 py-3">Damaged Stock</th>
+                  <th className="text-center px-4 py-3">Reorder Level</th>
+                  <th className="text-center px-4 py-3">Status</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((item) => {
+                  const status = getStockStatus(item.availableStock || 0, item.minimumStock);
+                  return (
+                    <tr key={item.id} className="group hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center font-semibold text-[10px] border shrink-0",
+                            status.label === "CRITICAL" ? "bg-rose-50 text-rose-500 border-rose-200" : "bg-gray-50 text-gray-500 border-gray-200"
+                          )}>
+                            {item.name.substring(0, 2).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-800 truncate">{item.name}</p>
+                            <span className="text-xs text-gray-400">{item.sku}</span>
+                            {!selectedWarehouseId && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.warehouseBreakdown && item.warehouseBreakdown.length > 0 ? (
+                                  item.warehouseBreakdown.map((b: any) => (
+                                    <span
+                                      key={b.warehouseId}
+                                      className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-500"
+                                      title={`${b.qty.toFixed(2)} ${item.unit} in ${b.warehouseName}`}
+                                    >
+                                      {b.warehouseName}: {b.qty.toFixed(1)}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-600">
+                                    Not tagged to any warehouse
                                   </span>
-                                ))
-                              ) : (
-                                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-600">
-                                  Not tagged to any warehouse
-                                </span>
-                              )}
-                            </div>
-                          )}
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm font-extrabold text-slate-900 dark:text-slate-200">
-                        {(item.availableStock || 0).toFixed(2)}
-                      </span>
-                      <span className="ml-1 text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={clsx("text-sm font-extrabold", (item.reservedStock || 0) > 0 ? "text-amber-600" : "text-slate-400")}>
-                        {(item.reservedStock || 0).toFixed(2)}
-                      </span>
-                      <span className="ml-1 text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={clsx("text-sm font-extrabold", (item.nearExpiryStock || 0) > 0 ? "text-red-500" : "text-slate-400")}>
-                        {(item.nearExpiryStock || 0).toFixed(2)}
-                      </span>
-                      <span className="ml-1 text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={clsx("text-sm font-extrabold", (item.damagedStock || 0) > 0 ? "text-orange-500" : "text-slate-400")}>
-                        {(item.damagedStock || 0).toFixed(2)}
-                      </span>
-                      <span className="ml-1 text-[10px] text-slate-400 font-bold uppercase">{item.unit}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {editingId === item.id ? (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <input
-                            type="number"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            className="w-16 px-1.5 py-0.5 text-center text-xs font-bold border rounded"
-                          />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="font-semibold text-gray-800">
+                          {(item.availableStock || 0).toFixed(2)}
+                        </span>
+                        <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={clsx("font-semibold", (item.reservedStock || 0) > 0 ? "text-amber-600" : "text-gray-400")}>
+                          {(item.reservedStock || 0).toFixed(2)}
+                        </span>
+                        <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={clsx("font-semibold", (item.nearExpiryStock || 0) > 0 ? "text-rose-600" : "text-gray-400")}>
+                          {(item.nearExpiryStock || 0).toFixed(2)}
+                        </span>
+                        <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={clsx("font-semibold", (item.damagedStock || 0) > 0 ? "text-orange-600" : "text-gray-400")}>
+                          {(item.damagedStock || 0).toFixed(2)}
+                        </span>
+                        <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {editingId === item.id ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <input
+                              type="number"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-16 px-1.5 py-1 text-center text-xs border border-gray-200 rounded outline-none focus:border-[#f58220]"
+                            />
+                            <button
+                              disabled={updating}
+                              onClick={() => handleUpdateThreshold(item.id)}
+                              className="px-1.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded text-[10px] font-semibold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="px-1.5 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded text-[10px] font-semibold"
+                            >
+                              X
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="text-gray-700">
+                              {item.minimumStock} {item.unit}
+                            </span>
+                            <button
+                              onClick={() => { setEditingId(item.id); setEditValue(item.minimumStock.toString()); }}
+                              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-700"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", status.color, status.bg, status.border)}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            disabled={updating}
-                            onClick={() => handleUpdateThreshold(item.id)}
-                            className="px-1.5 py-0.5 bg-emerald-500 text-white rounded text-[10px] font-bold"
+                            onClick={() => { setTrashItem(item); setTrashQty(""); setTrashNote(""); setTrashReason("EXPIRED"); setTrashError(""); }}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                            title="Move to Trash"
                           >
-                            Save
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="px-1.5 py-0.5 bg-slate-300 text-slate-800 rounded text-[10px] font-bold"
-                          >
-                            X
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className="text-sm font-semibold text-slate-600">
-                            {item.minimumStock} {item.unit}
-                          </span>
-                          <button
-                            onClick={() => { setEditingId(item.id); setEditValue(item.minimumStock.toString()); }}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-900"
-                          >
-                            <Edit2 size={10} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={clsx("inline-block px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-wider border", status.color)}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-8 py-4 text-right">
-                      <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => { setTrashItem(item); setTrashQty(""); setTrashNote(""); setTrashReason("EXPIRED"); setTrashError(""); }}
-                          className="p-2 bg-red-50 dark:bg-red-500/10 text-red-400 rounded-lg hover:bg-red-100 hover:text-red-600 transition-all"
-                          title="Move to Trash"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <div className="py-20 text-center space-y-4">
-              <div className="inline-flex p-6 bg-slate-50 dark:bg-white/5 rounded-full mb-2"><Database size={40} className="text-slate-200" /></div>
-              <p className="text-sm font-black text-slate-400 uppercase tracking-widest">No matching raw material items found</p>
-            </div>
-          )}
-        </div>
-        <div className="px-8 py-4 bg-slate-50/50 dark:bg-white/[0.02] border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Stock Integrity Active</div>
-            <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase tracking-widest"><Lock size={10} className="text-orange-500" /> Production Locked Ledger</div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {filtered.length === 0 && (
+              <div className="py-20 text-center space-y-4">
+                <div className="inline-flex p-6 bg-gray-50 rounded-full mb-2"><Database className="h-8 w-8 text-gray-300" /></div>
+                <p className="text-sm text-gray-400">No matching raw material items found</p>
+              </div>
+            )}
           </div>
-          <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest italic">Total Asset Value: ₹{totalValue.toLocaleString()}</p>
+          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Stock Integrity Active</div>
+              <div className="flex items-center gap-1.5 text-xs text-gray-500"><Lock className="h-3 w-3 text-[#f58220]" /> Production Locked Ledger</div>
+            </div>
+            <p className="text-xs text-gray-400">Total Asset Value: ₹{totalValue.toLocaleString()}</p>
+          </div>
         </div>
       </div>
 
       {/* Move to Trash Modal */}
       {trashItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md p-8 space-y-6 border border-slate-100 dark:border-white/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-lg border border-gray-200 shadow-xl w-full max-w-md p-6 space-y-4">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Move to Trash</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{trashItem.name}</p>
+                <h3 className="text-sm font-bold text-gray-800">Move to Trash</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{trashItem.name}</p>
               </div>
-              <button onClick={() => setTrashItem(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl text-slate-400">
-                <X size={18} />
+              <button onClick={() => setTrashItem(null)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <div className="p-4 bg-red-50 dark:bg-red-500/10 rounded-2xl border border-red-100 dark:border-red-500/20 text-xs font-bold text-red-600 dark:text-red-400">
-              Available Stock: <span className="font-black">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-600">
+              Available Stock: <span className="font-semibold">
                 {trashItem.availableStock.toFixed(2)} {trashItem.unit}
               </span>
-              <span className="block mt-1 text-[10px] text-slate-400 font-medium">• This action reduces inventory permanently</span>
+              <span className="block mt-1 text-xs text-gray-400">This action reduces inventory permanently</span>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason for Disposal</label>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Reason for Disposal</label>
               <div className="grid grid-cols-3 gap-2">
                 {WASTE_REASONS.map(r => (
                   <button
                     key={r.value}
                     onClick={() => setTrashReason(r.value)}
                     className={clsx(
-                      "flex flex-col items-center gap-2 p-3 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all",
+                      "flex flex-col items-center gap-1.5 p-3 rounded-lg border text-[11px] font-semibold transition-colors",
                       trashReason === r.value
-                        ? `${r.bg} ${r.color} ${r.border} scale-105`
-                        : "border-slate-100 dark:border-white/5 text-slate-400 hover:border-slate-200"
+                        ? `${r.bg} ${r.color} ${r.border}`
+                        : "border-gray-200 text-gray-500 hover:border-gray-300"
                     )}
                   >
-                    <r.icon size={18} />
+                    <r.icon className="h-4 w-4" />
                     {r.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Quantity to Dispose *</label>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantity to Dispose *</label>
               <div className="relative">
                 <input
                   type="number"
@@ -443,44 +424,44 @@ export default function RawMaterialStockDashboard() {
                   onChange={e => setTrashQty(e.target.value)}
                   placeholder="0.00"
                   max={trashItem.availableStock}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-black outline-none focus:ring-2 ring-red-500/20"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-800 outline-none focus:border-rose-400"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 uppercase">{trashItem.unit}</span>
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">{trashItem.unit}</span>
               </div>
               {trashQty && (
-                <p className="text-[10px] text-red-500 font-bold">
+                <p className="text-xs text-rose-500 mt-1.5">
                   Loss Value: ₹{((parseFloat(trashQty) || 0) * (trashItem.costPrice || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </p>
               )}
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes (Optional)</label>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes (Optional)</label>
               <input
                 type="text"
                 value={trashNote}
                 onChange={e => setTrashNote(e.target.value)}
                 placeholder="e.g. batch spoiled due to storage issue"
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-medium outline-none"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
               />
             </div>
 
             {trashError && (
-              <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-500/20 rounded-xl text-xs font-bold text-red-600 flex items-center gap-2">
-                <AlertTriangle size={14} /> {trashError}
+              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-600 flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5" /> {trashError}
               </div>
             )}
 
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setTrashItem(null)} className="flex-1 py-3 rounded-xl text-xs font-black uppercase text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-all">
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setTrashItem(null)} className="flex-1 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 border border-gray-200 transition-colors">
                 Cancel
               </button>
               <button
                 onClick={handleMoveToTrash}
                 disabled={trashSaving}
-                className="flex-[2] py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-red-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="flex-[2] py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                <Trash2 size={14} />
+                <Trash2 className="h-4 w-4" />
                 {trashSaving ? "Processing..." : "Confirm Disposal"}
               </button>
             </div>

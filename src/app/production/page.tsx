@@ -6,6 +6,7 @@ import {
   RefreshCw, ChefHat, Play, ShoppingCart, Info, Sparkles 
 } from "lucide-react";
 import Link from "next/link";
+import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { recipesApi, franchiseApi, inventoryApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
@@ -250,37 +251,27 @@ export default function ProductionPlanningPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] flex flex-col items-center justify-center p-6">
-        <div className="w-12 h-12 border-4 border-[#F97316] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Planning Scheduler Loading...</p>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+        <div className="w-12 h-12 border-4 border-[#f58220] border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Planning Scheduler Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-in fade-in duration-500">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 border-b border-slate-200 dark:border-slate-800">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-[#F97316] rounded-xl shadow-lg shadow-orange-600/20 text-white">
-              <Calendar size={22} />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
-                Production <span className="text-[#F97316]">Planning</span>
-              </h1>
-              <p className="text-xs text-slate-500 mt-0.5 font-semibold tracking-wider uppercase">
-                Schedule upcoming runs and audit raw material readiness
-              </p>
-            </div>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50 text-gray-800">
+
+      {/* ── Page Header ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-[#f58220]" />
+          Production Planning
+        </h1>
         <div className="flex items-center gap-2">
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-xs font-bold uppercase tracking-wider focus:outline-none"
+            className="bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer"
           >
             {warehouses.length === 0 && <option value="">No warehouses found</option>}
             {warehouses.map((w) => (
@@ -290,302 +281,303 @@ export default function ProductionPlanningPage() {
             ))}
           </select>
         </div>
-      </header>
+      </div>
 
-      {/* Error Banner for Insufficient Stock */}
-      {error && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-rose-50 dark:bg-rose-500/10 rounded-2xl border border-rose-100 dark:border-rose-500/20 animate-in slide-in-from-top-2">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="p-2 bg-white dark:bg-rose-500/20 rounded-xl shrink-0">
-              <AlertTriangle size={20} className="text-rose-500" />
-            </div>
-            <div>
-              <h4 className="text-[11px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-400">Production Launch Failed</h4>
-              <p className="text-[10px] font-bold text-rose-600/80 dark:text-rose-300/80 mt-0.5 leading-tight">{error}</p>
-            </div>
-          </div>
-          {(error.toLowerCase().includes("insufficient stock") || error.toLowerCase().includes("stock")) && (
-            <Link 
-              href="/purchases/orders" 
-              className="px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors shrink-0 whitespace-nowrap shadow-lg shadow-rose-600/20 flex items-center justify-center gap-2"
-            >
-              <ShoppingCart size={14} /> Go to Purchase Orders
-            </Link>
-          )}
-        </div>
-      )}
+      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
 
-      {/* Select Recipe Scheduler */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
-        
-        {/* Run Schedule Planner Queue */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-6 space-y-5 shadow-sm">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 flex items-center gap-2">
-              <Sparkles size={16} className="text-[#F97316]" />
-              Schedule Run
-            </h3>
-
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Select Formula</label>
-                <select
-                  value={activeRecipeId}
-                  onChange={(e) => setActiveRecipeId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F97316]/50"
-                >
-                  {recipes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
+        {/* Error Banner for Insufficient Stock */}
+        {error && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-rose-50 rounded-lg border border-rose-200 animate-in slide-in-from-top-2">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-2 bg-white rounded-lg shrink-0">
+                <AlertTriangle size={20} className="text-rose-500" />
               </div>
+              <div>
+                <h4 className="text-xs font-bold text-rose-700">Production Launch Failed</h4>
+                <p className="text-xs text-rose-600 mt-0.5 leading-tight">{error}</p>
+              </div>
+            </div>
+            {(error.toLowerCase().includes("insufficient stock") || error.toLowerCase().includes("stock")) && (
+              <Link 
+                href="/purchases/orders" 
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors shrink-0 whitespace-nowrap shadow-sm flex items-center justify-center gap-2"
+              >
+                <ShoppingCart size={14} /> Purchase Orders
+              </Link>
+            )}
+          </div>
+        )}
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Production Requirement</label>
-                  <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-                    {(["QUANTITY", "RUNS"] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        onClick={() => setInputMode(mode)}
-                        className={`px-3 py-1 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${
-                          inputMode === mode ? "bg-white dark:bg-slate-950 text-[#F97316] shadow-sm" : "text-slate-400"
-                        }`}
-                      >
-                        {mode === "QUANTITY" ? "Quantity" : "Runs"}
-                      </button>
+        {/* Select Recipe Scheduler */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Run Schedule Planner Queue */}
+          <div className="lg:col-span-1 space-y-5">
+            <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 shadow-sm">
+              <h3 className="text-xs font-semibold text-gray-700 uppercase flex items-center gap-2">
+                <Sparkles size={16} className="text-[#f58220]" />
+                Schedule Run
+              </h3>
+
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 block">Select Formula</label>
+                  <select
+                    value={activeRecipeId}
+                    onChange={(e) => setActiveRecipeId(e.target.value)}
+                    className="w-full bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#f58220]"
+                  >
+                    {recipes.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
                     ))}
-                  </div>
+                  </select>
                 </div>
 
-                {inputMode === "QUANTITY" ? (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder={`e.g. 500`}
-                        value={targetQuantity || ""}
-                        onChange={(e) => setTargetQuantity(Math.max(0, Number(e.target.value)))}
-                        className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm font-bold focus:outline-none"
-                      />
-                      <span className="flex items-center px-3 text-[10px] font-black text-slate-400 uppercase">
-                        {activeRecipe?.yieldUnit || "KG"}
-                      </span>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-gray-500 block">Production Requirement</label>
+                    <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                      {(["QUANTITY", "RUNS"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setInputMode(mode)}
+                          className={clsx(
+                            "px-2 py-1 rounded-md text-[10px] font-semibold transition-all",
+                            inputMode === mode ? "bg-white text-[#f58220] shadow-sm" : "text-gray-400"
+                          )}
+                        >
+                          {mode === "QUANTITY" ? "Quantity" : "Runs"}
+                        </button>
+                      ))}
                     </div>
-                    <div className="space-y-1.5 bg-slate-50 dark:bg-slate-950 rounded-lg px-3 py-2">
-                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
-                        <span className="uppercase tracking-wider">Standard Recipe Yield: {activeRecipe?.yieldQty || 1} {activeRecipe?.yieldUnit || "KG"}</span>
-                        <span className="text-[#F97316] uppercase tracking-wider">Scale Factor: {computedRuns.toFixed(2)}x</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px] font-bold">
-                        <span className="text-slate-400 uppercase tracking-wider">Actual Output (exact)</span>
-                        <span className="text-slate-900 dark:text-white uppercase tracking-wider">
-                          {(targetQuantity || 0).toFixed(1)} {activeRecipe?.yieldUnit || "KG"}
+                  </div>
+
+                  {inputMode === "QUANTITY" ? (
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 500"
+                          value={targetQuantity || ""}
+                          onChange={(e) => setTargetQuantity(Math.max(0, Number(e.target.value)))}
+                          className="flex-1 bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#f58220]"
+                        />
+                        <span className="flex items-center px-2 text-xs font-bold text-gray-400">
+                          {activeRecipe?.yieldUnit || "KG"}
                         </span>
                       </div>
+                      <div className="space-y-1.5 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                        <div className="flex items-center justify-between text-[11px] font-medium text-gray-500">
+                          <span>Standard Recipe Yield: {activeRecipe?.yieldQty || 1} {activeRecipe?.yieldUnit || "KG"}</span>
+                          <span className="text-[#f58220]">Scale Factor: {computedRuns.toFixed(2)}x</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] font-bold">
+                          <span className="text-gray-400">Actual Output (exact)</span>
+                          <span className="text-gray-800">
+                            {(targetQuantity || 0).toFixed(1)} {activeRecipe?.yieldUnit || "KG"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[9px] text-slate-400 font-semibold normal-case leading-snug px-0.5">
-                      Every ingredient is scaled by {computedRuns.toFixed(2)}x to hit this quantity exactly — this is a single partial run, not rounded up to a full batch.
-                    </p>
-                  </div>
-                ) : (
-                  <input
-                    type="number"
-                    min="1"
-                    value={activeQty || ""}
-                    onChange={(e) => setActiveQty(Math.max(1, Number(e.target.value)))}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm font-bold focus:outline-none"
-                  />
+                  ) : (
+                    <input
+                      type="number"
+                      min="1"
+                      value={activeQty || ""}
+                      onChange={(e) => setActiveQty(Math.max(1, Number(e.target.value)))}
+                      className="w-full bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#f58220]"
+                    />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 block">Operator (Optional)</label>
+                  <select
+                    value={activeOperatorId}
+                    onChange={(e) => setActiveOperatorId(e.target.value)}
+                    className="w-full bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#f58220]"
+                  >
+                    <option value="">Not Assigned</option>
+                    {employees.map((e: any) => (
+                      <option key={e.id} value={e.id}>{e.user?.fullName || e.employeeCode}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={addToQueue}
+                  className="w-full py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <Plus size={16} />
+                  Add to run Queue
+                </button>
+              </div>
+            </div>
+
+            {/* Planned Schedule list */}
+            <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 shadow-sm">
+              <h3 className="text-xs font-semibold text-gray-700 uppercase">
+                Planned Run Queue ({plannedQueue.length})
+              </h3>
+
+              {plannedQueue.length === 0 ? (
+                <p className="text-xs text-gray-400 font-medium italic py-4">No schedules planned yet.</p>
+              ) : (
+                <div className="divide-y divide-gray-100 max-h-[360px] overflow-y-auto pr-1">
+                  {plannedQueue.map((item, idx) => {
+                    const operator = employees.find((e: any) => e.id === item.operatorId);
+                    return (
+                      <div key={item.id} className="flex justify-between items-start py-3 gap-3">
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-bold text-[#f58220]">
+                              PENDING-{String(idx + 1).padStart(3, "0")}
+                            </span>
+                            <h4 className="text-xs font-bold text-gray-800">{item.recipeName}</h4>
+                          </div>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-gray-500">
+                            <span>Yield: {(item.quantity * item.yieldQty).toFixed(1)} {item.yieldUnit} ({item.quantity.toFixed(2)}x scale)</span>
+                            <span>Expected: {formatDuration(item.estimatedDurationMinutes)}</span>
+                            <span className="col-span-2">
+                              Operator: <span className={operator ? "text-gray-700 font-semibold" : "text-gray-400 italic"}>
+                                {operator ? (operator.user?.fullName || operator.employeeCode) : "Not Assigned"}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeFromQueue(item.id)}
+                          className="p-1 text-gray-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Dynamic Aggregated Materials & Availability Checklist */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 className="text-xs font-semibold text-gray-700 uppercase flex items-center gap-2">
+                  <ShoppingCart size={16} className="text-[#f58220]" />
+                  Aggregated Ingredient Audit
+                </h3>
+                {stockLoading && (
+                  <span className="text-xs font-semibold text-gray-400 flex items-center gap-1.5 uppercase animate-pulse">
+                    <RefreshCw size={12} className="animate-spin" /> Verifying...
+                  </span>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Operator (Optional)</label>
-                <select
-                  value={activeOperatorId}
-                  onChange={(e) => setActiveOperatorId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-sm focus:outline-none"
-                >
-                  <option value="">Not Assigned</option>
-                  {employees.map((e: any) => (
-                    <option key={e.id} value={e.id}>{e.user?.fullName || e.employeeCode}</option>
-                  ))}
-                </select>
-              </div>
+              {plannedQueue.length === 0 ? (
+                <div className="py-20 text-center text-gray-400 text-xs font-medium flex flex-col items-center gap-3">
+                  <Info size={28} className="text-gray-300" />
+                  <span>Add formulas to the run queue to run material audits</span>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-250">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-gray-50 text-xs font-semibold uppercase text-gray-500 border-b border-gray-200">
+                          <th className="py-3 px-4">Ingredient</th>
+                          <th className="py-3 px-4 text-right">Required quantity</th>
+                          <th className="py-3 px-4 text-right">Stock Available</th>
+                          <th className="py-3 px-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                        {aggregatedMaterials.map((mat) => {
+                          const deficit = mat.required - mat.available;
 
-              <button
-                onClick={addToQueue}
-                className="w-full py-3.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-black text-xs uppercase tracking-wider hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-              >
-                <Plus size={16} />
-                Add to run Queue
-              </button>
-            </div>
-          </div>
+                          return (
+                            <tr key={mat.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="py-3 px-4 font-medium">
+                                <div>{mat.name}</div>
+                                <div className="text-xs text-gray-400 mt-0.5 font-mono">{mat.sku}</div>
+                              </td>
+                              <td className="py-3 px-4 text-right font-bold text-gray-800">
+                                {mat.required.toFixed(2)} <span className="text-xs text-gray-400">{mat.unit}</span>
+                              </td>
+                              <td className="py-3 px-4 text-right text-gray-500">
+                                {mat.available.toFixed(2)} <span className="text-xs text-gray-400">{mat.unit}</span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {mat.sufficient ? (
+                                  <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold border text-emerald-600 bg-emerald-50 border-emerald-200">
+                                    In Stock
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex flex-col items-center">
+                                    <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold border text-rose-600 bg-rose-50 border-rose-200">
+                                      Deficit
+                                    </span>
+                                    <span className="text-xs font-mono text-rose-500 font-semibold mt-0.5">
+                                      -{deficit.toFixed(2)} {mat.unit}
+                                    </span>
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
 
-          {/* Planned Schedule list */}
-          <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-6 space-y-4 shadow-sm">
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200">
-              Planned Run Queue ({plannedQueue.length})
-            </h3>
-
-            {plannedQueue.length === 0 ? (
-              <p className="text-[10px] text-slate-400 font-semibold uppercase italic py-4">No schedules planned yet.</p>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800/50 max-h-[360px] overflow-y-auto pr-1">
-                {plannedQueue.map((item, idx) => {
-                  const operator = employees.find((e: any) => e.id === item.operatorId);
-                  return (
-                    <div key={item.id} className="flex justify-between items-start py-3 gap-3">
-                      <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono font-black text-[#F97316] uppercase tracking-wider">
-                            PENDING-{String(idx + 1).padStart(3, "0")}
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-white">{item.recipeName}</h4>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[9px] font-semibold text-slate-500 uppercase">
-                          <span>Yield: {(item.quantity * item.yieldQty).toFixed(1)} {item.yieldUnit} ({item.quantity.toFixed(2)}x scale)</span>
-                          <span>Expected: {formatDuration(item.estimatedDurationMinutes)}</span>
-                          <span className="col-span-2">
-                            Operator: <span className={operator ? "text-slate-700 dark:text-slate-300" : "text-slate-400 italic"}>
-                              {operator ? (operator.user?.fullName || operator.employeeCode) : "Not Assigned"}
-                            </span>
-                          </span>
-                        </div>
+                  <div className="p-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-200">
+                    <div className="flex items-center gap-3">
+                      {allSufficient ? (
+                        <CheckCircle className="text-emerald-500" size={24} />
+                      ) : (
+                        <AlertTriangle className="text-[#f58220]" size={24} />
+                      )}
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-850 uppercase">
+                          {allSufficient ? 'Stock Validation Successful' : 'Ingredients Shortfall Detected'}
+                        </h4>
+                        <p className="text-xs text-gray-500">
+                          {allSufficient 
+                            ? 'All required quantities are present in the selected warehouse.' 
+                            : 'Some ingredients are missing. Launching runs might fail or cause negative stock.'}
+                        </p>
                       </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                      {!allSufficient && (
+                        <Link 
+                          href="/purchases/orders"
+                          className="w-full sm:w-auto px-4 py-2 bg-rose-100 text-rose-700 hover:bg-rose-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-rose-200"
+                        >
+                          <ShoppingCart size={14} /> Buy Stock
+                        </Link>
+                      )}
                       <button
-                        onClick={() => removeFromQueue(item.id)}
-                        className="p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-rose-500 rounded-lg transition-colors shrink-0"
+                        onClick={handleLaunchProduction}
+                        disabled={plannedQueue.length === 0 || submitting}
+                        className="w-full sm:w-auto px-6 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-xs uppercase tracking-wider shadow-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        <Trash2 size={14} />
+                        {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play size={14} fill="currentColor" />}
+                        Launch production run
                       </button>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Dynamic Aggregated Materials & Availability Checklist */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-slate-200/50 dark:border-slate-800/50 flex justify-between items-center">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <ShoppingCart size={16} className="text-[#F97316]" />
-                Aggregated Ingredient Audit
-              </h3>
-              {stockLoading && (
-                <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5 uppercase animate-pulse">
-                  <RefreshCw size={12} className="animate-spin" /> Verifying...
-                </span>
+                  </div>
+                </div>
               )}
             </div>
-
-            {plannedQueue.length === 0 ? (
-              <div className="py-20 text-center text-slate-400 uppercase text-[10px] font-bold flex flex-col items-center gap-3">
-                <Info size={28} className="text-slate-300 dark:text-slate-700" />
-                <span>Add formulas to the run queue to run material audits</span>
-              </div>
-            ) : (
-              <div className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/50 dark:border-slate-800/50">
-                        <th className="py-4 px-6">Ingredient</th>
-                        <th className="py-4 px-4 text-right">Required quantity</th>
-                        <th className="py-4 px-4 text-right">Stock Available</th>
-                        <th className="py-4 px-6 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                      {aggregatedMaterials.map((mat) => {
-                        const deficit = mat.required - mat.available;
-
-                        return (
-                          <tr key={mat.id} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
-                            <td className="py-4 px-6 font-bold">
-                              <div>{mat.name}</div>
-                              <div className="text-[9px] font-mono text-slate-400 mt-0.5">{mat.sku}</div>
-                            </td>
-                            <td className="py-4 px-4 text-right font-black text-slate-900 dark:text-white">
-                              {mat.required.toFixed(2)} <span className="text-[10px] font-bold uppercase">{mat.unit}</span>
-                            </td>
-                            <td className="py-4 px-4 text-right text-slate-500">
-                              {mat.available.toFixed(2)} <span className="text-[10px] font-bold uppercase">{mat.unit}</span>
-                            </td>
-                            <td className="py-4 px-6 text-center">
-                              {mat.sufficient ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20">
-                                  In Stock
-                                </span>
-                              ) : (
-                                <span className="inline-flex flex-col items-center">
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20">
-                                    Deficit
-                                  </span>
-                                  <span className="text-[9px] font-mono text-rose-500 font-bold mt-0.5">
-                                    -{deficit.toFixed(2)} {mat.unit}
-                                  </span>
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="p-6 bg-slate-50 dark:bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    {allSufficient ? (
-                      <CheckCircle className="text-emerald-500" size={24} />
-                    ) : (
-                      <AlertTriangle className="text-[#F97316]" size={24} />
-                    )}
-                    <div>
-                      <h4 className="text-xs font-black uppercase tracking-tight text-slate-900 dark:text-white">
-                        {allSufficient ? 'Stock Validation Successful' : 'Ingredients Shortfall Detected'}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 font-semibold uppercase">
-                        {allSufficient 
-                          ? 'All required quantities are present in the selected warehouse.' 
-                          : 'Some ingredients are missing. Launching runs might fail or cause negative stock.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-                    {!allSufficient && (
-                      <Link 
-                        href="/purchases/orders"
-                        className="w-full sm:w-auto px-6 py-3.5 bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2"
-                      >
-                        <ShoppingCart size={14} /> Buy Stock
-                      </Link>
-                    )}
-                    <button
-                      onClick={handleLaunchProduction}
-                      disabled={plannedQueue.length === 0 || submitting}
-                      className="w-full sm:w-auto px-8 py-3.5 bg-[#F97316] text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-lg shadow-orange-600/15 hover:shadow-xl hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:scale-100 disabled:translate-y-0 flex items-center justify-center gap-2"
-                    >
-                      {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Play size={14} fill="currentColor" />}
-                      Launch production run
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );

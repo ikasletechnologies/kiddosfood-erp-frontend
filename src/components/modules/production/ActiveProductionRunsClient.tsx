@@ -218,95 +218,62 @@ export default function ActiveProductionRunsClient() {
             return (
               <div
                 key={run.id}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm hover:shadow-md transition-all flex flex-col gap-6"
+                className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-all flex flex-col gap-6"
               >
-                {/* Top Section: Title, Batch, Status, Current Stage, Next Step */}
-                <div className="border-b border-slate-100 dark:border-slate-800/80 pb-5">
+                {/* Top Section: Title, Batch, Status */}
+                <div className="border-b border-gray-200 pb-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                    <h3 className="text-xl font-bold text-gray-800 uppercase tracking-tight">
                       {run.recipe?.name || "IDLY DOSA BATTER"}
                     </h3>
                     <span
                       className={clsx(
-                        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest w-fit border",
+                        "px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider w-fit border",
                         run.status === "IN_PROGRESS"
-                          ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20"
-                          : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
+                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200"
                       )}
                     >
                       Status : {run.status === "IN_PROGRESS" ? "IN PROGRESS" : run.status.replace("_", " ")}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-950/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/80">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-250">
                     <div>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Batch</span>
-                      <span className="text-sm font-black text-slate-900 dark:text-white font-mono mt-0.5 block">
+                      <span className="text-xs font-semibold text-gray-500 block uppercase">Batch</span>
+                      <span className="text-sm font-semibold text-gray-800 font-mono mt-0.5 block">
                         {formatERPNumber("PRD", run.id, run.producedAt)}
                       </span>
                     </div>
                     <div>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Status</span>
-                      <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-0.5 block">
+                      <span className="text-xs font-semibold text-gray-500 block uppercase">Status</span>
+                      <span className="text-sm font-semibold text-indigo-600 mt-0.5 block">
                         {run.status === "IN_PROGRESS" ? "IN PROGRESS" : run.status.replace("_", " ")}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Current Stage</span>
-                      <span className="text-sm font-black text-slate-900 dark:text-white mt-0.5 block uppercase">
-                        {STAGE_LABELS[run.currentStage] || run.currentStage || "QUEUED"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Next Step</span>
-                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 mt-0.5 block uppercase">
-                        {getNextStepLabel(run.currentStage)}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 block">
-                        {getNextStepInstruction(run.currentStage)}
                       </span>
                     </div>
                   </div>
                 </div>
 
                 {/* Section 2: Production Operational Details */}
-                <div className="border-b border-slate-100 dark:border-slate-800/80 pb-5">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+                <div className="border-b border-gray-200 pb-5">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Recipe</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 uppercase">
+                      <p className="text-xs text-gray-500">Recipe</p>
+                      <p className="text-xs font-semibold text-gray-800 mt-1 uppercase">
                         {run.recipe?.name || "Idly Dosa Batter"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Expected Yield</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+                      <p className="text-xs text-gray-500">Expected Yield</p>
+                      <p className="text-xs font-semibold text-gray-800 mt-1 tabular-nums">
                         {((run.quantity || 0) * (run.recipe?.yieldQty || 1)).toFixed(2)}{" "}
-                        <span className="text-[10px] text-slate-400 font-normal">{run.recipe?.yieldUnit || "KG"}</span>
+                        <span className="text-xs text-gray-400 font-normal">{run.recipe?.yieldUnit || "KG"}</span>
                       </p>
                     </div>
                     <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ingredients</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+                      <p className="text-xs text-gray-500">Ingredients</p>
+                      <p className="text-xs font-semibold text-gray-800 mt-1 tabular-nums">
                         {run.recipe?.recipeItems?.length || 4}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Machine</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 uppercase">
-                        {run.machine || "Mixer-01"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Operator</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 uppercase">
-                        {run.operator?.user?.name || run.operator?.employeeCode || run.producedBy || "Admin"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Shift</p>
-                      <p className="text-xs font-black text-slate-900 dark:text-white mt-1 uppercase">
-                        {run.shift || "Morning"}
                       </p>
                     </div>
                   </div>
@@ -314,34 +281,34 @@ export default function ActiveProductionRunsClient() {
 
                 {/* Section 2B: Conditional Stock Shortage & Production Paused Alerts */}
                 {shortItems.length > 0 && (
-                  <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/40 rounded-2xl p-4 space-y-3">
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
-                      <p className="text-xs font-black text-rose-900 dark:text-rose-100 uppercase tracking-wider">
+                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
+                      <p className="text-xs font-semibold text-rose-900 uppercase tracking-wider">
                         Stock Shortage — Cannot Continue
                       </p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
                         <thead>
-                          <tr className="text-[9px] font-black uppercase text-rose-600 dark:text-rose-400 border-b border-rose-200 dark:border-rose-800/50">
+                          <tr className="text-xs font-semibold uppercase text-rose-600 border-b border-rose-200">
                             <th className="pb-1.5">Ingredient</th>
                             <th className="pb-1.5">Required</th>
                             <th className="pb-1.5">Available</th>
                             <th className="pb-1.5">Short</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-rose-200/50 dark:divide-rose-800/30">
+                        <tbody className="divide-y divide-rose-200/50">
                           {shortItems.map((item: any, idx: number) => {
                             const required = (item.quantityRequired || 0) * (run.quantity || 1);
                             const available = getAvailableFor(run, item);
                             const short = required - available;
                             return (
-                              <tr key={idx} className="text-rose-900 dark:text-rose-200 font-bold">
+                              <tr key={idx} className="text-rose-900 font-bold">
                                 <td className="py-2">{item.inventoryItem?.name || "Ingredient"}</td>
                                 <td className="py-2">{required.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
                                 <td className="py-2">{available.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2 text-rose-600 dark:text-rose-400">{short.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
                               </tr>
                             );
                           })}
@@ -352,16 +319,16 @@ export default function ActiveProductionRunsClient() {
                 )}
 
                 {run.status === "STOPPED" && (
-                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
                         <AlertTriangle size={18} />
                       </div>
                       <div>
-                        <p className="text-xs font-black text-amber-900 dark:text-amber-100 uppercase tracking-wide">
+                        <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
                           Production Paused
                         </p>
-                        <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 mt-0.5">
+                        <p className="text-xs text-amber-700 mt-0.5">
                           Paused at:{" "}
                           {run.endTime
                             ? new Date(run.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -372,62 +339,26 @@ export default function ActiveProductionRunsClient() {
                     </div>
                     <button
                       onClick={() => handleResume(run.id)}
-                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm transition-colors flex items-center gap-1.5 shrink-0"
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center gap-1.5 shrink-0"
                     >
                       <PlayCircle size={14} /> Resume
                     </button>
                   </div>
                 )}
 
-                {/* Section 3: Workflow Stages */}
-                <div className="border-b border-slate-100 dark:border-slate-800/80 pb-5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    {STAGES.map((stage, idx) => {
-                      const currentIdx = STAGES.indexOf(run.currentStage as any);
-                      const isCompleted = idx < currentIdx;
-                      const isCurrent = idx === currentIdx;
-                      const isUpcoming = idx > currentIdx;
-                      const displayLabel = stage === "READY_FOR_QC" ? "QC" : STAGE_LABELS[stage] || stage;
-
-                      return (
-                        <button
-                          key={stage}
-                          onClick={() => handleAdvanceStage(run.id, stage)}
-                          disabled={isCurrent || shortItems.length > 0}
-                          title={isCurrent ? "Current Stage" : "Click to advance/update to this stage"}
-                          className={clsx(
-                            "flex-1 min-w-[110px] py-3 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 border",
-                            isCompleted &&
-                              "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30 hover:bg-emerald-100/60",
-                            isCurrent &&
-                              "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/20 ring-2 ring-indigo-500/30 cursor-default",
-                            isUpcoming &&
-                              "bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:text-slate-600"
-                          )}
-                        >
-                          <span className="font-mono font-bold text-sm">
-                            {isCompleted ? "✓" : isCurrent ? "●" : "○"}
-                          </span>
-                          <span>{displayLabel}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
                 {/* Section 4: Action Buttons */}
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-1">
                   {run.status === "IN_PROGRESS" ? (
                     <button
                       onClick={() => handleStop(run.id)}
-                      className="w-full sm:flex-1 py-3.5 px-4 bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full sm:flex-1 py-2 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <StopCircle size={16} /> Pause Production
                     </button>
                   ) : (
                     <button
                       onClick={() => handleResume(run.id)}
-                      className="w-full sm:flex-1 py-3.5 px-4 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full sm:flex-1 py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <PlayCircle size={16} /> Resume Production
                     </button>
@@ -437,10 +368,10 @@ export default function ActiveProductionRunsClient() {
                     onClick={() => handleApproveClick(run)}
                     disabled={shortItems.length > 0}
                     className={clsx(
-                      "w-full sm:flex-[1.3] py-3.5 px-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg",
+                      "w-full sm:flex-[1.3] py-2 px-4 rounded-lg font-semibold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm",
                       shortItems.length > 0
-                        ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
-                        : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20"
+                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        : "bg-emerald-600 hover:bg-emerald-700 text-white"
                     )}
                   >
                     <CheckCircle2 size={16} /> Complete Production
@@ -448,7 +379,7 @@ export default function ActiveProductionRunsClient() {
 
                   <button
                     onClick={() => handleCancel(run.id)}
-                    className="w-full sm:flex-1 py-3.5 px-4 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/30 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full sm:flex-1 py-2 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                   >
                     Cancel Production
                   </button>
@@ -467,16 +398,16 @@ export default function ActiveProductionRunsClient() {
       >
         <div className="space-y-6">
           {batchToApprove && (
-            <div className="bg-slate-50 dark:bg-slate-950/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex justify-between items-center">
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-250 flex justify-between items-center">
               <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Recipe</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white uppercase mt-0.5">
+                <p className="text-xs text-gray-500">Recipe</p>
+                <p className="text-sm font-bold text-gray-800 uppercase mt-0.5">
                   {batchToApprove.recipe?.name || "IDLY DOSA BATTER"}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Batch</p>
-                <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 font-mono mt-0.5">
+                <p className="text-xs text-gray-500">Batch</p>
+                <p className="text-xs font-semibold text-[#f58220] font-mono mt-0.5">
                   {formatERPNumber("PRD", batchToApprove.id, batchToApprove.producedAt)}
                 </p>
               </div>
@@ -484,46 +415,46 @@ export default function ActiveProductionRunsClient() {
           )}
 
           <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Expected Yield</p>
-              <p className="text-lg font-black text-slate-900 dark:text-white mt-1 tabular-nums">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+              <p className="text-xs text-gray-500">Expected Yield</p>
+              <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
                 {expectedYieldVal.toFixed(2)}{" "}
-                <span className="text-xs text-slate-400 font-normal">{yieldUnit}</span>
+                <span className="text-xs text-gray-400 font-normal">{yieldUnit}</span>
               </p>
             </div>
 
-            <div className="p-4 bg-slate-50 dark:bg-slate-950/60 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Actual Yield</p>
-              <p className="text-lg font-black text-indigo-600 dark:text-indigo-400 mt-1 tabular-nums">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+              <p className="text-xs text-gray-500">Actual Yield</p>
+              <p className="text-base font-bold text-indigo-600 mt-1 tabular-nums">
                 {(Number(actualYield) || 0).toFixed(2)}{" "}
-                <span className="text-xs text-slate-400 font-normal">{yieldUnit}</span>
+                <span className="text-xs text-gray-400 font-normal">{yieldUnit}</span>
               </p>
             </div>
 
             <div
               className={clsx(
-                "p-4 rounded-2xl border text-center",
+                "p-4 rounded-lg border text-center",
                 wasteVal > 0
-                  ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-                  : "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
+                  ? "bg-amber-50 border-amber-200"
+                  : "bg-emerald-50 border-emerald-200"
               )}
             >
               <p
                 className={clsx(
-                  "text-[9px] font-black uppercase tracking-widest",
+                  "text-xs font-semibold uppercase tracking-wider",
                   wasteVal > 0
-                    ? "text-amber-700 dark:text-amber-400"
-                    : "text-emerald-700 dark:text-emerald-400"
+                    ? "text-amber-700"
+                    : "text-emerald-700"
                 )}
               >
                 Waste
               </p>
               <p
                 className={clsx(
-                  "text-lg font-black mt-1 tabular-nums",
+                  "text-base font-bold mt-1 tabular-nums",
                   wasteVal > 0
-                    ? "text-amber-800 dark:text-amber-300"
-                    : "text-emerald-800 dark:text-emerald-300"
+                    ? "text-amber-800"
+                    : "text-emerald-800"
                 )}
               >
                 {wasteVal.toFixed(2)}{" "}
@@ -533,7 +464,7 @@ export default function ActiveProductionRunsClient() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+            <label className="text-xs font-semibold text-gray-500 block">
               Actual Yield ({yieldUnit})
             </label>
             <input
@@ -542,12 +473,12 @@ export default function ActiveProductionRunsClient() {
               value={actualYield === 0 ? "" : actualYield}
               onChange={(e) => setActualYield(Number(e.target.value))}
               placeholder={`Enter actual yield in ${yieldUnit}`}
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-base font-black focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
               <FileText size={12} /> Remarks / Production Notes
             </label>
             <textarea
@@ -555,22 +486,22 @@ export default function ActiveProductionRunsClient() {
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Enter production remarks, QC notes, or reason for waste..."
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 resize-none"
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 text-gray-700 resize-none font-medium"
             />
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex gap-3 pt-4 border-t border-gray-200">
             <button
               onClick={() => setShowApprovalModal(false)}
               disabled={submitting}
-              className="flex-1 py-3.5 rounded-xl font-black text-xs uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleFinalApprove}
               disabled={submitting}
-              className="flex-[2] py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2"
+              className="flex-[2] py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm"
             >
               {submitting ? "Completing..." : "Complete Production"} <ChevronRight size={16} />
             </button>

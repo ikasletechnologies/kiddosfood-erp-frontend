@@ -1,26 +1,31 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Search, Filter, CheckCircle2, XCircle, AlertCircle, 
-  Thermometer, Droplets, Package, History, ArrowRight,
-  ClipboardCheck, Trash2, RefreshCw, Eye, Sparkles, Layers,
-  Compass, ShieldCheck
+import { useSearchParams } from 'next/navigation';
+import {
+  Search, CheckCircle2, XCircle, Thermometer, Package,
+  ArrowRight, ClipboardCheck, Trash2, RefreshCw, ShieldCheck, X
 } from 'lucide-react';
+import { clsx } from 'clsx';
 import { qcApi, productionApi } from '@/lib/api';
-import { format } from 'date-fns';
 import { toast } from 'react-hot-toast';
 
 export default function QCClient() {
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<'GRN' | 'PRODUCTION'>('GRN');
-  
+
   // GRN State
   const [grnItems, setGrnItems] = useState<any[]>([]);
   const [selectedGrnItem, setSelectedGrnItem] = useState<any>(null);
 
-  // Production State
+  // Production State — a plain table + a dialog for the actual inspection,
+  // not the split list/detail panel GRN uses. Only one number is entered
+  // (rejected qty); accepted is always produced - rejected.
   const [prodBatches, setProdBatches] = useState<any[]>([]);
-  const [selectedProdBatch, setSelectedProdBatch] = useState<any>(null);
+  const [qcModalBatch, setQcModalBatch] = useState<any>(null);
+  const [qcRejectedQty, setQcRejectedQty] = useState<number>(0);
+  const [qcRemarks, setQcRemarks] = useState('');
+  const [autoOpenedBatchId, setAutoOpenedBatchId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,16 +45,6 @@ export default function QCClient() {
     packagingOk: true
   });
 
-  // Production Form State
-  const [prodInspection, setProdInspection] = useState({
-    qcStatus: 'APPROVED',
-    moistureCheck: '',
-    colorCheck: 'Match Standard',
-    textureCheck: 'Smooth',
-    rejectionQty: 0,
-    remarks: ''
-  });
-
   const fetchPending = useCallback(async () => {
     try {
       setLoading(true);
@@ -62,20 +57,35 @@ export default function QCClient() {
       } else {
         const res = await productionApi.getPendingQC();
         setProdBatches(res.data || []);
-        if (res.data?.length > 0 && !selectedProdBatch) {
-          setSelectedProdBatch(res.data[0]);
-        }
       }
     } catch (err) {
       toast.error('Failed to load pending quality checks');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, selectedGrnItem, selectedProdBatch]);
+  }, [activeTab, selectedGrnItem]);
 
   useEffect(() => {
     fetchPending();
   }, [activeTab]);
+
+  // Arriving from Batch Registry with ?batchId=... — jump straight to the
+  // Production tab and open that batch's inspection dialog, instead of
+  // landing on the generic queue and making the user find it again.
+  useEffect(() => {
+    const batchId = searchParams.get('batchId');
+    if (batchId) setActiveTab('PRODUCTION');
+  }, [searchParams]);
+
+  useEffect(() => {
+    const batchId = searchParams.get('batchId');
+    if (!batchId || batchId === autoOpenedBatchId) return;
+    const match = prodBatches.find((b) => b.id === batchId);
+    if (match) {
+      openInspect(match);
+      setAutoOpenedBatchId(batchId);
+    }
+  }, [prodBatches, searchParams, autoOpenedBatchId]);
 
   // Sync GRN form when item changes
   useEffect(() => {
@@ -90,19 +100,11 @@ export default function QCClient() {
     }
   }, [selectedGrnItem]);
 
-  // Sync Production form when batch changes
-  useEffect(() => {
-    if (selectedProdBatch) {
-      setProdInspection({
-        qcStatus: 'APPROVED',
-        moistureCheck: '',
-        colorCheck: 'Match Standard',
-        textureCheck: 'Smooth',
-        rejectionQty: 0,
-        remarks: ''
-      });
-    }
-  }, [selectedProdBatch]);
+  const openInspect = (batch: any) => {
+    setQcModalBatch(batch);
+    setQcRejectedQty(0);
+    setQcRemarks('');
+  };
 
   const handleGrnQtyChange = (field: string, val: number) => {
     const total = selectedGrnItem?.receivedQty || 0;
@@ -125,18 +127,9 @@ export default function QCClient() {
     }));
   };
 
-  const handleProdRejectionChange = (val: number) => {
-    const total = selectedProdBatch?.quantity || 0;
-    const cleanVal = Math.min(total, Math.max(0, val));
-    setProdInspection(prev => ({
-      ...prev,
-      rejectionQty: cleanVal
-    }));
-  };
-
   const handleGrnSubmit = async () => {
     if (!selectedGrnItem) return;
-    
+
     try {
       setIsSubmitting(true);
       await qcApi.inspect({
@@ -149,7 +142,7 @@ export default function QCClient() {
         moistureContent: grnInspection.moistureContent ? Number(grnInspection.moistureContent) : undefined,
         packagingOk: grnInspection.packagingOk
       });
-      
+
       toast.success('Material inspection recorded successfully');
       setSelectedGrnItem(null);
       fetchPending();
@@ -161,489 +154,475 @@ export default function QCClient() {
   };
 
   const handleProdSubmit = async () => {
-    if (!selectedProdBatch) return;
+    if (!qcModalBatch) return;
 
     try {
       setIsSubmitting(true);
-      await productionApi.inspectBatch(selectedProdBatch.id, {
-        qcStatus: prodInspection.qcStatus,
-        moistureCheck: prodInspection.moistureCheck ? Number(prodInspection.moistureCheck) : undefined,
-        colorCheck: prodInspection.colorCheck,
-        textureCheck: prodInspection.textureCheck,
-        rejectionQty: Number(prodInspection.rejectionQty)
+      await productionApi.inspectBatch(qcModalBatch.id, {
+        rejectionQty: Number(qcRejectedQty),
+        qcRemarks: qcRemarks.trim() || undefined,
       });
 
-      toast.success('Production QC audit finalized!');
-      setSelectedProdBatch(null);
+      toast.success('QC recorded successfully');
+      setQcModalBatch(null);
       fetchPending();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to submit production QC audit');
+      toast.error(err.response?.data?.error || 'Failed to submit QC');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   // Filter items
-  const filteredGrnItems = grnItems.filter(item => 
+  const filteredGrnItems = grnItems.filter(item =>
     item.inventoryItem?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.vendorBatchNo?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredProdBatches = prodBatches.filter(batch => 
+  const filteredProdBatches = prodBatches.filter(batch =>
     batch.product?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     batch.batchCode.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)] gap-6 p-4 md:p-6 overflow-hidden bg-white dark:bg-slate-950 -m-4 md:-m-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 px-6 border-b border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-900/20">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black  text-[#F97316] tracking-tight flex items-center gap-2 uppercase">
-            <ShieldCheck className="text-orange-500" />
-            Quality Control Center
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 font-semibold uppercase tracking-wider">Enterprise Inspection Workflow & Material Release</p>
-        </div>
+    <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
+          <ShieldCheck className="h-5 w-5 text-[#f58220]" />
+          Quality Control
+        </h1>
+        <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+          <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+        </button>
+      </div>
 
-        <div className="flex items-center gap-2">
-          {/* Dual Tabs */}
-          <div className="flex bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-200 dark:border-slate-800">
-            <button
-              onClick={() => { setActiveTab('GRN'); setSelectedGrnItem(null); setSearchQuery(''); }}
-              className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${activeTab === 'GRN' ? 'bg-[#F97316] text-slate-900 dark:text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
-            >
-              Inward Materials (GRN)
-            </button>
-            <button
-              onClick={() => { setActiveTab('PRODUCTION'); setSelectedProdBatch(null); setSearchQuery(''); }}
-              className={`px-4 py-2 text-xs font-black uppercase tracking-wider rounded-lg transition-all ${activeTab === 'PRODUCTION' ? 'bg-[#F97316] text-slate-900 dark:text-white shadow' : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white'}`}
-            >
-              Production Batches
-            </button>
-          </div>
-
-          <button 
-            onClick={fetchPending}
-            className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+        {/* Tab Bar */}
+        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
+          <button
+            onClick={() => { setActiveTab('GRN'); setSelectedGrnItem(null); setSearchQuery(''); }}
+            className={clsx(
+              "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
+              activeTab === 'GRN' ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+            )}
           >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            Inward Materials
+          </button>
+          <button
+            onClick={() => { setActiveTab('PRODUCTION'); setQcModalBatch(null); setSearchQuery(''); }}
+            className={clsx(
+              "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
+              activeTab === 'PRODUCTION' ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            Production Batches
           </button>
         </div>
-      </div>
 
-      <div className="flex flex-1 gap-6 overflow-hidden px-6 pb-6">
-        
-        {/* Left Side: List Panel */}
-        <div className="w-full md:w-1/3 flex flex-col bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-900 rounded-3xl overflow-hidden backdrop-blur-xl">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-900/40">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-              <input 
-                type="text" 
-                placeholder={activeTab === 'GRN' ? 'Search materials or batches...' : 'Search finished goods or batches...'}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 transition-all"
-              />
+        {activeTab === 'GRN' ? (
+          <div className="flex flex-col md:flex-row gap-5 items-start">
+            {/* Left Side: List Panel */}
+            <div className="w-full md:w-1/3 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
+              <div className="p-3 border-b border-gray-200 bg-gray-50">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search materials or batches..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+                {loading && grnItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-400">
+                    <RefreshCw className="h-6 w-6 animate-spin text-orange-400 opacity-60" />
+                    <p className="text-xs text-gray-400">Retrieving queue...</p>
+                  </div>
+                ) : filteredGrnItems.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
+                    <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
+                      <CheckCircle2 className="h-6 w-6 text-[#f58220]" />
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Queue is completely clear!</p>
+                  </div>
+                ) : (
+                  filteredGrnItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedGrnItem(item)}
+                      className={clsx(
+                        "w-full text-left p-3 transition-colors hover:bg-gray-50",
+                        selectedGrnItem?.id === item.id && "bg-orange-50"
+                      )}
+                    >
+                      <div className="flex justify-between items-start mb-1.5">
+                        <span className="text-[11px] font-mono text-gray-400">GRN-{item.grn?.id.substring(0, 8)}</span>
+                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 border border-amber-200 text-[10px] rounded font-semibold">M-Hold</span>
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">{item.inventoryItem?.name}</p>
+                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+                        <Package className="h-3 w-3 text-gray-400" />
+                        {item.receivedQty} {item.inventoryItem?.unit}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Right Side: Form Panel */}
+            <div className="flex-1 w-full bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
+              {!selectedGrnItem ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                  <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
+                    <ClipboardCheck className="h-8 w-8 text-[#f58220]" />
+                  </div>
+                  <p className="text-gray-800 font-semibold">Ready for Material QC</p>
+                  <p className="text-gray-500 text-sm mt-1 max-w-xs">Select an inward GRN material consignment to inspect.</p>
+                </div>
+              ) : (
+                <div className="flex flex-col h-full">
+                  {/* Header */}
+                  <div className="p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-start">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1 text-xs">
+                        <span className="font-semibold text-[#f58220]">Material Verification</span>
+                        <ArrowRight className="h-3 w-3 text-gray-400" />
+                        <span className="text-gray-500">{selectedGrnItem.grn?.procurementOrder?.vendor?.name}</span>
+                      </div>
+                      <h2 className="text-lg font-bold text-gray-800">{selectedGrnItem.inventoryItem?.name}</h2>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono text-gray-500">Batch: {selectedGrnItem.vendorBatchNo || 'N/A'}</span>
+                        <span className="px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono text-gray-500">PO: {selectedGrnItem.grn?.procurementOrder?.poNumber || 'N/A'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-gray-500">Total Received</p>
+                      <p className="text-xl font-bold text-gray-800">{selectedGrnItem.receivedQty} <span className="text-sm text-gray-400">{selectedGrnItem.inventoryItem?.unit}</span></p>
+                    </div>
+                  </div>
+
+                  {/* Form Content */}
+                  <div className="flex-1 overflow-y-auto p-5 space-y-6">
+
+                    {/* Physical Parameters */}
+                    <section>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <Thermometer className="h-3.5 w-3.5 text-[#f58220]" /> Physical Parameters
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Temperature (°C)</label>
+                          <input
+                            type="number"
+                            placeholder="24.5"
+                            value={grnInspection.temperature}
+                            onChange={(e) => setGrnInspection({ ...grnInspection, temperature: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Moisture Content (%)</label>
+                          <input
+                            type="number"
+                            placeholder="12.0"
+                            value={grnInspection.moistureContent}
+                            onChange={(e) => setGrnInspection({ ...grnInspection, moistureContent: e.target.value })}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Packaging Integrity</label>
+                          <button
+                            onClick={() => setGrnInspection({ ...grnInspection, packagingOk: !grnInspection.packagingOk })}
+                            className={clsx(
+                              "w-full py-2 px-3 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
+                              grnInspection.packagingOk ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-rose-50 text-rose-600 border-rose-200"
+                            )}
+                          >
+                            {grnInspection.packagingOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                            {grnInspection.packagingOk ? 'Intact & Sealed' : 'Damaged / Leaked'}
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Quantity Tally */}
+                    <section>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <Package className="h-3.5 w-3.5 text-[#f58220]" /> Accepted vs Rejected
+                      </h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+                        <div>
+                          <div className="flex justify-between items-center text-xs font-medium text-gray-500 mb-2">
+                            <span className="text-[#f58220]">Accepted Quantity</span>
+                            <span>Usable Stock</span>
+                          </div>
+                          <input
+                            type="number"
+                            value={grnInspection.approvedQty}
+                            onChange={(e) => handleGrnQtyChange('approvedQty', Number(e.target.value))}
+                            className="w-full text-2xl font-bold bg-transparent outline-none text-gray-800"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center text-xs font-medium text-gray-500 mb-2">
+                            <span className="text-rose-500">Rejected Quantity</span>
+                            <span>Deducted Stock</span>
+                          </div>
+                          <input
+                            type="number"
+                            value={grnInspection.rejectedQty}
+                            onChange={(e) => handleGrnQtyChange('rejectedQty', Number(e.target.value))}
+                            className="w-full text-2xl font-bold bg-transparent outline-none text-gray-800"
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Final Disposition */}
+                    <section>
+                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                        <RefreshCw className="h-3.5 w-3.5 text-[#f58220]" /> Final Disposition
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { id: 'APPROVE', label: 'Release Stock', icon: CheckCircle2, activeColor: 'border-[#f58220] text-[#f58220] bg-orange-50' },
+                          { id: 'REJECT_RETURN', label: 'Return Vendor', icon: Trash2, activeColor: 'border-amber-500 text-amber-600 bg-amber-50' },
+                          { id: 'REJECT_SCRAP', label: 'Scrap/Destroy', icon: XCircle, activeColor: 'border-rose-500 text-rose-600 bg-rose-50' },
+                          { id: 'REWORK', label: 'Internal Rework', icon: RefreshCw, activeColor: 'border-sky-500 text-sky-600 bg-sky-50' }
+                        ].map((btn) => (
+                          <button
+                            key={btn.id}
+                            onClick={() => setGrnInspection({ ...grnInspection, actionTaken: btn.id })}
+                            className={clsx(
+                              "flex flex-col items-center gap-2 p-3 border rounded-lg text-[11px] font-semibold transition-colors",
+                              grnInspection.actionTaken === btn.id ? btn.activeColor : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                            )}
+                          >
+                            <btn.icon className="h-4 w-4" />
+                            <span>{btn.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+
+                    {/* Remarks */}
+                    <section>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Inspection Remarks</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Enter remarks..."
+                        value={grnInspection.remarks}
+                        onChange={(e) => setGrnInspection({ ...grnInspection, remarks: e.target.value })}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white resize-none"
+                      />
+                    </section>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+                    <button
+                      onClick={() => setSelectedGrnItem(null)}
+                      className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white transition-colors"
+                    >
+                      Discard Changes
+                    </button>
+                    <button
+                      onClick={handleGrnSubmit}
+                      disabled={isSubmitting}
+                      className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-60 transition-colors flex items-center gap-2"
+                    >
+                      {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+                      Record Inspection
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-          
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {loading && (activeTab === 'GRN' ? grnItems.length === 0 : prodBatches.length === 0) ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-500">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F97316]"></div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Retrieving queue...</p>
-              </div>
-            ) : (activeTab === 'GRN' ? filteredGrnItems.length === 0 : filteredProdBatches.length === 0) ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 p-8 text-center">
-                <CheckCircle2 className="w-10 h-10 text-orange-500/20" />
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Queue is completely clear!</p>
-              </div>
-            ) : activeTab === 'GRN' ? (
-              filteredGrnItems.map((item) => (
-                <div 
-                  key={item.id}
-                  onClick={() => setSelectedGrnItem(item)}
-                  className={`p-4 border-b border-slate-200 dark:border-slate-200 dark:border-slate-900/60 cursor-pointer transition-all hover:bg-slate-50 dark:bg-slate-900/30 ${selectedGrnItem?.id === item.id ? 'bg-[#F97316]/10 border-l-4 border-l-[#F97316]' : ''}`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[9px] font-mono text-slate-500 uppercase">GRN-{item.grn?.id.substring(0, 8)}</span>
-                    <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 text-[9px] rounded-full font-black uppercase tracking-wider">M-Hold</span>
-                  </div>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">{item.inventoryItem?.name}</h4>
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold uppercase">
-                      <Package className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                      {item.receivedQty} {item.inventoryItem?.unit}
-                    </div>
-                  </div>
+        ) : (
+          /* Production Batches — a plain table + an Inspect dialog. Not a
+             lab QMS screen: no moisture/color/texture parameters, no
+             multi-way disposition toggle — just accept/reject quantities
+             against what was actually produced. */
+          <div className="space-y-4">
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search finished goods or batches..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              />
+            </div>
+
+            {loading && prodBatches.length === 0 ? (
+              <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
+            ) : filteredProdBatches.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+                  <CheckCircle2 className="h-8 w-8 text-[#f58220]" />
                 </div>
-              ))
+                <p className="text-gray-800 font-semibold">Queue is completely clear!</p>
+              </div>
             ) : (
-              filteredProdBatches.map((batch) => (
-                <div 
-                  key={batch.id}
-                  onClick={() => setSelectedProdBatch(batch)}
-                  className={`p-4 border-b border-slate-200 dark:border-slate-200 dark:border-slate-900/60 cursor-pointer transition-all hover:bg-slate-50 dark:bg-slate-900/30 ${selectedProdBatch?.id === batch.id ? 'bg-[#F97316]/10 border-l-4 border-l-[#F97316]' : ''}`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[9px] font-mono text-slate-600 dark:text-slate-400 uppercase">{batch.batchCode}</span>
-                    <span className="px-2 py-0.5 bg-[#F97316]/10 text-[#F97316] text-[9px] rounded-full font-black uppercase tracking-wider font-mono">P-HOLD</span>
-                  </div>
-                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">{batch.product?.name}</h4>
-                  <div className="flex items-center gap-4 mt-2">
-                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold uppercase">
-                      <Package className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                      Yield: {batch.quantity} {batch.product?.unit || 'units'}
-                    </div>
-                    {batch.production?.recipe?.name && (
-                      <div className="text-[9px] text-slate-600 dark:text-slate-400 font-bold uppercase truncate max-w-[120px]">
-                        Formula: {batch.production.recipe.name}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                      <th className="text-left px-4 py-3">Batch</th>
+                      <th className="text-left px-4 py-3">Product</th>
+                      <th className="text-right px-4 py-3">Produced Qty</th>
+                      <th className="text-left px-4 py-3">Status</th>
+                      <th className="text-right px-4 py-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredProdBatches.map((batch) => (
+                      <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800">{batch.product?.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.quantity} {batch.product?.unit || 'units'}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-amber-600 bg-amber-50 border-amber-200">
+                            QC Pending
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            onClick={() => openInspect(batch)}
+                            className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+                          >
+                            Inspect
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-        </div>
-
-        {/* Right Side: Form Panel */}
-        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-900 rounded-3xl overflow-hidden backdrop-blur-xl relative">
-          
-          {activeTab === 'GRN' ? (
-            /* GRN QC Form */
-            !selectedGrnItem ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-12 text-center">
-                <ClipboardCheck className="w-14 h-14 text-slate-800 mb-4 animate-pulse" />
-                <h2 className="text-sm font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">Ready for Material QC</h2>
-                <p className="max-w-xs text-[10px] text-slate-500 font-semibold uppercase mt-1">Select an inward GRN material consignment to inspect.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="p-6 border-b border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-900/40 flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[#F97316] font-mono text-xs tracking-widest uppercase font-black">Material Verification</span>
-                      <ArrowRight className="w-4 h-4 text-slate-650" />
-                      <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{selectedGrnItem.grn?.procurementOrder?.vendor?.name}</span>
-                    </div>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{selectedGrnItem.inventoryItem?.name}</h2>
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[9px] font-mono text-slate-500 dark:text-slate-400">Batch: {selectedGrnItem.vendorBatchNo || 'N/A'}</div>
-                      <div className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[9px] font-mono text-slate-500 dark:text-slate-400">PO: {selectedGrnItem.grn?.procurementOrder?.poNumber || 'N/A'}</div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Total Received</div>
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">{selectedGrnItem.receivedQty} <span className="text-xs text-slate-500">{selectedGrnItem.inventoryItem?.unit}</span></div>
-                  </div>
-                </div>
-
-                {/* Form Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  
-                  {/* Physical Parameters */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Thermometer className="w-4 h-4 text-[#F97316]" /> Physical Parameters
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Temperature (°C)</label>
-                        <input 
-                          type="number"
-                          placeholder="24.5"
-                          value={grnInspection.temperature}
-                          onChange={(e) => setGrnInspection({...grnInspection, temperature: e.target.value})}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Moisture Content (%)</label>
-                        <input 
-                          type="number"
-                          placeholder="12.0"
-                          value={grnInspection.moistureContent}
-                          onChange={(e) => setGrnInspection({...grnInspection, moistureContent: e.target.value})}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Packaging Integrity</label>
-                        <button 
-                          onClick={() => setGrnInspection({...grnInspection, packagingOk: !grnInspection.packagingOk})}
-                          className={`w-full py-3 px-4 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${grnInspection.packagingOk ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-450'}`}
-                        >
-                          {grnInspection.packagingOk ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                          {grnInspection.packagingOk ? 'Intact & Sealed' : 'Damaged / Leaked'}
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Quantity Tally */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-[#F97316]" /> Accepted vs Rejected
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-white dark:bg-slate-950 p-6 rounded-3xl border border-slate-200 dark:border-slate-800">
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center text-xs font-semibold">
-                          <label className="text-orange-500 uppercase">Accepted Quantity</label>
-                          <span className="text-slate-500">Usable Stock</span>
-                        </div>
-                        <input 
-                          type="number"
-                          value={grnInspection.approvedQty}
-                          onChange={(e) => handleGrnQtyChange('approvedQty', Number(e.target.value))}
-                          className="w-full text-3xl font-black bg-transparent outline-none text-slate-900 dark:text-white focus:text-[#F97316]"
-                        />
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center text-xs font-semibold">
-                          <label className="text-rose-400 uppercase">Rejected Quantity</label>
-                          <span className="text-slate-500">Deducted Stock</span>
-                        </div>
-                        <input 
-                          type="number"
-                          value={grnInspection.rejectedQty}
-                          onChange={(e) => handleGrnQtyChange('rejectedQty', Number(e.target.value))}
-                          className="w-full text-3xl font-black bg-transparent outline-none text-slate-900 dark:text-white focus:text-rose-400"
-                        />
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Final Disposition */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 text-[#F97316]" /> Final Disposition
-                    </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {[
-                        { id: 'APPROVE', label: 'Release Stock', icon: CheckCircle2, activeColor: 'border-orange-500 text-orange-500 bg-orange-500/10' },
-                        { id: 'REJECT_RETURN', label: 'Return Vendor', icon: Trash2, activeColor: 'border-amber-500 text-amber-400 bg-amber-500/10' },
-                        { id: 'REJECT_SCRAP', label: 'Scrap/Destroy', icon: XCircle, activeColor: 'border-rose-500 text-rose-400 bg-rose-500/10' },
-                        { id: 'REWORK', label: 'Internal Rework', icon: RefreshCw, activeColor: 'border-sky-500 text-sky-400 bg-sky-500/10' }
-                      ].map((btn) => (
-                        <button
-                          key={btn.id}
-                          onClick={() => setGrnInspection({...grnInspection, actionTaken: btn.id})}
-                          className={`flex flex-col items-center gap-3 p-4 rounded-2xl border text-[10px] font-bold uppercase transition-all ${grnInspection.actionTaken === btn.id ? btn.activeColor : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-200 dark:border-slate-800'}`}
-                        >
-                          <btn.icon className="w-5 h-5" />
-                          <span>{btn.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-
-                  {/* Remarks */}
-                  <section className="space-y-2">
-                    <label className="text-[10px] text-slate-500 font-black uppercase">Inspection Remarks</label>
-                    <textarea 
-                      rows={3}
-                      placeholder="Enter remarks..."
-                      value={grnInspection.remarks}
-                      onChange={(e) => setGrnInspection({...grnInspection, remarks: e.target.value})}
-                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white resize-none"
-                    />
-                  </section>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="p-6 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-200 dark:border-slate-900 flex justify-end gap-4">
-                  <button 
-                    onClick={() => setSelectedGrnItem(null)}
-                    className="px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs font-bold uppercase tracking-wider"
-                  >
-                    Discard Changes
-                  </button>
-                  <button 
-                    onClick={handleGrnSubmit}
-                    disabled={isSubmitting}
-                    className="px-8 py-3 bg-[#F97316] text-slate-900 dark:text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.01] transition-all flex items-center gap-2"
-                  >
-                    {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
-                    Record Inspection
-                  </button>
-                </div>
-              </div>
-            )
-          ) : (
-            /* Production QC Form */
-            !selectedProdBatch ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-slate-500 p-12 text-center">
-                <Layers className="w-14 h-14 text-slate-800 mb-4 animate-pulse" />
-                <h2 className="text-sm font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">Ready for Production QC</h2>
-                <p className="max-w-xs text-[10px] text-slate-500 font-semibold uppercase mt-1">Select a finished goods batch from the schedule to release to inventory.</p>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full">
-                {/* Header */}
-                <div className="p-6 border-b border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-900/40 flex justify-between items-start">
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[#F97316] font-mono text-xs tracking-widest uppercase font-black">Finished Goods Verification</span>
-                      <ArrowRight className="w-4 h-4 text-slate-650" />
-                      <span className="text-slate-500 dark:text-slate-400 text-xs font-semibold">{selectedProdBatch.franchise?.name || 'Central Facility'}</span>
-                    </div>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{selectedProdBatch.product?.name}</h2>
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[9px] font-mono text-slate-500 dark:text-slate-400">Batch Code: {selectedProdBatch.batchCode}</div>
-                      {selectedProdBatch.production?.recipe?.name && (
-                        <div className="px-2 py-1 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded text-[9px] font-mono text-slate-500 dark:text-slate-400">Formula: {selectedProdBatch.production.recipe.name}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider mb-1">Declared Output Yield</div>
-                    <div className="text-2xl font-black text-slate-900 dark:text-white">{selectedProdBatch.quantity} <span className="text-xs text-slate-500">{selectedProdBatch.product?.unit || 'units'}</span></div>
-                  </div>
-                </div>
-
-                {/* Form Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  
-                  {/* QA Quality Parameters */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Compass className="w-4 h-4 text-[#F97316]" /> QA Quality Parameters
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Moisture Content (%)</label>
-                        <input 
-                          type="number"
-                          placeholder="e.g. 8.2"
-                          value={prodInspection.moistureCheck}
-                          onChange={(e) => setProdInspection({...prodInspection, moistureCheck: e.target.value})}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Color Consistency</label>
-                        <input 
-                          type="text"
-                          value={prodInspection.colorCheck}
-                          onChange={(e) => setProdInspection({...prodInspection, colorCheck: e.target.value})}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] text-slate-500 font-black uppercase">Texture Profile</label>
-                        <input 
-                          type="text"
-                          value={prodInspection.textureCheck}
-                          onChange={(e) => setProdInspection({...prodInspection, textureCheck: e.target.value})}
-                          className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white"
-                        />
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Quantity Discrepancy (Rejections) */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Package className="w-4 h-4 text-[#F97316]" /> Yield Accounting
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-white dark:bg-slate-950 p-6 rounded-3xl border border-slate-200 dark:border-slate-800">
-                      
-                      <div className="space-y-3">
-                        <label className="text-[10px] text-slate-500 font-black uppercase block">Wastage / Rejection Quantity</label>
-                        <input 
-                          type="number"
-                          value={prodInspection.rejectionQty || ""}
-                          onChange={(e) => handleProdRejectionChange(Number(e.target.value))}
-                          placeholder="0.00"
-                          className="w-full text-3xl font-black bg-transparent outline-none text-rose-400 focus:ring-0 focus:outline-none"
-                        />
-                        <p className="text-[9px] font-semibold text-slate-500 uppercase">Discarded due to contamination or QA fail</p>
-                      </div>
-
-                      <div className="space-y-3">
-                        <label className="text-[10px] text-[#F97316] font-black uppercase block">Approved Intake Quantity</label>
-                        <div className="text-3xl font-black text-orange-500 py-1">
-                          {(selectedProdBatch.quantity - prodInspection.rejectionQty).toFixed(2)}
-                          <span className="text-xs text-slate-550 ml-1.5 uppercase font-bold">{selectedProdBatch.product?.unit || 'units'}</span>
-                        </div>
-                        <p className="text-[9px] font-semibold text-slate-500 uppercase">Released directly to finished goods inventory</p>
-                      </div>
-
-                    </div>
-                  </section>
-
-                  {/* QC Status Toggle */}
-                  <section>
-                    <h3 className="text-xs font-black text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4 text-[#F97316]" /> Final Status Decision
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <button
-                        onClick={() => setProdInspection({...prodInspection, qcStatus: 'APPROVED'})}
-                        className={`py-4 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${prodInspection.qcStatus === 'APPROVED' ? 'bg-orange-500/10 border-orange-500 text-orange-500 shadow-lg' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-200 dark:border-slate-800'}`}
-                      >
-                        <CheckCircle2 size={16} />
-                        Pass & Release
-                      </button>
-                      <button
-                        onClick={() => setProdInspection({...prodInspection, qcStatus: 'REWORK'})}
-                        className={`py-4 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${prodInspection.qcStatus === 'REWORK' ? 'bg-sky-500/10 border-sky-500 text-sky-400 shadow-lg' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-200 dark:border-slate-800'}`}
-                      >
-                        <RefreshCw size={16} />
-                        Send for Rework
-                      </button>
-                      <button
-                        onClick={() => setProdInspection({...prodInspection, qcStatus: 'REJECTED'})}
-                        className={`py-4 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${prodInspection.qcStatus === 'REJECTED' ? 'bg-rose-500/10 border-rose-500 text-rose-400 shadow-lg' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-500 hover:border-slate-200 dark:border-slate-800'}`}
-                      >
-                        <XCircle size={16} />
-                        Reject Batch
-                      </button>
-                    </div>
-                  </section>
-
-                  {/* Remarks */}
-                  <section className="space-y-2">
-                    <label className="text-[10px] text-slate-500 font-black uppercase">QA Inspector Notes</label>
-                    <textarea 
-                      rows={3}
-                      placeholder="Add QA inspection logs, variance notes..."
-                      value={prodInspection.remarks}
-                      onChange={(e) => setProdInspection({...prodInspection, remarks: e.target.value})}
-                      className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#F97316]/50 text-slate-900 dark:text-white resize-none"
-                    />
-                  </section>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="p-6 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-200 dark:border-slate-900 flex justify-end gap-4">
-                  <button 
-                    onClick={() => setSelectedProdBatch(null)}
-                    className="px-6 py-3 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white text-xs font-bold uppercase tracking-wider"
-                  >
-                    Discard Changes
-                  </button>
-                  <button 
-                    onClick={handleProdSubmit}
-                    disabled={isSubmitting}
-                    className="px-8 py-3 bg-[#F97316] text-slate-900 dark:text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg hover:scale-[1.01] transition-all flex items-center gap-2 animate-pulse"
-                  >
-                    {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
-                    Finalize QA Release
-                  </button>
-                </div>
-              </div>
-            )
-          )}
-
-        </div>
-
+        )}
       </div>
+
+      {/* QC Inspection Dialog */}
+      {qcModalBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">QC Inspection</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Batch: {qcModalBatch.batchCode}</p>
+              </div>
+              <button
+                onClick={() => setQcModalBatch(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Product</p>
+                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.product?.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Produced Quantity</p>
+                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.quantity} {qcModalBatch.product?.unit || 'units'}</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-2">QC Decision</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => { setQcRejectedQty(0); setQcRemarks(''); }}
+                    className={clsx(
+                      "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
+                      qcRejectedQty === 0 ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                    )}
+                  >
+                    <CheckCircle2 className="h-4 w-4" /> Accept
+                  </button>
+                  <button
+                    onClick={() => setQcRejectedQty(qcModalBatch.quantity)}
+                    className={clsx(
+                      "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
+                      qcRejectedQty > 0 ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                    )}
+                  >
+                    <XCircle className="h-4 w-4" /> Reject
+                  </button>
+                </div>
+              </div>
+
+              {qcRejectedQty > 0 ? (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Rejection Quantity (KG)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={qcModalBatch.quantity}
+                      value={qcRejectedQty}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setQcRejectedQty(Math.max(0, Math.min(val, qcModalBatch.quantity)));
+                      }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-[#f58220] bg-white"
+                    />
+                    <p className="text-xs text-gray-500 mt-1.5">Accepted: {(qcModalBatch.quantity - qcRejectedQty).toFixed(2)} {qcModalBatch.product?.unit || 'units'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                      Reason <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={qcRemarks}
+                      onChange={(e) => setQcRemarks(e.target.value)}
+                      placeholder="Reason for rejection..."
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white resize-none"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                  <p className="text-xs font-medium text-emerald-600 mb-1">Accepted Quantity</p>
+                  <p className="text-xl font-bold text-gray-800">{qcModalBatch.quantity} <span className="text-sm text-gray-400">{qcModalBatch.product?.unit || 'units'}</span></p>
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => setQcModalBatch(null)}
+                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleProdSubmit}
+                disabled={isSubmitting || (qcRejectedQty > 0 && !qcRemarks.trim())}
+                className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-60 transition-colors flex items-center gap-2"
+              >
+                {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
+                Confirm QC
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

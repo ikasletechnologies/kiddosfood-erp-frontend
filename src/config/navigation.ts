@@ -181,12 +181,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/packaging/labels",
         roles: SUPER_ONLY,
       },
-      {
-        icon: Package,
-        label: "Carton Packing",
-        href: "/packaging/carton",
-        roles: SUPER_ONLY,
-      },
     ],
   },
   {
