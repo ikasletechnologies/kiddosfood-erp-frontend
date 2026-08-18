@@ -13,7 +13,7 @@ export const vendorsApi = {
     api.post('/api/vendors/link-material', data),
   getLedger: (id: string, params: any = {}) => api.get(`/api/vendors/${id}/ledger`, { params }),
   getAging: (id: string) => api.get(`/api/vendors/${id}/aging`),
-  getNextPaymentNumber: () => api.get('/api/vendors/next-payment-number'),
+  getNextPaymentNumber: (date?: string) => api.get('/api/vendors/next-payment-number', { params: { date } }),
   recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string }) => api.post(`/api/vendors/${id}/payment`, data),
   recordAdjustment: (id: string, data: { amount: number; type: 'CREDIT' | 'DEBIT'; note: string; referenceType?: string, referenceId?: string }) => api.post(`/api/vendors/${id}/adjustment`, data),
 };

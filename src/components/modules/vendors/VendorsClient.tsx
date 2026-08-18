@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   Plus, Search,
   Edit2, Trash2,
@@ -11,7 +12,8 @@ import {
   Phone, Mail, ShieldCheck, Zap, ArrowRight,
   Package, Truck, Receipt, LayoutDashboard, Settings2,
   AlertTriangle, Star, Calendar, FileCheck, Loader2,
-  Printer, MoreVertical, Filter, ChevronDown, MessageSquare, Clock, Info, X
+  Printer, MoreVertical, Filter, ChevronDown, MessageSquare, Clock, X,
+  Upload, FileSpreadsheet
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -19,8 +21,15 @@ import api, { vendorsApi, accountsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
+import { Modal } from "@/components/ui/Modal";
 
 
+
+// Local YYYY-MM-DD — never use toISOString() for "today", it renders in UTC and
+// silently shifts the date by a day whenever the local timezone has a non-zero offset.
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 const VENDOR_STATUS = [
   { value: "ACTIVE", label: "Active", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-400/10", border: "border-emerald-200 dark:border-emerald-400/20" },
@@ -66,6 +75,13 @@ export default function VendorsClient() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
+  // Excel Import
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<Array<{ name: string; contact: string; email: string; gstNumber: string; category: string; creditLimit: string; paymentTerms: string; error?: string }>>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
+
   // Advanced Filters State
   const [isLedgerFilterPanelOpen, setIsLedgerFilterPanelOpen] = useState(false);
   const [ledgerSearchQuery, setLedgerSearchQuery] = useState("");
@@ -97,12 +113,10 @@ export default function VendorsClient() {
   }, []);
 
   const [settings, setSettings] = useState({
-    partyGrouping: false,
-    shippingAddress: false,
-    managePartyStatus: false,
-    enablePaymentReminder: true,
+    enablePaymentReminder: false,
     reminderDays: "1"
   });
+  const [savingSettings, setSavingSettings] = useState(false);
   
   const [saving, setSaving] = useState(false);
   const [totalFilter, setTotalFilter] = useState({ category: 'Equal To', value: '', endValue: '' });
@@ -134,7 +148,7 @@ export default function VendorsClient() {
     paymentMode: "CASH",
     transactionRef: "",
     vendorInvoiceId: "",
-    date: new Date().toISOString().split('T')[0]
+    date: toLocalDateStr(new Date())
   });
   const [vendorInvoices, setVendorInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
@@ -565,6 +579,118 @@ export default function VendorsClient() {
     showToast(`Exported ${format.toUpperCase()} successfully`, "success");
   };
 
+  // -- Excel Import --
+
+  const IMPORT_TEMPLATE_HEADERS = ["Name", "Contact", "Email", "GSTIN", "Category", "Credit Limit", "Payment Terms"];
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      IMPORT_TEMPLATE_HEADERS,
+      ["Acme Traders", "9876543210", "acme@example.com", "27AAAAA1111A1Z1", "Raw material", "50000", "IMMEDIATE"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vendors");
+    XLSX.writeFile(wb, "vendor_import_template.xlsx");
+  };
+
+  const pickField = (row: Record<string, any>, ...keys: string[]) => {
+    for (const key of Object.keys(row)) {
+      if (keys.some(k => k.toLowerCase() === key.trim().toLowerCase())) {
+        const val = row[key];
+        return val === undefined || val === null ? "" : String(val).trim();
+      }
+    }
+    return "";
+  };
+
+  const handleImportFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+      if (rows.length === 0) {
+        showToast("No rows found in the file", "error");
+        return;
+      }
+
+      const parsed = rows.map(row => {
+        const name = pickField(row, "name", "vendor name", "party name");
+        const contact = pickField(row, "contact", "phone", "mobile", "phone number").replace(/\D/g, "");
+        const rowData = {
+          name,
+          contact,
+          email: pickField(row, "email"),
+          gstNumber: pickField(row, "gstin", "gst number", "gst"),
+          category: pickField(row, "category", "material category"),
+          creditLimit: pickField(row, "credit limit"),
+          paymentTerms: pickField(row, "payment terms") || "IMMEDIATE",
+        };
+        let error: string | undefined;
+        if (!rowData.name) error = "Missing name";
+        else if (!/^\d{10}$/.test(rowData.contact)) error = "Contact must be 10 digits";
+        return { ...rowData, error };
+      });
+
+      setImportRows(parsed);
+      setImportResult(null);
+      setShowImportModal(true);
+    } catch (err) {
+      console.error(err);
+      showToast("Could not read that file — expected .xlsx or .csv", "error");
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    const validRows = importRows.filter(r => !r.error);
+    if (validRows.length === 0) return;
+
+    setImporting(true);
+    let success = 0, failed = 0;
+    for (const row of validRows) {
+      try {
+        await vendorsApi.create({
+          name: row.name,
+          contact: row.contact,
+          email: row.email || undefined,
+          gstNumber: row.gstNumber || undefined,
+          category: row.category || undefined,
+          creditLimit: row.creditLimit ? Number(row.creditLimit) : 0,
+          paymentTerms: row.paymentTerms || "IMMEDIATE",
+        });
+        success++;
+      } catch {
+        failed++;
+      }
+    }
+    setImporting(false);
+    setImportResult({ success, failed });
+    fetchData();
+  };
+
+  const handleSaveSettings = async () => {
+    if (!selectedVendorId) return;
+    setSavingSettings(true);
+    try {
+      await vendorsApi.update(selectedVendorId, {
+        paymentReminderEnabled: settings.enablePaymentReminder,
+        paymentReminderDays: Number(settings.reminderDays) || 1,
+      });
+      showToast("Settings saved", "success");
+      setIsSettingsOpen(false);
+      fetchData();
+    } catch (e: any) {
+      showToast(e.response?.data?.error || "Failed to save settings", "error");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   // -- Actions --
 
   const handlePayment = async () => {
@@ -613,6 +739,10 @@ export default function VendorsClient() {
   const amountNum = Number(paymentForm.amount) || 0;
   const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
   const accountBalance = selectedAccount?.balance || 0;
+  // Pay Due against a vendor that has no outstanding payable doesn't make sense —
+  // block it rather than silently recording a payment with nothing to pay.
+  const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
+  const noPayableDue = paymentForm.type === 'PAYMENT' && vendorNetPayable <= 0;
 
   return (
     <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
@@ -760,12 +890,13 @@ export default function VendorsClient() {
                 </span>
               </div>
               <div className="flex items-center gap-4">
-                <button 
+                <button
                   onClick={async () => {
                     fetchVendorInvoices(selectedVendor.id);
-                    setPaymentForm(prev => ({ ...prev, transactionRef: '', vendorInvoiceId: '', amount: '', note: '' }));
+                    const todayStr = toLocalDateStr(new Date());
+                    setPaymentForm(prev => ({ ...prev, transactionRef: '', vendorInvoiceId: '', amount: '', note: '', date: todayStr }));
                     try {
-                      const res = await vendorsApi.getNextPaymentNumber();
+                      const res = await vendorsApi.getNextPaymentNumber(todayStr);
                       setNextPaymentNumber(res.data?.nextPaymentNumber || '');
                     } catch { setNextPaymentNumber(''); }
                     setShowPaymentModal(true);
@@ -775,23 +906,40 @@ export default function VendorsClient() {
                   <Wallet size={14} /> Record Payment
                 </button>
                 <div className="flex items-center gap-2 text-slate-400">
-                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Settings2 size={18} /></button>
+                  <button
+                    onClick={() => {
+                      setSettings({
+                        enablePaymentReminder: !!selectedVendor?.paymentReminderEnabled,
+                        reminderDays: String(selectedVendor?.paymentReminderDays ?? 1),
+                      });
+                      setIsSettingsOpen(true);
+                    }}
+                    className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                  ><Settings2 size={18} /></button>
                   <div className="relative filter-popover-container">
                     <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><MoreVertical size={18} /></button>
+                    <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
                     {/* More Options Menu */}
                     {isMoreMenuOpen && (
                       <div className="absolute top-full right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 dark:border-white/5 z-50 py-1.5">
-                        {[
-                          "Import from Excel",
-                          "Import from Phone",
-                          "Import Via Google Contacts",
-                          "Party Statement (Report)",
-                          "All Parties (Report)"
-                        ].map((item, i) => (
-                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                            {item}
-                          </button>
-                        ))}
+                        <button
+                          onClick={() => { setIsMoreMenuOpen(false); importFileRef.current?.click(); }}
+                          className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                        >
+                          <Upload size={14} className="text-emerald-500" /> Import from Excel
+                        </button>
+                        <button
+                          onClick={() => { setIsMoreMenuOpen(false); router.push(`/reports?report=${encodeURIComponent('Party Statement')}`); }}
+                          className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                        >
+                          <FileText size={14} className="text-blue-500" /> Party Statement (Report)
+                        </button>
+                        <button
+                          onClick={() => { setIsMoreMenuOpen(false); router.push(`/reports?report=${encodeURIComponent('All parties')}`); }}
+                          className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                        >
+                          <FileText size={14} className="text-indigo-500" /> All Parties (Report)
+                        </button>
                       </div>
                     )}
                   </div>
@@ -824,18 +972,20 @@ export default function VendorsClient() {
               <div className="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar bg-slate-50/50 dark:bg-[#0b0c14]">
                 {/* Financial Formula Card */}
                 <div className="bg-white dark:bg-card p-6 rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Outstanding Balance Formula</h4>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Balance Formula</h4>
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                       <p className={`text-2xl font-black ${Number(selectedVendor.balance) > 0 ? "text-rose-500" : Number(selectedVendor.balance) < 0 ? "text-emerald-500" : "text-slate-500"}`}>
                         ₹ {Math.round(Math.abs(selectedVendor.balance || 0)).toLocaleString()}
                         {Number(selectedVendor.balance) !== 0 && (
                           <span className="text-xs font-bold uppercase tracking-wider ml-1.5 text-slate-400">
-                            {Number(selectedVendor.balance) > 0 ? "To Pay" : "Advance"}
+                            {Number(selectedVendor.balance) > 0 ? "To Pay" : "Advance Credit"}
                           </span>
                         )}
                       </p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Outstanding Balance</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
+                        {Number(selectedVendor.balance) > 0 ? "Outstanding Balance" : Number(selectedVendor.balance) < 0 ? "Balance — Paid Ahead of Purchases" : "Balance"}
+                      </p>
                     </div>
                     <div className="text-2xl text-slate-300 font-light hidden md:block">=</div>
                     <div>
@@ -1526,35 +1676,149 @@ export default function VendorsClient() {
         title={editing ? "EDIT VENDOR" : "ADD VENDOR"}
       />
 
+      {/* Import from Excel */}
+      <Modal
+        isOpen={showImportModal}
+        onClose={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); }}
+        title="Import Vendors from Excel"
+        size="lg"
+        footer={
+          importResult ? (
+            <button
+              onClick={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); }}
+              className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
+            >
+              Done
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setShowImportModal(false); setImportRows([]); }}
+                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing || importRows.filter(r => !r.error).length === 0}
+                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+              >
+                {importing ? "Importing…" : `Import ${importRows.filter(r => !r.error).length} Vendor${importRows.filter(r => !r.error).length === 1 ? '' : 's'}`}
+              </button>
+            </>
+          )
+        }
+      >
+        {importResult ? (
+          <div className="text-center py-6 space-y-3">
+            <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 size={32} />
+            </div>
+            <p className="text-lg font-bold text-slate-800">{importResult.success} vendor{importResult.success === 1 ? '' : 's'} imported</p>
+            {importResult.failed > 0 && (
+              <p className="text-sm text-rose-500 font-medium">{importResult.failed} row{importResult.failed === 1 ? '' : 's'} failed — check for duplicate names or invalid data and try again.</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                {importRows.length} row{importRows.length === 1 ? '' : 's'} found · {importRows.filter(r => r.error).length} with errors will be skipped.
+              </p>
+              <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:underline">
+                <Download size={14} /> Download Template
+              </button>
+            </div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Name</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Contact</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Email</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">GSTIN</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, i) => (
+                    <tr key={i} className={clsx("border-t border-slate-100", row.error && "bg-rose-50/50")}>
+                      <td className="px-3 py-2 font-semibold text-slate-800">{row.name || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.contact || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.gstNumber || "—"}</td>
+                      <td className="px-3 py-2">
+                        {row.error
+                          ? <span className="text-rose-600 font-bold">{row.error}</span>
+                          : <span className="text-emerald-600 font-bold">Ready</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {showPaymentModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-[#12141c] rounded-[2.5rem] shadow-2xl w-full max-w-4xl flex flex-col" style={{maxHeight: '92vh'}}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col" style={{maxHeight: '92vh'}}>
             {/* Header */}
-            <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b border-slate-100 dark:border-white/5 shrink-0">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 shrink-0">
               <div>
-                <h2 className="text-base font-black text-gray-900 dark:text-white">Record Transaction</h2>
-                <p className="text-[10px] text-slate-400 font-medium mt-0.5">{selectedVendor?.name}</p>
+                <h2 className="text-base font-bold text-gray-800">Record Payment</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{selectedVendor?.name}</p>
               </div>
-              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl transition-colors">
+              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                 <X size={18} />
               </button>
             </div>
 
             {/* Scrollable body */}
-            <div className="overflow-y-auto flex-1 px-8 py-5 custom-scrollbar">
+            <div className="overflow-y-auto flex-1 px-6 py-5 custom-scrollbar">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4 flex flex-col">
                 <div className="space-y-3">
-                  <div className="p-1 bg-slate-100 dark:bg-slate-800/50 rounded-xl flex border border-slate-200 dark:border-white/5">
-                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'PAYMENT' })} className={clsx("flex-1 py-2.5 rounded-lg text-[9px] font-black uppercase transition-all", paymentForm.type === 'PAYMENT' ? "bg-white dark:bg-slate-700 text-orange-600 dark:text-white shadow-sm" : "text-slate-500")}>Pay Due</button>
-                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'ADVANCE' })} className={clsx("flex-1 py-2.5 rounded-lg text-[9px] font-black uppercase transition-all", paymentForm.type === 'ADVANCE' ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm" : "text-slate-500")}>Advance</button>
+                  <div className="p-1 bg-gray-100 rounded-lg flex border border-gray-200">
+                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'PAYMENT' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'PAYMENT' ? "bg-white text-[#f58220] shadow-sm" : "text-gray-500")}>Pay Due</button>
+                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'ADVANCE' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'ADVANCE' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500")}>Advance</button>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Transaction Amount</label>
+                    <label className="text-xs font-medium text-gray-500">Transaction Amount</label>
                     <div className="relative">
-                      <span className="absolute left-5 top-1/2 -translate-y-1/2 text-lg font-black text-slate-300">₹</span>
-                      <input value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="0.00" className="w-full pl-11 pr-5 py-4 text-2xl font-black text-slate-900 dark:text-white bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-white/5 rounded-2xl outline-none focus:ring-4 ring-orange-500/10" />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-300">₹</span>
+                      <input value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Enter amount" className="w-full pl-9 pr-4 py-3 text-xl font-bold text-gray-800 bg-white border border-gray-200 rounded-lg outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-300 placeholder:font-medium placeholder:text-base" />
                     </div>
+                    {(() => {
+                      const totalPurchased = Number(selectedVendor?.totalPurchased || 0);
+                      const totalPaid = Number(selectedVendor?.totalPaid || 0);
+                      const netPayable = totalPurchased - totalPaid;
+                      const advanceCredit = Math.max(0, -netPayable);
+
+                      if (paymentForm.type === 'PAYMENT') {
+                        if (netPayable <= 0) {
+                          return (
+                            <p className="text-xs text-gray-500">
+                              No outstanding balance.{advanceCredit > 0 && ` Vendor has ₹${Math.round(advanceCredit).toLocaleString()} advance credit.`}
+                            </p>
+                          );
+                        }
+                        return (
+                          <div className="text-xs text-gray-500 space-y-0.5">
+                            <p className="flex justify-between"><span>Outstanding payable</span><span className="font-semibold text-gray-700">₹{Math.round(totalPurchased).toLocaleString()}</span></p>
+                            {totalPaid > 0 && <p className="flex justify-between"><span>Advance credit</span><span className="font-semibold text-gray-700">₹{Math.round(totalPaid).toLocaleString()}</span></p>}
+                            <p className="flex justify-between"><span>Net payable</span><span className="font-semibold text-[#f58220]">₹{Math.round(netPayable).toLocaleString()}</span></p>
+                          </div>
+                        );
+                      }
+                      // ADVANCE tab
+                      return (
+                        <p className="text-xs text-gray-500">
+                          {advanceCredit > 0 ? `Current advance credit: ₹${Math.round(advanceCredit).toLocaleString()}` : "No existing advance credit."}
+                        </p>
+                      );
+                    })()}
                   </div>
                 </div>
 
@@ -1567,30 +1831,30 @@ export default function VendorsClient() {
                   const advanceAfter = paymentForm.type === 'ADVANCE' ? advanceBefore + amountNum : advanceBefore;
                   const isOverdraft = amountNum > accountBalance;
                   return (
-                    <div className={`p-4 border rounded-2xl space-y-2.5 shrink-0 ${isOverdraft ? 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30' : 'bg-orange-500/5 border-orange-500/10'}`}>
-                      <p className={`text-[8px] font-black uppercase tracking-widest flex items-center gap-1.5 ${isOverdraft ? 'text-rose-600' : 'text-orange-600'}`}>
-                        <Zap size={10} /> {isOverdraft ? '⚠ Insufficient Balance' : 'Payment Summary'}
+                    <div className={`p-4 border rounded-lg space-y-2 shrink-0 ${isOverdraft ? 'bg-rose-50 border-rose-200' : 'bg-orange-50 border-orange-100'}`}>
+                      <p className={`text-xs font-semibold flex items-center gap-1.5 ${isOverdraft ? 'text-rose-600' : 'text-[#f58220]'}`}>
+                        <Zap size={12} /> {isOverdraft ? '⚠ Insufficient Balance' : 'Payment Summary'}
                       </p>
                       {paymentForm.type === 'PAYMENT' ? (
-                        <div className="space-y-1 text-[10px]">
-                          <div className="flex justify-between"><span className="text-slate-500">Outstanding Before</span><span className="font-black text-slate-700 dark:text-slate-300">₹{outstandingBefore.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-500">Payment Amount</span><span className="font-black text-orange-600">− ₹{amountNum.toLocaleString()}</span></div>
-                          <div className="flex justify-between border-t border-orange-500/20 pt-1"><span className="text-slate-500 font-bold">Outstanding After</span><span className="font-black text-emerald-600">₹{outstandingAfter.toLocaleString()}</span></div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between"><span className="text-gray-500">Outstanding Before</span><span className="font-semibold text-gray-700">₹{outstandingBefore.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">Payment Amount</span><span className="font-semibold text-[#f58220]">− ₹{amountNum.toLocaleString()}</span></div>
+                          <div className="flex justify-between border-t border-orange-200 pt-1"><span className="text-gray-500 font-medium">Outstanding After</span><span className="font-semibold text-emerald-600">₹{outstandingAfter.toLocaleString()}</span></div>
                         </div>
                       ) : (
-                        <div className="space-y-1 text-[10px]">
-                          <div className="flex justify-between"><span className="text-slate-500">Current Advance</span><span className="font-black text-slate-700 dark:text-slate-300">₹{advanceBefore.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-500">New Advance</span><span className="font-black text-indigo-600">+ ₹{amountNum.toLocaleString()}</span></div>
-                          <div className="flex justify-between border-t border-indigo-500/20 pt-1"><span className="text-slate-500 font-bold">Total Advance</span><span className="font-black text-indigo-600">₹{advanceAfter.toLocaleString()}</span></div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between"><span className="text-gray-500">Current Advance</span><span className="font-semibold text-gray-700">₹{advanceBefore.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500">New Advance</span><span className="font-semibold text-indigo-600">+ ₹{amountNum.toLocaleString()}</span></div>
+                          <div className="flex justify-between border-t border-indigo-200 pt-1"><span className="text-gray-500 font-medium">Total Advance</span><span className="font-semibold text-indigo-600">₹{advanceAfter.toLocaleString()}</span></div>
                         </div>
                       )}
-                      {isOverdraft && <p className="text-[9px] text-rose-600 font-bold">Payment exceeds account balance by ₹{(amountNum - accountBalance).toLocaleString()}</p>}
+                      {isOverdraft && <p className="text-xs text-rose-600 font-medium">Payment exceeds account balance by ₹{(amountNum - accountBalance).toLocaleString()}</p>}
                     </div>
                   );
                 })() : (
-                  <div className="p-4 bg-slate-50 dark:bg-slate-800/10 border border-dashed border-slate-200 dark:border-white/5 rounded-2xl flex flex-col items-center justify-center h-[110px] shrink-0 gap-1">
-                    <Zap size={16} className="text-slate-300" />
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Enter amount to see payment summary</p>
+                  <div className="p-4 bg-gray-50 border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center h-[110px] shrink-0 gap-1">
+                    <Zap size={16} className="text-gray-300" />
+                    <p className="text-xs text-gray-400 font-medium">Enter amount to see payment summary</p>
                   </div>
                 )}
               </div>
@@ -1599,11 +1863,11 @@ export default function VendorsClient() {
               <div className="space-y-3">
                 {/* Transaction ID (Auto-generated, read-only) */}
                 <div className="space-y-1">
-                  <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">Transaction ID <span className="text-slate-300 font-normal normal-case tracking-normal">(Auto-generated · Read Only)</span></label>
-                  <div className={`w-full px-4 py-3 border border-dashed rounded-xl text-sm font-black font-mono select-all transition-colors ${
+                  <label className="text-xs font-medium text-gray-500">Transaction ID <span className="text-gray-300 font-normal">(Auto-generated · Read Only)</span></label>
+                  <div className={`w-full px-3 py-2.5 border border-dashed rounded-lg text-sm font-semibold font-mono select-all transition-colors ${
                     nextPaymentNumber
-                      ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-white/10 text-slate-400 animate-pulse'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
+                      : 'bg-gray-100 border-gray-300 text-gray-400 animate-pulse'
                   }`}>
                     {nextPaymentNumber || 'Generating…'}
                   </div>
@@ -1611,19 +1875,25 @@ export default function VendorsClient() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1 col-span-2">
-                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">Debit From Account</label>
+                    <label className="text-xs font-medium text-gray-500">Debit From Account</label>
                     {accounts.length === 0 ? (
-                      <div className="px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl">
-                        <p className="text-[9px] font-bold text-rose-600 dark:text-rose-400">No accounts found. Create one in <span className="underline cursor-pointer" onClick={() => router.push('/banking/accounts')}>Banking</span></p>
+                      <div className="p-4 bg-rose-50 border-2 border-dashed border-rose-300 rounded-lg flex items-center justify-between gap-3">
+                        <p className="text-xs font-medium text-rose-600">No bank/cash accounts available — a payment can&apos;t be recorded without one.</p>
+                        <button
+                          onClick={() => router.push('/banking/accounts')}
+                          className="shrink-0 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors active:scale-95 flex items-center gap-1"
+                        >
+                          <Plus size={12} strokeWidth={3} /> Create Account
+                        </button>
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold outline-none">
+                        <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
                           {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                         </select>
                         {selectedAccount && (
-                          <div className={`flex items-center justify-between px-4 py-2 rounded-xl text-[10px] font-black ${amountNum > accountBalance ? 'bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 text-rose-600' : 'bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-700'}`}>
-                            <span className="uppercase tracking-wider">Available Balance</span>
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${amountNum > accountBalance ? 'bg-rose-50 border border-rose-200 text-rose-600' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
+                            <span>Available Balance</span>
                             <span className="text-sm">₹{Math.round(accountBalance).toLocaleString()}</span>
                           </div>
                         )}
@@ -1632,8 +1902,8 @@ export default function VendorsClient() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">Payment Mode</label>
-                    <select value={paymentForm.paymentMode} onChange={e => setPaymentForm({ ...paymentForm, paymentMode: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold outline-none">
+                    <label className="text-xs font-medium text-gray-500">Payment Mode</label>
+                    <select value={paymentForm.paymentMode} onChange={e => setPaymentForm({ ...paymentForm, paymentMode: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
                       <option value="CASH">Cash</option>
                       <option value="UPI">UPI</option>
                       <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -1645,8 +1915,20 @@ export default function VendorsClient() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">Transaction Date</label>
-                    <input type="date" value={paymentForm.date} onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold outline-none" />
+                    <label className="text-xs font-medium text-gray-500">Transaction Date</label>
+                    <input
+                      type="date"
+                      value={paymentForm.date}
+                      onChange={async e => {
+                        const newDate = e.target.value;
+                        setPaymentForm({ ...paymentForm, date: newDate });
+                        try {
+                          const res = await vendorsApi.getNextPaymentNumber(newDate);
+                          setNextPaymentNumber(res.data?.nextPaymentNumber || '');
+                        } catch { setNextPaymentNumber(''); }
+                      }}
+                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]"
+                    />
                   </div>
 
                   {/* Reference Number - fixed label, mode-aware placeholder & required */}
@@ -1667,18 +1949,18 @@ export default function VendorsClient() {
                       const placeholder = modePlaceholder[paymentForm.paymentMode] || 'Optional';
                       return (
                         <>
-                          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">
+                          <label className="text-xs font-medium text-gray-500">
                             Reference Number {isRequired && <span className="text-rose-500">*</span>}
                           </label>
                           <input
                             placeholder={placeholder}
                             value={paymentForm.transactionRef}
                             onChange={e => setPaymentForm({ ...paymentForm, transactionRef: e.target.value })}
-                            className={`w-full px-4 py-2.5 bg-slate-50 dark:bg-white/5 border rounded-xl text-sm font-bold outline-none transition-colors ${
-                              isError ? 'border-rose-300 dark:border-rose-500/50 ring-1 ring-rose-500/20' : 'border-slate-200 dark:border-white/10'
+                            className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm font-medium text-gray-800 outline-none transition-colors ${
+                              isError ? 'border-rose-300 ring-1 ring-rose-200' : 'border-gray-200 focus:border-[#f58220]'
                             }`}
                           />
-                          {isError && <p className="text-[9px] text-rose-500 font-bold ml-1 mt-0.5">Required — enter the bank/payment reference number</p>}
+                          {isError && <p className="text-xs text-rose-500 font-medium mt-0.5">Required — enter the bank/payment reference number</p>}
                         </>
                       );
                     })()}
@@ -1686,12 +1968,12 @@ export default function VendorsClient() {
 
                   {/* Allocate to Invoice */}
                   <div className="space-y-1 col-span-2">
-                    <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">
-                      Settle Against Invoice
+                    <label className="text-xs font-medium text-gray-500">
+                      Apply to Bill
                     </label>
                     {paymentForm.type === 'PAYMENT' ? (
                       loadingInvoices ? (
-                        <div className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-400 animate-pulse">Loading invoices...</div>
+                        <div className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-400 animate-pulse">Loading invoices...</div>
                       ) : (
                         <select
                           value={paymentForm.vendorInvoiceId}
@@ -1699,7 +1981,7 @@ export default function VendorsClient() {
                             const inv = vendorInvoices.find(i => i.id === e.target.value);
                             setPaymentForm({ ...paymentForm, vendorInvoiceId: e.target.value, amount: inv ? inv.amount.toString() : paymentForm.amount });
                           }}
-                          className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold outline-none"
+                          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]"
                         >
                           <option value="">— Direct Payment (Unallocated)</option>
                           {vendorInvoices.length === 0 ? (
@@ -1712,7 +1994,7 @@ export default function VendorsClient() {
                         </select>
                       )
                     ) : (
-                      <div className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-white/5 rounded-xl text-xs font-bold text-slate-400 select-none">
+                      <div className="w-full px-3 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-400 select-none">
                         Advances are not linked to invoices
                       </div>
                     )}
@@ -1720,35 +2002,43 @@ export default function VendorsClient() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-3">Remarks / Internal Notes</label>
-                  <input placeholder="Note for accounting..." value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm font-bold outline-none" />
+                  <label className="text-xs font-medium text-gray-500">Remarks / Internal Notes</label>
+                  <input placeholder="Note for accounting..." value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]" />
                 </div>
               </div>
             </div>{/* end grid */}
             </div>{/* end scrollable body */}
 
             {/* Sticky Footer */}
-            <div className="flex items-center justify-between px-8 py-4 border-t border-slate-100 dark:border-white/5 shrink-0 bg-white dark:bg-[#12141c] rounded-b-[2.5rem]">
-              <p className="text-[10px] text-slate-400 font-medium">
-                {paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()
-                  ? <span className="text-rose-500 font-bold">⚠ Reference number required</span>
+            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 shrink-0 bg-white rounded-b-lg">
+              <p className="text-xs text-gray-500">
+                {accounts.length === 0
+                  ? <span className="text-rose-500 font-semibold">⚠ No debit account available</span>
+                  : noPayableDue
+                  ? <span className="text-rose-500 font-semibold">⚠ No outstanding balance to pay — switch to Advance</span>
+                  : !amountNum
+                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
+                  : !paymentForm.accountId
+                  ? <span className="text-rose-500 font-semibold">⚠ Select a debit account</span>
+                  : paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()
+                  ? <span className="text-rose-500 font-semibold">⚠ Reference number required</span>
                   : amountNum > accountBalance
-                  ? <span className="text-rose-500 font-bold">⚠ Amount exceeds account balance</span>
-                  : <span className="text-emerald-600 font-bold">✓ Ready to confirm</span>}
+                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds account balance</span>
+                  : <span className="text-emerald-600 font-semibold">✓ Ready to record</span>}
               </p>
               <div className="flex items-center gap-3">
-                <button onClick={() => setShowPaymentModal(false)} className="px-5 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all">Cancel</button>
+                <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
                 <button
                   onClick={handlePayment}
                   className={clsx(
-                    "px-8 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-lg",
-                    saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                      : "bg-orange-500 text-white shadow-orange-500/20 hover:bg-orange-600 active:scale-95"
+                    "px-6 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm",
+                    saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+                      : "bg-[#f58220] text-white hover:bg-[#e8740e] active:scale-95"
                   )}
-                  disabled={saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())}
+                  disabled={saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())}
                 >
-                  {saving ? "Processing…" : "Confirm Settlement"}
+                  {saving ? "Processing…" : "Record Payment"}
                 </button>
               </div>
             </div>
@@ -1760,7 +2050,7 @@ export default function VendorsClient() {
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end">
           <div className="w-[400px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right">
-            
+
             {/* Header */}
             <div className="px-6 py-4 flex items-center justify-between border-b border-slate-200 bg-white z-10 shrink-0">
               <h3 className="text-lg font-bold text-slate-700">Party Settings</h3>
@@ -1770,71 +2060,48 @@ export default function VendorsClient() {
             </div>
 
             {/* Settings Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              
-              {/* General Section */}
-              <div className="space-y-4">
-                <div className="bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
-                  <span className="text-sm font-bold text-slate-600">General</span>
-                </div>
-                
-                {[
-                  { id: "partyGrouping", label: "Party Grouping" },
-                  { id: "shippingAddress", label: "Shipping Address" },
-                  { id: "managePartyStatus", label: "Manage Party Status" }
-                ].map(opt => (
-                  <div key={opt.id} className="flex items-center gap-3">
-                    <input 
-                      type="checkbox" 
-                      checked={(settings as any)[opt.id]}
-                      onChange={(e) => setSettings({...settings, [opt.id]: e.target.checked})}
-                      className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500" 
-                    />
-                    <span className="text-sm font-medium text-slate-700">{opt.label}</span>
-                    <Info size={14} className="text-slate-400" />
-                  </div>
-                ))}
-
-                {/* Payment Reminder */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center gap-3">
-                    <input 
-                      type="checkbox" 
-                      checked={settings.enablePaymentReminder}
-                      onChange={(e) => setSettings({...settings, enablePaymentReminder: e.target.checked})}
-                      className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 bg-orange-500" 
-                    />
-                    <span className="text-sm font-medium text-slate-700">Enable Payment Reminder</span>
-                    <Info size={14} className="text-slate-400" />
-                  </div>
-                  
-                  {settings.enablePaymentReminder && (
-                    <div className="pl-7 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-slate-500">Remind me for payment due in</span>
-                        <Info size={12} className="text-slate-400" />
-                      </div>
-                      <div className="flex items-center relative">
-                        <input 
-                          type="text" 
-                          value={settings.reminderDays}
-                          onChange={(e) => setSettings({...settings, reminderDays: e.target.value})}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 focus:outline-none focus:border-orange-400"
-                        />
-                        <span className="absolute right-4 text-sm font-semibold text-slate-400">(Days)</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+                <span className="text-sm font-bold text-slate-600">General</span>
               </div>
 
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={settings.enablePaymentReminder}
+                    onChange={(e) => setSettings({ ...settings, enablePaymentReminder: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                  />
+                  <span className="text-sm font-medium text-slate-700">Enable payment reminders</span>
+                </div>
+
+                {settings.enablePaymentReminder && (
+                  <div className="pl-7 space-y-1.5">
+                    <span className="text-xs font-semibold text-slate-500">Remind me X days before payment is due</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        value={settings.reminderDays}
+                        onChange={(e) => setSettings({ ...settings, reminderDays: e.target.value })}
+                        className="w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 text-center focus:outline-none focus:border-orange-400"
+                      />
+                      <span className="text-sm font-medium text-slate-500">day{Number(settings.reminderDays) === 1 ? '' : 's'} before due date</span>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 shrink-0">
-              <button onClick={() => setIsSettingsOpen(false)} className="w-full py-2.5 flex items-center justify-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-colors">
-                <Settings2 size={16} />
-                More Settings
+            <div className="mt-auto p-4 border-t border-slate-200 bg-slate-50 shrink-0 flex justify-end">
+              <button
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-sm font-bold shadow-sm transition-colors"
+              >
+                {savingSettings ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

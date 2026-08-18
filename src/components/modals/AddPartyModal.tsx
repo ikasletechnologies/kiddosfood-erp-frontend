@@ -20,6 +20,7 @@ const getEmptyForm = (partyType?: 'vendor' | 'customer') => ({
   email: "",
   category: "",
   paymentTerms: "IMMEDIATE",
+  status: "ACTIVE",
   
   // GST & Address Tab
   gstNumber: "",
@@ -107,6 +108,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           openingBalanceType: mappedBalanceType,
           category: initialData.category || "",
           paymentTerms: initialData.paymentTerms || "IMMEDIATE",
+          status: initialData.status || "ACTIVE",
         });
       } else {
         setForm(getEmptyForm(partyType));
@@ -223,7 +225,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         asOfDate: form.asOfDate,
         creditLimit: form.noCreditLimit ? null : (Number(form.customCreditLimit) || 0),
         category: form.category,
-        paymentTerms: form.paymentTerms
+        paymentTerms: form.paymentTerms,
+        status: form.status,
       };
       
       await onSave(payload);
@@ -342,6 +345,18 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     <option value="NET_7">7 Days (Net 7)</option>
                     <option value="NET_30">30 Days (Net 30)</option>
                     <option value="ADVANCE">Advance Payment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({...form, status: e.target.value})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="BLOCKED">Blocked</option>
+                    <option value="BLACKLISTED">Blacklisted</option>
                   </select>
                 </div>
               </>
