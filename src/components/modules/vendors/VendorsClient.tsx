@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Store, Plus, Search,
-  RefreshCw, Edit2, Trash2,
+  Plus, Search,
+  Edit2, Trash2,
   AlertCircle, History,
   TrendingUp, Wallet,
   CheckCircle2, FileText, Download,
@@ -622,9 +622,7 @@ export default function VendorsClient() {
         
         {/* Sidebar Header */}
         <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 hover:text-blue-600 transition-colors">
-            Vendors <ChevronDown size={18} className="text-blue-500" />
-          </button>
+          <span className="text-lg font-bold text-slate-800">Vendors</span>
           <button
             onClick={() => { setEditing(null); setShowForm(true); }}
             className="p-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-all shadow-sm active:scale-95"
@@ -1486,26 +1484,23 @@ export default function VendorsClient() {
             )}
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50/30 dark:bg-[#0b0c14] relative">
-            <div className="relative z-10 flex flex-col items-center max-w-md text-center px-10">
-              <div className="w-24 h-24 rounded-full bg-white dark:bg-slate-900 shadow-xl border border-slate-100 dark:border-white/5 flex items-center justify-center text-slate-200 dark:text-slate-800 mb-8">
-                <Store size={48} />
-              </div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tighter mb-4">Vendor Command Center</h2>
-              <p className="text-sm font-bold text-slate-400 mb-10">Select a supplier from the directory to manage procurement, monitor financial ledgers, and track warehouse receiving.</p>
+          <div className="flex-1 flex flex-col items-center justify-center bg-slate-50/30 dark:bg-[#0b0c14] relative overflow-hidden">
+            {/* Decorative ambient glows */}
+            <div className="absolute top-1/4 left-1/3 w-72 h-72 bg-orange-500/5 blur-3xl rounded-full pointer-events-none" />
+            <div className="absolute bottom-1/4 right-1/3 w-72 h-72 bg-purple-500/5 blur-3xl rounded-full pointer-events-none" />
 
-              <div className="grid grid-cols-2 gap-4 w-full">
-                <button onClick={() => { setEditing(null); setShowForm(true); }} className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 rounded-3xl hover:border-orange-500/50 hover:shadow-xl hover:shadow-orange-500/10 transition-all group text-left">
-                  <Plus className="text-orange-500 mb-2 group-hover:scale-110 transition-transform" size={24} />
-                  <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">New Supplier</p>
-                  <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase">Onboard a vendor</p>
-                </button>
-                <button onClick={() => fetchData()} className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/5 rounded-3xl hover:border-blue-500/50 hover:shadow-xl hover:shadow-blue-500/10 transition-all group text-left">
-                  <RefreshCw className="text-blue-500 mb-2 group-hover:rotate-180 transition-transform duration-500" size={24} />
-                  <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Global Sync</p>
-                  <p className="text-[8px] font-bold text-slate-400 mt-1 uppercase">Refresh ERP nodes</p>
-                </button>
+            <div className="relative z-10 flex flex-col items-center text-center px-10">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-xl shadow-orange-500/30 flex items-center justify-center text-white mb-8 rotate-3">
+                <Package size={32} />
               </div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight mb-2">No Suppliers Yet</h2>
+              <p className="text-sm font-medium text-slate-400 mb-8 max-w-xs">Onboard your first vendor to start tracking purchase orders, GRNs, and payments.</p>
+              <button
+                onClick={() => { setEditing(null); setShowForm(true); }}
+                className="flex items-center gap-3 bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-orange-500/20 hover:shadow-2xl hover:shadow-orange-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all"
+              >
+                <Plus size={18} strokeWidth={3} /> New Supplier
+              </button>
             </div>
           </div>
         )}
