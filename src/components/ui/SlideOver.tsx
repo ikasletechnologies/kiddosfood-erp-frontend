@@ -10,9 +10,16 @@ interface SlideOverProps {
   onClose: () => void;
   title?: string;
   children: React.ReactNode;
+  size?: 'md' | 'lg' | 'xl';
 }
 
-export function SlideOver({ isOpen, onClose, title, children }: SlideOverProps) {
+const sizes = {
+  md: 'max-w-md',
+  lg: 'max-w-lg',
+  xl: 'max-w-xl',
+};
+
+export function SlideOver({ isOpen, onClose, title, children, size = 'md' }: SlideOverProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -40,7 +47,8 @@ export function SlideOver({ isOpen, onClose, title, children }: SlideOverProps) 
       />
       <div 
         className={clsx(
-          "fixed top-0 right-0 h-full w-full max-w-md bg-white dark:bg-slate-900 shadow-2xl z-[60] transform transition-transform duration-300 ease-in-out flex flex-col border-l border-slate-100 dark:border-white/10",
+          "fixed top-0 right-0 h-full w-full bg-white dark:bg-slate-900 shadow-2xl z-[60] transform transition-transform duration-300 ease-in-out flex flex-col border-l border-slate-100 dark:border-white/10",
+          sizes[size],
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >

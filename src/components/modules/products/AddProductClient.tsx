@@ -51,6 +51,10 @@ export default function AddProductClient() {
       setError("Product name is required");
       return;
     }
+    if (form.productType === "FINISHED_GOOD" && !(form.basePrice > 0)) {
+      setError("Set a valid selling price before launching this item — franchises can't be offered a product with no price.");
+      return;
+    }
     setError(null);
     setSaving(true);
     try {

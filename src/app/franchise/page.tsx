@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { 
@@ -37,6 +37,7 @@ const EMPTY_FORM = {
 
 export default function FranchisePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user: currentUser } = useAuth();
   const [franchises, setFranchises] = useState<any[]>([]);
   const [loading, setLoading]       = useState(true);
@@ -65,6 +66,7 @@ export default function FranchisePage() {
   const [userForm, setUserForm] = useState({ fullName: "", email: "", password: "", roleId: "FRANCHISE_ADMIN" });
   const [roles, setRoles] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   const fetchFranchises = useCallback(async () => {
     setLoading(true);
@@ -83,12 +85,21 @@ export default function FranchisePage() {
 
   useEffect(() => { fetchFranchises(); }, [fetchFranchises]);
 
-  const openCreate = () => { 
-    setEditing(null); 
-    setForm(EMPTY_FORM); 
+  const openCreate = () => {
+    setEditing(null);
+    setForm(EMPTY_FORM);
     setActiveTab('info');
-    setShowForm(true); 
+    setShowForm(true);
   };
+
+  // Auto-open the create form when arriving via a "+ Add Franchise" shortcut link
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      openCreate();
+      router.replace('/franchise');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const fetchUsers = useCallback(async (fId: string) => {
     setLoadingUsers(true);
@@ -490,6 +501,7 @@ export default function FranchisePage() {
         isOpen={showForm}
         onClose={() => { setShowForm(false); setShowAddUser(false); setEditingUser(null); }}
         title={editing ? "Franchise Settings" : "Add New Franchise"}
+        size="lg"
       >
         {showForm && (
           <div className="flex flex-col min-h-[calc(100vh-8rem)]">
@@ -580,16 +592,26 @@ export default function FranchisePage() {
                           className="w-full px-4 py-3 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all" 
                           placeholder="Login ID / Email" 
                         />
-                        <input 
-                          type="password" 
-                          value={form.adminUser.password} 
-                          onChange={(e) => {
-                            const pass = e.target.value;
-                            setForm(prev => ({ ...prev, dashboardPassword: pass, adminUser: { ...prev.adminUser, password: pass } }));
-                          }} 
-                          className="w-full px-4 py-3 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all" 
-                          placeholder="Password" 
-                        />
+                        <div className="relative">
+                          <input
+                            type={showAdminPassword ? "text" : "password"}
+                            value={form.adminUser.password}
+                            onChange={(e) => {
+                              const pass = e.target.value;
+                              setForm(prev => ({ ...prev, dashboardPassword: pass, adminUser: { ...prev.adminUser, password: pass } }));
+                            }}
+                            className="w-full px-4 py-3 pr-11 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl font-bold text-sm text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all"
+                            placeholder="Password"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAdminPassword(v => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-orange-500 transition-colors"
+                            tabIndex={-1}
+                          >
+                            {showAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}

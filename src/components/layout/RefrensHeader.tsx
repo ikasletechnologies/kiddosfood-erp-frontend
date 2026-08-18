@@ -29,7 +29,6 @@ import { SUPER_ADMIN_SIDEBAR, menuItems } from "@/config/navigation";
 import { useTheme } from "@/context/ThemeContext";
 import { useNotification, Notification } from "@/context/NotificationContext";
 import Link from "next/link";
-import router from "next/router";
 
 
 function NIcon({ type }: { type: Notification["type"] }) {
@@ -159,6 +158,7 @@ function SearchModal({ onClose }: { onClose: () => void }) {
 
 export default function RefrensHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useAuth();
   const { toggleCollapsed, toggleMobileOpen } = useSidebar();
   const { theme, toggleTheme } = useTheme();

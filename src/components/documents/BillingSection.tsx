@@ -55,8 +55,8 @@ export default function BillingSection({
             phone: v.phone || v.mobile || v.contact,
             email: v.email,
             gstNumber: v.gstNumber,
-            advanceBalance: v.advanceBalance || (v.balance > 0 ? v.balance : 0),
-            balanceDue: v.balanceDue || (v.balance < 0 ? Math.abs(v.balance) : 0),
+            advanceBalance: v.advanceBalance || (v.balance < 0 ? Math.abs(v.balance) : 0),
+            balanceDue: v.balanceDue || (v.balance > 0 ? v.balance : 0),
             creditLimit: v.creditLimit || 0,
             vendorCode: v.vendorCode,
             suppliedMaterials: v.suppliedMaterials?.map((sm: any) => ({
@@ -139,11 +139,13 @@ export default function BillingSection({
 
             <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-50 dark:border-slate-800">
                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1"><Wallet size={8} /> Balance Due</span>
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1">
+                    <Wallet size={8} /> {(selectedVendor.advanceBalance || 0) > 0 ? "Advance" : "Balance Due"}
+                  </span>
                   <span className={clsx(
                     "text-xs font-black",
                     (selectedVendor.balanceDue || 0) > 0 ? "text-red-500" : "text-green-600"
-                  )}>₹{(selectedVendor.balanceDue || 0).toLocaleString()}</span>
+                  )}>₹{((selectedVendor.advanceBalance || 0) > 0 ? selectedVendor.advanceBalance : (selectedVendor.balanceDue || 0)).toLocaleString()}</span>
                </div>
                <div className="flex flex-col gap-0.5">
                   <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1"><BarChart3 size={8} /> Performance</span>
@@ -198,7 +200,7 @@ export default function BillingSection({
                                 <span className={clsx(
                                   "text-[10px] font-black",
                                   (v.balanceDue || 0) > 0 ? "text-red-500" : "text-green-600"
-                                )}>₹{(v.balanceDue || 0).toLocaleString()}</span>
+                                )}>₹{((v.advanceBalance || 0) > 0 ? v.advanceBalance : (v.balanceDue || 0)).toLocaleString()}</span>
                              </div>
                           </div>
                         ))

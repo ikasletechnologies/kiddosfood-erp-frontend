@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import DocumentOptions from "@/components/documents/DocumentOptions";
-import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, ArrowRight, ShieldCheck, Info } from "lucide-react";
+import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
@@ -112,9 +112,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         toast.success("Purchase Order created successfully!");
       }
       router.push("/purchases/orders");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to Create Purchase Order", error);
-      toast.error("Failed to create Purchase Order. Please check your inputs.");
+      toast.error(error.response?.data?.error || "Failed to create Purchase Order. Please check your inputs.");
     } finally {
       setIsSubmitting(false);
     }
@@ -413,33 +413,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         <div className="col-span-12 lg:col-span-3">
           <div className="sticky top-24 space-y-8">
              <DocumentSummary />
-             
-             {/* Dynamic Helper Card */}
-             <div className="bg-slate-900 dark:bg-[#0F172A] rounded-2xl p-8 text-white shadow-xl shadow-slate-200 dark:shadow-none relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 blur-3xl rounded-full -mr-16 -mt-16" />
-                <h4 className="text-[10px] font-black uppercase tracking-[0.25em] text-purple-400 mb-6 flex items-center gap-2">
-                   <ShieldCheck size={12} /> Lifecycle Status
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:border-orange-200 transition-all group">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-orange-400" />
-                      <span className="text-xs font-semibold text-gray-600">Mark Ordered</span>
-                    </div>
-                    <ArrowRight size={13} className="text-gray-300 group-hover:text-orange-500 transition-all" />
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 opacity-40 cursor-default">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-gray-400" />
-                      <span className="text-xs font-semibold text-gray-600">Pending GRN</span>
-                    </div>
-                    <Info size={13} className="text-gray-300" />
-                  </div>
-                </div>
-                <div className="mt-8 pt-6 border-t border-white/10 text-center">
-                   <p className="text-[9px] font-black text-white/40 uppercase tracking-[0.3em]">Accounting Ready v2.0</p>
-                 </div>
-              </div>
            </div>
         </div>
       </div>

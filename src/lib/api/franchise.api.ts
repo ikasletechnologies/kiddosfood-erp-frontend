@@ -29,6 +29,7 @@ export const franchiseOrdersApi = {
   getById: (id: string) => api.get(`/api/franchise-orders/${id}`),
   create: (data: {
     franchiseId: string;
+    orderType?: 'STOCK' | 'REQUEST';
     paymentType?: 'COD' | 'ONLINE';
     expectedDispatchDate?: string;
     notes?: string;

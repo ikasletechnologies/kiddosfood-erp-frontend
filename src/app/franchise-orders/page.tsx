@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   ShoppingCart, Plus, X, RefreshCw, CheckCircle2, Clock,
   Truck, PackageCheck, AlertTriangle, ChevronDown, Receipt,
-  CreditCard, Banknote, ArrowRight, Package
+  CreditCard, Banknote, ArrowRight, Package, Warehouse, ClipboardList
 } from "lucide-react";
 import { clsx } from "clsx";
 import api from "@/lib/api";
@@ -41,6 +42,16 @@ const NEXT_STATUS: Record<string, string> = {
   IN_PRODUCTION: "DISPATCHED", DISPATCHED: "DELIVERED",
 };
 
+// Production is a fulfillment path, not a mandatory status: once approved, an order
+// that HQ already has enough finished stock for skips IN_PRODUCTION entirely and goes
+// straight to dispatch. Only an order that actually needs production stops there.
+function getNextStatus(order: any): string | undefined {
+  if (order.status === "APPROVED" && order.fulfillmentPath === "STOCK") {
+    return "DISPATCHED";
+  }
+  return NEXT_STATUS[order.status];
+}
+
 export default function FranchiseOrdersPage() {
   const { user } = useAuth();
   const isFranchiseAdmin = user?.role === "FRANCHISE_ADMIN";
@@ -56,9 +67,12 @@ export default function FranchiseOrdersPage() {
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [invoiceModalData, setInvoiceModalData] = useState<{ order: any; vendor: any } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [companyDetails, setCompanyDetails] = useState<any>(null);
 
   // Create form
+  const [orderType, setOrderType] = useState<"STOCK" | "REQUEST">("STOCK");
   const [selectedFranchise, setSelectedFranchise] = useState(user?.franchiseId ?? "");
   const [paymentType, setPaymentType] = useState("CREDIT");
   const [preferredDelivery, setPreferredDelivery] = useState("");
@@ -113,10 +127,18 @@ export default function FranchiseOrdersPage() {
       setError("Select a franchise and at least one product.");
       return;
     }
+    const unpriced = validItems
+      .map(i => products.find(p => p.id === i.productId))
+      .filter((p): p is any => !!p && !(p.basePrice > 0));
+    if (unpriced.length > 0) {
+      setError(`HQ hasn't set a price yet for: ${Array.from(new Set(unpriced.map(p => p.name))).join(", ")}. Ask HQ to update pricing before this can be ordered or requested.`);
+      return;
+    }
     setSaving(true);
     try {
       await api.post("/api/franchise-orders", {
         franchiseId: selectedFranchise,
+        orderType,
         paymentType,
         expectedDispatchDate: preferredDelivery || undefined,
         priority,
@@ -125,7 +147,7 @@ export default function FranchiseOrdersPage() {
       });
       setShowCreate(false);
       setOrderItems([{ productId: "", quantity: 1 }]);
-      setNotes(""); setPreferredDelivery(""); setPriority("NORMAL");
+      setNotes(""); setPreferredDelivery(""); setPriority("NORMAL"); setOrderType("STOCK");
       fetchAll();
     } catch (e: any) {
       setError(e?.response?.data?.error ?? "Failed to create order.");
@@ -320,8 +342,9 @@ export default function FranchiseOrdersPage() {
         <div className="space-y-4">
           {filtered.map(order => {
             const StatusIcon = STATUS_ICONS[order.status] ?? Clock;
-            const nextStatus = NEXT_STATUS[order.status];
+            const nextStatus = getNextStatus(order);
             const isDelayed  = order.delayStatus === "DELAYED";
+            const needsProduction = order.status === "APPROVED" && order.fulfillmentPath === "PRODUCTION";
 
             return (
               <div key={order.id} className="bg-white dark:bg-card/40 backdrop-blur-md rounded-[32px] border border-slate-100 dark:border-white/5 p-8 hover:shadow-2xl transition-all">
@@ -334,6 +357,26 @@ export default function FranchiseOrdersPage() {
                       <span className={clsx("px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5", STATUS_STYLES[order.status])}>
                         <StatusIcon size={11} /> {order.status.replace("_", " ")}
                       </span>
+                      {order.orderType === "REQUEST" && (
+                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-400 flex items-center gap-1.5">
+                          <ClipboardList size={11} /> Requested
+                        </span>
+                      )}
+                      {order.status === "APPROVED" && order.fulfillmentPath === "STOCK" && (
+                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 flex items-center gap-1.5">
+                          <Warehouse size={11} /> Ready to Dispatch — In HQ Stock
+                        </span>
+                      )}
+                      {needsProduction && (
+                        <span className={clsx(
+                          "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5",
+                          order.materialsReady
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400"
+                            : "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400"
+                        )}>
+                          <Package size={11} /> {order.materialsReady ? "Materials Available" : "Insufficient Raw Materials"}
+                        </span>
+                      )}
                       {isDelayed && (
                         <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-red-100 text-red-600 border-red-200 flex items-center gap-1">
                           <AlertTriangle size={10} /> Delayed
@@ -390,6 +433,44 @@ export default function FranchiseOrdersPage() {
                       </p>
                     )}
 
+                    {/* Recipe / Raw Material Availability — only relevant while an order needs production */}
+                    {needsProduction && Array.isArray(order.materialsShortfall) && (
+                      <div className={clsx(
+                        "mt-4 p-4 rounded-2xl border text-xs",
+                        order.materialsReady
+                          ? "bg-emerald-50 border-emerald-100 dark:bg-emerald-900/10 dark:border-emerald-700/20"
+                          : "bg-red-50 border-red-100 dark:bg-red-900/10 dark:border-red-700/20"
+                      )}>
+                        {order.materialsReady ? (
+                          <p className="font-black text-emerald-700 dark:text-emerald-400">Materials Available — Production can start.</p>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="font-black text-red-700 dark:text-red-400">Insufficient Raw Materials</p>
+                            {order.materialsShortfall.map((sf: any, i: number) => (
+                              <div key={i} className="space-y-1">
+                                {!sf.recipeConfigured ? (
+                                  <p className="text-slate-500 dark:text-slate-400 font-bold">
+                                    {sf.product}: needs {sf.neededFromProduction} more units — no recipe configured, manual review required.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <p className="text-slate-500 dark:text-slate-400 font-bold">{sf.product} — {sf.neededFromProduction} units to produce:</p>
+                                    <ul className="pl-3 space-y-0.5">
+                                      {sf.materials.filter((m: any) => m.shortBy > 0).map((m: any, j: number) => (
+                                        <li key={j} className="text-red-600 dark:text-red-400 font-bold">
+                                          {m.name}: short by {m.shortBy} {m.unit} (need {m.required} {m.unit}, have {m.available} {m.unit})
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Order Timeline */}
                     <div className="mt-6 flex items-center gap-0 overflow-hidden max-w-md">
                       {["PENDING", "APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].map((step, idx, arr) => {
@@ -420,12 +501,24 @@ export default function FranchiseOrdersPage() {
 
                     {/* Actions for SUPER_ADMIN */}
                     {isSuperAdmin && nextStatus && (
-                      <button
-                        onClick={() => handleAdvanceStatus(order.id, nextStatus)}
-                        className="w-full px-4 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all"
-                      >
-                        Mark {nextStatus.replace("_", " ")} <ArrowRight size={12} />
-                      </button>
+                      needsProduction && !order.materialsReady ? (
+                        <div className="w-full text-right space-y-1.5">
+                          <button
+                            disabled
+                            className="w-full px-4 py-2.5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed"
+                          >
+                            Mark In Production
+                          </button>
+                          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">Blocked — resolve raw materials first</p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAdvanceStatus(order.id, nextStatus)}
+                          className="w-full px-4 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all"
+                        >
+                          Mark {nextStatus.replace("_", " ")} <ArrowRight size={12} />
+                        </button>
+                      )
                     )}
                     {order.status === "DELIVERED" && order.paymentStatus !== "PAID" && (
                       <button
@@ -452,7 +545,7 @@ export default function FranchiseOrdersPage() {
       )}
 
       {/* Create Order Modal */}
-      {showCreate && (
+      {showCreate && mounted && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={() => setShowCreate(false)} />
           <div className="relative bg-white dark:bg-card rounded-[48px] shadow-2xl w-full max-w-2xl border border-white/20 dark:border-white/5 p-10 max-h-[90vh] overflow-y-auto">
@@ -470,6 +563,34 @@ export default function FranchiseOrdersPage() {
             </div>
 
             <div className="space-y-6">
+              {/* Order Type */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Order Type *</label>
+                <div className="flex p-1 bg-slate-100 dark:bg-white/5 rounded-2xl">
+                  {[
+                    { value: "STOCK" as const, label: "Check Stock & Order", icon: Warehouse },
+                    { value: "REQUEST" as const, label: "Request / Make to Order", icon: ClipboardList },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setOrderType(opt.value)}
+                      className={clsx(
+                        "flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all",
+                        orderType === opt.value ? "bg-white dark:bg-card text-slate-900 dark:text-white shadow-md" : "text-slate-400"
+                      )}
+                    >
+                      <opt.icon size={12} /> {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 px-1">
+                  {orderType === "STOCK"
+                    ? "Fulfilled from HQ warehouse stock — limited by availability."
+                    : "Ask HQ to produce and fulfill it — stock availability doesn't matter."}
+                </p>
+              </div>
+
               {/* Franchise selector (SUPER_ADMIN only) */}
               {!isFranchiseAdmin && (
                 <div className="space-y-2">
@@ -503,8 +624,8 @@ export default function FranchiseOrdersPage() {
                       >
                         <option value="">Select product...</option>
                         {products.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} {p.productType === "MADE_TO_ORDER" ? "(MTO)" : ""} — {p.basePrice > 0 ? `₹${p.basePrice}` : "PRICE PENDING"} — (Avail: {p.currentStock ?? 0})
+                          <option key={p.id} value={p.id} disabled={!(p.basePrice > 0)}>
+                            {p.name} {p.productType === "MADE_TO_ORDER" ? "(MTO)" : ""} — {p.basePrice > 0 ? `₹${p.basePrice}` : "PRICE PENDING — ask HQ to set a price"} — (Avail: {p.currentStock ?? 0})
                           </option>
                         ))}
                       </select>
@@ -522,13 +643,19 @@ export default function FranchiseOrdersPage() {
                           placeholder="Qty"
                         />
                         {selectedProduct && (
-                          <div className={clsx(
-                            "absolute -bottom-5 left-0 right-0 text-[9px] font-black uppercase tracking-tighter text-center",
-                            (selectedProduct.currentStock ?? 0) <= 0 ? "text-red-500" : 
-                            (selectedProduct.currentStock ?? 0) < item.quantity ? "text-orange-500" : "text-emerald-500"
-                          )}>
-                            {(selectedProduct.currentStock ?? 0) <= 0 ? "OUT OF STOCK" : `${selectedProduct.currentStock ?? 0} Avail`}
-                          </div>
+                          orderType === "REQUEST" ? (
+                            <div className="absolute -bottom-5 left-0 right-0 text-[9px] font-black uppercase tracking-tighter text-center text-indigo-500">
+                              Requested
+                            </div>
+                          ) : (
+                            <div className={clsx(
+                              "absolute -bottom-5 left-0 right-0 text-[9px] font-black uppercase tracking-tighter text-center",
+                              (selectedProduct.currentStock ?? 0) <= 0 ? "text-red-500" :
+                              (selectedProduct.currentStock ?? 0) < item.quantity ? "text-orange-500" : "text-emerald-500"
+                            )}>
+                              {(selectedProduct.currentStock ?? 0) <= 0 ? "OUT OF STOCK" : `${selectedProduct.currentStock ?? 0} Avail`}
+                            </div>
+                          )
                         )}
                       </div>
                       {selectedProduct && (
@@ -652,7 +779,8 @@ export default function FranchiseOrdersPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {invoiceModalData && (
