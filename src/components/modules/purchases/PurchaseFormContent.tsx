@@ -96,7 +96,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         items: items.map(item => ({
           inventoryItemId: item.materialId,
           quantity: item.quantity,
-          price: item.price
+          price: item.price,
+          gstRate: item.gstRate
         }))
       };
       if (editId) {
@@ -141,7 +142,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           .map(item => ({
             inventoryItemId: item.materialId,
             quantity: item.quantity || 0,
-            price: item.price || 0
+            price: item.price || 0,
+            gstRate: item.gstRate
           }))
       };
       
