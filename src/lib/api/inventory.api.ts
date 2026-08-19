@@ -27,8 +27,8 @@ export const recipesApi = {
 
 // --- Raw Materials ---
 export const rawMaterialsApi = {
-  getAll: (includeInactive = false, franchiseId?: string) => 
-    api.get('/api/raw-materials', { params: { includeInactive, franchiseId } }),
+  getAll: (includeInactive = false, franchiseId?: string, excludeCategory?: string) =>
+    api.get('/api/raw-materials', { params: { includeInactive, franchiseId, excludeCategory } }),
   getById: (id: string) => api.get(`/api/raw-materials/${id}`),
   create: (data: any) => api.post('/api/raw-materials', data),
   update: (id: string, data: any) => api.patch(`/api/raw-materials/${id}`, data),
@@ -40,9 +40,12 @@ export const rawMaterialsApi = {
 // --- Inventory & Stock ---
 export const inventoryApi = {
   getInventory: (franchiseId?: string) => api.get('/api/inventory', { params: { franchiseId } }),
-  getRawMaterialStockSummary: (warehouseId?: string, franchiseId?: string) => api.get('/api/inventory/raw-materials/summary', { params: { warehouseId, franchiseId } }),
-  getRawMaterialConsumption: (warehouseId?: string, franchiseId?: string) => api.get('/api/inventory/raw-materials/consumption', { params: { warehouseId, franchiseId } }),
-  getRawMaterialLedger: (itemId?: string, franchiseId?: string) => api.get('/api/inventory/raw-materials/ledger', { params: { itemId, franchiseId } }),
+  getRawMaterialStockSummary: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/summary', { params: { warehouseId, franchiseId, category } }),
+  getRawMaterialConsumption: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/consumption', { params: { warehouseId, franchiseId, category } }),
+  // category omitted = ledger spans every item category (Raw Material,
+  // Packaging, Semi-Finished, Finished Good), not just Raw Material.
+  getInventoryLedger: (itemId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/ledger', { params: { itemId, franchiseId, category } }),
+  getRawMaterialLedger: (itemId?: string, franchiseId?: string) => api.get('/api/inventory/raw-materials/ledger', { params: { itemId, franchiseId, category: 'RAW_MATERIAL' } }),
   getItem: (id: string) => api.get(`/api/inventory/items/${id}`),
   createItem: (data: any) => api.post('/api/inventory/items', data),
   stockIn: (data: { itemId: string, quantity: number, type: string, note?: string }) =>

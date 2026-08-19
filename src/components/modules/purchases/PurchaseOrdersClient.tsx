@@ -129,7 +129,7 @@ export default function PurchaseOrdersClient() {
       const [poRes, vRes, rmRes, cpRes, aRes] = await Promise.all([
         purchaseOrdersApi.getAll().catch(() => ({ data: [] })),
         vendorsApi.getAll().catch(() => ({ data: [] })),
-        rawMaterialsApi.getAll().catch(() => ({ data: [] })),
+        rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD').catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
         accountsApi.getAll().catch(() => ({ data: [] }))
       ]);

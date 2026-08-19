@@ -57,7 +57,7 @@ export default function LineItemsTable() {
     const fetchMaterials = async () => {
       setLoadingMaterials(true);
       try {
-        const response = await rawMaterialsApi.getAll();
+        const response = await rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD');
         console.log('Fetched raw materials (filtered):', response.data);
         setMaterials(response.data);
       } catch (error) {

@@ -67,7 +67,7 @@ export default function RecipesPage() {
       const [rRes, pRes, mRes, cRes] = await Promise.all([
         recipesApi.getAll(),
         productsFullApi.getAll(),
-        rawMaterialsApi.getAll(),
+        rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
         recipesApi.getCategories()
       ]);
       setRecipes(rRes.data ?? []);

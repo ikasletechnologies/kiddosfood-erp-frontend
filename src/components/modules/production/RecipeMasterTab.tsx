@@ -76,7 +76,7 @@ export default function RecipeMasterTab() {
     try {
       const [rRes, mRes, pRes, cRes] = await Promise.all([
         recipesApi.getAll(),
-        rawMaterialsApi.getAll(),
+        rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
         productsApi.getAll(),
         recipesApi.getCategories()
       ]);
