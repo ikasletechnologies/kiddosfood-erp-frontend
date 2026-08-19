@@ -17,6 +17,7 @@ import { clsx } from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import Fuse from "fuse.js";
 import { toast } from "react-hot-toast";
+import WarehouseFormModal from "@/components/modals/WarehouseFormModal";
 
 interface AddInventoryProductFormProps {
   onSuccess?: (product: any) => void;
@@ -181,6 +182,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
   const [minimumStock, setMinimumStock] = useState<string | number>("5");
   const [itemLocation, setItemLocation] = useState("");
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [showAddWarehouse, setShowAddWarehouse] = useState(false);
 
   const [size, setSize] = useState("1KG");
   const [customNumber, setCustomNumber] = useState("1");
@@ -1388,21 +1390,46 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                     <label className="absolute -top-2 left-3 bg-white dark:bg-[#12141a] px-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 z-10 transition-all select-none">
                       Item Location (Warehouse)
                     </label>
-                    <select
-                      value={itemLocation}
-                      onChange={e => setItemLocation(e.target.value)}
-                      className="w-full px-3.5 py-3.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all appearance-none"
-                    >
-                      <option value="">Select Warehouse</option>
-                      {warehouses.map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
-                      <ChevronDown size={14} />
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value={itemLocation}
+                          onChange={e => setItemLocation(e.target.value)}
+                          className="w-full px-3.5 py-3.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all appearance-none"
+                        >
+                          <option value="">Select Warehouse</option>
+                          {warehouses.map(w => (
+                            <option key={w.id} value={w.id}>{w.name}</option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                          <ChevronDown size={14} />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddWarehouse(true)}
+                        className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold text-slate-500 hover:text-orange-600 hover:border-orange-400 transition-all whitespace-nowrap flex items-center gap-1"
+                      >
+                        <Plus size={11} /> New
+                      </button>
                     </div>
+                    {warehouses.length === 0 && (
+                      <p className="mt-1.5 text-[10px] font-semibold text-orange-600 dark:text-orange-400">
+                        No warehouses exist yet — click "New" to create one before adding opening stock.
+                      </p>
+                    )}
                   </div>
                 </div>
+
+                <WarehouseFormModal
+                  isOpen={showAddWarehouse}
+                  onClose={() => setShowAddWarehouse(false)}
+                  onSuccess={(warehouse) => {
+                    setWarehouses(prev => [...prev, warehouse]);
+                    setItemLocation(warehouse.id);
+                  }}
+                />
 
                 {openingStock > 0 && openingPurchasePrice > 0 && (
                   <div className="mt-4 p-4 rounded-lg bg-rose-500/5 border border-rose-500/10 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 animate-in fade-in duration-300">
@@ -1463,6 +1490,18 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                       { label: "Customer", price: prices.customerPrice },
                       ...customChannels.map(ch => ({ label: ch.name || "Custom", price: ch.price })),
                     ].map(({ label, price }) => {
+                      // An unconfigured channel (price left at 0) is "not set", not
+                      // "selling at ₹0" — treating it as the latter made every
+                      // unconfigured channel show a bogus -100% loss against the
+                      // purchase cost.
+                      if (!price || price <= 0) {
+                        return (
+                          <div key={label} className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                            <span>{label}</span>
+                            <span className="font-bold text-xs text-slate-400">Not set</span>
+                          </div>
+                        );
+                      }
                       const margin = price - prices.purchasePrice;
                       const pct = prices.purchasePrice > 0 ? ((margin / prices.purchasePrice) * 100).toFixed(0) : "—";
                       return (
