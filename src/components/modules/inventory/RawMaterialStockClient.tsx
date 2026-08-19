@@ -9,9 +9,10 @@ import {
   Download, Flame, Wrench, Recycle
 } from "lucide-react";
 import { clsx } from "clsx";
-import { rawMaterialsApi, inventoryApi } from "@/lib/api";
+import { rawMaterialsApi, inventoryApi, franchiseProductRequestsApi } from "@/lib/api";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { Send, Eye, ShieldCheck, Clock, Truck } from "lucide-react";
 
 const WEIGHT_VOLUME_UNITS = new Set(['KG', 'G', 'GM', 'KGS', 'L', 'LTR', 'LITER', 'LITRE', 'ML']);
 
@@ -87,9 +88,10 @@ const formatMinStock = (minStockVal: number, unit: string, sku: string, category
   return `${minStockVal} Units`;
 };
 
-
 export default function RawMaterialStockClient() {
   const [items, setItems] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [selectedDemandItem, setSelectedDemandItem] = useState<{ item: any; demand: any } | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("ALL");
@@ -113,14 +115,58 @@ export default function RawMaterialStockClient() {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await rawMaterialsApi.getAll(showInactive, user?.franchiseId);
+      const [res, reqRes] = await Promise.all([
+        rawMaterialsApi.getAll(showInactive, user?.franchiseId),
+        franchiseProductRequestsApi.getAll().catch(() => ({ data: [] })),
+      ]);
       setItems(res.data ?? []);
+      setRequests(Array.isArray(reqRes?.data) ? reqRes.data : []);
     } catch (e) {
       console.error("Failed to fetch inventory:", e);
     } finally {
       setLoading(false);
     }
   }, [showInactive, user?.franchiseId]);
+
+  // Helper to compute franchise demand and allocation per product
+  const getDemandStats = (item: any) => {
+    const itemReqs = requests.filter((r: any) => {
+      const prods = r.products ?? (r.details as any)?.products ?? [];
+      return prods.some((p: any) => p.productId === item.id || p.productName?.toLowerCase() === item.name?.toLowerCase());
+    });
+
+    let reserved = 0;
+    let inTransit = 0;
+    let pendingQty = 0;
+    let pendingCount = 0;
+
+    itemReqs.forEach((r: any) => {
+      const prods = r.products ?? (r.details as any)?.products ?? [];
+      const match = prods.find((p: any) => p.productId === item.id || p.productName?.toLowerCase() === item.name?.toLowerCase());
+      if (!match) return;
+
+      const qty = Number(match.approvedQuantity ?? match.requestedQuantity ?? 0);
+      const dispQty = Number(match.dispatchedQuantity ?? qty);
+      const reqQty = Number(match.requestedQuantity ?? 0);
+
+      if (r.status === "PROCESSING" || r.status === "APPROVED") {
+        reserved += qty;
+      } else if (r.status === "DISPATCHED") {
+        inTransit += dispQty;
+      } else if (r.status === "PENDING") {
+        pendingQty += reqQty;
+        pendingCount += 1;
+      }
+    });
+
+    return {
+      reserved,
+      inTransit,
+      pendingQty,
+      pendingCount,
+      requests: itemReqs,
+    };
+  };
 
   const handleUpdateThreshold = async (itemId: string) => {
     setUpdating(true);
@@ -426,26 +472,63 @@ export default function RawMaterialStockClient() {
                           )}
                         </div>
 
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider">
-                            <span>MIN STOCK</span>
-                            <span className="font-extrabold text-slate-700 dark:text-slate-300">
-                              {minStock}
-                            </span>
-                          </div>
-                          
-                          <div className="w-full bg-slate-100 dark:bg-slate-800/60 rounded-full h-1 overflow-hidden">
-                            <div 
-                              className={clsx(
-                                "h-full rounded-full transition-all duration-500",
-                                status.label === "SAFE" ? "bg-emerald-500" :
-                                status.label === "REORDER" ? "bg-amber-500" :
-                                "bg-red-500"
+                        {/* Franchise Demand allocation for Finished Goods */}
+                        {(() => {
+                          const demand = getDemandStats(item);
+                          if (!demand.requests.length && !item.category?.includes("FINISHED")) {
+                            return (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 dark:text-slate-500 tracking-wider">
+                                  <span>MIN STOCK</span>
+                                  <span className="font-extrabold text-slate-700 dark:text-slate-300">
+                                    {minStock}
+                                  </span>
+                                </div>
+                                
+                                <div className="w-full bg-slate-100 dark:bg-slate-800/60 rounded-full h-1 overflow-hidden">
+                                  <div 
+                                    className={clsx(
+                                      "h-full rounded-full transition-all duration-500",
+                                      status.label === "SAFE" ? "bg-emerald-500" :
+                                      status.label === "REORDER" ? "bg-amber-500" :
+                                      "bg-red-500"
+                                    )}
+                                    style={{ width: `${Math.min(100, Math.max(0, ((physicalStock || 0) / (item.minimumStock || 1)) * 100))}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="pt-1 border-t border-slate-100 dark:border-white/5 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap text-[10px]">
+                                {demand.reserved > 0 && (
+                                  <span className="font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-1.5 py-0.5 rounded">
+                                    🔒 Res: {demand.reserved}
+                                  </span>
+                                )}
+                                {demand.inTransit > 0 && (
+                                  <span className="font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded">
+                                    🚚 In-Trans: {demand.inTransit}
+                                  </span>
+                                )}
+                              </div>
+                              {demand.pendingCount > 0 && (
+                                <button
+                                  onClick={() => setSelectedDemandItem({ item, demand })}
+                                  className="w-full flex items-center justify-between text-[10px] font-black bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded-lg transition-all"
+                                  title="View Branch Requests for this product"
+                                >
+                                  <span>Demand: {demand.pendingQty} {item.unit || "units"}</span>
+                                  <span className="bg-amber-500 text-white px-1.5 py-0.2 rounded-full text-[9px]">
+                                    {demand.pendingCount} req
+                                  </span>
+                                </button>
                               )}
-                              style={{ width: `${Math.min(100, Math.max(0, ((physicalStock || 0) / (item.minimumStock || 1)) * 100))}%` }}
-                            />
-                          </div>
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-3">
@@ -464,6 +547,15 @@ export default function RawMaterialStockClient() {
                     </td>
                     <td className="px-8 py-3 text-right">
                       <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {getDemandStats(item).requests.length > 0 && (
+                          <button
+                            onClick={() => setSelectedDemandItem({ item, demand: getDemandStats(item) })}
+                            className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 rounded-lg hover:bg-amber-100 transition-all"
+                            title="View Franchise Demand Requests"
+                          >
+                            <Send size={12} />
+                          </button>
+                        )}
                         <button
                           onClick={() => { setTrashItem(item); setTrashQty(""); setTrashNote(""); setTrashReason("EXPIRED"); setTrashError(""); }}
                           className="p-2 bg-red-50 dark:bg-red-500/10 text-red-400 rounded-lg hover:bg-red-100 hover:text-red-600 transition-all"
@@ -496,6 +588,96 @@ export default function RawMaterialStockClient() {
           <p className="text-[9px] font-bold text-slate-300 uppercase tracking-widest italic">Total Valuation: ₹{totalValue.toLocaleString()}</p>
         </div>
       </div>
+
+      {/* ── Franchise Demand & Allocation Drawer Modal ── */}
+      {selectedDemandItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-[#12141c] rounded-3xl shadow-2xl w-full max-w-xl p-6 space-y-5 border border-slate-100 dark:border-white/10 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <Send size={18} className="text-orange-500" /> Branch Demand & Orders
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Live Franchise Product Requests for <strong>{selectedDemandItem.item.name}</strong> ({selectedDemandItem.item.sku || "N/A"})
+                </p>
+              </div>
+              <button onClick={() => setSelectedDemandItem(null)} className="p-1 text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Inventory Status Bar */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-slate-50 dark:bg-white/5 rounded-2xl text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Available HQ</p>
+                <p className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                  {selectedDemandItem.item.currentStock || 0} {selectedDemandItem.item.unit}
+                </p>
+              </div>
+              <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-2xl text-center">
+                <p className="text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase tracking-widest">Reserved</p>
+                <p className="text-lg font-black text-purple-600 dark:text-purple-400 mt-0.5">
+                  {selectedDemandItem.demand.reserved} {selectedDemandItem.item.unit}
+                </p>
+              </div>
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 rounded-2xl text-center">
+                <p className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest">Pending Demand</p>
+                <p className="text-lg font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                  {selectedDemandItem.demand.pendingQty} {selectedDemandItem.item.unit}
+                </p>
+              </div>
+            </div>
+
+            {/* Requests List */}
+            <div className="space-y-2.5">
+              <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider">Associated Branch Requests ({selectedDemandItem.demand.requests.length})</p>
+              {selectedDemandItem.demand.requests.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">No active franchise requests for this item.</p>
+              ) : (
+                selectedDemandItem.demand.requests.map((r: any) => {
+                  const prods = r.products ?? (r.details as any)?.products ?? [];
+                  const matchProd = prods.find((p: any) => p.productId === selectedDemandItem.item.id || p.productName?.toLowerCase() === selectedDemandItem.item.name?.toLowerCase());
+
+                  return (
+                    <div key={r.id} className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-white/5 flex items-center justify-between gap-3 text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-900 dark:text-white">{r.franchise?.name ?? "Branch"}</span>
+                          <span className="text-[10px] font-mono text-slate-400 bg-white dark:bg-card px-2 py-0.5 rounded border border-slate-200 dark:border-white/10">
+                            {r.requestNumber || `FPR-${String(r.id).slice(0, 4)}`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          Demanded: <strong>{matchProd?.requestedQuantity ?? "-"} {matchProd?.unit || selectedDemandItem.item.unit}</strong>
+                          {matchProd?.approvedQuantity !== undefined && <span> (Approved: {matchProd.approvedQuantity})</span>}
+                          <span> · Status: <span className="font-bold text-orange-500">{r.status}</span></span>
+                        </p>
+                      </div>
+
+                      <Link
+                        href={`/franchise/requests?id=${r.id}`}
+                        className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-[11px] shrink-0 transition-all"
+                      >
+                        Review Request →
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedDemandItem(null)}
+                className="px-5 py-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Move to Trash Modal */}
       {trashItem && (
