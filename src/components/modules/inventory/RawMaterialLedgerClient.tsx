@@ -10,11 +10,11 @@ import { inventoryApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
 const CATEGORY_OPTIONS = [
-  { value: "ALL", label: "All Categories" },
-  { value: "RAW_MATERIAL", label: "Raw Material" },
+  { value: "ALL", label: "All Items" },
+  { value: "RAW_MATERIAL", label: "Raw Materials" },
+  { value: "FINISHED_GOOD", label: "Finished Goods" },
   { value: "PACKAGING", label: "Packaging" },
-  { value: "SEMI_FINISHED", label: "Semi-Finished" },
-  { value: "FINISHED_GOOD", label: "Finished Good" },
+  { value: "SEMI_FINISHED", label: "Other Material" },
 ];
 
 export default function RawMaterialLedgerClient() {
@@ -64,7 +64,7 @@ export default function RawMaterialLedgerClient() {
   }, [fetchLedger]);
 
   const downloadCSV = () => {
-    const headers = ["Date", "Item Name", "SKU", "Category", "Transaction Type", "Inward Qty", "Outward Qty", "Running Balance", "Unit", "Batch ID", "Warehouse", "Unit Cost", "Actor", "Notes"];
+    const headers = ["Date", "Item Name", "SKU", "Category", "Transaction Type", "Inward Qty", "Outward Qty", "Unit", "Running Balance", "Operator", "Reference", "Batch ID", "Warehouse", "Unit Cost", "Description"];
     const rows = filteredEntries.map(entry => [
       new Date(entry.date).toLocaleDateString(),
       entry.itemName || "",
@@ -73,12 +73,13 @@ export default function RawMaterialLedgerClient() {
       entry.transactionType || "",
       entry.inwardQty.toFixed(2),
       entry.outwardQty.toFixed(2),
-      entry.runningBalance.toFixed(2),
       entry.unit || "",
+      entry.runningBalance.toFixed(2),
+      entry.actor || "",
+      entry.reference || "",
       entry.batchNumber || entry.batchId || "",
       entry.warehouseName || "",
       (entry.unitCost || 0).toFixed(2),
-      entry.actor || "",
       entry.notes || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
@@ -92,12 +93,17 @@ export default function RawMaterialLedgerClient() {
   };
 
   const filteredEntries = ledgerEntries.filter((it) => {
-    const matchSearch = !search ||
-      it.itemName?.toLowerCase().includes(search.toLowerCase()) ||
-      it.sku?.toLowerCase().includes(search.toLowerCase()) ||
-      it.transactionType?.toLowerCase().includes(search.toLowerCase()) ||
-      it.notes?.toLowerCase().includes(search.toLowerCase());
-    return matchSearch;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      it.itemName?.toLowerCase().includes(q) ||
+      it.sku?.toLowerCase().includes(q) ||
+      it.transactionType?.toLowerCase().includes(q) ||
+      it.notes?.toLowerCase().includes(q) ||
+      it.reference?.toLowerCase().includes(q) ||
+      it.batchNumber?.toLowerCase().includes(q) ||
+      it.actor?.toLowerCase().includes(q)
+    );
   });
 
   // Calculate opening, inward, outward, closing for item summary card
@@ -244,7 +250,7 @@ export default function RawMaterialLedgerClient() {
                 <th className="w-[11%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Running Balance</th>
                 <th className="w-[11%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Batch / Warehouse</th>
                 <th className="w-[8%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Unit Cost</th>
-                <th className="w-[12%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Operator / Ref</th>
+                <th className="w-[14%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Operator / Reference</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-white/5">
@@ -304,7 +310,12 @@ export default function RawMaterialLedgerClient() {
                   </td>
                   <td className="px-8 py-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <p className="font-bold text-slate-700 dark:text-slate-300 leading-none mb-1">{entry.actor}</p>
-                    <span className="text-[9px] text-slate-400">{entry.notes || "N/A"}</span>
+                    {entry.reference && (
+                      <span className="inline-block text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded mb-1">
+                        {entry.reference}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-slate-400 block truncate" title={entry.notes || undefined}>{entry.notes || "N/A"}</span>
                   </td>
                 </tr>
               ))}
