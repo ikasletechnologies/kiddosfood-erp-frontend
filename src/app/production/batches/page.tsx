@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Fragment, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   PackageCheck, RefreshCw, AlertTriangle,
   CheckCircle2, Clock, Filter, Package, Building2
@@ -43,10 +43,13 @@ const STAGE_LABELS: Record<string, string> = {
   READY_FOR_QC: "QC",
 };
 
-export default function ProductBatchesPage() {
+function ProductBatchesRegistry() {
   const { user } = useAuth();
   const isSuper = user?.role === "SUPER_ADMIN";
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedBatchId = searchParams.get("batchId");
 
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -56,22 +59,33 @@ export default function ProductBatchesPage() {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<string>("ALL");
-  const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">("ACTIVE_RUNS");
+  const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">(
+    requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" ? requestedTab : "ACTIVE_RUNS"
+  );
 
   // Batch Details SlideOver State
   const [showBatchDetails, setShowBatchDetails] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
 
-  // Fetch active franchises for Super Admin
+  // Deep-link support: a batch opened from Expiry Tracking (or elsewhere)
+  // via ?batchId= auto-opens straight to that same batch's detail drawer.
+  useEffect(() => {
+    if (!requestedBatchId || batches.length === 0) return;
+    const match = batches.find((b: any) => b.id === requestedBatchId);
+    if (match) {
+      setSelectedBatch(match);
+      setShowBatchDetails(true);
+    }
+  }, [requestedBatchId, batches]);
+
+  // Fetch every branch/outlet for Super Admin — batches can belong to HQ
+  // itself (it's a real location batches ship from), so unlike the
+  // franchise-management screens this filter must not drop it from the list.
   useEffect(() => {
     if (isSuper) {
       franchiseApi.getAll()
         .then((res) => {
-          const branches = (res.data ?? []).filter((f: any) => 
-            !f.name.includes("Headquarters (HQ)") && 
-            f.id !== "hq-001"
-          );
-          setFranchises(branches);
+          setFranchises(res.data ?? []);
         })
         .catch((err) => console.error("Failed to load franchises", err));
     }
@@ -547,5 +561,18 @@ export default function ProductBatchesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProductBatchesPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-16 text-center flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin" />
+        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Loading Batches...</p>
+      </div>
+    }>
+      <ProductBatchesRegistry />
+    </Suspense>
   );
 }

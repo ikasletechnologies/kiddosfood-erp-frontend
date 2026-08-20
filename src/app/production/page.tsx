@@ -219,18 +219,15 @@ export default function ProductionPlanningPage() {
 
     setSubmitting(true);
     try {
-      // Loop over queue and launch each
+      // Loop over queue and launch each. Expiry is derived server-side from
+      // the linked product's configured shelf life (Production Date + Shelf
+      // Life Days) — not computed here, so it stays correct per-product.
       for (const item of plannedQueue) {
-        // Expiry is set to standard 7 days from now
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 7);
-
         await productionApi.startBatch({
           recipeId: item.recipeId,
           franchiseId: selectedFranchiseId,
           warehouseId: selectedWarehouseId,
           quantity: item.quantity,
-          expiryDate: expiryDate.toISOString().split("T")[0],
           productionType: "FINISHED_GOOD",
           operatorId: item.operatorId || undefined,
         });

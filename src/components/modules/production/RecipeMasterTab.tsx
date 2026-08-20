@@ -17,7 +17,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { clsx } from "clsx";
-import { recipesApi, rawMaterialsApi, productsApi } from "@/lib/api";
+import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 
@@ -34,6 +34,7 @@ const emptyForm = {
   category: "",
   name: "",
   productId: "",
+  shelfLifeDays: null as number | null,
   yieldQty: 1,
   yieldUnit: "units",
   instructions: "",
@@ -66,7 +67,7 @@ export default function RecipeMasterTab() {
   const [savingMaterial, setSavingMaterial] = useState(false);
 
   const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
+  const [newProduct, setNewProduct] = useState({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null as number | null });
   const [savingProduct, setSavingProduct] = useState(false);
 
   const uniqueCategories = categories.map(c => c.name);
@@ -108,6 +109,7 @@ export default function RecipeMasterTab() {
       category: recipe.category ?? "",
       name: recipe.name ?? "",
       productId: recipe.productId ?? "",
+      shelfLifeDays: products.find((p: any) => p.id === recipe.productId)?.shelfLifeDays ?? null,
       yieldQty: recipe.yieldQty ?? 1,
       yieldUnit: recipe.yieldUnit ?? "units",
       instructions: recipe.instructions ?? "",
@@ -141,6 +143,11 @@ export default function RecipeMasterTab() {
         estimatedDurationMinutes: form.estimatedDurationMinutes,
         items: form.items,
       });
+      // Shelf life lives on the linked Product master (batch expiry is
+      // computed from it there), not on the recipe row itself.
+      if (form.productId) {
+        await productsFullApi.update(form.productId, { shelfLifeDays: form.shelfLifeDays });
+      }
       toast.success(editingId ? "Recipe updated" : "Recipe created");
       setShowForm(false);
       fetchAll();
@@ -308,14 +315,15 @@ export default function RecipeMasterTab() {
         name: newProduct.name.trim(),
         basePrice: newProduct.basePrice,
         category: newProduct.category,
-        sku: newProduct.sku || undefined
+        sku: newProduct.sku || undefined,
+        shelfLifeDays: newProduct.shelfLifeDays
       });
       await fetchAll();
 
-      setForm(f => ({ ...f, productId: res.data.id }));
+      setForm(f => ({ ...f, productId: res.data.id, shelfLifeDays: newProduct.shelfLifeDays }));
 
       setIsAddingProduct(false);
-      setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
+      setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null });
       toast.success("Product created");
     } catch (e: any) {
       console.error(e);
@@ -592,7 +600,8 @@ export default function RecipeMasterTab() {
                   if (e.target.value === "___NEW_PRODUCT___") {
                     setIsAddingProduct(true);
                   } else {
-                    setForm(f => ({ ...f, productId: e.target.value }));
+                    const selected = products.find((p: any) => p.id === e.target.value);
+                    setForm(f => ({ ...f, productId: e.target.value, shelfLifeDays: selected?.shelfLifeDays ?? null }));
                   }
                 }}
                 className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
@@ -604,6 +613,21 @@ export default function RecipeMasterTab() {
                 <option value="___NEW_PRODUCT___" className="font-bold text-[#f58220]">+ Add New Product</option>
               </select>
             </div>
+
+            {form.productId && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 7"
+                  value={form.shelfLifeDays ?? ""}
+                  onChange={e => setForm(f => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) }))}
+                  className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+                />
+                <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-700">Yield *</label>
@@ -831,7 +855,7 @@ export default function RecipeMasterTab() {
         isOpen={isAddingProduct}
         onClose={() => {
           setIsAddingProduct(false);
-          setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
+          setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null });
         }}
         title="Add New Linked Product"
       >
@@ -857,6 +881,19 @@ export default function RecipeMasterTab() {
               <option value="FINISHED_GOOD">Finished Good</option>
               <option value="SEMI_FINISHED">Semi Finished</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
+            <input
+              type="number"
+              min={0}
+              placeholder="e.g. 7"
+              value={newProduct.shelfLifeDays ?? ""}
+              onChange={(e) => setNewProduct({ ...newProduct, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) })}
+              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+            />
+            <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
           </div>
 
           <button

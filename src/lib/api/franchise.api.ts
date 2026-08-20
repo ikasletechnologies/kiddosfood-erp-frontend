@@ -18,7 +18,13 @@ export const franchiseApi = {
   approveRequest: (id: string, approvedItems: any[]) =>
     api.patch(`/api/logistics/requests/${id}/approve`, { approvedItems }),
   getTransfers: (params?: any) => api.get('/api/logistics/transfers', { params }),
-  initiateTransfer: (data: any) => api.post('/api/logistics/transfers', data),
+  getInTransitTransfers: (params?: any) => api.get('/api/logistics/transfers/in-transit', { params }),
+  initiateTransfer: (data: {
+    fromBranchId: string;
+    toBranchId: string;
+    items: { inventoryItemId: string; quantity: number }[];
+  }) => api.post('/api/logistics/transfers', data),
+  dispatchTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/dispatch`),
   completeTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/complete`),
 };
 

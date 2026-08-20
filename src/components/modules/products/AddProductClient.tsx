@@ -27,6 +27,7 @@ export default function AddProductClient() {
     is_menu_item: true,
     isVeg: true,
     isActive: true,
+    shelfLifeDays: null as number | null,
   });
 
   const [size, setSize] = useState("1KG");
@@ -252,6 +253,20 @@ export default function AddProductClient() {
                   className="w-16 py-3 px-2 bg-slate-50 rounded-lg font-black text-[10px] text-center border-none outline-none focus:bg-white transition-all placeholder:text-slate-300"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                Shelf Life (Days)
+              </label>
+              <input
+                type="number"
+                min={0}
+                placeholder="e.g. 7"
+                value={form.shelfLifeDays ?? ""}
+                onChange={(e) => setForm({ ...form, shelfLifeDays: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) })}
+                className="w-full px-6 py-4 bg-slate-50/50 rounded-xl font-black text-2xl text-slate-900 border-none outline-none focus:bg-white focus:ring-4 focus:ring-slate-100 transition-all placeholder:text-slate-300"
+              />
+              <p className="text-[10px] font-bold text-slate-400 ml-1">Batch expiry = Production Date + Shelf Life. Blank uses the default (7 days).</p>
             </div>
           </div>
         </div>

@@ -71,6 +71,7 @@ export const logisticsApi = {
   
   getTransfers: (params: any = {}) => api.get('/api/logistics/transfers', { params }),
   initiateTransfer: (data: any) => api.post('/api/logistics/transfers', data),
+  dispatchTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/dispatch`),
   completeTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/complete`),
   getInTransit: (params: any = {}) => api.get('/api/logistics/transfers/in-transit', { params }),
 };

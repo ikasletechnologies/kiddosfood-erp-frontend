@@ -6,6 +6,7 @@ import {
   CheckCircle2, Clock, Filter, Package, Building2
 } from "lucide-react";
 import { clsx } from "clsx";
+import { useRouter } from "next/navigation";
 import { productBatchesApi, productsFullApi, franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatERPNumber } from "@/lib/utils";
@@ -27,6 +28,7 @@ const FILTER_TABS = ["ALL", "VALID", "EXPIRING_SOON", "EXPIRED"] as const;
 export default function ProductBatchesPage() {
   const { user } = useAuth();
   const isSuper = user?.role === "SUPER_ADMIN";
+  const router = useRouter();
 
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -36,16 +38,14 @@ export default function ProductBatchesPage() {
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<string>("ALL");
 
-  // Fetch active franchises for Super Admin
+  // Fetch every branch/outlet for Super Admin — batches can belong to HQ
+  // itself (it's a real location batches ship from), so unlike the
+  // franchise-management screens this filter must not drop it from the list.
   useEffect(() => {
     if (isSuper) {
       franchiseApi.getAll()
         .then((res) => {
-          const branches = (res.data ?? []).filter((f: any) => 
-            !f.name.includes("Headquarters (HQ)") && 
-            f.id !== "hq-001"
-          );
-          setFranchises(branches);
+          setFranchises(res.data ?? []);
         })
         .catch((err) => console.error("Failed to load franchises", err));
     }
@@ -232,11 +232,15 @@ export default function ProductBatchesPage() {
                 return (
                   <div
                     key={batch.id}
-                    className={clsx("hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors items-center", gridClasses)}
+                    onClick={() => router.push(`/production/batches?tab=REGISTRY&batchId=${batch.id}`)}
+                    className={clsx("hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors items-center cursor-pointer", gridClasses)}
                   >
-                    {/* Batch Code */}
+                    {/* Batch Code — same PRD-YYYY-#### the batch carries in
+                        Batch Manufacturing / QC / Finished Goods, so it can be
+                        traced across the lifecycle instead of minting a
+                        second identifier just for this screen. */}
                     <p className="text-[10px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-wider font-mono">
-                      {batch.batchCode ? formatERPNumber("BT", batch.batchCode, batch.createdAt) : "—"}
+                      {batch.batchCode ? formatERPNumber("PRD", batch.batchCode, batch.createdAt) : "—"}
                     </p>
 
                     {/* Product */}
