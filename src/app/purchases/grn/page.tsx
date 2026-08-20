@@ -68,6 +68,7 @@ export default function GRNPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnItems, setGrnItems] = useState<GRNItem[]>([]);
+  const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [poSearch, setPoSearch] = useState("");
@@ -210,6 +211,19 @@ export default function GRNPage() {
       next[idx] = currentItem;
       return next;
     });
+  };
+
+  const handleAutoBatch = async (idx: number) => {
+    setGeneratingLotIdx(idx);
+    try {
+      const res = await grnApi.generateLotNumber();
+      updateItemStr(idx, "lotNumber", res.data.lotNumber);
+    } catch (e) {
+      console.error("Failed to generate lot number", e);
+      toast.error("Failed to generate a batch number. Please try again.");
+    } finally {
+      setGeneratingLotIdx(null);
+    }
   };
 
   const handleCreateAndApprove = async () => {
@@ -561,9 +575,15 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="px-2 py-1 bg-orange-50 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold">
-                                Auto Batch
-                              </span>
+                              <button
+                                type="button"
+                                title="Generate a unique lot/batch number"
+                                disabled={generatingLotIdx === idx}
+                                onClick={() => handleAutoBatch(idx)}
+                                className="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors"
+                              >
+                                {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
+                              </button>
                               <input
                                 type="text"
                                 placeholder="Lot Number"

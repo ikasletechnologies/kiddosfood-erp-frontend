@@ -13,7 +13,7 @@ import {
   Package, Truck, Receipt, LayoutDashboard, Settings2,
   AlertTriangle, Star, Calendar, FileCheck, Loader2,
   Printer, MoreVertical, Filter, ChevronDown, MessageSquare, Clock, X,
-  Upload, FileSpreadsheet
+  Upload, FileSpreadsheet, Eye, Copy, ExternalLink
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -74,6 +74,8 @@ export default function VendorsClient() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [openLedgerRowMenuId, setOpenLedgerRowMenuId] = useState<string | null>(null);
+  const [ledgerDetailEntry, setLedgerDetailEntry] = useState<any>(null);
 
   // Excel Import
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -106,6 +108,7 @@ export default function VendorsClient() {
         setIsMoreMenuOpen(false);
         setIsPrintDropdownOpen(false);
         setIsExportDropdownOpen(false);
+        setOpenLedgerRowMenuId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -153,6 +156,15 @@ export default function VendorsClient() {
   const [vendorInvoices, setVendorInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [accounts, setAccounts] = useState<any[]>([]);
+  // One key per "opened this payment modal" — reused across retries within
+  // that same session so a double-click or a slow/retried request can't
+  // post the same settlement twice.
+  const paymentIdempotencyKeyRef = useRef("");
+  useEffect(() => {
+    if (showPaymentModal) {
+      paymentIdempotencyKeyRef.current = `vendor-pay-${selectedVendorId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+  }, [showPaymentModal, selectedVendorId]);
 
   // -- Data Fetching --
   const fetchData = useCallback(async () => {
@@ -712,7 +724,8 @@ export default function VendorsClient() {
         accountId: paymentForm.accountId,
         vendorInvoiceId: paymentForm.vendorInvoiceId || undefined,
         paymentMode: paymentForm.paymentMode,
-        transactionRef: paymentForm.transactionRef.trim() || undefined
+        transactionRef: paymentForm.transactionRef.trim() || undefined,
+        idempotencyKey: paymentIdempotencyKeyRef.current
       });
       showToast("Financial settlement recorded", "success");
       setShowPaymentModal(false);
@@ -997,7 +1010,7 @@ export default function VendorsClient() {
                     <div className="text-2xl text-slate-300 font-light hidden md:block">-</div>
                     <div>
                       <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
-                        ₹ {Math.round(selectedVendor.totalPaid || 0).toLocaleString()}
+                        ₹ {Math.round(selectedVendor.totalPayments || 0).toLocaleString()}
                       </p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Payments Made</p>
                     </div>
@@ -1567,9 +1580,52 @@ export default function VendorsClient() {
                                 ₹ {Math.abs(Math.round(balance)).toLocaleString()} {balance >= 0 ? 'Cr' : 'Dr'}
                               </td>
                               <td className="px-2 py-4 text-center">
-                                <button className="text-slate-300 hover:text-slate-500">
-                                  <MoreVertical size={14} />
-                                </button>
+                                <div className="relative inline-block filter-popover-container">
+                                  <button
+                                    onClick={() => setOpenLedgerRowMenuId(openLedgerRowMenuId === e.id ? null : e.id)}
+                                    className="text-slate-300 hover:text-slate-500"
+                                  >
+                                    <MoreVertical size={14} />
+                                  </button>
+                                  {openLedgerRowMenuId === e.id && (
+                                    <div className="absolute top-full right-0 mt-1 w-52 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 py-1.5 text-left">
+                                      <button
+                                        onClick={() => { setOpenLedgerRowMenuId(null); setLedgerDetailEntry(e); }}
+                                        className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                      >
+                                        <Eye size={13} /> View Details
+                                      </button>
+                                      {(e.paymentNumber || e.referenceId) && (
+                                        <button
+                                          onClick={() => {
+                                            setOpenLedgerRowMenuId(null);
+                                            navigator.clipboard?.writeText(e.paymentNumber || e.referenceId || "");
+                                            showToast("Reference copied", "success");
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <Copy size={13} /> Copy Reference ID
+                                        </button>
+                                      )}
+                                      {e.referenceType === 'PURCHASE' && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/invoices'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Bills
+                                        </button>
+                                      )}
+                                      {(e.referenceType === 'PAYMENT' || e.referenceType === 'ADVANCE') && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/orders'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Orders
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1757,6 +1813,41 @@ export default function VendorsClient() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!ledgerDetailEntry}
+        onClose={() => setLedgerDetailEntry(null)}
+        title="Transaction Details"
+        size="sm"
+        footer={
+          <button
+            onClick={() => setLedgerDetailEntry(null)}
+            className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
+          >
+            Close
+          </button>
+        }
+      >
+        {ledgerDetailEntry && (
+          <div className="space-y-3 text-sm">
+            {[
+              { label: "Type", value: ledgerDetailEntry.referenceType === 'PAYMENT' ? 'Payment Out' : ledgerDetailEntry.referenceType === 'PURCHASE' ? 'Purchase' : ledgerDetailEntry.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : ledgerDetailEntry.referenceType },
+              { label: "Reference", value: ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
+              { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
+              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
+              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
+              { label: "Balance After", value: `₹ ${Math.abs(Math.round(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0)).toLocaleString()} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
+              { label: "Note", value: ledgerDetailEntry.note || "—" },
+              ...(ledgerDetailEntry.transactionRef ? [{ label: "Transaction Ref", value: ledgerDetailEntry.transactionRef }] : []),
+            ].map((row) => (
+              <div key={row.label} className="flex items-start justify-between gap-4 py-1.5 border-b border-slate-50 dark:border-white/5 last:border-0">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest shrink-0">{row.label}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200 text-right break-all">{row.value}</span>
+              </div>
+            ))}
           </div>
         )}
       </Modal>

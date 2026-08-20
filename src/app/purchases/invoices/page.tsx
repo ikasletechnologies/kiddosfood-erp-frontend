@@ -161,6 +161,7 @@ export default function PurchaseBillsPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState("");
 
   // form
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
@@ -343,7 +344,8 @@ export default function PurchaseBillsPage() {
         accountId: paymentAccount,
         paymentMode,
         type: "PAYMENT",
-        vendorInvoiceId: paymentBill.id
+        vendorInvoiceId: paymentBill.id,
+        idempotencyKey: paymentIdempotencyKey
       });
       toast.success("Payment recorded successfully");
       setShowPaymentModal(false);
@@ -357,10 +359,15 @@ export default function PurchaseBillsPage() {
 
   const openPaymentModal = (bill: any) => {
     setPaymentBill(bill);
-    setPaymentAmount(bill.amount?.toString() || "");
+    // Outstanding, not the bill's raw gross amount — a bill already partly
+    // settled by advance or a prior payment must default to what's actually
+    // still owed, not the full invoice total all over again.
+    const outstanding = bill.outstanding ?? Math.max(0, (bill.amount || 0) - (bill.advanceApplied || 0) - (bill.paidAmount || 0));
+    setPaymentAmount(outstanding.toString());
     setPaymentNote(`Payment for ${bill.invoiceNumber || 'Bill'}`);
     setPaymentMode("CASH");
     if (accounts.length > 0) setPaymentAccount(accounts[0].id);
+    setPaymentIdempotencyKey(`bill-pay-${bill.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     setShowPaymentModal(true);
   };
 

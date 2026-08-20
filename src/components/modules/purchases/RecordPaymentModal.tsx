@@ -36,6 +36,11 @@ export default function RecordPaymentModal({
   const [paymentNote, setPaymentNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
+  // One key per "opened this modal for this PO" — reused across submit
+  // retries so a double-click or a request that succeeded but timed out on
+  // the response can't post the same payment twice. A fresh key is only
+  // generated the next time the modal is opened for (a possibly different) PO.
+  const [idempotencyKey, setIdempotencyKey] = useState("");
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -43,6 +48,7 @@ export default function RecordPaymentModal({
     if (payingPO) {
       const balance = Math.max(0, (payingPO.totalAmount ?? 0) - (payingPO.paid ?? 0));
       setPaymentAmount(balance);
+      setIdempotencyKey(`po-pay-${payingPO.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     }
   }, [payingPO]);
 
@@ -71,7 +77,8 @@ export default function RecordPaymentModal({
         type: "INVOICE_LINKED",
         note: paymentNote || `Payment for PO #${payingPO.id.substring(0, 8)}`,
         paymentMode,
-        referenceId: payingPO.id
+        referenceId: payingPO.id,
+        idempotencyKey
       });
       
       toast.success("Payment recorded successfully!");

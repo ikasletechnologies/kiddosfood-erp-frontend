@@ -443,10 +443,19 @@ export default function PurchaseOrdersClient() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className={clsx("text-xs font-semibold", balance <= 0 ? "text-emerald-600" : "text-[#f58220]")}>
-                          {balance <= 0 ? "Paid" : formatCurrency(balance)}
+                          {balance <= 0 ? "Paid" : `${formatCurrency(balance)} Balance Due`}
                         </div>
-                        {balance > 0 && vendors.find(v => v.id === po.vendorId)?.advance > 0 && (
-                          <button 
+                        {(po.advanceApplied || 0) > 0 && (
+                          <div className="text-xs text-emerald-600 mt-0.5">
+                            {formatCurrency(po.advanceApplied)} Advance Applied
+                          </div>
+                        )}
+                        {/* Only offer to apply advance when the vendor actually
+                            has unused credit left — getVendors() already nets
+                            out whatever's been applied/reserved elsewhere, so
+                            this stays correctly hidden once advance is spent. */}
+                        {balance > 0 && (vendors.find(v => v.id === po.vendorId)?.advance || 0) > 0 && (
+                          <button
                             onClick={() => handleApplyAdvance(po.id)}
                             className="text-xs text-[#f58220] hover:underline mt-0.5 block font-medium"
                           >
