@@ -387,6 +387,14 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       } else {
         setTimeout(() => {
           if (returnTo) {
+            // Callers that send people here to create a linked product (e.g.
+            // Recipe Master's "+ Add New Product") have no other way to learn
+            // which product just got made — this endpoint returns the raw
+            // InventoryItem, not the synced Product record. Stash the name so
+            // the returning page can look it up itself once it refetches.
+            try {
+              sessionStorage.setItem("lastCreatedInventoryProduct", JSON.stringify({ name, sku: finalSku, at: Date.now() }));
+            } catch { /* ignore unavailable storage */ }
             router.push(returnTo);
           } else {
             router.push("/inventory/stock");

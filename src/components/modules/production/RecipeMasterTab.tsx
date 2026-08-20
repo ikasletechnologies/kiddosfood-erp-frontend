@@ -66,11 +66,16 @@ export default function RecipeMasterTab() {
   const [newMaterial, setNewMaterial] = useState({ name: "", unit: "kg", costPrice: 0 });
   const [savingMaterial, setSavingMaterial] = useState(false);
 
-  const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null as number | null });
-  const [savingProduct, setSavingProduct] = useState(false);
-
   const uniqueCategories = categories.map(c => c.name);
+
+  // "+ Add New Product" navigates to the Finished Goods add page instead of
+  // an inline form. The in-progress recipe form is stashed here so it can
+  // be restored when the user comes back (via ?returnTo=), and the newly
+  // created product's name is looked up in the freshly-fetched product list
+  // to auto-select it — AddInventoryProductForm has no other way to hand
+  // back which product it just made.
+  const RESUME_KEY = "recipeMaster:pendingFormForNewProduct";
+  const NEW_PRODUCT_KEY = "lastCreatedInventoryProduct";
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -93,6 +98,59 @@ export default function RecipeMasterTab() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Resume a recipe form left in progress when the user was sent off to
+  // create a new linked product, and auto-select whatever they just created.
+  useEffect(() => {
+    let pending: any = null;
+    try {
+      const raw = sessionStorage.getItem(RESUME_KEY);
+      if (raw) pending = JSON.parse(raw);
+    } catch { /* ignore malformed/unavailable storage */ }
+    if (!pending) return;
+    sessionStorage.removeItem(RESUME_KEY);
+
+    (async () => {
+      let productId = "";
+      let shelfLifeDays: number | null = null;
+      try {
+        const rawNew = sessionStorage.getItem(NEW_PRODUCT_KEY);
+        if (rawNew) {
+          sessionStorage.removeItem(NEW_PRODUCT_KEY);
+          const created = JSON.parse(rawNew);
+          // Only trust it if it was stashed for this same trip (a few
+          // minutes old at most), not a stale leftover from some earlier,
+          // unrelated visit to the add-product page.
+          if (created?.name && Date.now() - (created.at || 0) < 10 * 60 * 1000) {
+            const res = await productsApi.getAll();
+            const match = (res.data || []).find((p: any) => p.name?.toLowerCase() === created.name.toLowerCase());
+            if (match) {
+              productId = match.id;
+              shelfLifeDays = match.shelfLifeDays ?? null;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to resolve newly created product", e);
+      }
+
+      setForm({
+        ...emptyForm,
+        ...pending.form,
+        ...(productId ? { productId, shelfLifeDays } : {}),
+      });
+      setEditingId(pending.editingId ?? null);
+      setError("");
+      setShowForm(true);
+      if (!productId) {
+        toast.error("Couldn't find the product you just created — please select it manually.");
+      } else {
+        toast.success("Linked product created and selected");
+      }
+    })();
+    // Runs once on mount only — intentionally not re-triggered by fetchAll/products changing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openCreate = () => {
     setIsAddingCategory(false);
@@ -307,30 +365,16 @@ export default function RecipeMasterTab() {
     }
   };
 
-  const handleCreateProduct = async () => {
-    if (!newProduct.name.trim()) return;
-    setSavingProduct(true);
+  // "+ Add New Product" leaves this recipe form for the Finished Goods add
+  // page instead of opening an inline form here. Stash the in-progress
+  // recipe so it survives the trip, then come back to it via ?returnTo=.
+  const goToAddNewProduct = () => {
     try {
-      const res = await productsApi.create({
-        name: newProduct.name.trim(),
-        basePrice: newProduct.basePrice,
-        category: newProduct.category,
-        sku: newProduct.sku || undefined,
-        shelfLifeDays: newProduct.shelfLifeDays
-      });
-      await fetchAll();
-
-      setForm(f => ({ ...f, productId: res.data.id, shelfLifeDays: newProduct.shelfLifeDays }));
-
-      setIsAddingProduct(false);
-      setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null });
-      toast.success("Product created");
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.response?.data?.error ?? "Failed to create product");
-    } finally {
-      setSavingProduct(false);
+      sessionStorage.setItem(RESUME_KEY, JSON.stringify({ form, editingId }));
+    } catch (e) {
+      console.error("Failed to stash recipe form before navigating", e);
     }
+    router.push(`/inventory/stock/add?returnTo=${encodeURIComponent("/production/recipes")}`);
   };
 
   const handleDelete = async (id: string) => {
@@ -598,7 +642,7 @@ export default function RecipeMasterTab() {
                 value={form.productId}
                 onChange={e => {
                   if (e.target.value === "___NEW_PRODUCT___") {
-                    setIsAddingProduct(true);
+                    goToAddNewProduct();
                   } else {
                     const selected = products.find((p: any) => p.id === e.target.value);
                     setForm(f => ({ ...f, productId: e.target.value, shelfLifeDays: selected?.shelfLifeDays ?? null }));
@@ -850,61 +894,6 @@ export default function RecipeMasterTab() {
         </div>
       </SlideOver>
 
-      {/* Product Creation SlideOver */}
-      <SlideOver
-        isOpen={isAddingProduct}
-        onClose={() => {
-          setIsAddingProduct(false);
-          setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "", shelfLifeDays: null });
-        }}
-        title="Add New Linked Product"
-      >
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Product Name *</label>
-            <input
-              value={newProduct.name}
-              onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-              placeholder="e.g. Masala Dosa Batter"
-              autoFocus
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Category</label>
-            <select
-              value={newProduct.category}
-              onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-            >
-              <option value="FINISHED_GOOD">Finished Good</option>
-              <option value="SEMI_FINISHED">Semi Finished</option>
-            </select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
-            <input
-              type="number"
-              min={0}
-              placeholder="e.g. 7"
-              value={newProduct.shelfLifeDays ?? ""}
-              onChange={(e) => setNewProduct({ ...newProduct, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) })}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
-            />
-            <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
-          </div>
-
-          <button
-            onClick={handleCreateProduct}
-            disabled={savingProduct || !newProduct.name.trim()}
-            className="w-full bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {savingProduct ? "Saving..." : "Create Product"}
-          </button>
-        </div>
-      </SlideOver>
     </div>
   );
 }
