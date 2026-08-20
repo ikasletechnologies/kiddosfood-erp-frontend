@@ -113,6 +113,10 @@ export default function RecipeMasterTab() {
     (async () => {
       let productId = "";
       let shelfLifeDays: number | null = null;
+      // Distinguishes "nothing to look up" / "not found" / "found but
+      // conflicting" (its own toast, shown inline below) / "found cleanly" —
+      // each needs a different message, or none.
+      let outcome: "found" | "not-found" | "conflict" | "none" = "none";
       try {
         const rawNew = sessionStorage.getItem(NEW_PRODUCT_KEY);
         if (rawNew) {
@@ -124,14 +128,33 @@ export default function RecipeMasterTab() {
           if (created?.name && Date.now() - (created.at || 0) < 10 * 60 * 1000) {
             const res = await productsApi.getAll();
             const match = (res.data || []).find((p: any) => p.name?.toLowerCase() === created.name.toLowerCase());
-            if (match) {
-              productId = match.id;
-              shelfLifeDays = match.shelfLifeDays ?? null;
+            if (!match) {
+              outcome = "not-found";
+            } else {
+              // A name that collides with an existing item gets merged into
+              // it server-side (inventory→product sync matches by name), so
+              // "the product just created" can actually be a pre-existing
+              // one — including one another recipe already owns. Recipe.
+              // productId is unique, so surface that now rather than let the
+              // user hit an opaque save failure later.
+              const recipesRes = await recipesApi.getAll();
+              const conflict = (recipesRes.data || []).find(
+                (r: any) => r.productId === match.id && r.id !== pending.editingId
+              );
+              if (conflict) {
+                outcome = "conflict";
+                toast.error(`"${match.name}" is already linked to recipe "${conflict.name}" — pick a different product, or edit that recipe instead.`);
+              } else {
+                outcome = "found";
+                productId = match.id;
+                shelfLifeDays = match.shelfLifeDays ?? null;
+              }
             }
           }
         }
       } catch (e) {
         console.error("Failed to resolve newly created product", e);
+        outcome = "not-found";
       }
 
       setForm({
@@ -142,10 +165,10 @@ export default function RecipeMasterTab() {
       setEditingId(pending.editingId ?? null);
       setError("");
       setShowForm(true);
-      if (!productId) {
-        toast.error("Couldn't find the product you just created — please select it manually.");
-      } else {
+      if (outcome === "found") {
         toast.success("Linked product created and selected");
+      } else if (outcome === "not-found") {
+        toast.error("Couldn't find the product you just created — please select it manually.");
       }
     })();
     // Runs once on mount only — intentionally not re-triggered by fetchAll/products changing.
