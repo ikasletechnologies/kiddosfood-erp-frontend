@@ -418,7 +418,13 @@ export default function SalesInvoicesPage() {
         createdAt: d.createdAt,
         finalAmount: d.data.finalTotal || 0,
         order: {
-          invoiceNum: "DRAFT",
+          // The literal string "DRAFT" used to go here unconditionally — every
+          // draft row then ran that SAME literal through formatERPNumber(),
+          // which hashes an unrecognized string to a deterministic 4-digit
+          // suffix ("DRAFT" always hashes to 7009), so every draft displayed
+          // the identical fake "INV-2026-7009" no matter which draft it was.
+          // A draft only has a real number once the user typed one in.
+          invoiceNum: d.data._rawState?.invoiceNumber || null,
           customer: d.data._rawState?.selectedCustomer || { name: "Unknown Customer" },
           orderItems: d.data._rawState?.items?.map((i: any) => ({
             product: { name: i.itemSearch },
@@ -793,7 +799,7 @@ export default function SalesInvoicesPage() {
             <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">New Sale Invoice</h2>
+            <h2 className="text-base font-semibold text-gray-800">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
           </div>
           <div className="flex items-center gap-4">
             {!isFranchiseUser && (
@@ -1542,7 +1548,9 @@ export default function SalesInvoicesPage() {
                         {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
-                        {inv.order?.invoiceNum ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt) : "Lite Sale"}
+                        {inv.order?.invoiceNum
+                          ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
+                          : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span className="font-medium text-gray-800">
