@@ -22,22 +22,21 @@ export function formatERPNumber(
   }
   
   const str = String(idOrCode);
-  
-  // If it already matches the correct pattern (e.g. PREFIX-YYYY-XXXX), return it directly
-  const exactRegex = new RegExp(`^${prefix}-\\d{4}-\\d{4}$`);
-  if (exactRegex.test(str)) {
+
+  // Already a well-formed ERP number (e.g. PO-2026-0001, or PO-2026-17009 once
+  // a sequence has grown past 4 digits) — return it as-is. This used to only
+  // pass through an EXACT 4-digit sequence and otherwise reformat via
+  // `.slice(-4)`, which truncated any longer sequence down to its last 4
+  // digits — e.g. INV-2026-17009 rendered as INV-2026-7009, identical to the
+  // real INV-2026-7009. Two genuinely distinct, uniquely-stored invoice
+  // numbers then looked like duplicates in the UI. A real, already-correct
+  // number must never be reformatted/truncated — only a raw id lacking this
+  // shape (handled below) needs a display suffix synthesized for it.
+  const generalRegex = new RegExp(`^${prefix}-\\d{4}-\\d+$`);
+  if (generalRegex.test(str)) {
     return str;
   }
 
-  // Handle case where year is already in the string (e.g., PO-2026-0001 or DC-2026-00001)
-  const generalRegex = new RegExp(`^${prefix}-(\\d{4})-(\\d+)$`);
-  const matchGroup = str.match(generalRegex);
-  if (matchGroup) {
-    const year = matchGroup[1];
-    const sequence = matchGroup[2].padStart(4, "0").slice(-4);
-    return `${prefix}-${year}-${sequence}`;
-  }
-  
   // Extract or generate a 4-digit suffix from the input
   let suffix = "0001";
   if (typeof idOrCode === "number") {

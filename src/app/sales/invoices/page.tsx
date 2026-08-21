@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -219,6 +219,14 @@ export default function SalesInvoicesPage() {
   const { user } = useAuth();
   const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN";
 
+  // A franchise-scoped user always has one; SUPER_ADMIN doesn't, and the
+  // backend requires a franchiseId to save an Order (it's a required FK) —
+  // without this, submitting as SUPER_ADMIN crashed with a raw Prisma
+  // "Argument `franchise` is missing" error instead of ever asking who the
+  // sale is for.
+  const [franchises, setFranchises] = useState<any[]>([]);
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(user?.franchiseId || "");
+
   // shared
   const [view, setView] = useState<"list" | "create">("list");
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -385,14 +393,21 @@ export default function SalesInvoicesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [iRes, cRes, pRes, dRes, vRes] = await Promise.allSettled([
+      const [iRes, cRes, pRes, dRes, vRes, fRes] = await Promise.allSettled([
         api.get("/api/finance/invoices").catch(() => ({ data: [] })),
         customersApi.getAll(),
         productsFullApi.getAll(),
         draftsApi.getDrafts("invoice").catch(() => ({ data: [] })),
         api.get("/api/vendors").catch(() => ({ data: [] })),
+        isFranchiseUser ? Promise.resolve({ data: [] }) : franchiseApi.getAll().catch(() => ({ data: [] })),
       ]);
-      
+
+      if (fRes.status === "fulfilled") {
+        const franchiseList = (fRes.value as any).data || [];
+        setFranchises(franchiseList);
+        setSelectedFranchiseId(prev => prev || user?.franchiseId || franchiseList[0]?.id || "");
+      }
+
       let apiInvoices = iRes.status === "fulfilled" ? (iRes.value as any).data || [] : [];
       let drafts = dRes.status === "fulfilled" ? (dRes.value as any).data || [] : [];
       
@@ -639,6 +654,11 @@ export default function SalesInvoicesPage() {
       return;
     }
 
+    if (!selectedFranchiseId) {
+      showToast("Please select a branch/franchise for this invoice", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       let finalCustomerId = selectedCustomer?.id;
@@ -674,6 +694,7 @@ export default function SalesInvoicesPage() {
       const payload: any = {
         invoiceDate,
         invoiceNumber: invoiceNumber.trim() || undefined,
+        franchiseId: selectedFranchiseId,
         stateOfSupply: stateOfSupply || undefined,
         paymentType,
         status: "SENT",
@@ -774,7 +795,21 @@ export default function SalesInvoicesPage() {
             </button>
             <h2 className="text-base font-semibold text-gray-800">New Sale Invoice</h2>
           </div>
-          <span className="text-xs text-gray-400">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
+          <div className="flex items-center gap-4">
+            {!isFranchiseUser && (
+              <select
+                value={selectedFranchiseId}
+                onChange={e => setSelectedFranchiseId(e.target.value)}
+                className="text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-gray-700"
+              >
+                {franchises.length === 0 && <option value="">No branches found</option>}
+                {franchises.map((f: any) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            )}
+            <span className="text-xs text-gray-400">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -1515,7 +1550,13 @@ export default function SalesInvoicesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {inv.paymentMode === "CASH" || inv.order?.paymentType === "CASH" ? "Cash" : "Credit"}
+                        {/* Source of truth is the order's own paymentType — `inv.paymentMode`
+                            isn't a field the Invoice API returns, so that half of the old check
+                            was always false. Falling through to "Credit" for a missing/unmapped
+                            value was also backwards: the Order schema's own default is CASH, so
+                            anything not explicitly CREDIT should read as Cash, not the other way
+                            around. */}
+                        {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">
                         ₹ {(inv.finalAmount || 0).toLocaleString("en-IN")}
