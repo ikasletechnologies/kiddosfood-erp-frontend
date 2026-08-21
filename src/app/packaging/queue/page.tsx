@@ -189,6 +189,9 @@ export default function PackagingQueuePage() {
                       {filteredBatches.map((batch) => {
                         const isApproved = batch.qcStatus === "APPROVED";
                         const badge = QC_BADGE[batch.qcStatus] || DEFAULT_QC_BADGE;
+                        const isFullyPackaged = batch.packagingStatus === "PACKAGED" || 
+                                                (batch.packagedQty !== undefined && batch.approvedQty !== undefined && batch.packagedQty >= batch.approvedQty) ||
+                                                ((batch.approvedQty || 0) - (batch.packagedQty || 0)) <= 0.001;
 
                         return (
                           <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
@@ -212,13 +215,19 @@ export default function PackagingQueuePage() {
                               {batch.packagedQty || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button
-                                disabled={!isApproved}
-                                onClick={() => setSelectedBatch(batch)}
-                                className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
-                              >
-                                Package
-                              </button>
+                              {isFullyPackaged ? (
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                                  Completed
+                                </span>
+                              ) : (
+                                <button
+                                  disabled={!isApproved}
+                                  onClick={() => setSelectedBatch(batch)}
+                                  className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
+                                >
+                                  Package
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -232,7 +241,11 @@ export default function PackagingQueuePage() {
 
           {/* Right 1 Column: Conversion form panel */}
           <div className="lg:col-span-1">
-            {selectedBatch ? (
+            {selectedBatch && !(
+              selectedBatch.packagingStatus === 'PACKAGED' || 
+              (selectedBatch.packagedQty !== undefined && selectedBatch.approvedQty !== undefined && selectedBatch.packagedQty >= selectedBatch.approvedQty) ||
+              ((selectedBatch.approvedQty || 0) - (selectedBatch.packagedQty || 0)) <= 0.001
+            ) ? (
               <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
                 <div className="flex justify-between items-start border-b border-gray-100 pb-3">
                   <div>

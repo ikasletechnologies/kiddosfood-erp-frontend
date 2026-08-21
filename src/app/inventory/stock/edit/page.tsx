@@ -397,12 +397,6 @@ function EditItemForm() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (category === "FINISHED_GOOD" && (!prices.customerPrice || prices.customerPrice <= 0)) {
-      toast.error("Please configure a valid Customer Retail selling price before updating the item master.");
-      setError("Please configure a valid Customer Retail selling price before updating the item master.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
     setSaving(true);
     setError(null);
     setSuccess(null);

@@ -92,17 +92,16 @@ export default function RawMaterialLedgerClient() {
     URL.revokeObjectURL(url);
   };
 
+  // Search is scoped to Item Name / SKU only — it narrows *within* the
+  // selected category, it must not also match on notes/reference/actor text
+  // (e.g. searching "organic" inside Raw Materials should show only organic
+  // items, not any transaction whose note happens to mention "organic").
   const filteredEntries = ledgerEntries.filter((it) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
       it.itemName?.toLowerCase().includes(q) ||
-      it.sku?.toLowerCase().includes(q) ||
-      it.transactionType?.toLowerCase().includes(q) ||
-      it.notes?.toLowerCase().includes(q) ||
-      it.reference?.toLowerCase().includes(q) ||
-      it.batchNumber?.toLowerCase().includes(q) ||
-      it.actor?.toLowerCase().includes(q)
+      it.sku?.toLowerCase().includes(q)
     );
   });
 
@@ -186,7 +185,7 @@ export default function RawMaterialLedgerClient() {
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
-            placeholder="Search transaction / notes..."
+            placeholder="Search item name or SKU..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"

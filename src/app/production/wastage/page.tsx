@@ -21,11 +21,16 @@ interface WasteEntry {
     sku: string;
     unit: string;
   };
+  warehouse?: {
+    name: string;
+  };
 }
 
 const REASON_STYLES: Record<string, { color: string; bg: string; border: string }> = {
   QC_FAIL: { color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },
   EXPIRED: { color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
+  SPOILAGE: { color: "text-orange-600", bg: "bg-orange-50", border: "border-orange-200" },
+  DAMAGED: { color: "text-yellow-600", bg: "bg-yellow-50", border: "border-yellow-200" },
 };
 const DEFAULT_REASON_STYLE = { color: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" };
 
@@ -33,6 +38,7 @@ export default function WastagePage() {
   const [wasteLogs, setWasteLogs] = useState<WasteEntry[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -41,6 +47,7 @@ export default function WastagePage() {
   // Log Form State
   const [showLogModal, setShowLogModal] = useState(false);
   const [formData, setFormData] = useState({
+    warehouseId: "",
     itemId: "",
     quantity: 1,
     reason: "SPOILAGE",
@@ -50,29 +57,53 @@ export default function WastagePage() {
   useEffect(() => {
     async function initData() {
       try {
-        const fRes = await franchiseApi.getAll();
+        const [fRes, wRes] = await Promise.all([
+          franchiseApi.getAll(),
+          inventoryApi.getWarehouses()
+        ]);
         setFranchises(fRes.data || []);
+        setWarehouses(wRes.data || []);
         if (fRes.data?.length > 0) {
           setSelectedFranchiseId(fRes.data[0].id);
         }
+        if (wRes.data?.length > 0) {
+          setFormData(prev => ({ ...prev, warehouseId: wRes.data[0].id }));
+        }
       } catch (err) {
-        toast.error("Failed to load franchises");
+        toast.error("Failed to load initial data");
       }
     }
     initData();
   }, []);
+
+  const loadInventoryForWarehouse = async (warehouseId: string, franchiseId: string) => {
+    if (!warehouseId || !franchiseId) return;
+    try {
+      const res = await inventoryApi.getRawMaterialStockSummary(warehouseId, franchiseId, 'ALL');
+      setInventoryItems(res.data || []);
+      if (res.data?.length > 0) {
+        setFormData(prev => ({ ...prev, itemId: res.data[0].id }));
+      } else {
+        setFormData(prev => ({ ...prev, itemId: "" }));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadData = async () => {
     if (!selectedFranchiseId) return;
     setLoading(true);
     try {
       const [wRes, iRes] = await Promise.all([
-        wasteApi.getAll(),
-        inventoryApi.getInventory(selectedFranchiseId)
+        wasteApi.getAll({ franchiseId: selectedFranchiseId }),
+        formData.warehouseId 
+          ? inventoryApi.getRawMaterialStockSummary(formData.warehouseId, selectedFranchiseId, 'ALL')
+          : Promise.resolve({ data: [] })
       ]);
       setWasteLogs(wRes.data || []);
       setInventoryItems(iRes.data || []);
-      if (iRes.data?.length > 0) {
+      if (iRes.data?.length > 0 && !formData.itemId) {
         setFormData(prev => ({ ...prev, itemId: iRes.data[0].id }));
       }
     } catch (err) {
@@ -88,8 +119,23 @@ export default function WastagePage() {
 
   const handleSubmitWaste = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.itemId || formData.quantity <= 0) {
-      toast.error("Please enter a valid item and quantity");
+    if (!formData.warehouseId) {
+      toast.error("Please select a warehouse");
+      return;
+    }
+    if (!formData.itemId) {
+      toast.error("Please select an item");
+      return;
+    }
+    if (formData.quantity <= 0) {
+      toast.error("Please enter a valid quantity");
+      return;
+    }
+
+    const selectedItem = inventoryItems.find(it => it.id === formData.itemId);
+    const available = selectedItem ? selectedItem.availableStock : 0;
+    if (formData.quantity > available) {
+      toast.error(`Insufficient stock. Available: ${available} ${selectedItem?.unit || 'KG'}. Requested wastage: ${formData.quantity} ${selectedItem?.unit || 'KG'}.`);
       return;
     }
 
@@ -100,16 +146,17 @@ export default function WastagePage() {
         quantity: Number(formData.quantity),
         reason: formData.reason,
         note: formData.note,
-        franchiseId: selectedFranchiseId
+        franchiseId: selectedFranchiseId,
+        warehouseId: formData.warehouseId
       });
       toast.success("Wastage logged successfully");
       setShowLogModal(false);
-      setFormData({
-        itemId: inventoryItems[0]?.id || "",
+      setFormData(prev => ({
+        ...prev,
         quantity: 1,
         reason: "SPOILAGE",
         note: ""
-      });
+      }));
       loadData();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Failed to log wastage");
@@ -120,7 +167,10 @@ export default function WastagePage() {
 
   const filteredLogs = wasteLogs.filter(log =>
     log.inventoryItem?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.reason.toLowerCase().includes(searchQuery.toLowerCase())
+    log.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    log.inventoryItem?.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (log.note && log.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (log.warehouse?.name && log.warehouse.name.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   return (
@@ -199,16 +249,39 @@ export default function WastagePage() {
 
                 <form onSubmit={handleSubmitWaste} className="space-y-3">
                   <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Warehouse</label>
+                    <select
+                      value={formData.warehouseId}
+                      onChange={(e) => {
+                        const wId = e.target.value;
+                        setFormData(prev => ({ ...prev, warehouseId: wId, itemId: "" }));
+                        loadInventoryForWarehouse(wId, selectedFranchiseId);
+                      }}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                    >
+                      <option value="" disabled>Choose Warehouse...</option>
+                      {warehouses.map(w => (
+                        <option key={w.id} value={w.id}>
+                          {w.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">Inventory Item</label>
                     <select
                       value={formData.itemId}
                       onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                      disabled={!formData.warehouseId}
                     >
-                      <option value="" disabled>Choose Item...</option>
+                      <option value="" disabled>
+                        {formData.warehouseId ? "Choose Item..." : "Select a warehouse first..."}
+                      </option>
                       {inventoryItems.map(item => (
                         <option key={item.id} value={item.id}>
-                          {item.name} ({item.sku})
+                          {item.name} ({item.sku}) - Available: {(item.availableStock || 0).toFixed(2)} {item.unit}
                         </option>
                       ))}
                     </select>
@@ -296,6 +369,7 @@ export default function WastagePage() {
                     <thead>
                       <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
                         <th className="text-left px-4 py-3">Item</th>
+                        <th className="text-left px-4 py-3">Warehouse</th>
                         <th className="text-center px-4 py-3">Reason</th>
                         <th className="text-right px-4 py-3">Qty Loss</th>
                         <th className="text-left px-4 py-3">Notes / Date</th>
@@ -310,6 +384,9 @@ export default function WastagePage() {
                             <td className="px-4 py-3">
                               <div className="font-medium text-gray-800">{log.inventoryItem?.name}</div>
                               <div className="text-xs text-gray-400 mt-0.5">SKU: {log.inventoryItem?.sku}</div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {log.warehouse?.name || 'N/A'}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>

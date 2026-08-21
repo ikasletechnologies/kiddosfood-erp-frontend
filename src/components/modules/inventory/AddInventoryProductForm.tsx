@@ -330,12 +330,6 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    if (category === "FINISHED_GOOD" && (!prices.customerPrice || prices.customerPrice <= 0)) {
-      toast.error("Please configure a valid Customer Retail selling price before launching the item master.");
-      setError("Please configure a valid Customer Retail selling price before launching the item master.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
     if (Number(openingStock) > 0 && !itemLocation) {
       setError("Please select a Warehouse for the opening stock.");
       window.scrollTo({ top: 0, behavior: "smooth" });

@@ -101,9 +101,25 @@ export const productBatchesApi = {
     api.get('/api/production/batches', { params }),
 };
 
+export const recallApi = {
+  getEligibility: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall/eligibility`),
+  getState: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall`),
+  initiate: (batchId: string, data: { reason: string; reasonNotes?: string }) =>
+    api.post(`/api/production/batches/${batchId}/recall/initiate`, data),
+  locateDistribution: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/locate-distribution`),
+  blockSales: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/block-sales`),
+  generateReport: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/generate-report`),
+  collectReturn: (batchId: string, returnedQty: number) =>
+    api.post(`/api/production/batches/${batchId}/recall/collect-return`, { returnedQty }),
+  complete: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/complete`),
+  cancel: (batchId: string, note?: string) => api.post(`/api/production/batches/${batchId}/recall/cancel`, { note }),
+};
+
 export const wasteApi = {
-  getAll: () => api.get('/api/waste'),
-  getSummary: () => api.get('/api/waste/summary'),
-  create: (data: { itemId: string; quantity: number; reason: string; note?: string; franchiseId: string }) =>
+  getAll: (params: { dateFrom?: string; dateTo?: string; franchiseId?: string; warehouseId?: string } = {}) =>
+    api.get('/api/waste', { params }),
+  getSummary: (params: { franchiseId?: string; warehouseId?: string } = {}) =>
+    api.get('/api/waste/summary', { params }),
+  create: (data: { itemId: string; quantity: number; reason: string; note?: string; franchiseId: string; warehouseId?: string }) =>
     api.post('/api/waste', data),
 };
