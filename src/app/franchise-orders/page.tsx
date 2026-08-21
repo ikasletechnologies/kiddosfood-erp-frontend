@@ -5,10 +5,11 @@ import { createPortal } from "react-dom";
 import {
   ShoppingCart, Plus, X, RefreshCw, CheckCircle2, Clock,
   Truck, PackageCheck, AlertTriangle, ChevronDown, Receipt,
-  CreditCard, Banknote, ArrowRight, Package, Warehouse, ClipboardList
+  CreditCard, Banknote, ArrowRight, Package, Warehouse, ClipboardList,
+  Ban, XCircle, Trash2, ShieldAlert
 } from "lucide-react";
 import { clsx } from "clsx";
-import api from "@/lib/api";
+import api, { franchiseOrdersApi, franchiseProductRequestsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
@@ -86,10 +87,17 @@ export default function FranchiseOrdersPage() {
     setLoading(true);
     try {
       const [ordersRes, productsRes] = await Promise.all([
-        api.get("/api/franchise-orders"),
+        api.get("/api/franchise-orders", {
+          params: isFranchiseAdmin && user?.franchiseId ? { franchiseId: user.franchiseId } : undefined
+        }),
         api.get("/api/products?stockSource=HQ"),
       ]);
-      setOrders(ordersRes.data ?? []);
+      const rawOrders: any[] = ordersRes.data ?? [];
+      const scopedOrders = isFranchiseAdmin && user?.franchiseId
+        ? rawOrders.filter((o: any) => o.franchiseId === user.franchiseId || o.franchise?.id === user.franchiseId)
+        : rawOrders;
+
+      setOrders(scopedOrders);
       setProducts((productsRes.data ?? []).filter((p: any) => p.isActive));
 
       if (isFranchiseAdmin && user?.franchiseId) {
@@ -106,7 +114,7 @@ export default function FranchiseOrdersPage() {
       if (compRes?.data) setCompanyDetails(compRes.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [isFranchiseAdmin]);
+  }, [isFranchiseAdmin, user?.franchiseId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
   
@@ -136,7 +144,7 @@ export default function FranchiseOrdersPage() {
     }
     setSaving(true);
     try {
-      await api.post("/api/franchise-orders", {
+      const res = await api.post("/api/franchise-orders", {
         franchiseId: selectedFranchise,
         orderType,
         paymentType,
@@ -145,6 +153,32 @@ export default function FranchiseOrdersPage() {
         notes: notes || undefined,
         items: validItems,
       });
+
+      const createdOrder = res?.data;
+      const orderNum = createdOrder?.orderNumber || `FO-${Date.now().toString().slice(-4)}`;
+      const selectedF = franchises.find(f => f.id === selectedFranchise);
+      const fName = selectedF?.name || (user as any)?.franchiseName || "Blackbulls";
+
+      window.dispatchEvent(
+        new CustomEvent("erp:notify-stock-request", {
+          detail: {
+            franchiseId: selectedFranchise,
+            franchiseName: fName,
+            requestNumber: orderNum,
+            id: createdOrder?.id || "",
+            isSupplyOrder: true,
+            products: validItems.map(i => {
+              const p = products.find(prod => prod.id === i.productId);
+              return {
+                productName: p?.name || "KARI KOZHAMBU",
+                requestedQuantity: Number(i.quantity),
+                unit: p?.unit || "KG",
+              };
+            }),
+          },
+        })
+      );
+
       setShowCreate(false);
       setOrderItems([{ productId: "", quantity: 1 }]);
       setNotes(""); setPreferredDelivery(""); setPriority("NORMAL"); setOrderType("STOCK");
@@ -154,12 +188,261 @@ export default function FranchiseOrdersPage() {
     } finally { setSaving(false); }
   };
 
+  // Cancellation Modal State (Franchise & Pending Admin)
+  const [cancelModalOrder, setCancelModalOrder] = useState<any | null>(null);
+  const [cancelReasonPreset, setCancelReasonPreset] = useState("Ordered wrong product");
+  const [cancelCustomNotes, setCancelCustomNotes] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  // Super Admin Review Cancellation Modal State
+  const [reviewCancelModalOrder, setReviewCancelModalOrder] = useState<any | null>(null);
+  const [adminReviewNote, setAdminReviewNote] = useState("");
+  const [reviewingCancel, setReviewingCancel] = useState(false);
+
   const handleAdvanceStatus = async (orderId: string, nextStatus: string) => {
     try {
       await api.patch(`/api/franchise-orders/${orderId}/status`, { status: nextStatus });
       fetchAll();
     } catch (e: any) {
       toast.error(e?.response?.data?.error ?? "Failed to update status.");
+    }
+  };
+
+  const handleConfirmCancelOrder = async () => {
+    if (!cancelModalOrder) return;
+    const isDirectCancel = cancelModalOrder.status === "PENDING";
+
+    if (cancelReasonPreset === "Other" && !cancelCustomNotes.trim()) {
+      toast.error("Please provide a reason note when 'Other' is selected.");
+      return;
+    }
+
+    const finalReason = cancelReasonPreset === "Other"
+      ? cancelCustomNotes.trim()
+      : (cancelCustomNotes.trim() ? `${cancelReasonPreset}: ${cancelCustomNotes.trim()}` : cancelReasonPreset);
+
+    setCancelling(true);
+    const fName = cancelModalOrder.franchise?.name || (user as any)?.franchiseName || "Blackbulls";
+    const ordNumber = cancelModalOrder.orderNumber || `FO-${String(cancelModalOrder.id).slice(0, 6).toUpperCase()}`;
+
+    const prodSummary = cancelModalOrder.items && cancelModalOrder.items.length > 0
+      ? `${cancelModalOrder.items[0].productName || cancelModalOrder.items[0].product?.name || "Product"} · ${cancelModalOrder.items[0].quantity} ${cancelModalOrder.items[0].unit || "KG"}`
+      : "Stock Order";
+
+    if (isDirectCancel) {
+      // 1. Direct cancellation for PENDING orders
+      try {
+        await franchiseOrdersApi.cancelPendingOrder(cancelModalOrder.id, {
+          reasonCode: cancelReasonPreset,
+          reasonNote: cancelCustomNotes.trim() || undefined,
+        });
+
+        // Optimistic UI state update
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === cancelModalOrder.id
+              ? { ...o, status: "CANCELLED", notes: `Cancelled: ${finalReason}` }
+              : o
+          )
+        );
+
+        // Dispatch notification for Super Admin
+        window.dispatchEvent(
+          new CustomEvent("erp:notify-order-cancelled", {
+            detail: {
+              franchiseId: cancelModalOrder.franchiseId || cancelModalOrder.franchise?.id,
+              franchiseName: fName,
+              orderNumber: ordNumber,
+              productSummary: prodSummary,
+              reason: finalReason,
+              id: cancelModalOrder.id,
+            },
+          })
+        );
+
+        toast.success(`Order ${ordNumber} has been cancelled.`);
+        setCancelModalOrder(null);
+        setCancelReasonPreset("Ordered wrong product");
+        setCancelCustomNotes("");
+        fetchAll().catch(() => null);
+      } catch (e: any) {
+        console.error("Failed to cancel pending order:", e);
+        toast.error(e?.response?.data?.error ?? e?.message ?? "Failed to cancel order.");
+      } finally {
+        setCancelling(false);
+      }
+    } else {
+      // 2. Cancellation Request for APPROVED / PROCESSING orders (Separate review entity)
+      try {
+        await franchiseOrdersApi.createCancellationRequest(cancelModalOrder.id, {
+          reasonCode: cancelReasonPreset,
+          reasonNote: cancelCustomNotes.trim() || undefined,
+        });
+
+        // Optimistic UI state update: order remains APPROVED/PROCESSING, but has pending cancellationRequest
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === cancelModalOrder.id
+              ? {
+                  ...o,
+                  cancellationRequest: {
+                    status: "PENDING",
+                    reasonCode: cancelReasonPreset,
+                    reasonNote: cancelCustomNotes.trim() || undefined,
+                    requestedAt: new Date().toISOString(),
+                    requestedBy: (user as any)?.name || (user as any)?.username || "Franchise Admin",
+                  },
+                }
+              : o
+          )
+        );
+
+        // Dispatch notification for Super Admin
+        window.dispatchEvent(
+          new CustomEvent("erp:notify-cancellation-requested", {
+            detail: {
+              franchiseId: cancelModalOrder.franchiseId || cancelModalOrder.franchise?.id,
+              franchiseName: fName,
+              orderNumber: ordNumber,
+              productSummary: prodSummary,
+              reason: finalReason,
+              id: cancelModalOrder.id,
+            },
+          })
+        );
+
+        toast.success(`Cancellation request for ${ordNumber} submitted for HQ review.`);
+        setCancelModalOrder(null);
+        setCancelReasonPreset("Ordered wrong product");
+        setCancelCustomNotes("");
+        fetchAll().catch(() => null);
+      } catch (e: any) {
+        console.error("Failed to submit cancellation request:", e);
+        toast.error(e?.response?.data?.error ?? e?.message ?? "Failed to submit cancellation request.");
+      } finally {
+        setCancelling(false);
+      }
+    }
+  };
+
+  // Super Admin: Approve Cancellation Request
+  const handleApproveCancellationReview = async () => {
+    if (!reviewCancelModalOrder) return;
+    setReviewingCancel(true);
+    const ord = reviewCancelModalOrder;
+    const ordNumber = ord.orderNumber || `FO-${String(ord.id).slice(0, 6).toUpperCase()}`;
+    const fName = ord.franchise?.name || "Franchise";
+
+    try {
+      await franchiseOrdersApi.approveCancellationRequest(ord.id, {
+        reviewNote: adminReviewNote.trim() || undefined,
+      });
+
+      // Optimistic update
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === ord.id
+            ? {
+                ...o,
+                status: "CANCELLED",
+                notes: `Cancellation Approved by HQ: ${adminReviewNote.trim() || "Approved"}`,
+                cancellationRequest: { ...o.cancellationRequest, status: "APPROVED", reviewedAt: new Date().toISOString() },
+              }
+            : o
+        )
+      );
+
+      // Dispatch notification
+      window.dispatchEvent(
+        new CustomEvent("erp:notify-cancellation-approved", {
+          detail: {
+            franchiseId: ord.franchiseId || ord.franchise?.id,
+            franchiseName: fName,
+            orderNumber: ordNumber,
+            id: ord.id,
+            reviewNote: adminReviewNote.trim(),
+          },
+        })
+      );
+
+      toast.success(`Cancellation approved for ${ordNumber}. Stock released.`);
+      setReviewCancelModalOrder(null);
+      setAdminReviewNote("");
+      fetchAll().catch(() => null);
+    } catch (e: any) {
+      console.error("Failed to approve cancellation:", e);
+      toast.error(e?.response?.data?.error ?? "Failed to approve cancellation.");
+    } finally {
+      setReviewingCancel(false);
+    }
+  };
+
+  // Super Admin: Reject Cancellation Request
+  const handleRejectCancellationReview = async () => {
+    if (!reviewCancelModalOrder) return;
+    setReviewingCancel(true);
+    const ord = reviewCancelModalOrder;
+    const ordNumber = ord.orderNumber || `FO-${String(ord.id).slice(0, 6).toUpperCase()}`;
+    const fName = ord.franchise?.name || "Franchise";
+
+    try {
+      await franchiseOrdersApi.rejectCancellationRequest(ord.id, {
+        reviewNote: adminReviewNote.trim() || undefined,
+      });
+
+      // Optimistic update
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === ord.id
+            ? {
+                ...o,
+                cancellationRequest: { ...o.cancellationRequest, status: "REJECTED", reviewedAt: new Date().toISOString() },
+              }
+            : o
+        )
+      );
+
+      // Dispatch notification
+      window.dispatchEvent(
+        new CustomEvent("erp:notify-cancellation-rejected", {
+          detail: {
+            franchiseId: ord.franchiseId || ord.franchise?.id,
+            franchiseName: fName,
+            orderNumber: ordNumber,
+            id: ord.id,
+            reviewNote: adminReviewNote.trim(),
+          },
+        })
+      );
+
+      toast.success(`Cancellation request rejected for ${ordNumber}. Order continues.`);
+      setReviewCancelModalOrder(null);
+      setAdminReviewNote("");
+      fetchAll().catch(() => null);
+    } catch (e: any) {
+      console.error("Failed to reject cancellation:", e);
+      toast.error(e?.response?.data?.error ?? "Failed to reject cancellation.");
+    } finally {
+      setReviewingCancel(false);
+    }
+  };
+
+  // Franchise: Withdraw Cancellation Request
+  const handleWithdrawCancellation = async (order: any) => {
+    if (!confirm(`Withdraw cancellation request for ${order.orderNumber || "this order"}?`)) return;
+    try {
+      await franchiseOrdersApi.withdrawCancellationRequest(order.id);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id
+            ? { ...o, cancellationRequest: { ...o.cancellationRequest, status: "WITHDRAWN" } }
+            : o
+        )
+      );
+      toast.success("Cancellation request withdrawn.");
+      fetchAll().catch(() => null);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error ?? "Failed to withdraw cancellation request.");
     }
   };
 
@@ -218,9 +501,11 @@ export default function FranchiseOrdersPage() {
 
   const statsMap = {
     PENDING:      orders.filter(o => o.status === "PENDING").length,
+    APPROVED:     orders.filter(o => o.status === "APPROVED").length,
     IN_PRODUCTION:orders.filter(o => o.status === "IN_PRODUCTION").length,
     DISPATCHED:   orders.filter(o => o.status === "DISPATCHED").length,
     DELIVERED:    orders.filter(o => o.status === "DELIVERED").length,
+    CANCELLED:    orders.filter(o => o.status === "CANCELLED").length,
   };
 
   return (
@@ -254,24 +539,22 @@ export default function FranchiseOrdersPage() {
             </div>
             <div className="w-px h-8 bg-slate-200 dark:bg-white/10" />
             <div className="text-center">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Available</p>
-              <p className="text-sm font-black text-emerald-500">₹{((franchiseData.creditLimit || 0) - (franchiseData.outstandingAmount || 0)).toLocaleString("en-IN")}</p>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Balance Limit</p>
+              <p className="text-sm font-black text-emerald-500">₹{(franchiseData.balanceLimit || 0).toLocaleString("en-IN")}</p>
             </div>
           </div>
         )}
-        <div className="flex items-center gap-3">
-          <button onClick={fetchAll} className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-slate-300 transition-all shadow-sm group">
-            <RefreshCw size={18} className={clsx("text-slate-400 group-hover:rotate-180 transition-transform duration-500", loading && "animate-spin")} />
+        <div className="flex items-center gap-4">
+          <button onClick={() => fetchAll()} className="p-4 rounded-3xl border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-slate-400">
+            <RefreshCw size={20} className={clsx(loading && "animate-spin text-orange-500")} />
           </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-3 bg-orange-500 text-white px-8 py-4 rounded-3xl font-black text-xs uppercase tracking-widest hover:shadow-2xl hover:translate-y-[-2px] transition-all active:translate-y-0 shadow-orange-500/20"
-          >
-            <Plus size={20} strokeWidth={3} /> New Order
+          <button onClick={() => { setShowCreate(true); setError(""); }} className="px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-3xl font-black text-xs uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all">
+            <Plus size={18} /> New Order
           </button>
         </div>
       </header>
 
+      {/* Guide Banner for Franchise Admins */}
       {isFranchiseAdmin && (
         <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/20 rounded-3xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in duration-300">
           <div className="flex items-start gap-4">
@@ -296,12 +579,13 @@ export default function FranchiseOrdersPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: "Pending", value: statsMap.PENDING, color: "text-amber-500", bg: "bg-amber-500/10" },
           { label: "In Production", value: statsMap.IN_PRODUCTION, color: "text-indigo-500", bg: "bg-indigo-500/10" },
           { label: "Dispatched", value: statsMap.DISPATCHED, color: "text-purple-500", bg: "bg-purple-500/10" },
           { label: "Delivered", value: statsMap.DELIVERED, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+          { label: "Cancelled", value: statsMap.CANCELLED, color: "text-rose-500", bg: "bg-rose-500/10" },
         ].map((s, i) => (
           <div key={i} className="bg-white dark:bg-card/40 p-6 rounded-[28px] border border-slate-100 dark:border-white/5 shadow-xl shadow-black/[0.02]">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{s.label}</p>
@@ -357,6 +641,11 @@ export default function FranchiseOrdersPage() {
                       <span className={clsx("px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border flex items-center gap-1.5", STATUS_STYLES[order.status])}>
                         <StatusIcon size={11} /> {order.status.replace("_", " ")}
                       </span>
+                      {order.cancellationRequest?.status === "PENDING" && (
+                        <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 flex items-center gap-1.5 animate-pulse">
+                          <Clock size={11} /> Cancellation: Awaiting HQ Review
+                        </span>
+                      )}
                       {order.orderType === "REQUEST" && (
                         <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/20 dark:text-indigo-400 flex items-center gap-1.5">
                           <ClipboardList size={11} /> Requested
@@ -471,27 +760,37 @@ export default function FranchiseOrdersPage() {
                       </div>
                     )}
 
-                    {/* Order Timeline */}
-                    <div className="mt-6 flex items-center gap-0 overflow-hidden max-w-md">
-                      {["PENDING", "APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].map((step, idx, arr) => {
-                        const isPast = arr.indexOf(order.status) >= idx;
-                        const isCurrent = order.status === step;
-                        return (
-                          <div key={step} className="flex items-center group">
-                            <div className={clsx(
-                              "w-3 h-3 rounded-full border-2 transition-all",
-                              isPast ? "bg-orange-500 border-orange-500 scale-110" : "bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700"
-                            )} title={step.replace("_", " ")} />
-                            {idx < arr.length - 1 && (
+                    {/* Order Timeline / Cancelled Status Banner */}
+                    {order.status === "CANCELLED" ? (
+                      <div className="mt-4 px-4 py-2.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 rounded-2xl flex items-center gap-2.5 text-xs text-rose-600 dark:text-rose-400 font-bold max-w-md">
+                        <XCircle size={15} className="shrink-0 text-rose-500" />
+                        <span className="truncate">
+                          {order.notes?.includes("Cancellation Reason:")
+                            ? order.notes
+                            : `Order Cancelled: ${order.notes || "No additional notes"}`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-6 flex items-center gap-0 overflow-hidden max-w-md">
+                        {["PENDING", "APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED"].map((step, idx, arr) => {
+                          const isPast = arr.indexOf(order.status) >= idx;
+                          return (
+                            <div key={step} className="flex items-center group">
                               <div className={clsx(
-                                "w-10 h-0.5 transition-all",
-                                isPast && arr.indexOf(order.status) > idx ? "bg-orange-500" : "bg-slate-100 dark:bg-slate-800"
-                              )} />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                                "w-3 h-3 rounded-full border-2 transition-all",
+                                isPast ? "bg-orange-500 border-orange-500 scale-110" : "bg-slate-100 border-slate-200 dark:bg-slate-800 dark:border-slate-700"
+                              )} title={step.replace("_", " ")} />
+                              {idx < arr.length - 1 && (
+                                <div className={clsx(
+                                  "w-10 h-0.5 transition-all",
+                                  isPast && arr.indexOf(order.status) > idx ? "bg-orange-500" : "bg-slate-100 dark:bg-slate-800"
+                                )} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col items-end gap-3 min-w-[200px]">
@@ -499,27 +798,101 @@ export default function FranchiseOrdersPage() {
                       ₹{order.totalAmount.toLocaleString("en-IN")}
                     </p>
 
-                    {/* Actions for SUPER_ADMIN */}
-                    {isSuperAdmin && nextStatus && (
-                      needsProduction && !order.materialsReady ? (
-                        <div className="w-full text-right space-y-1.5">
+                    {/* Active Cancellation Review State */}
+                    {order.cancellationRequest?.status === "PENDING" ? (
+                      <div className="w-full space-y-2 text-right">
+                        {isSuperAdmin ? (
                           <button
-                            disabled
-                            className="w-full px-4 py-2.5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed"
+                            onClick={() => {
+                              setReviewCancelModalOrder(order);
+                              setAdminReviewNote("");
+                            }}
+                            className="w-full px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 transition-all"
                           >
-                            Mark In Production
+                            <ShieldAlert size={13} /> Review Cancellation
                           </button>
-                          <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">Blocked — resolve raw materials first</p>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleAdvanceStatus(order.id, nextStatus)}
-                          className="w-full px-4 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all"
-                        >
-                          Mark {nextStatus.replace("_", " ")} <ArrowRight size={12} />
-                        </button>
-                      )
+                        ) : (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest block">
+                              Cancellation Under HQ Review
+                            </span>
+                            <button
+                              onClick={() => handleWithdrawCancellation(order)}
+                              className="w-full px-3 py-1.5 text-[9px] font-bold text-slate-400 hover:text-slate-200 border border-slate-200 dark:border-white/10 rounded-xl transition-all"
+                            >
+                              Withdraw Request
+                            </button>
+                          </div>
+                        )}
+                        {isSuperAdmin && nextStatus && (
+                          <p className="text-[9px] font-bold text-amber-500 uppercase tracking-widest">
+                            Blocked — Cancellation review pending
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        {/* Standard Progression for Super Admin */}
+                        {isSuperAdmin && nextStatus && (
+                          needsProduction && !order.materialsReady ? (
+                            <div className="w-full text-right space-y-1.5">
+                              <button
+                                disabled
+                                className="w-full px-4 py-2.5 bg-slate-100 dark:bg-white/5 text-slate-400 dark:text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 cursor-not-allowed"
+                              >
+                                Mark In Production
+                              </button>
+                              <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest">
+                                Blocked — resolve raw materials first
+                              </p>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleAdvanceStatus(order.id, nextStatus)}
+                              className="w-full px-4 py-2.5 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all"
+                            >
+                              Mark {nextStatus.replace("_", " ")} <ArrowRight size={12} />
+                            </button>
+                          )
+                        )}
+
+                        {/* Direct Cancellation for PENDING Orders */}
+                        {order.status === "PENDING" && (
+                          <button
+                            onClick={() => {
+                              setCancelModalOrder(order);
+                              setCancelReasonPreset("Ordered wrong product");
+                              setCancelCustomNotes("");
+                            }}
+                            className="w-full px-4 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/40 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                          >
+                            <Ban size={13} /> Cancel Order
+                          </button>
+                        )}
+
+                        {/* Request Cancellation for APPROVED / IN_PRODUCTION (Franchise Admin) */}
+                        {isFranchiseAdmin && ["APPROVED", "IN_PRODUCTION"].includes(order.status) && (
+                          <button
+                            onClick={() => {
+                              setCancelModalOrder(order);
+                              setCancelReasonPreset("Ordered wrong product");
+                              setCancelCustomNotes("");
+                            }}
+                            className="w-full px-4 py-2 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800/40 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
+                          >
+                            <AlertTriangle size={13} /> Request Cancellation
+                          </button>
+                        )}
+
+                        {/* Dispatched / Delivered Info Note */}
+                        {["DISPATCHED", "DELIVERED"].includes(order.status) && (
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-right">
+                            Cannot be cancelled after dispatch
+                          </p>
+                        )}
+                      </>
                     )}
+
                     {order.status === "DELIVERED" && order.paymentStatus !== "PAID" && (
                       <button
                         onClick={() => handlePayment(order.id)}
@@ -777,6 +1150,212 @@ export default function FranchiseOrdersPage() {
                   {saving ? "Placing Order..." : "Place Order"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Cancel Order Modal with "Why cancel the order?" */}
+      {/* Cancel Order Modal with "Why cancel the order?" / "Request Cancellation" */}
+      {cancelModalOrder && mounted && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setCancelModalOrder(null)} />
+          <div className="relative bg-white dark:bg-[#12141c] rounded-[36px] shadow-2xl w-full max-w-lg border border-slate-200 dark:border-white/10 p-8 space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold shrink-0">
+                  <Ban size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    {cancelModalOrder.status === "PENDING" ? "Cancel Pending Order" : "Request Order Cancellation"}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Order: <strong className="text-slate-700 dark:text-slate-200">{cancelModalOrder.orderNumber || `FO-${String(cancelModalOrder.id).slice(0, 6).toUpperCase()}`}</strong> · {cancelModalOrder.franchise?.name || "Franchise"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCancelModalOrder(null)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-2xl text-slate-400 transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Info / Warning Box */}
+            <div className={clsx(
+              "p-4 rounded-2xl border text-xs font-semibold space-y-1",
+              cancelModalOrder.status === "PENDING"
+                ? "bg-rose-50/80 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/30 text-rose-600 dark:text-rose-400"
+                : "bg-amber-50/80 dark:bg-amber-950/20 border-amber-100 dark:border-amber-900/30 text-amber-700 dark:text-amber-400"
+            )}>
+              <p className="font-black flex items-center gap-1.5 text-xs">
+                <AlertTriangle size={14} className="shrink-0" />
+                {cancelModalOrder.status === "PENDING" ? "Direct Cancellation" : "HQ Review Required"}
+              </p>
+              <p className="text-[11px] opacity-90 leading-relaxed font-normal">
+                {cancelModalOrder.status === "PENDING"
+                  ? "This will immediately mark the order as CANCELLED, reduce Pending Demand, and notify Super Admin."
+                  : "This will submit a Cancellation Request to Central HQ for review. The order status remains unchanged until HQ approves."}
+              </p>
+            </div>
+
+            {/* Preset Reason Options */}
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                Select Reason *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  "Ordered wrong product",
+                  "Incorrect quantity",
+                  "Duplicate order",
+                  "Incorrect required date",
+                  "No longer required",
+                  "Other"
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setCancelReasonPreset(preset)}
+                    className={clsx(
+                      "px-3.5 py-2.5 rounded-xl text-xs font-bold border text-left transition-all",
+                      cancelReasonPreset === preset
+                        ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20"
+                        : "bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
+                    )}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Detailed Notes */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                {cancelReasonPreset === "Other" ? "Reason Note (Mandatory) *" : "Reason Note (Optional)"}
+              </label>
+              <textarea
+                rows={3}
+                value={cancelCustomNotes}
+                onChange={(e) => setCancelCustomNotes(e.target.value)}
+                placeholder={cancelReasonPreset === "Other" ? "Please specify why this order is being cancelled..." : "Add additional details for HQ records..."}
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500/20 resize-none placeholder:text-slate-400"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                className="flex-1 py-3.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={handleConfirmCancelOrder}
+                className={clsx(
+                  "flex-[1.5] py-3.5 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50",
+                  cancelModalOrder.status === "PENDING"
+                    ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/25"
+                    : "bg-amber-600 hover:bg-amber-700 shadow-amber-600/25"
+                )}
+              >
+                {cancelling
+                  ? "Processing..."
+                  : cancelModalOrder.status === "PENDING"
+                  ? "Confirm Cancellation"
+                  : "Submit Request to HQ"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Super Admin Review Cancellation Modal */}
+      {reviewCancelModalOrder && mounted && createPortal(
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setReviewCancelModalOrder(null)} />
+          <div className="relative bg-white dark:bg-[#12141c] rounded-[36px] shadow-2xl w-full max-w-lg border border-slate-200 dark:border-white/10 p-8 space-y-6 animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold shrink-0">
+                  <ShieldAlert size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Review Cancellation Request
+                  </h3>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Order: <strong className="text-slate-700 dark:text-slate-200">{reviewCancelModalOrder.orderNumber}</strong> · {reviewCancelModalOrder.franchise?.name}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReviewCancelModalOrder(null)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-2xl text-slate-400 transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Franchise Request Details */}
+            <div className="p-4 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 space-y-2 text-xs">
+              <div className="flex justify-between items-center text-slate-400 uppercase font-black text-[10px]">
+                <span>Reason: {reviewCancelModalOrder.cancellationRequest?.reasonCode || "Ordered wrong product"}</span>
+                <span>Status at Request: {reviewCancelModalOrder.status}</span>
+              </div>
+              {reviewCancelModalOrder.cancellationRequest?.reasonNote && (
+                <p className="text-slate-700 dark:text-slate-200 font-medium pt-1">
+                  &ldquo;{reviewCancelModalOrder.cancellationRequest.reasonNote}&rdquo;
+                </p>
+              )}
+              <div className="pt-2 border-t border-slate-200 dark:border-white/10 text-[11px] text-amber-600 dark:text-amber-400 font-bold">
+                ⚠️ Approving will transition the order to CANCELLED and release all reserved stock.
+              </div>
+            </div>
+
+            {/* Admin Resolution Notes */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                HQ Review Note (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={adminReviewNote}
+                onChange={(e) => setAdminReviewNote(e.target.value)}
+                placeholder="Enter explanation for approval or rejection..."
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500/20 resize-none"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                disabled={reviewingCancel}
+                onClick={handleRejectCancellationReview}
+                className="flex-1 py-3.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all disabled:opacity-50"
+              >
+                {reviewingCancel ? "Saving..." : "Reject Cancellation"}
+              </button>
+              <button
+                type="button"
+                disabled={reviewingCancel}
+                onClick={handleApproveCancellationReview}
+                className="flex-[1.5] py-3.5 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-xs font-black uppercase tracking-wider shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+              >
+                {reviewingCancel ? "Approving..." : "Approve & Cancel Order"}
+              </button>
             </div>
           </div>
         </div>,

@@ -308,15 +308,15 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/franchise",
         roles: SUPER_ONLY,
       },
-      {
-        icon: Package,
-        label: "Outlet Inventory",
-        href: "/franchise/stock",
-        roles: SUPER_ONLY,
-      },
+      // {
+      //   icon: Package,
+      //   label: "Outlet Inventory",
+      //   href: "/franchise/stock",
+      //   roles: SUPER_ONLY,
+      // },
       {
         icon: ShoppingCart,
-        label: "Outlet Sales",
+        label: "Franchise Orders",
         href: "/franchise-orders",
         roles: SUPER_ONLY,
       },
