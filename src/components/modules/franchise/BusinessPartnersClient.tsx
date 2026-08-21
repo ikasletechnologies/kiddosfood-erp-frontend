@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
+import { X, 
   Users, 
   Plus, 
   Search, 
@@ -114,6 +114,13 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-purple-500/20 transition-all"
           />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
         </div>
         <div className="bg-purple-50 dark:bg-purple-500/5 border border-purple-100 dark:border-purple-500/10 rounded-2xl p-4 flex items-center justify-between">
           <span className="text-sm font-bold text-purple-600 dark:text-purple-400">Total Partners</span>

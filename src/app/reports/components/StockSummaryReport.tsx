@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
+import { X, 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
   AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon 
 } from "lucide-react";
@@ -9,6 +9,7 @@ import { reportsApi } from "@/lib/api/accounting.api";
 
 interface StockRow {
   itemName: string;
+  category: string;
   salePrice: number;
   purchasePrice: number;
   stockQty: number;
@@ -20,13 +21,20 @@ export default function StockSummaryReport() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
+        const params: any = {};
+        if (startDate) params.startDate = startDate;
+        if (endDate) params.endDate = endDate;
+        
         // Uses the newly registered endpoint /api/reports/stock-summary
-        const res = await reportsApi.getStockSummary();
+        const res = await reportsApi.getStockSummary(params);
         // Fallback to stock-summary service or fallback response
         const data = await res.data;
         
@@ -36,6 +44,7 @@ export default function StockSummaryReport() {
         // Match the columns expected: Item Name, Sale Price, Purchase Price, Stock Qty, Stock Value
         const formatted = rows.map((r: any) => ({
           itemName: r.itemName || r.name || "—",
+          category: (r.category || r.categoryName || "Uncategorized").toUpperCase(),
           salePrice: Number(r.salePrice ?? r.customerPrice ?? r.basePrice ?? 0),
           purchasePrice: Number(r.purchasePrice ?? r.costPrice ?? 0),
           stockQty: Number(r.stockQty ?? r.currentStock ?? 0),
@@ -51,12 +60,35 @@ export default function StockSummaryReport() {
       }
     }
     fetchData();
-  }, []);
+  }, [startDate, endDate]);
+
+  const CATEGORY_OPTIONS = [
+    "All Categories",
+    "Raw Material",
+    "Finished Goods",
+    "Packaging Material",
+    "Other Material"
+  ];
 
   const filtered = reportData.filter(row => {
     const matchesSearch = row.itemName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesInStock = showInStockOnly ? row.stockQty > 0 : true;
-    return matchesSearch && matchesInStock;
+    
+    let matchesCategory = true;
+    if (selectedCategory !== "All Categories") {
+      const cat = row.category;
+      if (selectedCategory === "Raw Material") {
+        matchesCategory = cat === "RAW_MATERIAL" || cat.startsWith("RAW_");
+      } else if (selectedCategory === "Finished Goods") {
+        matchesCategory = cat === "FINISHED_GOOD" || cat.startsWith("FINISHED_");
+      } else if (selectedCategory === "Packaging Material") {
+        matchesCategory = cat === "PACKAGING_MATERIAL" || cat.startsWith("PACKAGING_");
+      } else if (selectedCategory === "Other Material") {
+        matchesCategory = !cat.startsWith("RAW_") && !cat.startsWith("FINISHED_") && !cat.startsWith("PACKAGING_");
+      }
+    }
+
+    return matchesSearch && matchesInStock && matchesCategory;
   });
 
   const totalStockQty = filtered.reduce((sum, r) => sum + r.stockQty, 0);
@@ -69,18 +101,17 @@ export default function StockSummaryReport() {
   const handleExportCSV = () => {
     const headers = ["Item Name", "Sale Price", "Purchase Price", "Stock Qty", "Stock Value"];
     const rows = filtered.map(r => [
-      r.itemName,
+      `"${r.itemName.replace(/"/g, '""')}"`,
       r.salePrice.toFixed(2),
       r.purchasePrice.toFixed(2),
       r.stockQty,
       r.stockValue.toFixed(2)
     ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
+    const csvString = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.href = URL.createObjectURL(blob);
+    link.download = `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -93,16 +124,33 @@ export default function StockSummaryReport() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Category Filter */}
           <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              All Categories <ChevronDownIcon size={12} />
-            </button>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="appearance-none flex items-center gap-2 pl-4 pr-8 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
+            >
+              {CATEGORY_OPTIONS.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            <ChevronDownIcon size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
           {/* Date Filter */}
-          <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              Date Filter <ChevronDownIcon size={12} />
-            </button>
+          <div className="flex items-center gap-2">
+            <input 
+              type="date" 
+              value={startDate} 
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
+            <span className="text-xs font-bold text-slate-400">to</span>
+            <input 
+              type="date" 
+              value={endDate} 
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
+            />
           </div>
 
           {/* Toggle */}
@@ -128,6 +176,13 @@ export default function StockSummaryReport() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 w-full md:w-64 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500"
             />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
           </div>
 
           <button 

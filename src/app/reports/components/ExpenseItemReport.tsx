@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
+import { X,
   Printer as PrinterIcon,
   FileSpreadsheet as ExcelIcon,
   Calendar as CalendarIcon,
@@ -243,6 +243,13 @@ export default function CentralExpenseItemReport({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-4 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none w-64 text-xs font-bold text-slate-700 dark:text-slate-200 focus:border-red-500"
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
 
           <button

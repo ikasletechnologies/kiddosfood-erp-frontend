@@ -68,7 +68,8 @@ function makeItem(): LineItem { return { id: Math.random().toString(36).slice(2)
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function fmtDate(d: string) {
   if (!d) return "—";
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const datePart = d.split("T")[0];
+  return new Date(datePart + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -488,6 +489,13 @@ export default function ExpensesPage() {
               placeholder="Search category, payee..."
               className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 outline-none w-52 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <button onClick={fetchData} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-orange-500 hover:border-orange-300 bg-white transition-colors" title="Refresh">
             <RefreshCw size={15} />

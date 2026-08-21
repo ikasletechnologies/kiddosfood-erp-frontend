@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
+import { X,
   ChevronDown as ChevronDownIcon,
   ChevronRight as ChevronRightIcon,
   Download as DownloadIcon,
@@ -1541,6 +1541,13 @@ export default function CentralReports() {
               onChange={(e) => setSidebarSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500 transition-colors"
             />
+            {sidebarSearchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSidebarSearchTerm("")} 
+              />
+            )}
           </div>
         </div>
 
@@ -1617,6 +1624,13 @@ export default function CentralReports() {
               onChange={(e) => setTableSearchTerm(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500 transition-colors"
             />
+            {tableSearchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setTableSearchTerm("")} 
+              />
+            )}
           </div>
           <div className="flex items-center gap-2.5">
             <button
@@ -1636,9 +1650,6 @@ export default function CentralReports() {
               className="p-2 rounded-lg text-white bg-orange-500 hover:bg-orange-600 transition-colors shadow-sm"
             >
               <PlusIcon size={14} className="stroke-[2.5]" />
-            </button>
-            <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-              <MoreVerticalIcon size={14} />
             </button>
           </div>
         </div>
@@ -1664,7 +1675,8 @@ export default function CentralReports() {
           </div>
 
           {/* Filter Bar */}
-          <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs">
+          {selectedReport !== "Stock summary" && (
+            <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs">
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Filter by:</span>
               <div className="relative">
@@ -1707,13 +1719,6 @@ export default function CentralReports() {
               </div>
             )}
 
-            <div className="relative">
-              <select className="appearance-none pl-3 pr-8 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-orange-500">
-                <option>All Firms</option>
-              </select>
-              <ChevronDownIcon size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
-
             {loading && (
               <div className="flex items-center gap-1.5 text-slate-400">
                 <LoaderIcon size={12} className="animate-spin" />
@@ -1721,6 +1726,7 @@ export default function CentralReports() {
               </div>
             )}
           </div>
+          )}
 
           {selectedReport === "Profit And Loss" ? (
             <CentralProfitLossReport 

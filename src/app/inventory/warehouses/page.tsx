@@ -123,6 +123,13 @@ export default function WarehousesPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
           
           <div className="flex items-center gap-2 p-1 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-white/5">

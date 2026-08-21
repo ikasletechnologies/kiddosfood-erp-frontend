@@ -1,11 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  ShieldAlert, Search, Package, Store, AlertTriangle,
+import { ShieldAlert, Search, Package, Store, AlertTriangle,
   CheckCircle2, XCircle, Truck, Clock, RefreshCw,
-  ChevronRight, MapPin, FileText, ArrowRight
-} from "lucide-react";
+  ChevronRight, MapPin, FileText, ArrowRight, X } from "lucide-react";
 import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { useToast } from "@/context/ToastContext";
@@ -133,6 +131,13 @@ export default function BatchRecallPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
           />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
         </div>
       </div>
 

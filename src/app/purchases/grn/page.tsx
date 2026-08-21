@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import {
+import { X,
   Package as PackageIcon,
   ChevronDown as ChevronDownIcon,
   CheckCircle2 as CheckCircle2Icon,
@@ -427,6 +427,13 @@ export default function GRNPage() {
                 onChange={e => setPoSearch(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220]"
               />
+            {poSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setPoSearch("")} 
+              />
+            )}
             </div>
 
             {loading ? (

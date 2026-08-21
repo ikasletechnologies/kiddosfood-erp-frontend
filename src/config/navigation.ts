@@ -230,7 +230,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       {
         icon: Truck,
         label: "Transit Stock",
-        href: "/delivery?status=IN_TRANSIT",
+        href: "/dispatch/transit-stock",
         roles: SUPER_ONLY,
       },
       {
@@ -346,13 +346,13 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       {
         icon: Landmark,
         label: "Receivables",
-        href: "/accounting/ledgers?type=receivables",
+        href: "/accounting/receivables",
         roles: SUPER_ONLY,
       },
       {
         icon: Landmark,
         label: "Payables",
-        href: "/accounting/ledgers?type=payables",
+        href: "/accounting/payables",
         roles: SUPER_ONLY,
       },
       {

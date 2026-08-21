@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { 
+import { X, 
   Plus, 
   Search, 
   Download,
@@ -136,6 +136,13 @@ export default function InventoryItemsPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-14 pr-6 py-4 bg-white dark:bg-card border-none rounded-3xl outline-none focus:ring-4 ring-orange-500/10 text-sm font-bold shadow-xl shadow-black/[0.02] transition-all"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
          </div>
       </div>
 

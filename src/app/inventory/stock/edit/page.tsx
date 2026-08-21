@@ -700,6 +700,13 @@ function EditItemForm() {
                             onChange={e => setHsnSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-orange-500 bg-slate-50 dark:bg-slate-800 dark:text-white font-semibold"
                           />
+            {hsnSearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setHsnSearchQuery("")} 
+              />
+            )}
                         </div>
                         <div className="max-h-64 overflow-y-auto space-y-1 divide-y divide-slate-50 dark:divide-white/5">
                           {loadingHsn ? (

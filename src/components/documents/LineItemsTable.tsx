@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Search, Package, IndianRupee, Zap, Info, AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
+import { X, Plus, Trash2, Search, Package, IndianRupee, Zap, Info, AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
 import { usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { rawMaterialsApi } from "@/lib/api";
 import { clsx } from "clsx";
@@ -163,6 +163,13 @@ export default function LineItemsTable() {
                             }}
                             onKeyDown={(e) => handleKeyDown(e, item.id)}
                           />
+            {activeSearchId === item.id ? searchQuery : item.name && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
                           {material && (
                             <div className="flex items-center gap-2 mt-1">
                                <div className={clsx(

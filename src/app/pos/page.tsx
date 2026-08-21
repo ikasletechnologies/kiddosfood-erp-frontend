@@ -429,6 +429,13 @@ export default function POSPage() {
                 onChange={e => setSearch(e.target.value)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800"
               />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
             </div>
             <button
               onClick={() => { setShowScanner(true); setScannedProduct(null); }}
@@ -581,6 +588,13 @@ export default function POSPage() {
                 onFocus={() => setShowPartyDrop(true)}
                 className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors text-gray-800"
               />
+            {partySearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setPartySearch("")} 
+              />
+            )}
               {showPartyDrop && partyResults.length > 0 && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                   {partyResults.map(p => (

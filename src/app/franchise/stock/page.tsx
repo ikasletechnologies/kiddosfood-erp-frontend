@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import {
+import { X,
   Package, RefreshCw, AlertTriangle, CheckCircle2,
   Clock, ShoppingCart, Filter, ArrowRight,
 } from "lucide-react";
@@ -135,6 +135,13 @@ export default function FranchiseStockPage() {
             placeholder="Search batch or product..."
             className="bg-transparent text-sm font-bold text-slate-700 dark:text-zinc-300 outline-none w-full"
           />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
         </div>
 
         <select

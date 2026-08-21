@@ -803,6 +803,13 @@ export default function SalesInvoicesPage() {
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                       />
+            {customerSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setCustomerSearch("")} 
+              />
+            )}
                       <ChevronDown size={13} className="text-gray-400 shrink-0" />
                     </div>
                     {showCustomerDrop && (
@@ -969,6 +976,13 @@ export default function SalesInvoicesPage() {
                               setItemDropRect({ top: rect.bottom, left: rect.left, width: 300 });
                             }}
                           />
+            {item.itemSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => updateItem(idx, "itemSearch", "")} 
+              />
+            )}
                           
                           {item.productId && (
                             <div className="text-[10px] text-gray-500 mt-1 leading-tight">
@@ -1406,6 +1420,13 @@ export default function SalesInvoicesPage() {
               placeholder="Search invoice or customer..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
 
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">

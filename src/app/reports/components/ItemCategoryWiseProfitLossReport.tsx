@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { 
+import { X, 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
   FolderIcon, InfoIcon
 } from "lucide-react";
@@ -50,6 +50,13 @@ export default function ItemCategoryWiseProfitLossReport() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 pr-4 py-2 w-full md:w-64 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500"
             />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
           </div>
 
           <button 

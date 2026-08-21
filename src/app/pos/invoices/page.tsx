@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
+import { X,
   Search as SearchIcon,
   Filter as FilterIcon,
   Calendar as CalendarIcon,
@@ -154,6 +154,13 @@ export default function InvoicesPage() {
                 onChange={e => setSearch(e.target.value)}
                 className="w-full pl-11 pr-4 py-3.5 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-orange-500 transition-all" 
               />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
            </div>
            <button onClick={fetchInvoices} className="p-3.5 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl text-slate-500 hover:text-orange-500 hover:bg-orange-50 transition-all shadow-sm">
              <HistoryIcon size={18} />

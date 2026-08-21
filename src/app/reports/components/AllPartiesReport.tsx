@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
+import { X,
   Printer as PrinterIcon,
   FileSpreadsheet as ExcelIcon,
   ChevronDown as ChevronDownIcon,
@@ -24,9 +24,11 @@ interface PartyRow {
 export default function CentralAllPartiesReport({
   reportData,
   loading: externalLoading,
+  filterType,
 }: {
   reportData: any;
   loading: boolean;
+  filterType?: "receivables" | "payables";
 }) {
   const [dateFilter, setDateFilter] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,9 +73,19 @@ export default function CentralAllPartiesReport({
 
   const fmt = (val: number | null) => val !== null ? `₹ ${val.toFixed(2)}` : "—";
 
-  const filtered = rows.filter((r) =>
+  let filtered = rows.filter((r) =>
     r.partyName.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  if (filterType === "receivables") {
+    filtered = filtered
+      .map(r => ({ ...r, payableBalance: null }))
+      .filter(r => r.receivableBalance !== null && r.receivableBalance > 0);
+  } else if (filterType === "payables") {
+    filtered = filtered
+      .map(r => ({ ...r, receivableBalance: null }))
+      .filter(r => r.payableBalance !== null && r.payableBalance > 0);
+  }
 
   const toggleAll = () => {
     if (selectedIds.length === filtered.length) {
@@ -140,6 +152,13 @@ export default function CentralAllPartiesReport({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-white dark:bg-[#090a0f] border border-slate-200 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
         </div>
 

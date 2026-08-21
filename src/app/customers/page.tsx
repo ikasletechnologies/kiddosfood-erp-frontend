@@ -382,6 +382,13 @@ export default function PartiesPage() {
                     onChange={(e) => setTransactionSearchQuery(e.target.value)}
                     onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
                   />
+            {transactionSearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setTransactionSearchQuery("")} 
+              />
+            )}
                 </div>
               ) : (
                 <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 transition-colors"><Search size={16} /></button>

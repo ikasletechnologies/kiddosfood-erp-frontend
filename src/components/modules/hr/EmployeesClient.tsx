@@ -1,13 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
+import { X, 
   Plus, Search, User, Calendar, Building2, RefreshCw, Star, 
   Briefcase, IndianRupee, Trash2, Edit2, MapPin, Landmark,
   ChevronRight, ChevronLeft, CheckCircle2, Upload, FileText,
   CreditCard, Smartphone, ShieldCheck, Heart, UserPlus,
-  Clock, Lock, Users,
-  X
+  Clock, Lock, Users
 } from "lucide-react";
 import Link from "next/link";
 import api from "@/lib/api";
@@ -330,6 +329,13 @@ export default function EmployeesClient() {
             placeholder="Search by name, code..." 
             className="w-full pl-9 pr-4 py-3 text-sm bg-white dark:bg-card border border-gray-200 rounded-xl outline-none focus:ring-4 ring-orange-500/5 transition-all" 
           />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
         </div>
         <select 
           value={departmentFilter} 

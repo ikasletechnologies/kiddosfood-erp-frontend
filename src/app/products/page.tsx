@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
+import { X,
   Package, Plus, Search, IndianRupee,
   RefreshCw, Edit2, Trash2, CheckCircle2,
 } from "lucide-react";
@@ -94,6 +94,13 @@ export default function ProductsPage() {
           placeholder="Quick search by name, category, or SKU..."
           className="w-full pl-14 pr-6 py-5 bg-slate-50/50 border-none rounded-2xl font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-4 focus:ring-slate-100 outline-none transition-all"
         />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
       </div>
 
       {/* Elegant Grid */}

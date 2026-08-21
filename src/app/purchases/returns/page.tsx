@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
+import { X, 
   Package as PackageIcon, 
   Plus as PlusIcon, 
   Search as SearchIcon, 
@@ -134,6 +134,13 @@ export default function PurchaseReturnsPage() {
               placeholder="Search returns..."
               className="w-full pl-12 pr-6 py-3.5 bg-white dark:bg-[#12141c] border border-gray-100 dark:border-white/5 rounded-2xl text-sm font-bold shadow-xl shadow-black/[0.02] outline-none focus:ring-2 ring-orange-500/10 focus:border-orange-500 transition-all"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <select
             value={statusFilter}

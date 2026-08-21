@@ -137,6 +137,13 @@ export default function ChequeSettlePage() {
               <input type="text" placeholder="Cheque #, Bank, Name..."
                 value={search} onChange={e => setSearch(e.target.value)}
                 className="w-full pl-4 pr-4 py-3.5 bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/10 rounded-2xl text-xs font-bold text-slate-900 placeholder:text-slate-400 outline-none focus:border-violet-500 transition-all" />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
             </div>
           </div>
 

@@ -326,6 +326,13 @@ export default function DebitNotesPage() {
                       placeholder="Search or select vendor..."
                       className="flex-1 text-sm text-gray-800 outline-none bg-transparent placeholder-gray-400"
                     />
+            {showVendorDrop ? vendorSearch : (selectedVendor?.name || "") && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setVendorSearch("")} 
+              />
+            )}
                     {selectedVendor && (
                       <button onClick={e => { e.stopPropagation(); setSelectedVendor(null); setVendorSearch(""); }} className="text-gray-300 hover:text-gray-500">
                         <X size={13} />
@@ -733,6 +740,13 @@ export default function DebitNotesPage() {
               placeholder="Search vendor, ref no..."
               className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 outline-none w-52 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <button onClick={fetchData} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-orange-500 hover:border-orange-300 bg-white transition-colors" title="Refresh">
             <RefreshCw size={15} />

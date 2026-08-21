@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
+import { X,
   Building2,
   Search,
   ArrowDownRight,
@@ -190,6 +190,13 @@ export default function BranchLedgerPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-white border border-slate-100 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-300 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-50 transition-all"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
         </div>
 
