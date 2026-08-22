@@ -209,6 +209,13 @@ export default function CRMLeadsClient() {
                   placeholder="Search Leads"
                   className="w-full pl-4 pr-10 py-2 bg-white dark:bg-slate-900 border border-[#F0EAF0] dark:border-slate-800 rounded-lg text-[13px] font-medium outline-none focus:border-[#7C3AED] transition-all"
                 />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-[#999]">
                   <Search size={14} />
                 </div>

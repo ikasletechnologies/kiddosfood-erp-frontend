@@ -784,6 +784,13 @@ export default function VendorsClient() {
               placeholder="Search Vendor Name"
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-700"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
 
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
@@ -1225,6 +1232,13 @@ export default function VendorsClient() {
                           value={ledgerSearchQuery}
                           onChange={e => setLedgerSearchQuery(e.target.value)}
                         />
+            {ledgerSearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setLedgerSearchQuery("")} 
+              />
+            )}
                       </div>
 
                       {/* Transaction Type */}

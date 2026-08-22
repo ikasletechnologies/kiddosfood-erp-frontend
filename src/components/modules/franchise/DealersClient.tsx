@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
+import { X, 
   Users, 
   Plus, 
   Search, 
@@ -158,6 +158,13 @@ export default function DealersClient() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-semibold"
           />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
         </div>
 
         {/* Franchise Dropdown for Super Admin */}

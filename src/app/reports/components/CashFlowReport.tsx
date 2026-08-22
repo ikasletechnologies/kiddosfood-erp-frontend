@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search as SearchIcon } from "lucide-react";
+import { X, Search as SearchIcon } from "lucide-react";
 
 interface ReportData {
   kpiValue: string;
@@ -88,6 +88,13 @@ export default function CentralCashFlowReport({
               onChange={(e) => setFilterQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500"
             />
+            {filterQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setFilterQuery("")} 
+              />
+            )}
           </div>
         </div>
 

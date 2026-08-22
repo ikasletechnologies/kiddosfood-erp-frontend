@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
+import { X,
   Plus,
   Pencil,
   Trash2,
@@ -477,6 +477,13 @@ export default function RecipeMasterTab() {
               placeholder="Search recipes..."
               className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <button
             onClick={fetchAll}

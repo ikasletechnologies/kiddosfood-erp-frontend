@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import {
+import { X,
   Package, Search, CheckCircle2, Box, Layers,
   Barcode, ArrowRight, Printer, Plus
 } from "lucide-react";
@@ -149,6 +149,13 @@ export default function CartonPackingPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-3 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-bold text-slate-700 dark:text-slate-300 outline-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 transition-all"
           />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
         </div>
       </div>
 

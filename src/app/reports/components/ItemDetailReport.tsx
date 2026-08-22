@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
+import { X, 
   FileTextIcon, PrinterIcon, AlertCircleIcon, SearchIcon
 } from "lucide-react";
 
@@ -126,6 +126,13 @@ export default function ItemDetailReport() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-3 pr-4 py-1.5 w-full md:w-48 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-orange-500"
                 />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
               </div>
             </div>
             

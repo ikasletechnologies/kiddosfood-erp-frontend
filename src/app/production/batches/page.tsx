@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useEffect, useCallback, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import {
   PackageCheck, RefreshCw, AlertTriangle,
   CheckCircle2, Clock, Filter, Package, Building2
@@ -203,6 +203,13 @@ function ProductBatchesRegistry() {
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-3 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
               />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
             </div>
 
             {/* Product Filter */}

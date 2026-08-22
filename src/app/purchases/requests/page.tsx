@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Search, FileText, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle2, XCircle, X } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
 
@@ -84,6 +84,13 @@ export default function PurchaseRequestsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests..." className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm" />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
         </div>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option value="">All Status</option>

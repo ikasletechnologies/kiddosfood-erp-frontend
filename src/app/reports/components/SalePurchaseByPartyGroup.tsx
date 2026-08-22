@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
+import { X,
   Printer as PrinterIcon,
   FileSpreadsheet as ExcelIcon,
   ChevronDown as ChevronDownIcon,
@@ -130,6 +130,13 @@ export default function CentralSalePurchaseByPartyGroup({
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-1.5 bg-white dark:bg-[#090a0f] border border-slate-200 dark:border-slate-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
         </div>
 

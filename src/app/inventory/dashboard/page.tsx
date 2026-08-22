@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowLeft, Package, AlertTriangle, TrendingUp, TrendingDown,
-  RefreshCw, Search, Loader2, BarChart3, ArrowUpRight, ArrowDownRight
-} from "lucide-react";
+import { ArrowLeft, Package, AlertTriangle, TrendingUp, TrendingDown,
+  RefreshCw, Search, Loader2, BarChart3, ArrowUpRight, ArrowDownRight, X } from "lucide-react";
 import { inventoryApi, rawMaterialsApi } from "@/lib/api";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -226,6 +224,13 @@ export default function InventoryDashboardPage() {
                   placeholder="Search items..."
                   className="w-full pl-9 pr-4 py-2.5 bg-white border border-[#F0EAF0] rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 focus:border-[#7C3AED]"
                 />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
               </div>
               <div className="flex gap-2">
                 <select

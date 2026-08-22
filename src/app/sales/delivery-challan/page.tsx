@@ -9,7 +9,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi, franchiseApi, salesApi } from "@/lib/api";
+import { customersApi, productsFullApi, franchiseApi, salesApi, productionApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber } from "@/lib/utils";
 
@@ -123,6 +123,7 @@ export default function DeliveryChallanPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
 
   // List filter state
   const [dateFilter, setDateFilter] = useState("THIS_MONTH");
@@ -239,9 +240,18 @@ export default function DeliveryChallanPage() {
       });
 
       setChallans(mappedChallans);
-      if (cRes.status === "fulfilled") setCustomers((cRes.value as any).data || []);
-      if (pRes.status === "fulfilled") setProducts((pRes.value as any).data || []);
-      if (fRes.status === "fulfilled") setFranchises((fRes.value as any).data || []);
+      if (cRes.status === "fulfilled") {
+        const d = (cRes.value as any).data;
+        setCustomers(Array.isArray(d) ? d : d?.data || []);
+      }
+      if (pRes.status === "fulfilled") {
+        const d = (pRes.value as any).data;
+        setProducts(Array.isArray(d) ? d : d?.data || []);
+      }
+      if (fRes.status === "fulfilled") {
+        const d = (fRes.value as any).data;
+        setFranchises(Array.isArray(d) ? d : d?.data || []);
+      }
     } finally {
       setLoading(false);
     }
@@ -694,6 +704,13 @@ export default function DeliveryChallanPage() {
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                       />
+            {customerSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setCustomerSearch("")} 
+              />
+            )}
                       <ChevronDown size={13} className="text-gray-400 shrink-0" />
                     </div>
                     {showCustomerDrop && (
@@ -790,6 +807,13 @@ export default function DeliveryChallanPage() {
                         <td className="px-4 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
                         <td className="px-4 py-2 relative">
                           <input value={it.itemSearch} onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }} onFocus={() => setOpenItemDrop(it.id)} placeholder="Search product..." className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400" />
+            {it.itemSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setOpenItemDrop("")} 
+              />
+            )}
                           {isItemDropOpen && (
                             <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
                               {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
@@ -804,8 +828,25 @@ export default function DeliveryChallanPage() {
                           )}
                           <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 outline-none bg-transparent mt-1 focus:text-gray-600" />
                         </td>
-                        <td className="px-3 py-2.5"><input value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} placeholder="Batch..." className="w-full text-sm outline-none bg-transparent text-gray-700" /></td>
-                        <td className="px-3 py-2.5"><input type="number" min={1} value={it.qty} onChange={e => updateItem(idx, "qty", Number(e.target.value) || 0)} className="w-full text-sm text-center outline-none bg-transparent text-gray-700" /></td>
+                        <td className="px-3 py-2.5">
+<select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 cursor-pointer">
+<option value="">Select...</option>
+{batches.filter(b => b.productId === it.productId && b.franchiseId === sourceFranchiseId && b.quantity > 0).map(b => (
+<option key={b.id} value={b.batchCode || b.id}>{b.batchCode || 'No Code'} ({b.quantity} available)</option>
+))}
+</select>
+</td>
+                        <td className="px-3 py-2.5">
+<input type="number" min={0} value={it.qty} onChange={e => {
+  const val = Number(e.target.value) || 0;
+  const batch = batches.find(b => b.batchCode === it.batchNumber || b.id === it.batchNumber);
+  if (batch && val > batch.quantity) {
+    updateItem(idx, "qty", batch.quantity);
+  } else {
+    updateItem(idx, "qty", val);
+  }
+}} className="w-full text-sm text-center outline-none bg-transparent text-gray-700" />
+</td>
                         <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}</select></td>
                         <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-sm text-right outline-none bg-transparent text-gray-700" placeholder="0.00" /></td>
                         <td className="px-3 py-2.5">
@@ -914,6 +955,13 @@ export default function DeliveryChallanPage() {
               placeholder="Search challan or party..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <select
             value={dateFilter}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Clock, LogIn, LogOut, Search } from "lucide-react";
+import { X, Clock, LogIn, LogOut, Search } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
 
@@ -84,6 +84,13 @@ export default function AttendancePage() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm"
           />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
         </div>
       </div>
 

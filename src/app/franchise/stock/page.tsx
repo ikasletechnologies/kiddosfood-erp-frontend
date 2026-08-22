@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import {
+import { X,
   Package, RefreshCw, AlertTriangle, CheckCircle2,
   Clock, ShoppingCart, Filter, ArrowRight, Send,
   Plus, Search, Building2, Check, X, ShieldCheck,
@@ -275,11 +275,6 @@ export default function FranchiseStockPage() {
             placeholder="Search by product name, SKU, or category..."
             className="bg-transparent text-xs font-bold text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-gray-400"
           />
-          {searchTerm && (
-            <button onClick={() => setSearchTerm("")} className="text-gray-400 hover:text-gray-600">
-              <X size={14} />
-            </button>
-          )}
         </div>
 
         {viewTab === "BATCHES" && (

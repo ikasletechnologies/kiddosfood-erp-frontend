@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Landmark,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { SlideOver } from '@/components/ui/SlideOver';
 import clsx from 'clsx';
@@ -197,9 +198,6 @@ export default function AccountsPage() {
                   <div>
                     <p className="text-[10px] text-gray-400 mb-0.5">System Balance</p>
                     <p className="text-lg font-bold text-gray-800">₹{acc.balance.toLocaleString()}</p>
-                  </div>
-                  <div className="w-8 h-8 bg-gray-50 rounded-full flex items-center justify-center text-gray-400 group-hover:text-[#f58220] transition-colors">
-                    <ChevronRight size={16} />
                   </div>
                 </div>
               </div>

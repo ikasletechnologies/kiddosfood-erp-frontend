@@ -330,6 +330,13 @@ export default function PaymentsPage() {
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-14 pr-6 py-4 bg-slate-50/50 border-none rounded-2xl font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-4 focus:ring-slate-100 outline-none transition-all" 
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
         </div>
 

@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import {
-  FileText, Search, RefreshCw, Calendar, 
+import { FileText, Search, RefreshCw, Calendar, 
   ChevronRight, ArrowUpRight, Filter, ShoppingBag,
   Clock, CheckCircle2, XCircle, Printer, Plus,
   ChevronDown, Trash2, ArrowLeft, FileSpreadsheet,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
-  AlertTriangle
-} from "lucide-react";
+  AlertTriangle, X } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, productsFullApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -595,6 +593,13 @@ export default function SalesOrdersPage() {
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                       onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                     />
+            {customerSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setCustomerSearch("")} 
+              />
+            )}
                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                   </div>
                   {showCustomerDrop && (
@@ -711,6 +716,13 @@ export default function SalesOrdersPage() {
                           placeholder="Search item..."
                           className="w-full px-3 py-1.5 border border-gray-200 rounded-md text-sm outline-none focus:border-orange-400"
                         />
+            {it.itemSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setOpenItemDrop("")} 
+              />
+            )}
                         {isItemDropOpen && (
                           <div className="absolute left-4 right-4 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
                             {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
@@ -1027,6 +1039,13 @@ export default function SalesOrdersPage() {
               placeholder="Search order or party..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-white"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <select
             value={dateFilter}

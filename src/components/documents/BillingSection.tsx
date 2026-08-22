@@ -170,6 +170,13 @@ export default function BillingSection({
                   }}
                   onFocus={() => setShowSearch(true)}
                 />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
               </div>
 
               {showSearch && (

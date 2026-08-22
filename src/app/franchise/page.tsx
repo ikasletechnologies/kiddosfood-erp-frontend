@@ -370,6 +370,13 @@ export default function FranchisePage() {
           placeholder="Filter by branch name, location, or owner..."
           className="w-full pl-12 pr-6 py-4 text-sm bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-2xl focus:outline-none focus:ring-4 focus:ring-orange-500/10 focus:border-orange-500 transition-all shadow-sm font-medium text-slate-900 dark:text-white placeholder:text-slate-400" 
         />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
       </div>
 
       {/* Franchise Grid */}

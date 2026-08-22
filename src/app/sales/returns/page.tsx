@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { 
-  Plus, Search, RefreshCw, ArrowLeft, Trash2, 
+import { Plus, Search, RefreshCw, ArrowLeft, Trash2, 
   User, Building2, AlertTriangle, Receipt, Undo2, 
   ChevronRight, Printer, FileSpreadsheet, Check, 
-  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, MoreVertical
-} from "lucide-react";
+  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, MoreVertical, X } from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
@@ -115,8 +113,18 @@ export default function SalesReturnsPage() {
         const res = await franchiseApi.getAll();
         setEntities(res.data || []);
       } else {
-        const res = await customersApi.getAll();
-        setEntities(res.data?.data || res.data || []);
+        const [custRes, dealerRes] = await Promise.all([
+          customersApi.getAll(),
+          api.get("/api/dealers").catch(() => ({ data: [] }))
+        ]);
+        const customers = custRes.data?.data || custRes.data || [];
+        const dealers = dealerRes.data?.data || dealerRes.data || [];
+        
+        // Merge and deduplicate by ID just in case
+        const merged = [...customers, ...dealers];
+        const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
+        
+        setEntities(unique);
       }
     } catch (err) {
       showToast("Error loading source lists", "error");
@@ -771,6 +779,13 @@ export default function SalesReturnsPage() {
               placeholder="Search return or party..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
             {(['ALL', 'PARTNER', 'FRANCHISE'] as const).map(tab => (
