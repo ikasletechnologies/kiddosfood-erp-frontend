@@ -22,7 +22,7 @@ export default function FinishedGoodsStockClient() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [demandFilter, setDemandFilter] = useState<"ALL" | "HAS_DEMAND" | "RESERVED" | "IN_TRANSIT">("ALL");
-  const [viewMode, setViewMode] = useState<"GRID" | "TABLE">("GRID");
+  const [viewMode, setViewMode] = useState<"GRID" | "TABLE">("TABLE");
 
   // Drawer States
   const [selectedDemandProduct, setSelectedDemandProduct] = useState<InventoryDemandItem | null>(null);
@@ -297,22 +297,22 @@ export default function FinishedGoodsStockClient() {
       </div>
 
       {/* ── Toolbar: Search, Filters & View Toggle ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-card p-5 rounded-[2rem] border border-slate-100 dark:border-white/5 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#0A0D14] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
         {/* Search */}
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-transparent w-full md:w-80">
+        <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg w-full md:w-80 shadow-sm">
           <Search size={16} className="text-slate-400" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by Product Name or SKU..."
-            className="bg-transparent text-xs font-bold text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-slate-400"
+            className="bg-transparent text-xs font-medium text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-slate-400"
           />
         </div>
 
         {/* Demand Filter Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-2xl border border-slate-100 dark:border-transparent">
+          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
             {[
               { id: "ALL", label: "All Finished Goods" },
               { id: "HAS_DEMAND", label: "Has Pending Demand" },
@@ -323,10 +323,10 @@ export default function FinishedGoodsStockClient() {
                 key={f.id}
                 onClick={() => setDemandFilter(f.id as any)}
                 className={clsx(
-                  "px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
+                  "px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all",
                   demandFilter === f.id
                     ? "bg-white dark:bg-card text-orange-500 shadow-sm"
-                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                    : "text-slate-450 hover:text-slate-805 dark:hover:text-slate-200"
                 )}
               >
                 {f.label}
@@ -335,12 +335,12 @@ export default function FinishedGoodsStockClient() {
           </div>
 
           {/* View Mode Switcher */}
-          <div className="flex bg-slate-50 dark:bg-white/5 p-1 rounded-2xl border border-slate-100 dark:border-transparent">
+          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
             <button
               onClick={() => setViewMode("GRID")}
               className={clsx(
-                "p-2 rounded-xl text-slate-400 transition-all",
-                viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-600"
+                "p-2 rounded-md text-slate-400 transition-all",
+                viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
               )}
               title="Grid Cards View"
             >
@@ -349,8 +349,8 @@ export default function FinishedGoodsStockClient() {
             <button
               onClick={() => setViewMode("TABLE")}
               className={clsx(
-                "p-2 rounded-xl text-slate-400 transition-all",
-                viewMode === "TABLE" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-600"
+                "p-2 rounded-md text-slate-400 transition-all",
+                viewMode === "TABLE" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
               )}
               title="Dense Ledger Table View"
             >
@@ -361,7 +361,7 @@ export default function FinishedGoodsStockClient() {
           {/* Refresh Button */}
           <button
             onClick={fetchDemandData}
-            className="p-2.5 rounded-2xl border border-slate-100 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-400 hover:text-orange-500 transition-colors"
+            className="p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-gray-400 hover:text-orange-500 transition-colors"
             title="Refresh Data"
           >
             <RefreshCw size={16} className={clsx(loading && "animate-spin text-orange-500")} />
@@ -393,7 +393,7 @@ export default function FinishedGoodsStockClient() {
                 return (
                   <div
                     key={item.productId}
-                    className="bg-white dark:bg-card border border-slate-100 dark:border-white/5 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5"
+                    className="bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
                   >
                     <div>
                       {/* Card Header */}
@@ -408,7 +408,7 @@ export default function FinishedGoodsStockClient() {
 
                       {/* Product Name & SKU */}
                       <div>
-                        <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight">
+                        <h3 className="text-base font-bold text-slate-905 dark:text-white leading-tight">
                           {item.productName}
                         </h3>
                         <p className="text-xs font-mono text-slate-400 mt-1 uppercase tracking-wider">
@@ -426,23 +426,23 @@ export default function FinishedGoodsStockClient() {
                         </div>
 
                         <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                          <div className="p-2.5 bg-slate-50 dark:bg-white/5 rounded-2xl">
-                            <p className="text-[8px] font-black text-slate-400 uppercase">HQ Available</p>
-                            <p className="text-sm font-black text-slate-900 dark:text-white mt-0.5">
+                          <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                            <p className="text-[9px] font-semibold text-slate-500 uppercase">HQ Available</p>
+                            <p className="text-sm font-bold text-slate-800 dark:text-white mt-0.5">
                               {item.hqAvailableStock}
                             </p>
                           </div>
 
-                          <div className="p-2.5 bg-purple-50 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
-                            <p className="text-[8px] font-black text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
-                            <p className="text-sm font-black text-purple-600 dark:text-purple-400 mt-0.5">
+                          <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900/30">
+                            <p className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
+                            <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                               {item.hqReservedStock}
                             </p>
                           </div>
 
-                          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
-                            <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase">In-Transit</p>
-                            <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+                          <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
+                            <p className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase">In-Transit</p>
+                            <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
                               {item.inTransitStock}
                             </p>
                           </div>
@@ -462,8 +462,8 @@ export default function FinishedGoodsStockClient() {
 
                         {/* Active Request Details Preview */}
                         {firstPendingRecord ? (
-                          <div className="p-3.5 bg-slate-50/80 dark:bg-white/[0.02] rounded-2xl border border-slate-100 dark:border-white/5 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between font-black text-slate-900 dark:text-white">
+                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-white">
                               <span>{firstPendingRecord.referenceNumber}</span>
                               <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-md">
                                 {firstPendingRecord.status}
@@ -490,14 +490,14 @@ export default function FinishedGoodsStockClient() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => setSelectedDemandProduct(item)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-2xl shadow-md shadow-orange-500/20 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors"
                         >
                           <Send size={14} /> Review Request ({item.demandRecords.length})
                         </button>
 
                         <button
                           onClick={() => setSelectedBranchProduct(item)}
-                          className="px-3.5 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-2xl text-xs font-bold transition-colors"
+                          className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
                           title="View Multi-Branch Stock Holdings"
                         >
                           <Building2 size={15} />
@@ -514,29 +514,29 @@ export default function FinishedGoodsStockClient() {
 
       {/* ── View 2: Dense Ledger Table View ── */}
       {viewMode === "TABLE" && (
-        <div className="bg-white dark:bg-card border border-slate-200 dark:border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left table-fixed">
-              <thead className="bg-slate-50/50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5 text-slate-400 text-[9px] font-black uppercase tracking-widest">
+              <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="w-[26%] px-8 py-4">Finished Product Specification</th>
+                  <th className="w-[26%] px-6 py-4">Finished Product Specification</th>
                   <th className="w-[14%] px-6 py-4 text-center">HQ Available</th>
                   <th className="w-[14%] px-6 py-4 text-center">HQ Reserved</th>
                   <th className="w-[14%] px-6 py-4 text-center">In-Transit</th>
                   <th className="w-[16%] px-6 py-4 text-center">Branch Holdings</th>
-                  <th className="w-[16%] px-8 py-4 text-right">Franchise Demand</th>
+                  <th className="w-[16%] px-6 py-4 text-right">Franchise Demand</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 dark:divide-white/5 text-xs">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
                 {filtered.map((item) => (
                   <tr key={item.productId} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
-                    <td className="px-8 py-4">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-black text-xs shrink-0">
-                          <Package size={18} />
+                        <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold text-xs shrink-0">
+                          <Package size={16} />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-black text-slate-900 dark:text-white uppercase truncate">
+                          <p className="font-semibold text-slate-800 dark:text-white uppercase truncate">
                             {item.productName}
                           </p>
                           <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
@@ -546,40 +546,40 @@ export default function FinishedGoodsStockClient() {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-center font-black text-slate-900 dark:text-white">
-                      {item.hqAvailableStock} <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
+                    <td className="px-6 py-4 text-center font-bold text-slate-800 dark:text-white">
+                      {item.hqAvailableStock} <span className="text-[10px] text-slate-450 font-normal">{item.unit}</span>
                     </td>
 
-                    <td className="px-6 py-4 text-center font-black text-purple-600 dark:text-purple-400">
+                    <td className="px-6 py-4 text-center font-bold text-purple-650 dark:text-purple-400">
                       {item.hqReservedStock} <span className="text-[10px] font-normal">{item.unit}</span>
                     </td>
 
-                    <td className="px-6 py-4 text-center font-black text-indigo-600 dark:text-indigo-400">
+                    <td className="px-6 py-4 text-center font-bold text-indigo-650 dark:text-indigo-400">
                       {item.inTransitStock} <span className="text-[10px] font-normal">{item.unit}</span>
                     </td>
 
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => setSelectedBranchProduct(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 rounded-xl text-slate-700 dark:text-slate-300 font-black text-xs transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-55 dark:bg-white/5 hover:bg-slate-100 rounded-lg text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
                       >
                         <Building2 size={13} className="text-slate-400" />
                         {item.totalFranchiseAvailableStock} {item.unit}
                       </button>
                     </td>
 
-                    <td className="px-8 py-4 text-right">
+                    <td className="px-6 py-4 text-right">
                       {item.pendingDemandQuantity > 0 ? (
                         <button
                           onClick={() => setSelectedDemandProduct(item)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-600 border border-amber-200 dark:border-amber-800/40 rounded-xl text-xs font-black transition-all shadow-sm"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-600 border border-amber-200 dark:border-amber-800/40 rounded-lg text-xs font-semibold transition-all shadow-sm"
                         >
                           <Send size={13} /> {item.pendingDemandQuantity} {item.unit} ({item.pendingRequestCount})
                         </button>
                       ) : (
                         <button
                           onClick={() => setSelectedDemandProduct(item)}
-                          className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                          className="text-xs font-semibold text-slate-400 hover:text-slate-650"
                         >
                           View Demand ({item.demandRecords.length})
                         </button>

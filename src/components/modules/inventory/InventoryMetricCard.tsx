@@ -74,34 +74,33 @@ export default function InventoryMetricCard({
     <div
       onClick={onClick}
       className={clsx(
-        "rounded-3xl border p-5 shadow-sm transition-all relative overflow-hidden",
-        theme.bg,
+        "rounded-xl border p-5 shadow-sm transition-all relative overflow-hidden bg-white dark:bg-[#0B0D14]",
         theme.border,
         onClick && "cursor-pointer hover:shadow-md hover:scale-[1.01] active:scale-[0.99]"
       )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             {label}
           </p>
-          <p className={clsx("text-2xl font-black tracking-tight", theme.text)}>
+          <p className={clsx("text-2xl font-bold tracking-tight", theme.text)}>
             {value}
           </p>
           {subtext && (
-            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <p className="text-xs font-medium text-slate-400">
               {subtext}
             </p>
           )}
         </div>
 
-        <div className={clsx("w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm", theme.iconBg)}>
-          <Icon size={22} />
+        <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm", theme.iconBg)}>
+          <Icon size={20} />
         </div>
       </div>
 
       {badge && (
-        <span className="inline-block mt-3 px-2.5 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300">
+        <span className="inline-block mt-3 px-2.5 py-0.5 rounded-lg text-[9px] font-semibold uppercase tracking-wider bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300">
           {badge}
         </span>
       )}
