@@ -42,6 +42,7 @@ interface PO {
   totalAmount: number;
   createdAt: string;
   poItems: POItem[];
+  warehouseId?: string;
 }
 
 interface GRNItem {
@@ -135,6 +136,7 @@ export default function GRNPage() {
   const [scannedPO, setScannedPO] = useState<PO | null>(null);
   const [isScanProcessing, setIsScanProcessing] = useState(false);
   const [scanInput, setScanInput] = useState("");
+  const [viewingGRNDetails, setViewingGRNDetails] = useState<any>(null);
 
   // Fetch Pending POs or History based on view
   useEffect(() => {
@@ -157,7 +159,21 @@ export default function GRNPage() {
       }).finally(() => setLoading(false));
     } else {
       grnApi.getAll().then(r => {
-        setHistory(r.data || []);
+        const list = r.data || [];
+        setHistory(list);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const grnId = urlParams.get('grnId');
+        if (grnId) {
+          const matched = list.find((g: any) => g.id === grnId);
+          if (matched) {
+            setViewingGRNDetails(matched);
+          } else {
+            grnApi.getById(grnId).then(res => {
+              if (res.data) setViewingGRNDetails(res.data);
+            }).catch(console.error);
+          }
+        }
       }).finally(() => setLoading(false));
     }
   }, [view]);
@@ -176,7 +192,7 @@ export default function GRNPage() {
         mfgDate: "",
         expDate: "",
         lotNumber: "",
-        warehouseId: defaultWarehouseId || "",
+        warehouseId: po.warehouseId || defaultWarehouseId || "",
         inventoryItem: item.inventoryItem,
       }))
     );
@@ -186,15 +202,16 @@ export default function GRNPage() {
   const updateItem = (idx: number, field: keyof GRNItem, val: number) => {
     setGrnItems(prev => {
       const next = [...prev];
-      const currentItem = { ...next[idx], [field]: val };
+      const currentItem = { ...next[idx] };
+      const parsedVal = Math.max(0, val);
 
-      // Calculate Accepted = Received - Rejected
-      if (field === "receivedQty" || field === "rejectedQty") {
-        const received = field === "receivedQty" ? val : currentItem.receivedQty;
-        const rejected = field === "rejectedQty" ? val : currentItem.rejectedQty;
-        currentItem.acceptedQty = Math.max(0, received - rejected);
+      if (field === "receivedQty") {
+        currentItem.receivedQty = Math.min(currentItem.quantity, parsedVal);
+      } else if (field === "rejectedQty") {
+        currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
       }
 
+      currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
       next[idx] = currentItem;
       return next;
     });
@@ -416,7 +433,13 @@ export default function GRNPage() {
                         {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 ml-1">+{grn.items.length - 2}</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex justify-end gap-2">
+                      <button
+                        onClick={() => setViewingGRNDetails(grn)}
+                        className="px-2.5 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded text-xs font-bold hover:bg-gray-200 transition-colors"
+                      >
+                        View Details
+                      </button>
                       <button
                         onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
                         className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors"
@@ -887,9 +910,113 @@ export default function GRNPage() {
               </button>
             </div>
           )}
-
         </div>
       </div>
+      )}
+
+      {viewingGRNDetails && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-end bg-black/60 backdrop-blur-sm">
+          <div className="absolute inset-0" onClick={() => setViewingGRNDetails(null)} />
+          <div className="bg-white dark:bg-[#0f1117] w-full max-w-3xl h-full shadow-2xl relative flex flex-col animate-in slide-in-from-right duration-500">
+            {/* Header */}
+            <div className="p-8 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 shadow-lg shadow-orange-500/10">
+                  <ClipboardCheckIcon size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                    {formatERPNumber("GRN", viewingGRNDetails.id, viewingGRNDetails.createdAt)}
+                  </h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                    PO Reference: {viewingGRNDetails.procurementOrder ? formatERPNumber("PO", viewingGRNDetails.procurementOrder.poNumber || viewingGRNDetails.procurementOrder.id, viewingGRNDetails.procurementOrder.createdAt) : 'N/A'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setViewingGRNDetails(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">{viewingGRNDetails.procurementOrder?.vendor?.name || "—"}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received Date</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">
+                    {new Date(viewingGRNDetails.receivedAt || viewingGRNDetails.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                    {viewingGRNDetails.status}
+                  </span>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received By</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">{viewingGRNDetails.receivedBy || "System Operator"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-[11px] font-black text-gray-900 dark:text-white uppercase tracking-widest px-1">Received items</h3>
+                <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm">
+                  <table className="w-full text-left border-collapse bg-slate-50 dark:bg-[#0b0c14] text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-slate-900/50">
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Material</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Batch/Lot No</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Received</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Accepted</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Rejected</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Warehouse</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {viewingGRNDetails.items?.map((item: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
+                          <td className="px-4 py-3 font-bold text-slate-800 dark:text-white">
+                            {item.inventoryItem?.name}
+                            <span className="text-[10px] text-gray-400 font-normal block">Unit: {item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-slate-500">{item.lotNumber || item.vendorBatchNo || "—"}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300">{item.receivedQty}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-emerald-600">{item.acceptedQty}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-rose-600">{item.rejectedQty}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.warehouse?.name || "Central Warehouse"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer / Actions */}
+            <div className="p-8 border-t border-gray-100 dark:border-white/5 flex gap-4">
+              <button
+                onClick={() => {
+                  router.push(`/purchases/invoices?grnId=${viewingGRNDetails.id}`);
+                  setViewingGRNDetails(null);
+                }}
+                className="flex-1 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-center"
+              >
+                Generate Purchase Bill
+              </button>
+              <button
+                onClick={() => setViewingGRNDetails(null)}
+                className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

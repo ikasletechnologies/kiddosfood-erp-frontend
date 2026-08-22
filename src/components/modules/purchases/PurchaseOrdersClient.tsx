@@ -288,6 +288,67 @@ export default function PurchaseOrdersClient() {
   const totalBalance = Math.max(0, totalSpend - totalPaid);
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
 
+  const getReceivedQty = (itemId: string) => {
+    if (!viewingDetailsPO || !viewingDetailsPO.goodsReceipts) return 0;
+    return viewingDetailsPO.goodsReceipts.reduce((sum: number, grn: any) => {
+      const grnItem = grn.items?.find((i: any) => i.itemId === itemId);
+      return sum + (grnItem?.receivedQty || 0);
+    }, 0);
+  };
+
+  const getAuditTimeline = () => {
+    if (!viewingDetailsPO) return [];
+    const timeline: Array<{ timestamp: Date; user: string; action: string; reference: string; color: string }> = [];
+
+    // 1. PO Created
+    timeline.push({
+      timestamp: new Date(viewingDetailsPO.createdAt),
+      user: "System",
+      action: "Purchase Order Created",
+      reference: `PO #${viewingDetailsPO.poNumber || viewingDetailsPO.id.slice(0, 8)}`,
+      color: "bg-blue-500"
+    });
+
+    // 2. Approved
+    if (viewingDetailsPO.approvedAt) {
+      timeline.push({
+        timestamp: new Date(viewingDetailsPO.approvedAt),
+        user: viewingDetailsPO.approvedBy || "Admin",
+        action: "Purchase Order Approved",
+        reference: `Status: APPROVED`,
+        color: "bg-emerald-500"
+      });
+    }
+
+    // 3. GRNs
+    if (viewingDetailsPO.goodsReceipts) {
+      viewingDetailsPO.goodsReceipts.forEach((grn: any) => {
+        timeline.push({
+          timestamp: new Date(grn.createdAt),
+          user: "QC Inspector",
+          action: `Goods Receipt Note (${grn.status})`,
+          reference: `GRN #${grn.grnNumber || grn.id.slice(0, 8)}`,
+          color: grn.status === 'COMPLETED' ? "bg-emerald-500" : "bg-amber-500"
+        });
+      });
+    }
+
+    // 4. Invoices/Bills
+    if (viewingDetailsPO.invoices) {
+      viewingDetailsPO.invoices.forEach((inv: any) => {
+        timeline.push({
+          timestamp: new Date(inv.createdAt),
+          user: "Accounts Admin",
+          action: `Purchase Bill Created (${inv.status})`,
+          reference: `Bill #${inv.invoiceNumber || inv.id.slice(0, 8)} - ${formatCurrency(inv.amount)}`,
+          color: "bg-indigo-500"
+        });
+      });
+    }
+
+    return timeline.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  };
+
   return (
     <div className={clsx("min-h-screen bg-gray-50 text-gray-800", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
       {/* ── Page Header ── */}
@@ -731,17 +792,79 @@ export default function PurchaseOrdersClient() {
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
               {poDetailsTab === "OVERVIEW" && (
-                <div className="space-y-8">
+                <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 dark:bg-white/5 p-5 rounded-3xl">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Current Status</p>
-                      <span className={clsx("inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider", STATUS_STYLES[viewingDetailsPO.status] || STATUS_STYLES.DRAFT)}>
-                        {viewingDetailsPO.status.replace(/_/g, ' ')}
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">PO Number</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0, 8)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">
+                        {viewingDetailsPO.vendor?.name} {viewingDetailsPO.vendor?.vendorCode ? `(${viewingDetailsPO.vendor.vendorCode})` : ""}
+                      </p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">PO Date</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{new Date(viewingDetailsPO.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Expected Delivery</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{viewingDetailsPO.expectedDeliveryDate ? new Date(viewingDetailsPO.expectedDeliveryDate).toLocaleDateString() : "—"}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Terms</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{viewingDetailsPO.vendor?.paymentTerms || "Immediate"}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Status</p>
+                      <span className={clsx("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider", 
+                        viewingDetailsPO.paymentStatus === 'PAID' ? "bg-emerald-50 text-emerald-600 border-emerald-200" : 
+                        viewingDetailsPO.paymentStatus === 'PARTIALLY_PAID' ? "bg-amber-50 text-amber-600 border-amber-200" : 
+                        "bg-red-50 text-red-600 border-red-200"
+                      )}>
+                        {viewingDetailsPO.paymentStatus?.replace(/_/g, ' ') || 'UNPAID'}
                       </span>
                     </div>
-                    <div className="bg-slate-50 dark:bg-white/5 p-5 rounded-3xl">
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Subtotal</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(viewingDetailsPO.subtotal || 0)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">GST (CGST+SGST+IGST)</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency((viewingDetailsPO.cgst || 0) + (viewingDetailsPO.sgst || 0) + (viewingDetailsPO.igst || 0))}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Discount</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(viewingDetailsPO.discountAmount || 0)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Freight</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(viewingDetailsPO.freightCost || 0)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Advance Applied</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(viewingDetailsPO.advanceApplied || 0)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Grand Total</p>
-                      <p className="text-xl font-black text-orange-600">{formatCurrency(viewingDetailsPO.totalAmount)}</p>
+                      <p className="text-xs font-black text-orange-600">{formatCurrency(viewingDetailsPO.totalAmount)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Balance Due</p>
+                      <p className="text-xs font-black text-red-500">{formatCurrency(viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Delivery Warehouse/Branch</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{viewingDetailsPO.warehouse?.name || "Central Warehouse"}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Created By</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">System Entry</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Approved By</p>
+                      <p className="text-xs font-black text-slate-700 dark:text-slate-300">{viewingDetailsPO.approvedBy || "—"}</p>
                     </div>
                   </div>
 
@@ -772,42 +895,107 @@ export default function PurchaseOrdersClient() {
               )}
 
               {poDetailsTab === "ITEMS" && (
-                <div className="space-y-4">
-                  {viewingDetailsPO.poItems?.map((item: any, idx: number) => (
-                    <div key={idx} className="bg-slate-50 dark:bg-white/5 p-5 rounded-3xl border border-slate-100 dark:border-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-2xl bg-white dark:bg-card flex items-center justify-center text-orange-500 shadow-sm"><Store size={18} /></div>
-                        <div>
-                          <p className="text-sm font-black text-gray-900 dark:text-white uppercase">{item.inventoryItem?.name}</p>
-                          <p className="text-[10px] text-gray-400 mt-0.5">{item.quantity} {item.inventoryItem?.unit} @ {formatCurrency(item.price)}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-black text-gray-900 dark:text-white">{formatCurrency(item.quantity * item.price)}</p>
-                        <p className="text-[10px] text-emerald-500 font-bold uppercase mt-0.5">{item.gstRate}% GST</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm">
+                  <table className="w-full text-left border-collapse bg-slate-50 dark:bg-[#0b0c14]">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-slate-900/50">
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Code</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Material</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Ordered</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Received</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Pending</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Unit</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Price</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">GST</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {viewingDetailsPO.poItems?.map((item: any, idx: number) => {
+                        const rQty = getReceivedQty(item.inventoryItemId);
+                        const pQty = Math.max(0, item.quantity - rQty);
+                        return (
+                          <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
+                            <td className="px-4 py-3 text-xs font-mono text-slate-500">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
+                            <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-white">{item.inventoryItem?.name}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{item.quantity}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{rQty}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600">{pQty}</td>
+                            <td className="px-4 py-3 text-xs text-slate-500">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.price)}</td>
+                            <td className="px-4 py-3 text-xs text-right text-slate-500">{item.gstRate || 0}%</td>
+                            <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {poDetailsTab === "GRN" && (
+                <div className="overflow-x-auto rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm">
+                  <table className="w-full text-left border-collapse bg-slate-50 dark:bg-[#0b0c14]">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-slate-900/50">
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">GRN No</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Date</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Received</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Accepted</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Rejected</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Warehouse</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {(!viewingDetailsPO.goodsReceipts || viewingDetailsPO.goodsReceipts.length === 0) ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-10 text-slate-400 text-xs font-semibold">
+                            No GRNs linked to this PO yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        viewingDetailsPO.goodsReceipts.map((grn: any, idx: number) => {
+                          const totalReceived = grn.items?.reduce((s: number, i: any) => s + (i.receivedQty || 0), 0) || 0;
+                          const totalAccepted = grn.items?.reduce((s: number, i: any) => s + (i.acceptedQty || 0), 0) || 0;
+                          const totalRejected = grn.items?.reduce((s: number, i: any) => s + (i.rejectedQty || 0), 0) || 0;
+                          return (
+                            <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
+                              <td className="px-4 py-3 text-xs font-mono text-slate-500">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
+                              <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{new Date(grn.createdAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{totalAccepted}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600">{totalRejected}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{viewingDetailsPO.warehouse?.name || "Central Warehouse"}</td>
+                              <td className="px-4 py-3 text-xs">
+                                <span className={clsx("inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider", 
+                                  grn.status === 'COMPLETED' ? "bg-emerald-50 text-emerald-600 border-emerald-200" : 
+                                  grn.status === 'PENDING_INSPECTION' ? "bg-amber-50 text-amber-600 border-amber-200" : 
+                                  "bg-slate-50 text-slate-500 border-slate-200"
+                                )}>
+                                  {grn.status?.replace(/_/g, ' ')}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
               {poDetailsTab === "AUDIT" && (
                 <div className="space-y-6">
                   <div className="relative pl-8 border-l-2 border-slate-100 dark:border-white/5 ml-2 space-y-8">
-                    <div className="relative">
-                      <div className="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/20" />
-                      <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">PO Created</p>
-                      <p className="text-xs font-bold text-gray-900 dark:text-white">{format(new Date(viewingDetailsPO.createdAt), "dd MMM yyyy · HH:mm")}</p>
-                      <p className="text-[10px] text-gray-400 mt-1 uppercase">System Entry</p>
-                    </div>
-                    {viewingDetailsPO.approvedAt && (
-                      <div className="relative">
-                        <div className="absolute -left-[41px] top-0 w-4 h-4 rounded-full bg-orange-500 shadow-lg shadow-orange-500/20" />
-                        <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1">Approved</p>
-                        <p className="text-xs font-bold text-gray-900 dark:text-white">{format(new Date(viewingDetailsPO.approvedAt), "dd MMM yyyy · HH:mm")}</p>
-                        <p className="text-[10px] text-gray-400 mt-1 uppercase">By: {viewingDetailsPO.approvedBy || 'Admin'}</p>
+                    {getAuditTimeline().map((event, idx) => (
+                      <div key={idx} className="relative">
+                        <div className={clsx("absolute -left-[41px] top-0 w-4 h-4 rounded-full shadow-lg", event.color)} />
+                        <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1">{event.action}</p>
+                        <p className="text-xs font-bold text-gray-900 dark:text-white">{format(event.timestamp, "dd MMM yyyy · HH:mm")}</p>
+                        <p className="text-[10px] text-gray-400 mt-1 uppercase">By: {event.user} · {event.reference}</p>
                       </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}

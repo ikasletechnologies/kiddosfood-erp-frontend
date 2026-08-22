@@ -236,18 +236,21 @@ export default function PurchaseBillsPage() {
            }
            setSourcePoId(grn.poId);
            setSourceGrnId(grn.id);
-           if (grn.items && grn.items.length > 0) {
-              const newItems = grn.items.map((item: any) => ({
-                 id: Math.random().toString(36).slice(2),
-                 name: item.inventoryItem?.name || "Material",
-                 qty: item.acceptedQty,
-                 unit: item.inventoryItem?.unit || "KGS",
-                 rate: item.price || 0,
-                 taxPct: 0,
-                 taxLabel: "NONE"
-              }));
-              setItems(newItems);
-           }
+            if (grn.items && grn.items.length > 0) {
+               const newItems = grn.items.map((item: any) => {
+                  const rate = item.gstRate || 0;
+                  return {
+                     id: Math.random().toString(36).slice(2),
+                     name: item.inventoryItem?.name || "Material",
+                     qty: item.acceptedQty,
+                     unit: item.inventoryItem?.unit || "KGS",
+                     rate: item.price || 0,
+                     taxPct: rate,
+                     taxLabel: rate > 0 ? `GST@${rate}%` : "NONE"
+                  };
+               });
+               setItems(newItems);
+            }
            setDescription(`Auto-generated from GRN: ${grnId} / PO: ${grn.procurementOrder?.poNumber || ''}`);
            setShowDesc(true);
            toast.success("Bill auto-filled from GRN!");
