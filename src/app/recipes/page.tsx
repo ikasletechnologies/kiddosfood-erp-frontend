@@ -53,7 +53,7 @@ export default function RecipesPage() {
     category: "",
     name: "",
     yieldQty: 1,
-    yieldUnit: "units",
+    yieldUnit: "",
     unitWeight: 1,
     weightUnit: "kg",
     instructions: "",
@@ -104,7 +104,7 @@ export default function RecipesPage() {
       category: "",
       name: "",
       yieldQty: 1,
-      yieldUnit: "units",
+      yieldUnit: "",
       unitWeight: 1,
       weightUnit: "kg",
       instructions: "",
@@ -128,7 +128,7 @@ export default function RecipesPage() {
       category: recipe.category || "",
       name: recipe.name,
       yieldQty: recipe.yieldQty,
-      yieldUnit: recipe.yieldUnit || "units",
+      yieldUnit: recipe.yieldUnit || "",
       unitWeight: unitWeightMatch ? Number(unitWeightMatch[1]) : 1,
       weightUnit: weightUnitMatch ? weightUnitMatch[1] : "kg",
       instructions: instructions.replace(/\[unitWeight:[\d.]+\]/, "").replace(/\[weightUnit:\w+\]/, "").trim(),
@@ -145,6 +145,10 @@ export default function RecipesPage() {
   const handleSave = async () => {
     if (!formData.name || formData.items.length === 0) {
       showToast("Please provide a recipe name and add at least one material", "error");
+      return;
+    }
+    if (!formData.yieldUnit) {
+      showToast("Select the recipe's yield unit (e.g. KG, L, Pcs)", "error");
       return;
     }
     const payload = {
@@ -684,11 +688,14 @@ export default function RecipesPage() {
                     onChange={(e) => setFormData({ ...formData, yieldUnit: e.target.value })}
                     className="flex-1 h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white uppercase"
                   >
-                    <option value="units">Units</option>
+                    <option value="" disabled>Select...</option>
                     <option value="kg">KG</option>
                     <option value="g">G</option>
+                    <option value="L">L</option>
+                    <option value="ml">ML</option>
                     <option value="pcs">Pcs</option>
                     <option value="pkts">Pkts</option>
+                    <option value="units">Units</option>
                   </select>
                 </div>
               </div>

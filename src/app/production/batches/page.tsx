@@ -309,13 +309,13 @@ function ProductBatchesRegistry() {
                           {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.packedQuantity || 0}
+                          {batch.packedQuantity || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.bulkQuantity || 0}
+                          {batch.bulkQuantity || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                          {Math.max(0, batch.quantity - (batch.packagedQty || 0))}
+                          {batch.availableQuantity || 0} <span className="text-xs text-gray-400">pcs</span>
                         </td>
                         <td className={clsx("px-4 py-3 text-xs whitespace-nowrap",
                           status === "EXPIRED" ? "text-rose-600 font-semibold" : status === "EXPIRING_SOON" ? "text-amber-600 font-semibold" : "text-gray-600"

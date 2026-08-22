@@ -6,7 +6,7 @@ import { LucideIcon } from "lucide-react";
 
 interface MetricCardProps {
   label: string;
-  value: string | number;
+  value: React.ReactNode;
   subtext?: string;
   icon: LucideIcon;
   colorTheme: "blue" | "purple" | "indigo" | "amber" | "emerald" | "rose" | "slate";
@@ -84,9 +84,9 @@ export default function InventoryMetricCard({
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             {label}
           </p>
-          <p className={clsx("text-2xl font-bold tracking-tight", theme.text)}>
+          <div className={clsx("text-2xl font-bold tracking-tight", theme.text)}>
             {value}
-          </p>
+          </div>
           {subtext && (
             <p className="text-xs font-medium text-slate-400">
               {subtext}

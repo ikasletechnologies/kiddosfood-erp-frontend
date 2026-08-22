@@ -41,7 +41,7 @@ export default function PackagingQueuePage() {
   const [selectedBatch, setSelectedBatch] = useState<ProductBatch | null>(null);
 
   // Form states
-  const [packetSize, setPacketSize] = useState("500g");
+  const [packetSize, setPacketSize] = useState("");
   const [quantityPackets, setQuantityPackets] = useState(10);
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,6 +79,7 @@ export default function PackagingQueuePage() {
 
   // Compute total bulk stock conversion needed
   const parseWeight = (size: string): number => {
+    if (!size) return 0;
     const match = size.match(/^(\d+(\.\d+)?)\s*(g|kg|l|ml|pcs|unit)$/i);
     if (!match) return 1.0;
     const val = parseFloat(match[1]);
@@ -90,6 +91,9 @@ export default function PackagingQueuePage() {
 
   const unitMultiplier = parseWeight(packetSize);
   const totalWeightNeeded = quantityPackets * unitMultiplier;
+  const availableBulk = selectedBatch ? selectedBatch.quantity - (selectedBatch.packagedQty || 0) : 0;
+  const maxPackets = unitMultiplier > 0 ? Math.floor(availableBulk / unitMultiplier) : 0;
+  const bulkRemaining = availableBulk - totalWeightNeeded;
 
   const handlePackageRun = async () => {
     if (!selectedBatch) return;
@@ -229,7 +233,11 @@ export default function PackagingQueuePage() {
                               ) : (
                                 <button
                                   disabled={!isApproved}
-                                  onClick={() => setSelectedBatch(batch)}
+                                  onClick={() => {
+                                    setSelectedBatch(batch);
+                                    setPacketSize("");
+                                    setQuantityPackets(10);
+                                  }}
                                   className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
                                 >
                                   Package
@@ -282,6 +290,7 @@ export default function PackagingQueuePage() {
                       onChange={(e) => setPacketSize(e.target.value)}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
                     >
+                      <option value="" disabled>Select pack size...</option>
                       <option value="250g">250 G Packet</option>
                       <option value="500g">500 G Packet</option>
                       <option value="1kg">1.0 KG Packet</option>
@@ -293,7 +302,16 @@ export default function PackagingQueuePage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantity of Packets</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-gray-500">Quantity of Packets</label>
+                      <button
+                        type="button"
+                        onClick={() => setQuantityPackets(Math.max(1, maxPackets))}
+                        className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e]"
+                      >
+                        Use All Bulk ({maxPackets})
+                      </button>
+                    </div>
                     <input
                       type="number"
                       min="1"
@@ -301,6 +319,9 @@ export default function PackagingQueuePage() {
                       onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
                     />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Maximum possible with available bulk: {maxPackets} packets
+                    </p>
                   </div>
 
                   {/* Simulated conversions */}
@@ -312,8 +333,12 @@ export default function PackagingQueuePage() {
 
                     <div className="space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Total Bulk Stock Deduct</span>
-                        <span className="text-rose-600 font-semibold">-{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-gray-500">Bulk Stock to Deduct</span>
+                        <span className="text-rose-600 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Bulk Stock Remaining</span>
+                        <span className="text-gray-700 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500">Total Retail Stock Added</span>
@@ -324,14 +349,21 @@ export default function PackagingQueuePage() {
 
                   <button
                     onClick={handlePackageRun}
-                    disabled={submitting || totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0))}
+                    disabled={submitting || !packetSize || totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0))}
                     className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
                     Package & Generate Labels
                   </button>
 
-                  {totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0)) && (
+                  {!packetSize && (
+                    <div className="flex gap-2 text-xs text-amber-600 font-medium p-2.5 border border-amber-200 bg-amber-50 rounded-lg">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>Select a target pack size to continue.</span>
+                    </div>
+                  )}
+
+                  {packetSize && totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0)) && (
                     <div className="flex gap-2 text-xs text-rose-600 font-medium p-2.5 border border-rose-200 bg-rose-50 rounded-lg">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       <span>Insufficient bulk stock to fulfill this quantity of packs.</span>

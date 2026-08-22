@@ -8,6 +8,7 @@ import { clsx } from "clsx";
 import { productionApi, franchiseApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
+import Code128Barcode from "@/components/common/Code128Barcode";
 
 interface PackagingRecord {
   id: string;
@@ -71,6 +72,25 @@ export default function LabelsBarcodesPage() {
 
   const handlePrintLabel = () => {
     window.print();
+  };
+
+  // Retail SKUs/product names carry the master product's own weight (e.g.
+  // "Idly Batter 1 Kg" / "...-1-KG-1KG"), which reads as wrong once a
+  // different retail pack size is printed next to it. Strip it for display
+  // only — the underlying records are untouched.
+  const stripEmbeddedWeight = (name: string): string =>
+    name.replace(/\s+\d+(\.\d+)?\s*(kg|g|l|ml|pcs|units?)\.?$/i, '').trim() || name;
+
+  const stripEmbeddedSizeSku = (sku: string): string => {
+    const segments = sku.split('-');
+    const isSizeSegment = (seg: string) =>
+      /^\d+(\.\d+)?$/.test(seg) ||
+      /^(KG|G|L|ML|PCS|UNITS?)$/i.test(seg) ||
+      /^\d+(\.\d+)?(KG|G|L|ML|PCS|UNITS?)$/i.test(seg);
+    while (segments.length > 1 && isSizeSegment(segments[segments.length - 1])) {
+      segments.pop();
+    }
+    return segments.join('-') || sku;
   };
 
   const filteredRecords = packagings.filter(p =>
@@ -203,21 +223,21 @@ export default function LabelsBarcodesPage() {
               <div className="space-y-5">
 
                 {/* Label sheet visual mockup container */}
-                <div id="print-label-sticker" className="bg-white text-slate-950 border-2 border-dashed border-gray-300 rounded-lg p-6 shadow-sm space-y-4 max-w-sm mx-auto print:border-none print:shadow-none print:p-0 print:m-0">
-                  <div className="text-center border-b-2 border-gray-900 pb-3">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#f58220]">Kiddos Food HQ</span>
-                    <h4 className="text-sm font-black uppercase tracking-tight text-slate-900 mt-0.5">
-                      {selectedRecord.batch?.product?.name}
+                <div id="print-label-sticker" className="bg-white text-slate-950 border-2 border-dashed border-gray-300 rounded-lg p-6 shadow-sm space-y-4 max-w-sm mx-auto print:border-none print:shadow-none print:p-0 print:m-0 print:space-y-2">
+                  <div className="text-center border-b-2 border-gray-900 pb-3 print:pb-1.5">
+                    <span className="text-[10px] print:text-[8px] font-black uppercase tracking-widest text-[#f58220]">Kiddos Food HQ</span>
+                    <h4 className="text-sm print:text-[13px] font-black uppercase tracking-tight text-slate-900 mt-0.5 print:mt-px">
+                      {stripEmbeddedWeight(selectedRecord.batch?.product?.name || "")}
                     </h4>
-                    <div className="text-[10px] font-bold text-gray-500 uppercase mt-0.5">
+                    <div className="text-[10px] print:text-[9px] font-bold text-gray-500 uppercase mt-0.5 print:mt-px">
                       Pack Size: {selectedRecord.packetSize}
                     </div>
                   </div>
 
-                  <div className="space-y-2 text-[10px] font-semibold text-slate-800">
+                  <div className="space-y-2 print:space-y-1 text-[10px] print:text-[9px] font-semibold text-slate-800">
                     <div className="flex justify-between">
                       <span className="uppercase text-gray-400">SKU Ref:</span>
-                      <span className="font-mono">{selectedRecord.batch?.product?.sku}-{selectedRecord.packetSize.toUpperCase()}</span>
+                      <span className="font-mono">{stripEmbeddedSizeSku(selectedRecord.batch?.product?.sku || "")}-{selectedRecord.packetSize.toUpperCase()}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="uppercase text-gray-400">Batch Code:</span>
@@ -233,24 +253,20 @@ export default function LabelsBarcodesPage() {
                     </div>
                   </div>
 
-                  {/* Simulated scan barcode graphics */}
-                  <div className="bg-gray-50 p-4 rounded-lg flex flex-col items-center gap-2 border border-gray-100">
-                    <div className="h-12 w-full flex items-center justify-center gap-[2px]">
-                      {/* Simulated vertical barcode stripes */}
-                      {[2, 1, 3, 1, 2, 1, 4, 1, 2, 3, 1, 2, 1, 3, 2, 1, 4, 1, 2, 1, 3, 1, 2, 4, 1, 2].map((w, idx) => (
-                        <div
-                          key={idx}
-                          className="h-full bg-slate-950"
-                          style={{ width: `${w}px`, opacity: idx % 3 === 0 ? 0.35 : 1 }}
-                        />
-                      ))}
+                  {/* Real Code 128 (Subset B) barcode, rendered as SVG <rect>
+                      bars derived from the encoded value — not a CSS
+                      background, so it survives "Background graphics" off
+                      in print/PDF, and it actually scans. */}
+                  <div className="bg-gray-50 px-4 py-3 print:py-1.5 rounded-lg flex flex-col items-center gap-2 border border-gray-100 print:bg-white print:border-0 print:px-2">
+                    <div className="w-full flex items-center justify-center bg-white">
+                      <Code128Barcode value={selectedRecord.barcode} height={48} moduleWidth={1.6} className="h-16 print:h-[0.4in] max-w-full" />
                     </div>
-                    <div className="text-[9px] font-mono tracking-widest font-black text-slate-700">
+                    <div className="text-[11px] print:text-[10px] font-mono tracking-widest font-black text-slate-800">
                       {selectedRecord.barcode}
                     </div>
                   </div>
 
-                  <div className="text-center text-[8px] font-bold text-gray-400 uppercase tracking-widest">
+                  <div className="text-center text-[8px] print:text-[7px] font-bold text-gray-400 uppercase tracking-widest">
                     Licensed Product of Kiddos Food LLP
                   </div>
                 </div>
@@ -268,7 +284,10 @@ export default function LabelsBarcodesPage() {
                   </button>
 
                   <p className="text-xs text-gray-500 leading-relaxed">
-                    Sticker is rendered to standard 4&quot; x 3&quot; thermal label dimensions. Ensure the printer margins are set to none.
+                    Sticker is rendered to standard 4&quot; x 3&quot; thermal label dimensions.
+                  </p>
+                  <p className="text-xs text-amber-600 font-medium leading-relaxed">
+                    In the print dialog: set Paper size to 4in x 3in (or your thermal printer), Margins to None, and turn OFF &quot;Headers and footers&quot; — otherwise the browser prints the page URL/date on the sticker.
                   </p>
                 </div>
 
@@ -287,6 +306,16 @@ export default function LabelsBarcodesPage() {
       {/* Styled inline sheet print CSS rules */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: 4in 3in;
+            margin: 0;
+          }
+          html, body {
+            width: 4in;
+            height: 3in;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -297,11 +326,16 @@ export default function LabelsBarcodesPage() {
             position: absolute;
             left: 0;
             top: 0;
-            width: 100% !important;
-            max-width: 100% !important;
+            width: 4in !important;
+            height: 3in !important;
+            max-width: none !important;
             border: none !important;
-            padding: 0 !important;
+            padding: 0.12in !important;
             margin: 0 !important;
+            box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
           }
         }
       `}</style>

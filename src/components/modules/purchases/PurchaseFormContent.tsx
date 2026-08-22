@@ -26,6 +26,14 @@ const FALLBACK_COMPANY = {
   state: "Tamil Nadu"
 };
 
+const formatDateToDMY = (dateStr: string) => {
+  if (!dateStr) return "";
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return dateStr;
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`;
+};
+
 export function NewPurchaseContent({ editId }: { editId?: string }) {
   const { 
     poNumber, setPoNumber, 
@@ -312,10 +320,15 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={expectedDeliveryDate}
                       onChange={(e) => setExpectedDeliveryDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm text-slate-700 outline-none focus:border-orange-500 transition-colors pl-3",
-                        expectedDeliveryDate ? "pr-16" : "pr-8"
+                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm outline-none focus:border-orange-500 transition-colors pl-3",
+                        expectedDeliveryDate ? "pr-16 text-transparent" : "pr-8 text-slate-700"
                       )}
                     />
+                    {expectedDeliveryDate && (
+                      <span className="absolute left-3 pointer-events-none text-sm text-slate-700 dark:text-slate-200">
+                        {formatDateToDMY(expectedDeliveryDate)}
+                      </span>
+                    )}
                     <div className="absolute right-2.5 flex items-center gap-1">
                       {expectedDeliveryDate && (
                         <button
@@ -366,10 +379,15 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={purchaseDate}
                       onChange={(e) => setPurchaseDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm text-slate-700 outline-none focus:border-orange-500 transition-colors pl-3",
-                        purchaseDate ? "pr-16" : "pr-8"
+                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm outline-none focus:border-orange-500 transition-colors pl-3",
+                        purchaseDate ? "pr-16 text-transparent" : "pr-8 text-slate-700"
                       )}
                     />
+                    {purchaseDate && (
+                      <span className="absolute left-3 pointer-events-none text-sm text-slate-700 dark:text-slate-200">
+                        {formatDateToDMY(purchaseDate)}
+                      </span>
+                    )}
                     <div className="absolute right-2.5 flex items-center gap-1">
                       {purchaseDate && (
                         <button

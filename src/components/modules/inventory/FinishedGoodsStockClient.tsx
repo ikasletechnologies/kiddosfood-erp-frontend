@@ -9,13 +9,60 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
-  productsFullApi, productBatchesApi, franchiseProductRequestsApi,
-  franchiseOrdersApi, franchiseApi, InventoryDemandItem
+  productsFullApi, franchiseProductRequestsApi,
+  franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem
 } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
 import BranchStockDrawer from "./BranchStockDrawer";
+
+const HQ_FRANCHISE_ID = "hq-001";
+const isHqFranchise = (franchiseId: string | undefined, franchises: any[]) =>
+  franchiseId === HQ_FRANCHISE_ID ||
+  !!franchises.find((f) => f.id === franchiseId)?.name?.toUpperCase().includes("HEADQUARTERS");
+
+// Product (the recipe/catalog master) and InventoryItem (the actual stock
+// ledger, credited by packaging/production) aren't linked by a foreign key.
+// Matching is intentionally exact (not a SKU/name prefix match): a packaged
+// retail variant's SKU is derived from the master's SKU with a pack-size
+// suffix appended, so a prefix match would fold a differently-unit'd
+// variant's stock (e.g. 10 packets) into the master's own total (e.g. KG),
+// producing a number that looks plausible but mixes two units together.
+// Net effect: a packaged variant that has no Product catalog row of its own
+// (the normal case today) won't appear on this screen at all — that's a
+// real gap, not silently patched over here.
+function matchesProduct(item: { sku?: string; name?: string }, prod: { sku?: string; name?: string }): boolean {
+  const itemSku = item.sku?.toUpperCase() || "";
+  const itemName = item.name?.toUpperCase() || "";
+  const prodSku = prod.sku?.toUpperCase() || "";
+  const prodName = prod.name?.toUpperCase() || "";
+  if (prodSku && itemSku === prodSku) return true;
+  if (prodName && itemName === prodName) return true;
+  return false;
+}
+
+// Splits one SKU's InventoryItem rows (one per franchise) into HQ vs branch
+// holdings. Shared by both Product-backed rows and the InventoryItem-only
+// rows below, so a packaged retail variant with no Product catalog entry
+// gets the exact same HQ/branch/unit accounting as one that does.
+function summarizeStock(matchedItems: any[], franchises: any[]) {
+  const hqItems = matchedItems.filter((it) => isHqFranchise(it.franchiseId, franchises));
+  const branchItems = matchedItems.filter((it) => !isHqFranchise(it.franchiseId, franchises));
+  const hqAvailable = hqItems.reduce((acc: number, it: any) => acc + Number(it.currentStock || 0), 0);
+  const totalBranchAvailable = branchItems.reduce((acc: number, it: any) => acc + Number(it.currentStock || 0), 0);
+
+  const branchMap = new Map<string, { franchiseId: string; franchiseName: string; availableQuantity: number; damagedQuantity: number }>();
+  branchItems.forEach((it: any) => {
+    const fid = it.franchiseId || "UNASSIGNED";
+    const fName = franchises.find((f: any) => f.id === fid)?.name || it.franchise?.name || "Unassigned Branch";
+    const existing = branchMap.get(fid) || { franchiseId: fid, franchiseName: fName, availableQuantity: 0, damagedQuantity: 0 };
+    existing.availableQuantity += Number(it.currentStock || 0);
+    branchMap.set(fid, existing);
+  });
+
+  return { hqAvailable, totalBranchAvailable, branchStockBreakdown: Array.from(branchMap.values()) };
+}
 
 export default function FinishedGoodsStockClient() {
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
@@ -31,19 +78,23 @@ export default function FinishedGoodsStockClient() {
   const fetchDemandData = useCallback(async () => {
     setLoading(true);
     try {
-      const [pRes, bRes, fprRes, foRes, frRes] = await Promise.all([
+      const [pRes, fprRes, foRes, frRes, iRes] = await Promise.all([
         productsFullApi.getAll().catch(() => ({ data: [] })),
-        productBatchesApi.getAll().catch(() => ({ data: [] })),
         franchiseProductRequestsApi.getAll().catch(() => ({ data: [] })),
         franchiseOrdersApi.getAll().catch(() => ({ data: [] })),
         franchiseApi.getAll().catch(() => ({ data: [] })),
+        // Real stock ledger (credited by packaging/production) — Product is
+        // a catalog/recipe record and does NOT reflect live stock; see
+        // matchesProduct() for how these link up.
+        rawMaterialsApi.getAll(false, undefined, undefined).catch(() => ({ data: [] })),
       ]);
 
       const rawProducts: any[] = Array.isArray(pRes?.data) ? pRes.data : [];
-      const batches: any[] = Array.isArray(bRes?.data) ? bRes.data : [];
       const fprs: any[] = Array.isArray(fprRes?.data) ? fprRes.data : [];
       const fos: any[] = Array.isArray(foRes?.data) ? foRes.data : [];
       const franchises: any[] = Array.isArray(frRes?.data) ? frRes.data : frRes?.data?.franchises || [];
+      const allInventoryItems: any[] = Array.isArray(iRes?.data) ? iRes.data : [];
+      const inventoryItems = allInventoryItems.filter((it) => it.category === "FINISHED_GOOD");
 
       // Filter for finished goods
       const finishedProducts = rawProducts.filter(
@@ -54,33 +105,18 @@ export default function FinishedGoodsStockClient() {
       const items: InventoryDemandItem[] = finishedProducts.map((prod) => {
         const pid = prod.id;
 
-        // 1. Physical Batches
-        const prodBatches = batches.filter((b: any) => b.productId === pid);
-        const totalBranchAvailable = prodBatches
-          .filter((b: any) => (b.expiryStatus ?? "VALID") !== "EXPIRED")
-          .reduce((acc: number, b: any) => acc + Number(b.quantity || 0), 0);
-        const totalBranchDamaged = prodBatches
-          .filter((b: any) => b.expiryStatus === "EXPIRED")
-          .reduce((acc: number, b: any) => acc + Number(b.quantity || 0), 0);
-
-        // Branch breakdown
-        const branchMap = new Map<string, { franchiseId: string; franchiseName: string; availableQuantity: number; damagedQuantity: number }>();
-        prodBatches.forEach((b: any) => {
-          const fid = b.franchiseId || "MAIN_BRANCH";
-          const fName = franchises.find((f: any) => f.id === fid)?.name || b.franchise?.name || "Downtown Branch";
-          const existing = branchMap.get(fid) || {
-            franchiseId: fid,
-            franchiseName: fName,
-            availableQuantity: 0,
-            damagedQuantity: 0,
-          };
-          if (b.expiryStatus === "EXPIRED") {
-            existing.damagedQuantity += Number(b.quantity || 0);
-          } else {
-            existing.availableQuantity += Number(b.quantity || 0);
-          }
-          branchMap.set(fid, existing);
-        });
+        // 1. Real stock — every InventoryItem row (one per franchise) that
+        // matches this product, split into HQ vs branch holdings. This
+        // replaces the old logic that summed ProductBatch.quantity (total
+        // ever *produced*, not netted against what's since been packaged
+        // or shipped) and mislabeled HQ's own production batches as
+        // "Branch Holdings" even when nothing was ever transferred out.
+        const matchedItems = inventoryItems.filter((it) => matchesProduct(it, prod));
+        const { hqAvailable, totalBranchAvailable, branchStockBreakdown } = summarizeStock(matchedItems, franchises);
+        // InventoryItem doesn't carry a per-row damaged/expired flag the way
+        // ProductBatch did — damaged/expired retail stock would need a
+        // per-batch lookup (Expiry Tracking), out of scope for this fix.
+        const totalBranchDamaged = 0;
 
         // 2. Product Requests (FPR)
         const prodFprs = fprs.filter((r: any) => {
@@ -171,14 +207,14 @@ export default function FinishedGoodsStockClient() {
           }
         });
 
-        // HQ available balance (physical current stock stored on product record)
-        const hqAvailable = Number(prod.currentStock || prod.stock || 0);
-
+        // HQ available balance — Product has no currentStock field at all
+        // (it's a catalog/recipe record, not a stock record), so this used
+        // to always evaluate to 0 regardless of real stock.
         return {
           productId: prod.id,
           productName: prod.name,
           sku: prod.sku || "",
-          unit: prod.unit || "KG",
+          unit: matchedItems[0]?.unit || "KG",
           hqAvailableStock: hqAvailable,
           hqReservedStock: reservedStockQty,
           inTransitStock: inTransitStockQty,
@@ -188,12 +224,46 @@ export default function FinishedGoodsStockClient() {
           pendingRequestCount: pendingReqCount,
           approvedDemandQuantity: approvedDemandQty,
           approvedOrderCount: approvedOrderCount,
-          branchStockBreakdown: Array.from(branchMap.values()),
+          branchStockBreakdown: branchStockBreakdown,
           demandRecords: demandRecords,
         };
       });
 
-      setDemandItems(items);
+      // InventoryItem-only rows: packaged/retail SKUs that have real stock
+      // but no matching Product catalog entry (see matchesProduct — this is
+      // the normal case for a packaging-created variant). Grouped by exact
+      // SKU so KG and PCS never mix, and never merged into any Product row.
+      const claimedItemIds = new Set(
+        inventoryItems.filter((it) => finishedProducts.some((p) => matchesProduct(it, p))).map((it) => it.id)
+      );
+      const unclaimedItems = inventoryItems.filter((it) => it.sku && !claimedItemIds.has(it.id));
+      const bySku = new Map<string, any[]>();
+      unclaimedItems.forEach((it) => {
+        const sku = it.sku as string;
+        bySku.set(sku, [...(bySku.get(sku) || []), it]);
+      });
+      const inventoryOnlyItems: InventoryDemandItem[] = Array.from(bySku.entries()).map(([sku, group]) => {
+        const { hqAvailable, totalBranchAvailable, branchStockBreakdown } = summarizeStock(group, franchises);
+        return {
+          productId: `inv:${sku}`,
+          productName: group[0].name,
+          sku,
+          unit: group[0].unit || "KG",
+          hqAvailableStock: hqAvailable,
+          hqReservedStock: 0,
+          inTransitStock: 0,
+          totalFranchiseAvailableStock: totalBranchAvailable,
+          totalFranchiseDamagedStock: 0,
+          pendingDemandQuantity: 0,
+          pendingRequestCount: 0,
+          approvedDemandQuantity: 0,
+          approvedOrderCount: 0,
+          branchStockBreakdown,
+          demandRecords: [],
+        };
+      });
+
+      setDemandItems([...items, ...inventoryOnlyItems]);
     } catch (e) {
       console.error("Failed to load finished goods demand data:", e);
       toast.error("Failed to sync finished goods demand");
@@ -237,14 +307,49 @@ export default function FinishedGoodsStockClient() {
     return matchSearch && matchDemand;
   });
 
-  // Aggregated Stats for Strip
+  // Aggregated Stats for Strip — different finished goods are tracked in
+  // different units (KG, PACKET, ...), so a plain sum across all products
+  // (e.g. "97 KG" + "10 PACKET" = a meaningless "107") is wrong, and even
+  // joining them into one string ("97 KG + 10 PACKET") reads as a single
+  // combined value. Each total is kept as a per-unit breakdown and rendered
+  // as separate stacked lines instead.
+  const sumByUnit = (getQty: (item: InventoryDemandItem) => number): Map<string, number> => {
+    const map = new Map<string, number>();
+    demandItems.forEach((item) => {
+      const qty = getQty(item);
+      if (!qty) return;
+      const unit = (item.unit || "UNIT").toUpperCase();
+      map.set(unit, (map.get(unit) || 0) + qty);
+    });
+    return map;
+  };
+  const renderByUnit = (map: Map<string, number>): React.ReactNode => {
+    if (map.size === 0) return "0";
+    const stacked = map.size > 1;
+    return (
+      <div className="space-y-0.5">
+        {Array.from(map.entries()).map(([unit, qty]) => (
+          <div key={unit} className={stacked ? "text-lg leading-tight" : undefined}>
+            {qty.toLocaleString()}{" "}
+            <span className="text-xs font-semibold opacity-70">{unit}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const hqAvailableByUnit = sumByUnit((i) => i.hqAvailableStock);
+  const pendingByUnit = sumByUnit((i) => i.pendingDemandQuantity);
+  const readySkuCount = demandItems.filter((i) => i.hqAvailableStock > 0).length;
   const stats = {
     totalProducts: demandItems.length,
-    totalHqAvailable: demandItems.reduce((a, b) => a + b.hqAvailableStock, 0),
-    totalReserved: demandItems.reduce((a, b) => a + b.hqReservedStock, 0),
-    totalInTransit: demandItems.reduce((a, b) => a + b.inTransitStock, 0),
-    totalPendingDemand: demandItems.reduce((a, b) => a + b.pendingDemandQuantity, 0),
-    totalApprovedDemand: demandItems.reduce((a, b) => a + b.approvedDemandQuantity, 0),
+    hqAvailableNode: renderByUnit(hqAvailableByUnit),
+    reservedNode: renderByUnit(sumByUnit((i) => i.hqReservedStock)),
+    inTransitNode: renderByUnit(sumByUnit((i) => i.inTransitStock)),
+    pendingNode: renderByUnit(pendingByUnit),
+    approvedNode: renderByUnit(sumByUnit((i) => i.approvedDemandQuantity)),
+    hasPendingDemand: pendingByUnit.size > 0,
+    readySkuCount,
   };
 
   return (
@@ -252,44 +357,44 @@ export default function FinishedGoodsStockClient() {
       {/* ── Top Metric Cards Strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <InventoryMetricCard
-          label="Total Finished Products"
-          value={stats.totalProducts}
-          subtext="Catalog items"
+          label="Total Finished Goods"
+          value={`${stats.totalProducts} SKU${stats.totalProducts === 1 ? "" : "s"}`}
+          subtext="Catalog + packaged variants"
           icon={Package}
           colorTheme="slate"
         />
         <InventoryMetricCard
           label="HQ Available Stock"
-          value={stats.totalHqAvailable.toLocaleString()}
-          subtext="Ready in warehouse"
+          value={stats.hqAvailableNode}
+          subtext={`${stats.readySkuCount} SKU${stats.readySkuCount === 1 ? "" : "s"} ready`}
           icon={Layers}
           colorTheme="emerald"
         />
         <InventoryMetricCard
           label="HQ Reserved Stock"
-          value={stats.totalReserved.toLocaleString()}
+          value={stats.reservedNode}
           subtext="Locked for processing"
           icon={Clock}
           colorTheme="purple"
         />
         <InventoryMetricCard
           label="In-Transit Stock"
-          value={stats.totalInTransit.toLocaleString()}
+          value={stats.inTransitNode}
           subtext="On road to branches"
           icon={Truck}
           colorTheme="indigo"
         />
         <InventoryMetricCard
           label="Pending Demand"
-          value={stats.totalPendingDemand.toLocaleString()}
+          value={stats.pendingNode}
           subtext="Awaiting HQ approval"
           icon={Send}
           colorTheme="amber"
-          badge={stats.totalPendingDemand > 0 ? "Active Demand" : undefined}
+          badge={stats.hasPendingDemand ? "Active Demand" : undefined}
         />
         <InventoryMetricCard
           label="Approved Orders"
-          value={stats.totalApprovedDemand.toLocaleString()}
+          value={stats.approvedNode}
           subtext="Ready for processing"
           icon={CheckCircle2}
           colorTheme="blue"

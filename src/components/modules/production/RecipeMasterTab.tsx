@@ -37,7 +37,7 @@ const emptyForm = {
   productId: "",
   shelfLifeDays: null as number | null,
   yieldQty: 1,
-  yieldUnit: "units",
+  yieldUnit: "",
   instructions: "",
   estimatedDurationMinutes: null as number | null,
   items: [] as RecipeItem[],
@@ -209,7 +209,7 @@ export default function RecipeMasterTab() {
       productId: recipe.productId ?? "",
       shelfLifeDays: products.find((p: any) => p.id === recipe.productId)?.shelfLifeDays ?? null,
       yieldQty: recipe.yieldQty ?? 1,
-      yieldUnit: recipe.yieldUnit ?? "units",
+      yieldUnit: recipe.yieldUnit ?? "",
       instructions: recipe.instructions ?? "",
       estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
       items: (recipe.recipeItems ?? []).map((i: any) => ({
@@ -225,6 +225,7 @@ export default function RecipeMasterTab() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError("Recipe name is required."); return; }
+    if (!form.yieldUnit) { setError("Select the recipe's yield unit (e.g. KG, L, PCS)."); return; }
     if (form.items.length === 0) { setError("Add at least one ingredient."); return; }
     if (form.items.some(item => !item.inventoryItemId)) {
       setError("Please select a material for all ingredients.");
@@ -743,15 +744,12 @@ export default function RecipeMasterTab() {
                   className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
                 />
                 <select
-                  value={form.yieldUnit || "units"}
+                  value={form.yieldUnit}
                   onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
                   className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
                 >
-                  <option value="units">UNITS</option>
-                  <option value="kg">KG</option>
-                  <option value="g">G</option>
-                  <option value="L">L</option>
-                  <option value="ml">ML</option>
+                  <option value="" disabled>Select...</option>
+                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
             </div>
