@@ -186,7 +186,7 @@ export default function VendorsClient() {
         const accs = aRes.value.data || [];
         setAccounts(accs);
         if (accs.length > 0) {
-          setPaymentForm(prev => ({ ...prev, accountId: prev.accountId || accs[0].id }));
+          // Default must be Select Account (empty)
         }
       }
     } catch (e) {
@@ -819,6 +819,34 @@ export default function VendorsClient() {
 
   // -- Actions --
 
+  const amountNum = Number(paymentForm.amount) || 0;
+  const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
+  const accountBalance = selectedAccount?.balance || 0;
+  const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
+  const noPayableDue = paymentForm.type === 'PAYMENT' && vendorNetPayable <= 0;
+
+  const getFilteredAccounts = () => {
+    if (paymentForm.paymentMode === "CASH") {
+      return accounts.filter(a => a.type === "CASH");
+    } else {
+      return accounts.filter(a => a.type === "BANK");
+    }
+  };
+
+  const handlePaymentModeChange = (mode: string) => {
+    setPaymentForm(prev => {
+      const filtered = mode === "CASH"
+        ? accounts.filter(a => a.type === "CASH")
+        : accounts.filter(a => a.type === "BANK");
+      const isStillValid = filtered.some(a => a.id === prev.accountId);
+      return {
+        ...prev,
+        paymentMode: mode,
+        accountId: isStillValid ? prev.accountId : ""
+      };
+    });
+  };
+
   const handlePayment = async () => {
     const isRefRequired = paymentForm.paymentMode !== 'CASH';
     if (!selectedVendorId || !paymentForm.amount || !paymentForm.accountId) {
@@ -827,6 +855,14 @@ export default function VendorsClient() {
     }
     if (isRefRequired && !paymentForm.transactionRef.trim()) {
       showToast("Reference Number is required for non-cash payments", "error");
+      return;
+    }
+    if (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable + 0.01) {
+      showToast(`Payment amount cannot exceed Net Payable of ₹${vendorNetPayable.toLocaleString()}`, "error");
+      return;
+    }
+    if (amountNum > accountBalance) {
+      showToast(`Payment amount cannot exceed Available Account Balance of ₹${accountBalance.toLocaleString()}`, "error");
       return;
     }
     setSaving(true);
@@ -862,14 +898,6 @@ export default function VendorsClient() {
       setLoadingInvoices(false);
     }
   };
-
-  const amountNum = Number(paymentForm.amount) || 0;
-  const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
-  const accountBalance = selectedAccount?.balance || 0;
-  // Pay Due against a vendor that has no outstanding payable doesn't make sense —
-  // block it rather than silently recording a payment with nothing to pay.
-  const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
-  const noPayableDue = paymentForm.type === 'PAYMENT' && vendorNetPayable <= 0;
 
   return (
     <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
@@ -1739,7 +1767,7 @@ export default function VendorsClient() {
                         selectedVendorDetail?.suppliedMaterials?.map((m: any) => (
                           <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                             <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
+                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.sku || m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
                             <td className="px-6 py-4 text-xs text-slate-500">{m.material?.unit ? m.material.unit.replace(/^1\s*/, "") : "Units"}</td>
                             <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {m.price || m.material?.basePrice || 0}</td>
                             <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
@@ -2043,7 +2071,8 @@ export default function VendorsClient() {
                     ) : (
                       <div className="space-y-1.5">
                         <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
-                          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          <option value="">Select Account</option>
+                          {getFilteredAccounts().map(a => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
                         </select>
                         {selectedAccount && (
                           <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${amountNum > accountBalance ? 'bg-rose-50 border border-rose-200 text-rose-600' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
@@ -2057,7 +2086,7 @@ export default function VendorsClient() {
 
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500">Payment Mode</label>
-                    <select value={paymentForm.paymentMode} onChange={e => setPaymentForm({ ...paymentForm, paymentMode: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
+                    <select value={paymentForm.paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
                       <option value="CASH">Cash</option>
                       <option value="UPI">UPI</option>
                       <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -2168,16 +2197,16 @@ export default function VendorsClient() {
               <p className="text-xs text-gray-500">
                 {accounts.length === 0
                   ? <span className="text-rose-500 font-semibold">⚠ No debit account available</span>
-                  : noPayableDue
-                  ? <span className="text-rose-500 font-semibold">⚠ No outstanding balance to pay — switch to Advance</span>
-                  : !amountNum
-                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
                   : !paymentForm.accountId
                   ? <span className="text-rose-500 font-semibold">⚠ Select a debit account</span>
+                  : !amountNum
+                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
+                  : paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable
+                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds Net Payable</span>
+                  : amountNum > accountBalance
+                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds available account balance</span>
                   : paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()
                   ? <span className="text-rose-500 font-semibold">⚠ Reference number required</span>
-                  : amountNum > accountBalance
-                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds account balance</span>
                   : <span className="text-emerald-600 font-semibold">✓ Ready to record</span>}
               </p>
               <div className="flex items-center gap-3">
@@ -2186,11 +2215,11 @@ export default function VendorsClient() {
                   onClick={handlePayment}
                   className={clsx(
                     "px-6 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm",
-                    saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())
+                    saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
                       : "bg-[#f58220] text-white hover:bg-[#e8740e] active:scale-95"
                   )}
-                  disabled={saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())}
+                  disabled={saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance}
                 >
                   {saving ? "Processing…" : "Record Payment"}
                 </button>
