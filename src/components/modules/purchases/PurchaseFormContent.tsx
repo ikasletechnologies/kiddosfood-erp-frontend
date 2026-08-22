@@ -248,12 +248,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Tag size={11} /> Purchase Type
+                    <Tag size={14} className="text-slate-400" /> Purchase Type
                   </label>
                   <select
                     value={purchaseType}
                     onChange={(e) => setPurchaseType(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
+                    className="w-full border border-slate-350 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
                   >
                     <option value="RAW_MATERIAL">Raw Material</option>
                     <option value="PACKAGING_MATERIAL">Packaging Material</option>
@@ -264,12 +264,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-semibold text-gray-500 flex items-center gap-1">
-                      <Warehouse size={11} /> Warehouse
+                    <Warehouse size={14} className="text-slate-400" /> Warehouse
                     </label>
                     <button
                       type="button"
                       onClick={() => setShowWarehouseModal(true)}
-                      className="text-[10px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
+                      className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
                     >
                       + Add New
                     </button>
@@ -284,7 +284,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                           setWarehouseId(e.target.value);
                         }
                       }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
+                      className="w-full border border-slate-355 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
                     >
                       <option value="">Select Warehouse</option>
                       {warehouses.map(w => (
@@ -295,7 +295,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                     <button
                       type="button"
                       onClick={() => setShowWarehouseModal(true)}
-                      className="p-2 border border-gray-300 hover:border-orange-500 hover:bg-orange-50 text-gray-500 hover:text-orange-600 rounded-lg transition-all"
+                      className="p-2 border border-slate-350 dark:border-slate-700 hover:border-orange-500 hover:bg-orange-50/50 text-slate-500 hover:text-orange-600 rounded-lg transition-all"
                       title="Add New Warehouse"
                     >
                       +
@@ -304,7 +304,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Calendar size={11} /> Expected Delivery <span className="text-rose-500 font-bold">*</span>
+                    <Calendar size={14} className="text-slate-400" /> Expected Delivery <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -312,7 +312,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={expectedDeliveryDate}
                       onChange={(e) => setExpectedDeliveryDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-gray-300 rounded-lg py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400 pl-3",
+                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm text-slate-700 outline-none focus:border-orange-500 transition-colors pl-3",
                         expectedDeliveryDate ? "pr-16" : "pr-8"
                       )}
                     />
@@ -332,12 +332,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <CreditCard size={11} /> Payment Terms
+                    <CreditCard size={14} className="text-slate-400" /> Payment Terms
                   </label>
                   <select
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
+                    className="w-full border border-slate-350 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
                   >
                     <option value="">Select Terms</option>
                     <option value="IMMEDIATE">Immediate</option>
@@ -358,7 +358,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Calendar size={11} /> Purchase Date
+                    <Calendar size={14} className="text-slate-400" /> Purchase Date
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -366,7 +366,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={purchaseDate}
                       onChange={(e) => setPurchaseDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-gray-300 rounded-lg py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400 pl-3",
+                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm text-slate-700 outline-none focus:border-orange-500 transition-colors pl-3",
                         purchaseDate ? "pr-16" : "pr-8"
                       )}
                     />
@@ -419,28 +419,27 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                   Notes & Terms
                 </button>
              </div>
-
-             <div className="p-0">
+              <div className="p-0">
                 {activeTab === "items" && <LineItemsTable />}
                 {activeTab === "notes" && (
-                  <div className="p-10 space-y-10">
-                     <div className="grid grid-cols-2 gap-10">
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Internal Remarks</label>
+                  <div className="p-6 space-y-6">
+                     <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-1.5">
+                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Internal Remarks</label>
                            <textarea 
                              value={internalNotes}
                              onChange={(e) => setInternalNotes(e.target.value)}
                              placeholder="Internal collaboration notes..."
-                             className="w-full min-h-[140px] p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-xl text-sm outline-none focus:ring-2 ring-purple-500/10"
+                             className="w-full min-h-[140px] p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm outline-none focus:border-orange-500 transition-colors resize-none"
                            />
                         </div>
-                        <div className="space-y-3">
-                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Supplier Instructions</label>
+                        <div className="space-y-1.5">
+                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Supplier Instructions</label>
                            <textarea 
                              value={vendorNotes}
                              onChange={(e) => setVendorNotes(e.target.value)}
                              placeholder="Delivery instructions, terms, etc..."
-                             className="w-full min-h-[140px] p-5 bg-slate-50 dark:bg-slate-900 border-none rounded-xl text-sm outline-none focus:ring-2 ring-purple-500/10"
+                             className="w-full min-h-[140px] p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm outline-none focus:border-orange-500 transition-colors resize-none"
                            />
                         </div>
                      </div>
