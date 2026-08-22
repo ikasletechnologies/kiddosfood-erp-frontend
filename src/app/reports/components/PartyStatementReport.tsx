@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { reportsApi } from "@/lib/api/accounting.api";
+import * as XLSX from "xlsx";
 
 export default function CentralPartyStatementReport({
   reportData,
@@ -27,6 +28,14 @@ export default function CentralPartyStatementReport({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const pn = params.get("partyName");
+      if (pn) setPartyName(pn);
+    }
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     reportsApi.getPartyStatement({
       startDate,
@@ -40,12 +49,86 @@ export default function CentralPartyStatementReport({
     });
   }, [startDate, endDate]);
 
+  const transactions = (data?.transactions || []).filter((t: any) => {
+    if (!partyName || !partyName.trim()) return true;
+    const q = partyName.trim().toLowerCase();
+    return (
+      (t.partyName && t.partyName.toLowerCase().includes(q)) ||
+      (t.particular && t.particular.toLowerCase().includes(q)) ||
+      (t.refNo && t.refNo.toLowerCase().includes(q))
+    );
+  });
+
   const handlePrint = () => {
     window.print();
   };
 
   const handleExcel = () => {
-    toast.success("Excel export initiated...");
+    try {
+      if (!transactions || transactions.length === 0) {
+        toast.error("No transactions to export");
+        return;
+      }
+
+      const aoa: any[][] = [];
+      aoa.push(["PARTY STATEMENT REPORT"]);
+      if (partyName) aoa.push(["Selected Party:", partyName]);
+      aoa.push(["Period:", `${startDate} to ${endDate}`]);
+      aoa.push([]);
+
+      // Headers
+      aoa.push([
+        "Date",
+        "Txn Type",
+        "Ref No.",
+        "Payment Type",
+        "Total (Rs)",
+        "Received/Paid (Rs)",
+        "Txn Balance (Rs)",
+        "Receivable Balance (Rs)",
+        "Payable Balance (Rs)"
+      ]);
+
+      // Rows
+      transactions.forEach((t: any) => {
+        aoa.push([
+          t.date || "",
+          t.txnType || "",
+          t.refNo || "",
+          t.paymentType || "",
+          Number(t.total || 0),
+          Number(t.receivedPaid || 0),
+          Number(t.txnBalance || 0),
+          Number(t.receivableBalance || 0),
+          Number(t.payableBalance || 0)
+        ]);
+      });
+
+      aoa.push([]);
+      if (data?.summary) {
+        aoa.push(["Summary"]);
+        aoa.push(["Total Sale:", Number(data.summary.totalSale || 0)]);
+        aoa.push(["Total Purchase:", Number(data.summary.totalPurchase || 0)]);
+        aoa.push(["Total Money-In:", Number(data.summary.totalMoneyIn || 0)]);
+        aoa.push(["Total Money-Out:", Number(data.summary.totalMoneyOut || 0)]);
+        aoa.push(["Total Expense:", Number(data.summary.totalExpense || 0)]);
+        aoa.push(["Total Receivable:", Number(data.summary.totalReceivable || 0)]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Party Statement");
+
+      const filename = partyName
+        ? `Party_Statement_${partyName.replace(/[^a-zA-Z0-9_-]/g, "_")}_${startDate}_${endDate}.xlsx`
+        : `Party_Statement_All_${startDate}_${endDate}.xlsx`;
+
+      XLSX.writeFile(wb, filename);
+      toast.success(partyName ? `Party Statement for "${partyName}" exported to Excel!` : "Party Statement exported to Excel!");
+    } catch (err) {
+      console.error("Excel export failed:", err);
+      toast.error("Failed to export Excel file");
+    }
   };
 
   const fmt = (val: number | undefined) => `₹ ${Number(val || 0).toFixed(2)}`;
@@ -156,7 +239,7 @@ export default function CentralPartyStatementReport({
                     </div>
                   </td>
                 </tr>
-              ) : (!data?.transactions || data.transactions.length === 0) ? (
+              ) : (!transactions || transactions.length === 0) ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-40 text-center h-full align-middle">
                     <div className="text-slate-600 dark:text-slate-400 font-medium">
@@ -165,7 +248,7 @@ export default function CentralPartyStatementReport({
                   </td>
                 </tr>
               ) : (
-                data.transactions.map((t: any, idx: number) => (
+                transactions.map((t: any, idx: number) => (
                   <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
                     <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800">{t.date}</td>
                     <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800">{t.txnType}</td>

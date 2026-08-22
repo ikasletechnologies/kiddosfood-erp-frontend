@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, Info } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
+import { vendorsApi } from "@/lib/api";
 
 export interface AddPartyModalProps {
   isOpen: boolean;
@@ -157,6 +158,27 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
       }
     }
 
+    if (form.gstNumber && form.gstNumber.trim()) {
+      const cleanGst = form.gstNumber.trim().toUpperCase();
+      try {
+        if (partyType === 'vendor') {
+          const res = await vendorsApi.getAll();
+          const allVendors = res.data?.vendors || res.data || [];
+          const duplicate = allVendors.find((v: any) => 
+            v.id !== initialData?.id && 
+            (v.gstNumber || v.gstin || "").trim().toUpperCase() === cleanGst
+          );
+          if (duplicate) {
+            toast.error("GST Number already exists.");
+            setActiveTab("GST");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Duplicate GST check failed:", err);
+      }
+    }
+
     if (!form.billingAddress || !form.billingAddress.trim()) {
       toast.error("Billing Address is required.");
       setActiveTab("GST");
@@ -165,6 +187,13 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
     if (!form.shippingAddress || !form.shippingAddress.trim()) {
       toast.error("Shipping Address is required.");
+      setActiveTab("GST");
+      return;
+    }
+
+    const cleanPincode = form.pincode ? form.pincode.replace(/\D/g, "") : "";
+    if (!cleanPincode || cleanPincode.length !== 6) {
+      toast.error("Pincode must be exactly 6 digits.");
       setActiveTab("GST");
       return;
     }
@@ -225,7 +254,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         state: form.state,
         district: form.district,
         city: form.city,
-        pincode: form.pincode,
+        pincode: cleanPincode,
         gstNumber: form.gstNumber,
         gstType: form.gstType,
         openingBalance: finalOpeningBalance,
@@ -239,8 +268,15 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
       
       await onSave(payload);
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      const errMsg = e?.response?.data?.error || e?.response?.data?.message || e?.message || "";
+      if (errMsg.toLowerCase().includes("gst") && (errMsg.toLowerCase().includes("exist") || errMsg.toLowerCase().includes("duplicate") || errMsg.toLowerCase().includes("unique"))) {
+        toast.error("GST Number already exists.");
+        setActiveTab("GST");
+      } else if (errMsg) {
+        toast.error(errMsg);
+      }
     } finally {
       setSaving(false);
     }
@@ -436,11 +472,14 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   {/* Right Column */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Pincode</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Pincode *</label>
                       <input 
-                        placeholder="Pincode"
+                        placeholder="6-digit Pincode"
                         value={form.pincode} 
-                        onChange={(e) => setForm({...form, pincode: e.target.value.replace(/\D/g, "")})} 
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                          setForm({...form, pincode: val});
+                        }} 
                         maxLength={6}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
                       />

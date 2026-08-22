@@ -102,6 +102,23 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
       return;
     }
 
+    if (form.gstNumber && form.gstNumber.trim()) {
+      const cleanGst = form.gstNumber.trim().toUpperCase();
+      try {
+        const res = await vendorsApi.getAll();
+        const allVendors = res.data?.vendors || res.data || [];
+        const duplicate = allVendors.find((v: any) => 
+          (v.gstNumber || v.gstin || "").trim().toUpperCase() === cleanGst
+        );
+        if (duplicate) {
+          showToast("GST Number already exists.", "error");
+          return;
+        }
+      } catch (err) {
+        console.error("Duplicate GST check failed:", err);
+      }
+    }
+
     setSaving(true);
     try {
       const response = await vendorsApi.create({
@@ -129,7 +146,12 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
       setForm(EMPTY_FORM);
     } catch (error: any) {
       console.error("Failed to save vendor", error);
-      showToast(error.response?.data?.error || "Failed to create vendor", "error");
+      const errMsg = error.response?.data?.error || error.response?.data?.message || "";
+      if (errMsg.toLowerCase().includes("gst") && (errMsg.toLowerCase().includes("exist") || errMsg.toLowerCase().includes("duplicate") || errMsg.toLowerCase().includes("unique"))) {
+        showToast("GST Number already exists.", "error");
+      } else {
+        showToast(errMsg || "Failed to create vendor", "error");
+      }
     } finally {
       setSaving(false);
     }

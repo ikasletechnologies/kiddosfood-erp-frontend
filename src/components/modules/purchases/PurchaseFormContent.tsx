@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import DocumentOptions from "@/components/documents/DocumentOptions";
-import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X } from "lucide-react";
+import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X, ArrowLeft } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
@@ -47,7 +47,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"items" | "notes" | "attachments">("items");
+  const [activeTab, setActiveTab] = useState<"items" | "notes">("items");
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [warehouses, setWarehouses] = useState<{id: string, name: string}[]>([]);
@@ -76,6 +76,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   }, []);
 
   const handleCreatePO = async () => {
+    if (!expectedDeliveryDate) {
+      toast.error("Expected Delivery date is mandatory.");
+      return;
+    }
     if (!isValid) {
       toast.error("Please fill in all required fields and resolve errors.");
       return;
@@ -175,11 +179,19 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       {/* Top bar */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => router.push("/purchases/orders")}
+            className="p-2 -ml-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Back to Purchase Orders"
+          >
+            <ArrowLeft size={20} />
+          </button>
           <div className="p-2 bg-orange-100 rounded-lg">
             <Package size={18} className="text-orange-600" />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">New Purchase Order</h1>
+            <h1 className="text-lg font-bold text-gray-800">{editId ? "Edit Purchase Order" : "New Purchase Order"}</h1>
             <p className="text-xs text-gray-400 font-mono">#{poNumber}</p>
           </div>
           <span className={clsx(
@@ -190,13 +202,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleSaveDraft}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors disabled:opacity-50"
-          >
-            Save Draft
-          </button>
           <button
             onClick={() => setShowPreview(true)}
             className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors flex items-center gap-1.5"
@@ -299,7 +304,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Calendar size={11} /> Expected Delivery
+                    <Calendar size={11} /> Expected Delivery <span className="text-rose-500 font-bold">*</span>
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -413,15 +418,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 >
                   Notes & Terms
                 </button>
-                <button 
-                  onClick={() => setActiveTab("attachments")}
-                  className={clsx(
-                    "px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] transition-all border-b-2",
-                    activeTab === "attachments" ? "border-[#7C3AED] text-[#7C3AED]" : "border-transparent text-slate-400 hover:text-slate-600"
-                  )}
-                >
-                  Attachments
-                </button>
              </div>
 
              <div className="p-0">
@@ -449,17 +445,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                         </div>
                      </div>
                   </div>
-                )}
-                {activeTab === "attachments" && (
-                   <div className="p-20 text-center flex flex-col items-center gap-6">
-                      <div className="w-20 h-20 rounded-2xl bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-400">
-                         <Plus size={40} />
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">Upload Documents</h4>
-                        <p className="text-xs text-slate-400 font-medium">Click to upload or drag & drop Supplier Quotations, Invoices, or Specs</p>
-                      </div>
-                   </div>
                 )}
               </div>
             </div>

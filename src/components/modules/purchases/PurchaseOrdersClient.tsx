@@ -1154,7 +1154,13 @@ export default function PurchaseOrdersClient() {
                 </button>
               )}
 
-              <button onClick={() => { setViewingPO(viewingDetailsPO); setViewingDetailsPO(null); }} className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest">Download PDF</button>
+              <button 
+                type="button"
+                onClick={() => handleDownloadPdf(viewingDetailsPO)} 
+                className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+              >
+                Download PDF
+              </button>
             </div>
           </div>
         </div>,

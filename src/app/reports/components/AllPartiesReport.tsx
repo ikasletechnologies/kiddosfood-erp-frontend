@@ -10,6 +10,7 @@ import { X,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { reportsApi } from "@/lib/api/accounting.api";
+import * as XLSX from "xlsx";
 
 interface PartyRow {
   id: string;
@@ -63,16 +64,6 @@ export default function CentralAllPartiesReport({
     });
   }, []);
 
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExcel = () => {
-    toast.success("Excel export initiated...");
-  };
-
-  const fmt = (val: number | null) => val !== null ? `₹ ${val.toFixed(2)}` : "—";
-
   let filtered = rows.filter((r) =>
     r.partyName.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -86,6 +77,78 @@ export default function CentralAllPartiesReport({
       .map(r => ({ ...r, receivableBalance: null }))
       .filter(r => r.payableBalance !== null && r.payableBalance > 0);
   }
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExcel = () => {
+    try {
+      const rowsToExport = selectedIds.length > 0
+        ? filtered.filter(r => selectedIds.includes(r.id))
+        : filtered;
+
+      if (!rowsToExport || rowsToExport.length === 0) {
+        toast.error("No parties to export");
+        return;
+      }
+
+      const aoa: any[][] = [];
+      aoa.push(["ALL PARTIES REPORT"]);
+      aoa.push(["Generated Date:", new Date().toLocaleDateString()]);
+      if (filterType) aoa.push(["Filter Type:", filterType.toUpperCase()]);
+      if (selectedIds.length > 0) aoa.push(["Selected Parties Count:", selectedIds.length]);
+      aoa.push([]);
+
+      // Table Header
+      aoa.push([
+        "#",
+        "Party Name",
+        "Email",
+        "Phone No",
+        "Receivable Balance (Rs)",
+        "Payable Balance (Rs)",
+        "Credit Limit (Rs)"
+      ]);
+
+      // Data Rows
+      rowsToExport.forEach((r, idx) => {
+        aoa.push([
+          idx + 1,
+          r.partyName || "",
+          r.email || "—",
+          r.phoneNo || "—",
+          r.receivableBalance !== null ? Number(r.receivableBalance) : 0,
+          r.payableBalance !== null ? Number(r.payableBalance) : 0,
+          r.creditLimit !== null ? Number(r.creditLimit) : 0
+        ]);
+      });
+
+      aoa.push([]);
+      aoa.push([
+        "TOTALS",
+        "",
+        "",
+        "",
+        rowsToExport.reduce((s, r) => s + (r.receivableBalance || 0), 0),
+        rowsToExport.reduce((s, r) => s + (r.payableBalance || 0), 0),
+        ""
+      ]);
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "All Parties");
+
+      const filename = `All_Parties_Report_${new Date().toISOString().split("T")[0]}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      toast.success(selectedIds.length > 0 ? `Exported ${selectedIds.length} selected parties to Excel!` : "All Parties report exported to Excel!");
+    } catch (err) {
+      console.error("Excel export error:", err);
+      toast.error("Failed to export Excel file");
+    }
+  };
+
+  const fmt = (val: number | null) => val !== null ? `₹ ${val.toFixed(2)}` : "—";
 
   const toggleAll = () => {
     if (selectedIds.length === filtered.length) {

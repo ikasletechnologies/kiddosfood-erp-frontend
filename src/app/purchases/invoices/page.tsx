@@ -4,14 +4,13 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X,
   Printer, ChevronDown, Trash2, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft, Upload,
+  AlignLeft, FileText, ArrowLeft, Upload, Download,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import AccountFormModal from "@/components/modals/AccountFormModal";
-
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,17 +102,39 @@ function MiniCalendar({ value, onChange, onClose }: {
 
   const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
   const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
-  const isSelected = (d: number) => selected.getFullYear() === viewYear && selected.getMonth() === viewMonth && selected.getDate() === d;
+  const isSelected = (d: number) => Boolean(value) && selected.getFullYear() === viewYear && selected.getMonth() === viewMonth && selected.getDate() === d;
   const isToday = (d: number) => today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+
+  const currentYear = today.getFullYear();
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - 15 + i);
 
   return (
     <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-64 select-none">
-      <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+      <div className="flex items-center justify-between mb-2 gap-1">
+        <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">
           <ChevronDown size={14} className="rotate-90" />
         </button>
-        <span className="text-sm font-semibold text-gray-800">{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <div className="flex items-center gap-1">
+          <select
+            value={viewMonth}
+            onChange={e => setViewMonth(Number(e.target.value))}
+            className="text-xs font-semibold text-gray-800 bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600"
+          >
+            {MONTH_NAMES.map((m, idx) => (
+              <option key={m} value={idx}>{m}</option>
+            ))}
+          </select>
+          <select
+            value={viewYear}
+            onChange={e => setViewYear(Number(e.target.value))}
+            className="text-xs font-semibold text-gray-800 bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">
           <ChevronDown size={14} className="-rotate-90" />
         </button>
       </div>
@@ -140,7 +161,159 @@ function MiniCalendar({ value, onChange, onClose }: {
   );
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+function buildPurchaseBillPdf(bill: any): string {
+  const contentObjects: string[] = [];
+  const rowHeight = 20;
+  const topMargin = 790;
+  const bottomMargin = 50;
+  const pageHeight = 842;
+  const pageWidth = 595;
+  const leftMargin = 40;
+  const colWidths = [25, 190, 45, 45, 65, 55, 90];
+  const headers = ["#", "Item Description", "Qty", "Unit", "Rate (Rs)", "Tax", "Amount (Rs)"];
+
+  const items = bill.items || [];
+  let currentRow = 0;
+  let pageNum = 1;
+
+  const vendorName = (bill.vendor?.name || bill.vendorSearch || "Vendor").replace(/[()\\\r\n]/g, "");
+  const vendorPhone = (bill.vendor?.phone || bill.vendor?.contact || bill.vendorPhone || "-").replace(/[()\\\r\n]/g, "");
+  const billNum = (bill.invoiceNumber || bill.billNumber || "PB-001").replace(/[()\\\r\n]/g, "");
+  const bDate = bill.invoiceDate ? new Date(bill.invoiceDate).toLocaleDateString() : (bill.billDate || new Date().toLocaleDateString());
+  const pType = bill.paymentType || "CASH";
+
+  while (currentRow < items.length || pageNum === 1) {
+    let y = topMargin;
+    let stream = "";
+
+    // Header
+    stream += `BT /F2 16 Tf 0.96 0.51 0.13 rg ${leftMargin} ${y} Td (PURCHASE BILL) Tj ET\n`;
+    stream += `BT /F2 10 Tf 0.2 0.2 0.2 rg 400 ${y} Td (Bill #: ${billNum}) Tj ET\n`;
+    y -= 16;
+    stream += `BT /F1 9 Tf 0.4 0.4 0.4 rg 400 ${y} Td (Date: ${bDate}) Tj ET\n`;
+    stream += `BT /F2 11 Tf 0.1 0.1 0.1 rg ${leftMargin} ${y} Td (KIDDOS FOODS) Tj ET\n`;
+    y -= 22;
+
+    // Divider
+    stream += `0.85 0.85 0.85 RG 1 w ${leftMargin} ${y} m ${leftMargin + 515} ${y} l S\n`;
+    y -= 18;
+
+    // Vendor Box
+    stream += `0.97 0.97 0.98 rg ${leftMargin} ${y - 35} 515 45 re f\n`;
+    stream += `0.88 0.88 0.90 RG 0.5 w ${leftMargin} ${y - 35} 515 45 re S\n`;
+
+    stream += `BT /F2 9 Tf 0.3 0.3 0.3 rg ${leftMargin + 8} ${y - 2} Td (BILLED BY VENDOR:) Tj ET\n`;
+    stream += `BT /F2 10 Tf 0.1 0.1 0.1 rg ${leftMargin + 8} ${y - 16} Td (${vendorName}) Tj ET\n`;
+    stream += `BT /F1 8.5 Tf 0.4 0.4 0.4 rg ${leftMargin + 8} ${y - 28} Td (Phone: ${vendorPhone}  |  Payment Type: ${pType}) Tj ET\n`;
+
+    y -= 50;
+
+    // Table Header
+    stream += `0.94 0.95 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
+    stream += `0.7 0.7 0.7 RG 0.5 w ${leftMargin} ${y - 4} 515 18 re S\n`;
+
+    let x = leftMargin + 4;
+    headers.forEach((h, i) => {
+      stream += `BT /F2 8.5 Tf 0.2 0.2 0.2 rg ${x} ${y} Td (${h}) Tj ET\n`;
+      x += colWidths[i];
+    });
+    y -= rowHeight;
+
+    // Rows
+    let subtotal = 0;
+    while (currentRow < items.length && y > bottomMargin + 80) {
+      const it = items[currentRow];
+      const name = (it.item || it.name || "Item " + (currentRow + 1)).replace(/[()\\\r\n]/g, "").slice(0, 32);
+      const qty = Number(it.qty || it.quantity) || 0;
+      const unit = (it.unit || "unit").replace(/[()\\\r\n]/g, "");
+      const price = Number(it.price || it.pricePerUnit || it.rate) || 0;
+      const taxRate = Number(it.taxRate ?? it.tax ?? it.taxPct ?? 0);
+      const amount = Number(it.amount) || (qty * price);
+      subtotal += amount;
+
+      stream += `0.9 0.9 0.9 RG 0.3 w ${leftMargin} ${y - 4} m ${leftMargin + 515} ${y - 4} l S\n`;
+
+      const rowVals = [
+        String(currentRow + 1),
+        name,
+        String(qty),
+        unit,
+        price.toLocaleString("en-IN"),
+        taxRate ? `${taxRate}%` : "0%",
+        amount.toLocaleString("en-IN")
+      ];
+
+      let rx = leftMargin + 4;
+      rowVals.forEach((val, ci) => {
+        stream += `BT /F1 8 Tf 0.15 0.15 0.15 rg ${rx} ${y} Td (${val}) Tj ET\n`;
+        rx += colWidths[ci];
+      });
+
+      y -= rowHeight;
+      currentRow++;
+    }
+
+    if (currentRow >= items.length) {
+      y -= 10;
+      const grandTotal = Number(bill.amount || bill.finalTotal || subtotal);
+      const totalTaxVal = Number(bill.totalTax || 0);
+
+      stream += `0.85 0.85 0.85 RG 1 w 330 ${y} m ${leftMargin + 515} ${y} l S\n`;
+      y -= 16;
+      stream += `BT /F1 9 Tf 0.3 0.3 0.3 rg 340 ${y} Td (Subtotal: Rs ${subtotal.toLocaleString("en-IN")}) Tj ET\n`;
+      if (totalTaxVal > 0) {
+        y -= 14;
+        stream += `BT /F1 9 Tf 0.3 0.3 0.3 rg 340 ${y} Td (Tax: Rs ${totalTaxVal.toLocaleString("en-IN")}) Tj ET\n`;
+      }
+      y -= 18;
+      stream += `BT /F2 12 Tf 0.96 0.51 0.13 rg 340 ${y} Td (Grand Total: Rs ${grandTotal.toLocaleString("en-IN")}) Tj ET\n`;
+    }
+
+    stream += `BT /F1 7.5 Tf 0.5 0.5 0.5 rg ${leftMargin} 30 Td (Generated by KIDDOS ERP  |  Page ${pageNum}) Tj ET\n`;
+
+    const streamLength = new TextEncoder().encode(stream).length;
+    contentObjects.push(`<< /Length ${streamLength} >>\nstream\n${stream}endstream`);
+    pageNum++;
+  }
+
+  const allObjs: string[] = [];
+  allObjs.push(`<< /Type /Catalog /Pages 2 0 R >>`);
+  
+  const pageObjIndices: number[] = [];
+  contentObjects.forEach((_, i) => {
+    pageObjIndices.push(3 + i * 2);
+  });
+  
+  const kidsStr = pageObjIndices.map(idx => `${idx} 0 R`).join(" ");
+  allObjs.push(`<< /Type /Pages /Kids [ ${kidsStr} ] /Count ${contentObjects.length} >>`);
+
+  contentObjects.forEach((streamObj, i) => {
+    const pageObjIndex = 3 + i * 2;
+    const contentObjIndex = pageObjIndex + 1;
+    allObjs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjIndex} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>`);
+    allObjs.push(streamObj);
+  });
+
+  let pdf = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  const encoder = new TextEncoder();
+
+  allObjs.forEach((obj, i) => {
+    offsets.push(encoder.encode(pdf).length);
+    pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+
+  const xrefStart = encoder.encode(pdf).length;
+  pdf += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
+  offsets.forEach(offset => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+
+  pdf += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  return pdf;
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PurchaseBillsPage() {
   const [view, setView] = useState<"list" | "create">("list");
@@ -186,7 +359,9 @@ export default function PurchaseBillsPage() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [sourcePoId, setSourcePoId] = useState<string | null>(null);
   const [sourceGrnId, setSourceGrnId] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: string; type: string; url?: string }[]>([]);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
   const vendorDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
@@ -201,7 +376,7 @@ export default function PurchaseBillsPage() {
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
 
-  const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmtD = (d: string) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -293,8 +468,38 @@ export default function PurchaseBillsPage() {
     setStateOfSupply(""); setPaymentType("CASH");
     setItems([makeItem(), makeItem()]); setPriceMode("without_tax");
     setTermsText(""); setShowTerms(false); setDescription(""); setShowDesc(false);
+    setAttachedFiles([]);
     setRoundOffEnabled(true); setView("create");
     setSourcePoId(null); setSourceGrnId(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newAttachments: { id: string; name: string; size: string; type: string; url?: string }[] = [];
+    Array.from(files).forEach((file) => {
+      const sizeStr = file.size > 1024 * 1024 
+        ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` 
+        : `${Math.round(file.size / 1024)} KB`;
+      
+      const newFileObj = {
+        id: Math.random().toString(36).slice(2),
+        name: file.name,
+        size: sizeStr,
+        type: file.type,
+        url: URL.createObjectURL(file),
+      };
+      newAttachments.push(newFileObj);
+    });
+
+    setAttachedFiles(prev => [...prev, ...newAttachments]);
+    toast.success(`Attached ${newAttachments.length} document${newAttachments.length > 1 ? "s" : ""}`);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachedFiles(prev => prev.filter(f => f.id !== id));
   };
 
   const handleSave = async () => {
@@ -318,6 +523,7 @@ export default function PurchaseBillsPage() {
         })),
         termsAndConditions: termsText || undefined,
         description: description || undefined,
+        attachments: attachedFiles.map(f => ({ name: f.name, size: f.size, type: f.type, url: f.url })),
         roundOff,
       });
       toast.success("Bill saved successfully");
@@ -326,26 +532,6 @@ export default function PurchaseBillsPage() {
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Failed to save bill");
     } finally { setSaving(false); }
-  };
-
-  const getFilteredAccounts = () => {
-    if (paymentMode === "CASH") {
-      return accounts.filter(a => a.type === "CASH");
-    } else {
-      return accounts.filter(a => a.type === "BANK" || a.type === "UPI");
-    }
-  };
-
-  const handlePaymentModeChange = (mode: string) => {
-    setPaymentMode(mode);
-    const filtered = mode === "CASH" 
-      ? accounts.filter(a => a.type === "CASH")
-      : accounts.filter(a => a.type === "BANK" || a.type === "UPI");
-    
-    const isStillValid = filtered.some(a => a.id === paymentAccount);
-    if (!isStillValid) {
-      setPaymentAccount("");
-    }
   };
 
   const handleMakePayment = async () => {
@@ -385,14 +571,13 @@ export default function PurchaseBillsPage() {
     }
   };
 
-  const openPaymentModal = (bill: any) => {
+  const openPaymentModal = async (bill: any) => {
     setPaymentBill(bill);
     const outstanding = bill.outstanding ?? Math.max(0, (bill.amount || 0) - (bill.advanceApplied || 0) - (bill.paidAmount || 0));
     setPaymentAmount(outstanding.toString());
     setPaymentNote(`Payment for ${bill.invoiceNumber || 'Bill'}`);
     setPaymentMode("CASH");
-    setPaymentAccount(""); // Default to "Select Account"
-    setPaymentIdempotencyKey(`bill-pay-${bill.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    if (accounts.length > 0) setPaymentAccount(accounts[0].id);
     setShowPaymentModal(true);
   };
 
@@ -405,11 +590,17 @@ export default function PurchaseBillsPage() {
       b.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ||
       b.vendor?.name?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || b.status === statusFilter;
-    return matchSearch && matchStatus;
+    let matchDate = true;
+    if (b.invoiceDate) {
+      const bD = b.invoiceDate.split("T")[0];
+      if (dateFrom && bD < dateFrom) matchDate = false;
+      if (dateTo && bD > dateTo) matchDate = false;
+    }
+    return matchSearch && matchStatus && matchDate;
   });
 
   const totalBillAmt = filtered.reduce((s, b) => s + (b.amount || 0), 0);
-  const totalApproved = filtered.filter(b => b.status === "APPROVED" || b.status === "PAID").reduce((s, b) => s + (b.amount || 0), 0);
+  const totalPaid = filtered.filter(b => b.status === "PAID" || b.status === "APPROVED").reduce((s, b) => s + (b.amount || 0), 0);
   const totalPending = filtered.filter(b => b.status === "PENDING").reduce((s, b) => s + (b.amount || 0), 0);
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -454,13 +645,13 @@ export default function PurchaseBillsPage() {
                         onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowVendorDrop(true); }}
                       />
-            {vendorSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setVendorSearch("")} 
-              />
-            )}
+                      {vendorSearch && (
+                        <X 
+                          size={14} 
+                          className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                          onClick={(e) => { e.stopPropagation(); setVendorSearch(""); setSelectedVendor(null); }} 
+                        />
+                      )}
                       <ChevronDown size={13} className="text-gray-400 shrink-0" />
                     </div>
                     {showVendorDrop && (
@@ -510,13 +701,36 @@ export default function PurchaseBillsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-gray-500">Bill Date</span>
                   <div className="relative" ref={calendarRef}>
-                    <button
-                      onClick={() => setShowCalendar(v => !v)}
-                      className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
-                    >
-                      <Calendar size={13} className="text-orange-500 shrink-0" />
-                      {new Date(billDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                    </button>
+                    <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors w-48 justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setShowCalendar(v => !v)}
+                        className="text-sm text-gray-700 text-left outline-none truncate"
+                      >
+                        {billDate ? new Date(billDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Select Date"}
+                      </button>
+                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowCalendar(v => !v)}
+                          className="text-orange-500 hover:text-orange-600 transition-colors"
+                          title="Open Calendar"
+                        >
+                          <Calendar size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setBillDate(""); }}
+                          className={clsx(
+                            "text-gray-400 hover:text-gray-600 transition-all",
+                            billDate ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
+                          )}
+                          title="Clear Date"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1 z-[200]">
                         <MiniCalendar value={billDate} onChange={setBillDate} onClose={() => setShowCalendar(false)} />
@@ -706,13 +920,49 @@ export default function PurchaseBillsPage() {
               ) : (
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
               )}
-              <div className="flex gap-2">
-                <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
-                  <Upload size={13} /> Upload Bill
-                </button>
-                <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
-                  <FileText size={13} /> Add Document
-                </button>
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  multiple
+                  accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                  className="hidden"
+                />
+                <div className="flex gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors cursor-pointer"
+                  >
+                    <Upload size={13} /> Upload Bill
+                  </button>
+                </div>
+
+                {attachedFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {attachedFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-2 px-2.5 py-1.5 bg-orange-50/60 border border-orange-200/80 rounded-lg text-xs text-gray-700 shadow-sm"
+                      >
+                        <FileText size={14} className="text-orange-500 shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="font-medium max-w-[180px] truncate">{file.name}</span>
+                          <span className="text-[10px] text-gray-400">{file.size}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(file.id)}
+                          className="ml-1 text-gray-400 hover:text-red-500 transition-colors p-0.5"
+                          title="Remove attachment"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -750,21 +1000,37 @@ export default function PurchaseBillsPage() {
           </button>
           <div className="relative" ref={shareDropRef}>
             <div className="flex rounded-lg overflow-hidden">
-              <button onClick={() => toast.success("Share feature coming soon")}
-                className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-r border-orange-400"
+              <button 
+                type="button"
+                onClick={() => handleShare()}
+                className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-r border-orange-400 flex items-center gap-1.5"
               >
-                Share
+                <Share2 size={13} /> Share
               </button>
-              <button onClick={() => setShowShareDrop(v => !v)}
+              <button 
+                type="button"
+                onClick={() => setShowShareDrop(v => !v)}
                 className="px-2 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600"
               >
                 <ChevronDown size={14} />
               </button>
             </div>
             {showShareDrop && (
-              <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg text-sm min-w-[160px] z-50">
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"><Share2 size={13} /> Share</button>
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"><Printer size={13} /> Print</button>
+              <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg text-sm min-w-[160px] z-50 py-1">
+                <button 
+                  type="button"
+                  onClick={() => { setShowShareDrop(false); handlePrint(); }} 
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"
+                >
+                  <Printer size={13} /> Print
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => { setShowShareDrop(false); handleDownloadPdf(); }} 
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"
+                >
+                  <Download size={13} /> Download
+                </button>
               </div>
             )}
           </div>
@@ -790,19 +1056,19 @@ export default function PurchaseBillsPage() {
           Purchase Bills
         </h1>
         <button onClick={openCreate}
-          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
+          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
         >
-          <Plus className="h-4 w-4" /> New Bill
+          <Plus className="h-4 w-4" /> Add Purchase Bill
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
-        {/* Summary Strip */}
-        <div className="grid grid-cols-3 gap-4">
+      <div className="p-6 space-y-4 max-w-7xl mx-auto">
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Bills",     value: `₹${totalBillAmt.toLocaleString("en-IN")}`,  color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "Approved / Paid", value: `₹${totalApproved.toLocaleString("en-IN")}`, color: "text-emerald-600", dot: "bg-emerald-500" },
-            { label: "Pending",         value: `₹${totalPending.toLocaleString("en-IN")}`,  color: "text-amber-600",   dot: "bg-amber-500" },
+            { label: "Total Purchases",  value: `₹ ${totalBillAmt.toLocaleString("en-IN")}`,  dot: "bg-blue-500",    color: "text-gray-900" },
+            { label: "Paid",             value: `₹ ${totalPaid.toLocaleString("en-IN")}`,     dot: "bg-emerald-500", color: "text-emerald-700" },
+            { label: "Pending Payment",  value: `₹ ${totalPending.toLocaleString("en-IN")}`,  dot: "bg-amber-500",   color: "text-amber-700" },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
@@ -830,84 +1096,135 @@ export default function PurchaseBillsPage() {
               />
             )}
           </div>
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
-            {["ALL", "PENDING", "MATCHED", "APPROVED"].map(s => (
-              <button key={s} onClick={() => setStatusFilter(s)}
-                className={clsx("px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+
+          <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 text-xs gap-1">
+            {["ALL", "PENDING", "PAID"].map(st => (
+              <button key={st} onClick={() => setStatusFilter(st)}
+                className={clsx("px-3 py-1 rounded font-semibold transition-colors",
+                  statusFilter === st ? "bg-[#f58220] text-white" : "text-gray-600 hover:text-gray-900"
                 )}
-              >{s === "ALL" ? "All" : s}</button>
+              >{st === "ALL" ? "All" : st.charAt(0) + st.slice(1).toLowerCase()}</button>
             ))}
           </div>
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 relative">
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowFromCal(v => !v)}>
-              <Calendar className="h-4 w-4 text-gray-400" />
-              <span className="font-medium">{fmtD(dateFrom)}</span>
-            </div>
-            {showFromCal && (
-              <div className="absolute top-full left-0 mt-1 z-50" ref={fromCalRef}>
-                <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
+
+          <div className="flex items-center gap-2">
+            <div className="relative" ref={fromCalRef}>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-[#f58220] transition-colors">
+                <button
+                  type="button"
+                  onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
+                  className="outline-none"
+                >
+                  {dateFrom ? fmtD(dateFrom) : "From Date"}
+                </button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
+                    className="text-[#f58220]"
+                    title="Choose from date"
+                  >
+                    <Calendar size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setDateFrom(""); }}
+                    className={clsx(
+                      "text-gray-400 hover:text-gray-600 transition-all",
+                      dateFrom ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
+                    )}
+                    title="Clear from date"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
               </div>
-            )}
-            <span className="text-gray-300 px-1">to</span>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowToCal(v => !v)}>
-              <span className="font-medium">{fmtD(dateTo)}</span>
-              <Calendar className="h-4 w-4 text-gray-400" />
+              {showFromCal && (
+                <div className="absolute left-0 top-full mt-1 z-50">
+                  <MiniCalendar value={dateFrom} onChange={v => { setDateFrom(v); setShowFromCal(false); }} onClose={() => setShowFromCal(false)} />
+                </div>
+              )}
             </div>
-            {showToCal && (
-              <div className="absolute top-full right-0 mt-1 z-50" ref={toCalRef}>
-                <MiniCalendar value={dateTo} onChange={setDateTo} onClose={() => setShowToCal(false)} />
+            <span className="text-xs text-gray-400">to</span>
+            <div className="relative" ref={toCalRef}>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-[#f58220] transition-colors">
+                <button
+                  type="button"
+                  onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
+                  className="outline-none"
+                >
+                  {dateTo ? fmtD(dateTo) : "To Date"}
+                </button>
+                <div className="flex items-center gap-1 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
+                    className="text-[#f58220]"
+                    title="Choose to date"
+                  >
+                    <Calendar size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setDateTo(""); }}
+                    className={clsx(
+                      "text-gray-400 hover:text-gray-600 transition-all",
+                      dateTo ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
+                    )}
+                    title="Clear to date"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
               </div>
-            )}
+              {showToCal && (
+                <div className="absolute left-0 top-full mt-1 z-50">
+                  <MiniCalendar value={dateTo} onChange={v => { setDateTo(v); setShowToCal(false); }} onClose={() => setShowToCal(false)} />
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+
+          <button onClick={fetchData} className="p-2 border border-gray-200 bg-white rounded-lg text-gray-400 hover:text-gray-600 transition-colors ml-auto" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
 
-        {/* Empty State */}
+        {/* Table */}
         {loading ? (
-          <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
+          <div className="p-12 text-center text-sm text-gray-400">Loading bills...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
-              <Receipt className="h-8 w-8 text-[#f58220]" />
-            </div>
-            <div>
-              <p className="text-gray-800 font-semibold">No Purchase Bills Found</p>
-              <p className="text-gray-500 text-sm mt-1">Create your first supplier bill to start tracking purchases.</p>
-            </div>
-            <button onClick={openCreate}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
-            >
-              Create Purchase Bill
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <Receipt className="h-10 w-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-600 mb-1">No Purchase Bills Found</p>
+            <p className="text-xs text-gray-400 mb-4">Create your first bill to get started.</p>
+            <button onClick={openCreate} className="inline-flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all">
+              <Plus className="h-4 w-4" /> Add Purchase Bill
             </button>
           </div>
         ) : (
-          /* Table */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Bill No</th>
-                  <th className="text-left px-4 py-3">Vendor / Party</th>
-                  <th className="text-left px-4 py-3">Pay Type</th>
-                  <th className="text-right px-4 py-3">Amount</th>
-                  <th className="text-center px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Actions</th>
+                <tr className="border-b border-gray-200 bg-gray-50/50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Bill No.</th>
+                  <th className="px-4 py-3">Vendor</th>
+                  <th className="px-4 py-3">Payment Type</th>
+                  <th className="px-4 py-3 text-right">Amount</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map(b => {
-                  const style = STATUS_STYLES[b.status] || STATUS_STYLES.PENDING;
+                  const style = STATUS_STYLES[b.status] || { label: b.status, color: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" };
                   return (
-                    <tr key={b.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {b.billDate ? new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : new Date(b.createdAt || Date.now()).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                    <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {b.invoiceDate ? new Date(b.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 text-xs font-bold text-gray-800">
                         {b.invoiceNumber || "—"}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800">
@@ -931,8 +1248,22 @@ export default function PurchaseBillsPage() {
                               Make Payment
                             </button>
                           )}
-                          <button className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"><Printer className="h-4 w-4" /></button>
-                          <button className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"><Share2 className="h-4 w-4" /></button>
+                          <button 
+                            type="button"
+                            onClick={() => handleDownloadPdf(b)} 
+                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" 
+                            title="Download PDF"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleShare(b)} 
+                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" 
+                            title="Share Purchase Bill"
+                          >
+                            <Share2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1003,7 +1334,7 @@ export default function PurchaseBillsPage() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
                 >
                   <option value="">Select Account</option>
-                  {getFilteredAccounts().map(a => (
+                  {accounts.map(a => (
                     <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
                   ))}
                   <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
@@ -1020,9 +1351,10 @@ export default function PurchaseBillsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Note (Optional)</label>
-            <textarea value={paymentNote} onChange={e => setPaymentNote(e.target.value)} rows={2}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 resize-none"
+            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Note</label>
+            <input type="text" value={paymentNote} onChange={e => setPaymentNote(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50"
+              placeholder="e.g. Cleared via Cheque #1234"
             />
           </div>
         </div>
@@ -1031,9 +1363,9 @@ export default function PurchaseBillsPage() {
       <AccountFormModal
         isOpen={showAccountModal}
         onClose={() => setShowAccountModal(false)}
-        onSuccess={(newAccount) => {
-          setAccounts(prev => [...prev, newAccount]);
-          setPaymentAccount(newAccount.id);
+        onSuccess={(acc) => {
+          setAccounts(prev => [...prev, acc]);
+          setPaymentAccount(acc.id);
         }}
       />
     </div>
