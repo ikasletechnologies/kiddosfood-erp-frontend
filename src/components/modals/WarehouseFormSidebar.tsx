@@ -83,82 +83,76 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
       {/* Sidebar Panel */}
       <div 
         className={clsx(
-          "fixed inset-y-0 right-0 z-[110] w-full max-w-md bg-white dark:bg-[#0A0D14] shadow-2xl transition-transform duration-500 ease-in-out transform border-l border-slate-100 dark:border-slate-800",
+          "fixed inset-y-0 right-0 z-[110] w-full max-w-md bg-white dark:bg-[#0B0D14] shadow-2xl transition-transform duration-500 ease-in-out transform border-l border-slate-200 dark:border-slate-800",
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="p-8 border-b border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-            <div className="flex items-center justify-between mb-8">
-              <button 
-                onClick={onClose}
-                className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400 group"
-              >
-                <X size={20} className="group-hover:rotate-90 transition-transform duration-300" />
-              </button>
-              <div className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <span>Warehouse Hub</span>
-                <ArrowRight size={10} />
-                <span className="text-purple-600">{warehouseToEdit ? "Edit Location" : "New Location"}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="p-4 bg-purple-600 rounded-[1.5rem] shadow-lg shadow-purple-200 text-white">
-                <Warehouse size={28} />
+          <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0B0D14] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-orange-100 dark:bg-orange-950/30 text-orange-600 rounded-xl">
+                <Warehouse size={20} />
               </div>
               <div>
-                <h2 className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight leading-none mb-1">
+                <h2 className="text-base font-semibold text-slate-900 dark:text-white">
                   {warehouseToEdit ? "Update Warehouse" : "Add Warehouse"}
                 </h2>
-                <p className="text-xs text-slate-400 font-bold">
+                <p className="text-xs text-slate-500 mt-0.5">
                   {warehouseToEdit ? "Modify storage or production unit details" : "Configure a new storage or production unit"}
                 </p>
               </div>
             </div>
+            <button 
+              onClick={onClose}
+              className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500"
+            >
+              <X size={18} />
+            </button>
           </div>
 
           {/* Form Content */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-8 space-y-8">
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <Tag size={12} className="text-purple-500" /> Warehouse Name *
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Tag size={14} className="text-orange-500" /> Warehouse Name *
                 </label>
                 <input 
                   autoFocus
                   type="text"
                   required
                   placeholder="e.g. Central Distribution Hub"
-                  className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-4 outline-none focus:ring-2 ring-purple-500/20 transition-all placeholder:text-slate-300"
+                  className="w-full text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg px-3 py-2 outline-none focus:border-orange-500 transition-colors placeholder:text-slate-400"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                  <MapPin size={12} className="text-blue-500" /> Physical Location
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <MapPin size={14} className="text-orange-500" /> Physical Location
                 </label>
                 <textarea 
                   placeholder="Street address, City, Region..."
-                  className="w-full min-h-[100px] text-sm font-bold bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-4 outline-none focus:ring-2 ring-purple-500/20 transition-all placeholder:text-slate-300 resize-none"
+                  className="w-full min-h-[100px] text-sm border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg px-3 py-2 outline-none focus:border-orange-500 transition-colors placeholder:text-slate-400 resize-none"
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 />
               </div>
 
-              <div className="p-6 bg-slate-50 dark:bg-slate-900/50 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Quick Tips</h4>
-                <ul className="space-y-3">
-                  <li className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1" />
-                    <p className="text-[10px] font-bold text-slate-500 leading-relaxed">Name should be unique to avoid confusion in stock transfers.</p>
+              <div className="p-4 bg-amber-50/50 dark:bg-amber-950/10 rounded-xl border border-dashed border-amber-200 dark:border-amber-900/50">
+                <h4 className="text-xs font-semibold text-amber-800 dark:text-amber-400 mb-2 flex items-center gap-1">
+                  Quick Tips
+                </h4>
+                <ul className="space-y-2">
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Name should be unique to avoid confusion in stock transfers.</p>
                   </li>
-                  <li className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1" />
-                    <p className="text-[10px] font-bold text-slate-500 leading-relaxed">Location helps in calculating lead times for procurement.</p>
+                  <li className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-orange-500 mt-1.5 shrink-0" />
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Location helps in calculating lead times for procurement.</p>
                   </li>
                 </ul>
               </div>
@@ -166,29 +160,27 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
           </form>
 
           {/* Footer Actions */}
-          <div className="p-8 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex gap-4">
-              <button 
-                type="button"
-                onClick={onClose}
-                className="flex-1 py-4 text-xs font-black text-slate-500 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 transition-all uppercase tracking-widest"
-              >
-                Cancel
-              </button>
-              <button 
-                disabled={loading}
-                onClick={handleSubmit}
-                className="flex-[2] py-4 bg-slate-900 dark:bg-purple-600 text-white text-xs font-black rounded-2xl shadow-xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <>
-                    <CheckCircle2 size={18} /> {warehouseToEdit ? "Update Warehouse" : "Save Warehouse"}
-                  </>
-                )}
-              </button>
-            </div>
+          <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+            <button 
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button 
+              disabled={loading}
+              onClick={handleSubmit}
+              className="px-6 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white text-sm font-semibold rounded-lg shadow-sm hover:shadow active:scale-95 transition-all flex items-center justify-center gap-2"
+            >
+              {loading ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <>
+                  <CheckCircle2 size={16} /> {warehouseToEdit ? "Update Warehouse" : "Save Warehouse"}
+                </>
+              )}
+            </button>
           </div>
         </div>
       </div>
