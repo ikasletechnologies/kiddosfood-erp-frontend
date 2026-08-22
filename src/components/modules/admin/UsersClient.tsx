@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-import { userGovernanceApi, franchiseApi, rolesApi } from "@/lib/api";
+import { userGovernanceApi, franchiseApi } from "@/lib/api";
 
 interface User {
   id: string;
@@ -27,16 +27,10 @@ interface User {
   email: string;
   phone: string;
   role: string;
-  customRole: { id: string; name: string } | null;
   franchiseId?: string | null;
   franchise?: { name: string };
   is_active: boolean;
   createdAt: string;
-}
-
-interface RoleOption {
-  id: string;
-  name: string;
 }
 
 export default function UsersClient() {
@@ -54,16 +48,13 @@ export default function UsersClient() {
     password: "",
     franchiseId: "",
     roleName: "FRANCHISE_ADMIN", // Fixed for this view
-    customRoleId: ""
   });
 
   const [franchises, setFranchises] = useState<{id: string, name: string}[]>([]);
-  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
 
   useEffect(() => {
     fetchUsers();
     fetchFranchises();
-    fetchRoleOptions();
   }, []);
 
   const fetchUsers = async () => {
@@ -86,17 +77,8 @@ export default function UsersClient() {
     }
   };
 
-  const fetchRoleOptions = async () => {
-    try {
-      const res = await rolesApi.getAll();
-      setRoleOptions(res.data);
-    } catch (error) {
-      console.error("Failed to fetch roles");
-    }
-  };
-
   const resetForm = () =>
-    setFormData({ fullName: "", email: "", phone: "", password: "", franchiseId: "", roleName: "FRANCHISE_ADMIN", customRoleId: "" });
+    setFormData({ fullName: "", email: "", phone: "", password: "", franchiseId: "", roleName: "FRANCHISE_ADMIN" });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +102,6 @@ export default function UsersClient() {
       password: "",
       franchiseId: user.franchiseId || "",
       roleName: user.role,
-      customRoleId: user.customRole?.id || "",
     });
   };
 
@@ -132,7 +113,6 @@ export default function UsersClient() {
         fullName: formData.fullName,
         franchiseId: formData.franchiseId,
         role: formData.roleName,
-        customRoleId: formData.customRoleId,
       });
       toast.success("User updated successfully");
       setEditingUser(null);
@@ -267,18 +247,9 @@ export default function UsersClient() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="w-fit px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                          {user.role === "SUPER_ADMIN" ? "Super Admin HQ" : "Franchise Admin"}
-                        </span>
-                        {user.customRole ? (
-                          <span className="w-fit px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400">
-                            {user.customRole.name}
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-slate-400 italic">No department role</span>
-                        )}
-                      </div>
+                      <span className="w-fit px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {user.role === "SUPER_ADMIN" ? "Super Admin" : "Franchise Admin"}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
                       <button
@@ -395,19 +366,6 @@ export default function UsersClient() {
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Department Role (optional)</label>
-                <select
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
-                  value={formData.customRoleId}
-                  onChange={e => setFormData({...formData, customRoleId: e.target.value})}
-                >
-                  <option value="">No department role</option>
-                  {roleOptions.map(r => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
                 <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Initial Password</label>
                 <input
                   required
@@ -487,19 +445,6 @@ export default function UsersClient() {
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Department Role (optional)</label>
-                <select
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
-                  value={formData.customRoleId}
-                  onChange={e => setFormData({...formData, customRoleId: e.target.value})}
-                >
-                  <option value="">No department role</option>
-                  {roleOptions.map(r => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
               </div>
 
               <div className="pt-4 flex gap-3">

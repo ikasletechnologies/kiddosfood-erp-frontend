@@ -177,10 +177,7 @@ export default function Sidebar() {
             <div className="space-y-0.5">
               {sections.map((section) => {
                 const filteredItems = section.items.filter(
-                  (item) =>
-                    !user ||
-                    (item.roles.includes(userRole) &&
-                      (!item.requiresCustomRole || !!(user as any).customRole))
+                  (item) => !user || item.roles.includes(userRole)
                 );
                 
                 const finalItems = filteredItems.filter(item => {

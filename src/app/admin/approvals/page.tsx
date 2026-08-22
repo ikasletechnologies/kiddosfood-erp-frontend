@@ -21,40 +21,38 @@ import { workflowApprovalsApi } from "@/lib/api";
 
 // ─── TYPES & STAGE CONFIG ───────────────────────────────────────────────────
 // Mirrors the server-side stage sequences in
-// ERP-backend/src/modules/workflow-approvals/stage-config.ts — the backend
-// is the actual authority on which permission gates a stage; this copy only
-// drives display (labels/descriptions) and the button's enabled/disabled hint.
+// ERP-backend/src/modules/workflow-approvals/stage-config.ts. Every stage is
+// handled by a Franchise Admin (scoped to their own franchise, enforced
+// server-side) or a Super Admin — there's no separate department-role gate.
 
 interface Stage {
   key: string;
   label: string;
-  requiredPermission: string;
-  roleLabel: string; // display-only, matches the seeded system role that holds requiredPermission
   desc: string;
 }
 
 const PURCHASE_STAGES: Stage[] = [
-  { key: "REQUEST", label: "Purchase Request", requiredPermission: "purchase:create", roleLabel: "Super Admin (HQ)", desc: "Logged by procurement department" },
-  { key: "MANAGER_APPROVE", label: "Manager Approval", requiredPermission: "purchase:manager_approve", roleLabel: "Purchase Manager", desc: "Verify necessity and quantity limits" },
-  { key: "ORDER", label: "Purchase Order", requiredPermission: "purchase:order_dispatch", roleLabel: "Purchase Manager", desc: "PO dispatched to vendor" },
-  { key: "GRN", label: "GRN Receipt", requiredPermission: "purchase:grn_approve", roleLabel: "Factory Manager", desc: "Received at warehouse and verified" },
-  { key: "ACCOUNTS_VERIFY", label: "Accounts Review", requiredPermission: "purchase:accounts_verify", roleLabel: "Accounts Reviewer", desc: "Verify invoice against GRN checklist" },
-  { key: "PAYMENT", label: "Vendor Payment", requiredPermission: "purchase:payment_release", roleLabel: "Accounts Reviewer", desc: "Funds released to vendor bank account" },
+  { key: "REQUEST", label: "Purchase Request", desc: "Logged by procurement department" },
+  { key: "MANAGER_APPROVE", label: "Manager Approval", desc: "Verify necessity and quantity limits" },
+  { key: "ORDER", label: "Purchase Order", desc: "PO dispatched to vendor" },
+  { key: "GRN", label: "GRN Receipt", desc: "Received at warehouse and verified" },
+  { key: "ACCOUNTS_VERIFY", label: "Accounts Review", desc: "Verify invoice against GRN checklist" },
+  { key: "PAYMENT", label: "Vendor Payment", desc: "Funds released to vendor bank account" },
 ];
 
 const PRODUCTION_STAGES: Stage[] = [
-  { key: "PLAN", label: "Production Plan", requiredPermission: "production:plan_create", roleLabel: "Super Admin (HQ)", desc: "Production target scheduled" },
-  { key: "FACTORY_APPROVE", label: "Factory Approval", requiredPermission: "production:factory_approve", roleLabel: "Factory Manager", desc: "Check raw material sufficiency" },
-  { key: "EXECUTION", label: "Execution", requiredPermission: "production:execution", roleLabel: "Factory Manager", desc: "Manufacturing batch underway" },
-  { key: "QC", label: "QC Verification", requiredPermission: "production:qc_verify", roleLabel: "QC Auditor", desc: "Sample testing and validation" },
-  { key: "FINISHED_ENTRY", label: "Finished Goods Entry", requiredPermission: "production:finished_entry", roleLabel: "Super Admin (HQ)", desc: "Items added to inventory" },
+  { key: "PLAN", label: "Production Plan", desc: "Production target scheduled" },
+  { key: "FACTORY_APPROVE", label: "Factory Approval", desc: "Check raw material sufficiency" },
+  { key: "EXECUTION", label: "Execution", desc: "Manufacturing batch underway" },
+  { key: "QC", label: "QC Verification", desc: "Sample testing and validation" },
+  { key: "FINISHED_ENTRY", label: "Finished Goods Entry", desc: "Items added to inventory" },
 ];
 
 const EXPENSE_STAGES: Stage[] = [
-  { key: "ENTRY", label: "Expense Entry", requiredPermission: "expense:entry_create", roleLabel: "Super Admin (HQ)", desc: "Operational invoice received" },
-  { key: "DEPT_APPROVE", label: "Dept Approval", requiredPermission: "expense:dept_approve", roleLabel: "Factory Manager", desc: "Head of department validation" },
-  { key: "ACCOUNTS_APPROVE", label: "Accounts Approval", requiredPermission: "expense:accounts_approve", roleLabel: "Accounts Reviewer", desc: "General ledger classification review" },
-  { key: "PAYMENT_RELEASE", label: "Payment Release", requiredPermission: "expense:payment_release", roleLabel: "Accounts Reviewer", desc: "Disbursement completed" },
+  { key: "ENTRY", label: "Expense Entry", desc: "Operational invoice received" },
+  { key: "DEPT_APPROVE", label: "Dept Approval", desc: "Head of department validation" },
+  { key: "ACCOUNTS_APPROVE", label: "Accounts Approval", desc: "General ledger classification review" },
+  { key: "PAYMENT_RELEASE", label: "Payment Release", desc: "Disbursement completed" },
 ];
 
 type Category = "PURCHASE" | "PRODUCTION" | "EXPENSE";
@@ -117,15 +115,10 @@ export default function ApprovalsPage() {
 
   const isSuperAdmin = (user?.role || "").toUpperCase() === "SUPER_ADMIN";
 
-  // UI-only hint for enabling/disabling the button — the server re-checks this
-  // for real on every approve call, so this can never be used to bypass anything.
-  const isAuthorizedToApprove = (item: WorkflowItem) => {
-    if (isSuperAdmin) return true;
-    const stages = getStagesForCategory(item.category);
-    const curIdx = getStageIndex(stages, item.currentStage);
-    if (curIdx === -1) return false;
-    return !!user?.customRole?.permissions?.includes(stages[curIdx].requiredPermission);
-  };
+  // Any Franchise Admin can approve any stage of their own franchise's
+  // requests (server enforces the franchise-ownership check on every approve
+  // call); a Super Admin can act on anything. There's no per-stage role gate.
+  const isAuthorizedToApprove = (_item: WorkflowItem) => true;
 
   const handleApprove = async (itemId: string, notes?: string) => {
     setApproving(true);
@@ -169,18 +162,11 @@ export default function ApprovalsPage() {
           <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
             <User size={12} /> {isSuperAdmin ? "Super Admin (HQ)" : "Franchise Admin"}
           </span>
-          {user?.customRole ? (
-            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              {user.customRole.name}
-            </span>
-          ) : !isSuperAdmin ? (
-            <span className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 italic">No department role assigned</span>
-          ) : null}
         </div>
         {isSuperAdmin && (
           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold mt-3 flex items-start gap-1.5">
             <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-            Approving a gate outside your assigned department role is recorded as a Super Admin override in the audit log.
+            Approving a request that belongs to a specific franchise is recorded as a Super Admin override in the audit log.
           </p>
         )}
       </div>
@@ -228,7 +214,7 @@ export default function ApprovalsPage() {
                   </div>
                   <div>
                     <p className="text-[10px] font-black uppercase text-slate-700 dark:text-slate-200">{s.label}</p>
-                    <p className="text-[8px] text-slate-400 uppercase tracking-wide font-black mt-0.5">Role: {s.roleLabel}</p>
+                    <p className="text-[8px] text-slate-400 uppercase tracking-wide font-black mt-0.5">{s.desc}</p>
                   </div>
                 </div>
                 {!isLast && <ChevronRight size={14} className="text-slate-300 dark:text-white/10 hidden md:block" />}
@@ -343,7 +329,7 @@ export default function ApprovalsPage() {
                               ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
                               : "bg-slate-100 text-slate-400 dark:bg-white/5 cursor-not-allowed"
                           )}
-                          title={nextAuthorized ? "Click to approve" : `Requires ${stages[curIdx].roleLabel}`}
+                          title="Click to approve"
                         >
                           Approve <ArrowRight size={10} />
                         </button>
@@ -432,9 +418,6 @@ export default function ApprovalsPage() {
                           <p className="text-xs font-black text-amber-500 uppercase tracking-tight">
                             Pending: {getStagesForCategory(selectedItem.category).find(s => s.key === selectedItem.currentStage)?.label}
                           </p>
-                          <p className="text-[9px] text-slate-400 font-black uppercase mt-0.5 tracking-wider">
-                            Required Role: {getStagesForCategory(selectedItem.category).find(s => s.key === selectedItem.currentStage)?.roleLabel}
-                          </p>
                         </div>
                       </div>
                     )}
@@ -444,29 +427,16 @@ export default function ApprovalsPage() {
                 {/* Direct Advance Area */}
                 {getStageIndex(getStagesForCategory(selectedItem.category), selectedItem.currentStage) < getStagesForCategory(selectedItem.category).length - 1 && (
                   <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
-                    {isAuthorizedToApprove(selectedItem) ? (
-                      <div className="space-y-3">
-                        <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 rounded-xl">
-                          <ShieldCheck size={12} /> You are authorized to approve this gate.
-                        </p>
-                        <button
-                          disabled={approving}
-                          onClick={() => handleApprove(selectedItem.id)}
-                          className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          Sign & Release To Next Gate <ArrowRight size={14} />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="p-4 bg-slate-50 dark:bg-white/[0.01] border border-slate-100 dark:border-white/5 rounded-2xl space-y-2">
-                        <div className="flex gap-2 text-slate-400">
-                          <Info size={16} className="shrink-0 text-amber-500" />
-                          <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 leading-normal">
-                            Your assigned role does not match the required gatekeeper role ({getStagesForCategory(selectedItem.category).find(s => s.key === selectedItem.currentStage)?.roleLabel}) for this gate.
-                          </p>
-                        </div>
-                      </div>
-                    )}
+                    <p className="text-[10px] text-emerald-500 font-black uppercase tracking-widest flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-2 rounded-xl">
+                      <ShieldCheck size={12} /> You are authorized to approve this gate.
+                    </p>
+                    <button
+                      disabled={approving}
+                      onClick={() => handleApprove(selectedItem.id)}
+                      className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      Sign & Release To Next Gate <ArrowRight size={14} />
+                    </button>
                   </div>
                 )}
               </div>

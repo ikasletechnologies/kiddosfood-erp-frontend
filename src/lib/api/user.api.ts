@@ -23,19 +23,6 @@ export const auditApi = {
   getLogs: (params?: any) => api.get('/api/audit/logs', { params }),
 };
 
-// --- Roles & Permissions (RBAC) ---
-export const rolesApi = {
-  getAll: () => api.get('/api/roles'),
-  getOne: (id: string) => api.get(`/api/roles/${id}`),
-  create: (data: any) => api.post('/api/roles', data),
-  update: (id: string, data: any) => api.patch(`/api/roles/${id}`, data),
-  delete: (id: string) => api.delete(`/api/roles/${id}`),
-};
-
-export const permissionsApi = {
-  getAll: () => api.get('/api/permissions'),
-};
-
 // --- Approval Workflows ---
 export const workflowApprovalsApi = {
   getAll: (category?: string) => api.get('/api/workflow-approvals', { params: category ? { category } : undefined }),

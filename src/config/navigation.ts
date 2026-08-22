@@ -30,7 +30,6 @@ import {
   FilePlus2,
   Barcode,
   MapPin,
-  Lock,
   ShieldAlert,
 } from "lucide-react";
 
@@ -42,10 +41,6 @@ export interface MenuItem {
   isNew?: boolean;
   isHot?: boolean;
   isComingSoon?: boolean;
-  // Only shown to a FRANCHISE_ADMIN-tier user if they've additionally been
-  // assigned a department Role (see AuthContext.User.customRole) — used for
-  // items like Approval Workflows that a plain franchise admin shouldn't see.
-  requiresCustomRole?: boolean;
   children?: {
     label: string;
     href: string;
@@ -419,18 +414,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: UserCheck,
-        label: "Roles",
-        href: "/admin/roles",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Lock,
-        label: "Permissions",
-        href: "/admin/permissions",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: UserCheck,
         label: "Approval Workflows",
         href: "/admin/approvals",
         roles: SUPER_ONLY,
@@ -593,7 +576,6 @@ export const franchiseMenuSections: MenuSection[] = [
         label: "Approval Workflows",
         href: "/admin/approvals",
         roles: FRANCHISE_ONLY,
-        requiresCustomRole: true,
       },
     ],
   },
