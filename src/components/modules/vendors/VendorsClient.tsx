@@ -693,6 +693,141 @@ export default function VendorsClient() {
     }
   };
 
+  const handleDownloadSelectedPartyReport = () => {
+    const vendor = selectedVendorDetail || selectedVendor;
+    if (!vendor) {
+      showToast("Please select a party first.", "error");
+      return;
+    }
+    const vendorCleanName = vendor.name.replace(/[^a-zA-Z0-9]/g, '_');
+    const todayStr = new Date().toISOString().split('T')[0];
+    const filename = `Party_Statement_${vendorCleanName}_${todayStr}.xlsx`;
+
+    const targetData = ledger.length > 0 ? ledger : filteredLedger;
+    const headers = ['Date', 'Transaction Type', 'Reference No.', 'Particulars / Notes', 'Debit (₹)', 'Credit (₹)', 'Balance (₹)'];
+    
+    let runningDebit = 0;
+    let runningCredit = 0;
+    
+    const rows = [...targetData].reverse().map(e => {
+      const balance = e.runningBalance || e.balanceAfterTransaction || 0;
+      const debitVal = e.type === 'DEBIT' ? Math.round(e.amount) : 0;
+      const creditVal = e.type === 'CREDIT' ? Math.round(e.amount) : 0;
+      runningDebit += debitVal;
+      runningCredit += creditVal;
+      
+      return [
+        new Date(e.createdAt).toLocaleDateString(),
+        e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
+        e.referenceId || '',
+        e.note || '',
+        debitVal,
+        creditVal,
+        `${Math.abs(Math.round(balance))} ${(balance >= 0) ? 'Cr' : 'Dr'}`
+      ];
+    });
+
+    const aoa = [
+      ['PARTY STATEMENT REPORT'],
+      [`Party Name: ${vendor.name}`, `Vendor Code: ${vendor.vendorCode || '-'}`],
+      [`Contact: ${vendor.contact || vendor.phone || '-'}`, `Email: ${vendor.email || '-'}`],
+      [`GSTIN: ${vendor.gstNumber || vendor.gstin || '-'}`, `Category: ${vendor.category || '-'}`],
+      [`Generated Date: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...rows,
+      [],
+      ['SUMMARY', '', '', '', 'Total Debit (₹)', 'Total Credit (₹)', 'Net Balance (₹)'],
+      ['', '', '', '', runningDebit, runningCredit, `${Math.abs(Math.round(runningCredit - runningDebit))} ${(runningCredit - runningDebit >= 0) ? 'Cr' : 'Dr'}`]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Party Statement");
+    XLSX.writeFile(wb, filename);
+    showToast(`Party Statement for ${vendor.name} downloaded (.xlsx)`, "success");
+  };
+
+  const handleDownloadAllPartiesReport = async () => {
+    try {
+      let list = vendors;
+      if (!list || list.length === 0) {
+        const res = await vendorsApi.getAll();
+        list = res.data?.vendors || res.data || [];
+      }
+
+      if (!list || list.length === 0) {
+        showToast("No party data available to download.", "error");
+        return;
+      }
+
+      const headers = [
+        '#',
+        'Vendor Code',
+        'Party Name',
+        'Contact Number',
+        'Email Address',
+        'GST Number',
+        'Category',
+        'Payment Terms',
+        'Advance Credit (₹)',
+        'Total Purchases (₹)',
+        'Balance Due (₹)',
+        'Status'
+      ];
+
+      let totalAdvance = 0;
+      let totalPurchases = 0;
+      let totalBalanceDue = 0;
+
+      const rows = list.map((v: any, idx: number) => {
+        const adv = Number(v.advanceBalance || v.advanceCredit || 0);
+        const pur = Number(v.totalPurchases || 0);
+        const bal = Number(v.balanceDue || v.currentBalance || 0);
+        totalAdvance += adv;
+        totalPurchases += pur;
+        totalBalanceDue += bal;
+
+        return [
+          idx + 1,
+          v.vendorCode || '-',
+          v.name || '',
+          v.contact || v.phone || v.mobile || '—',
+          v.email || '—',
+          v.gstNumber || v.gstin || '—',
+          v.category || '—',
+          v.paymentTerms || 'IMMEDIATE',
+          adv,
+          pur,
+          bal,
+          v.status || 'ACTIVE'
+        ];
+      });
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const filename = `All_Parties_Report_${todayStr}.xlsx`;
+
+      const aoa = [
+        ['ALL PARTIES MASTER REPORT'],
+        [`Generated Date: ${new Date().toLocaleDateString()}`, `Total Parties Count: ${list.length}`],
+        [],
+        headers,
+        ...rows,
+        [],
+        ['TOTALS', '', '', '', '', '', '', '', totalAdvance, totalPurchases, totalBalanceDue, '']
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "All Parties");
+      XLSX.writeFile(wb, filename);
+      showToast("All Parties report downloaded (.xlsx)", "success");
+    } catch (err) {
+      console.error("Failed to download All Parties report:", err);
+      showToast("Failed to download All Parties report", "error");
+    }
+  };
+
   // -- Excel Import --
 
   const IMPORT_TEMPLATE_HEADERS = ["Name", "Contact", "Email", "GSTIN", "Category", "Credit Limit", "Payment Terms"];
@@ -1044,19 +1179,19 @@ export default function VendorsClient() {
                     {isMoreMenuOpen && (
                       <div className="absolute top-full right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 dark:border-white/5 z-50 py-1.5">
                         <button
-                          onClick={() => { setIsMoreMenuOpen(false); importFileRef.current?.click(); }}
-                          className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
-                        >
-                          <Upload size={14} className="text-emerald-500" /> Import from Excel
-                        </button>
-                        <button
-                          onClick={() => { setIsMoreMenuOpen(false); router.push(`/reports?report=${encodeURIComponent('Party Statement')}`); }}
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            handleDownloadSelectedPartyReport();
+                          }}
                           className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
                         >
                           <FileText size={14} className="text-blue-500" /> Party Statement (Report)
                         </button>
                         <button
-                          onClick={() => { setIsMoreMenuOpen(false); router.push(`/reports?report=${encodeURIComponent('All parties')}`); }}
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            handleDownloadAllPartiesReport();
+                          }}
                           className="w-full flex items-center gap-2.5 text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
                         >
                           <FileText size={14} className="text-indigo-500" /> All Parties (Report)
@@ -1731,7 +1866,12 @@ export default function VendorsClient() {
             setShowForm(false);
             fetchData();
           } catch (e: any) {
-            showToast(e.response?.data?.error || "Transaction Aborted", "error");
+            const err = e.response?.data?.error || e.response?.data?.message || "";
+            if (err.toLowerCase().includes("gst") && (err.toLowerCase().includes("exist") || err.toLowerCase().includes("duplicate") || err.toLowerCase().includes("unique"))) {
+              showToast("GST Number already exists", "error");
+            } else {
+              showToast(err || "Transaction Aborted", "error");
+            }
             throw e;
           }
         }}

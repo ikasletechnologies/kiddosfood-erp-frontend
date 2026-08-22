@@ -94,13 +94,6 @@ export default function GRNPage() {
       .then(res => {
         const list = res.data || [];
         setWarehouses(list);
-        if (list.length > 0) {
-          setDefaultWarehouseId(list[0].id);
-          setGrnItems(prev => prev.map(item => ({
-            ...item,
-            warehouseId: item.warehouseId || list[0].id
-          })));
-        }
       })
       .catch(err => {
         console.error("Failed to fetch warehouses:", err);
@@ -299,23 +292,31 @@ export default function GRNPage() {
 
       {/* ── Page Header ── */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <PackageIcon className="h-5 w-5 text-[#f58220]" />
-          <div>
-            <h1 className="text-base font-bold text-gray-800">Goods Receipt (GRN)</h1>
-            <p className="text-xs text-gray-500">Manage vendor shipment verification and stock reconciliation</p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (step === 2) {
+                setStep(1);
+                setSelectedPO(null);
+              } else {
+                router.back();
+              }
+            }}
+            className="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Back"
+          >
+            <ArrowLeftIcon className="h-5 w-5" />
+          </button>
+          <div className="flex items-center gap-2">
+            <PackageIcon className="h-5 w-5 text-[#f58220]" />
+            <div>
+              <h1 className="text-base font-bold text-gray-800">Goods Receipt (GRN)</h1>
+              <p className="text-xs text-gray-500">Manage vendor shipment verification and stock reconciliation</p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {view === "NEW" && step === 1 && (
-            <button
-              onClick={() => { setShowScanner(true); setScannedPO(null); setScanInput(""); }}
-              className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-3 py-1.5 rounded-lg font-semibold text-xs transition-colors shadow-sm"
-            >
-              <ScanIcon size={14} strokeWidth={2.5} />
-              Scan PO Label
-            </button>
-          )}
           <div className="flex p-1 bg-gray-100 rounded-lg border border-gray-200">
             <button
               onClick={() => { setView("NEW"); setStep(1); }}
@@ -583,14 +584,14 @@ export default function GRNPage() {
                                 title="Mfg Date"
                                 value={item.mfgDate || ""}
                                 onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                className="w-28 px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800"
+                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
                               />
                               <input
                                 type="date"
                                 title="Exp Date"
                                 value={item.expDate || ""}
                                 onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                                className="w-28 px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800"
+                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
                               />
                             </div>
                           </td>
@@ -673,13 +674,6 @@ export default function GRNPage() {
                 <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{grnItems.reduce((s, i) => s + i.acceptedQty, 0)}</span> units
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition-colors"
-                >
-                  Save Draft
-                </button>
                 <button
                   type="button"
                   onClick={handleSubmitForReview}

@@ -299,13 +299,14 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const errors = useMemo(() => {
     const errs: string[] = [];
     if (!selectedVendor) errs.push("Please select a vendor");
+    if (!expectedDeliveryDate) errs.push("Expected delivery date is mandatory");
     if (items.length === 0 || (items.length === 1 && !items[0].materialId && items[0].quantity === 0)) {
         errs.push("Please add at least one item");
     }
     if (items.some(i => i.quantity <= 0)) errs.push("One or more items have invalid quantity");
     if (items.some(i => i.price <= 0)) errs.push("One or more items have invalid price");
     return errs;
-  }, [selectedVendor, items]);
+  }, [selectedVendor, expectedDeliveryDate, items]);
 
   const isValid = errors.length === 0;
 
