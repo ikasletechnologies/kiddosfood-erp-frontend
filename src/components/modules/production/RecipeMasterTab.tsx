@@ -226,6 +226,14 @@ export default function RecipeMasterTab() {
   const handleSave = async () => {
     if (!form.name.trim()) { setError("Recipe name is required."); return; }
     if (form.items.length === 0) { setError("Add at least one ingredient."); return; }
+    if (form.items.some(item => !item.inventoryItemId)) {
+      setError("Please select a material for all ingredients.");
+      return;
+    }
+    if (form.items.some(item => !item.quantityRequired || Number(item.quantityRequired) <= 0)) {
+      setError("Please specify a valid quantity greater than 0 for all ingredients.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
