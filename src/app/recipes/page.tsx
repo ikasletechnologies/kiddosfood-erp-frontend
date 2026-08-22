@@ -1,5 +1,4 @@
 "use client";
-// Re-compile trigger
 
 import { useState, useEffect, useCallback } from "react";
 import { 
@@ -38,7 +37,7 @@ export default function RecipesPage() {
   const [savingCategory, setSavingCategory] = useState(false);
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [materialRowIdx, setMaterialRowIdx] = useState<number | null>(null);
-  const [newMaterial, setNewMaterial] = useState({ name: "", unit: "kg", costPrice: 0 });
+  const [materialList, setMaterialList] = useState<{ id: string; name: string; unit: string }[]>([{ id: "1", name: "", unit: "kg" }]);
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProduct, setNewProduct] = useState({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
@@ -54,8 +53,8 @@ export default function RecipesPage() {
     category: "",
     name: "",
     yieldQty: 1,
-      yieldUnit: "units",
-      unitWeight: 1,
+    yieldUnit: "units",
+    unitWeight: 1,
     weightUnit: "kg",
     instructions: "",
     items: [] as any[]
@@ -187,30 +186,34 @@ export default function RecipesPage() {
   };
 
   const handleCreateMaterial = async () => {
-    if (!newMaterial.name.trim()) return;
+    const validMaterials = materialList.filter(m => m.name.trim());
+    if (validMaterials.length === 0) return;
     setSavingMaterial(true);
     try {
-      const res = await rawMaterialsApi.create({
-        name: newMaterial.name.trim(),
-        unit: newMaterial.unit,
-        costPrice: newMaterial.costPrice
-      });
+      let lastRes: any = null;
+      for (const mat of validMaterials) {
+        lastRes = await rawMaterialsApi.create({
+          name: mat.name.trim(),
+          unit: mat.unit,
+          costPrice: 0
+        });
+      }
       await fetchAll();
       
-      if (materialRowIdx !== null) {
+      if (materialRowIdx !== null && lastRes) {
         setFormData(f => {
           const newItems = [...f.items];
-          newItems[materialRowIdx].inventoryItemId = res.data.id;
+          newItems[materialRowIdx].inventoryItemId = lastRes.data.id;
           return { ...f, items: newItems };
         });
       }
       setIsAddingMaterial(false);
-      setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
       setMaterialRowIdx(null);
-      showToast("Material created", "success");
+      showToast(validMaterials.length > 1 ? "Materials created" : "Material created", "success");
     } catch (e: any) {
       console.error(e);
-      showToast("Failed to create material", "error");
+      showToast(e?.response?.data?.error || "Failed to create material", "error");
     } finally {
       setSavingMaterial(false);
     }
@@ -261,7 +264,7 @@ export default function RecipesPage() {
   const updateItem = (idx: number, field: string, val: any) => {
     if (field === 'inventoryItemId' && val === "___NEW___") {
       setMaterialRowIdx(idx);
-      setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
       setIsAddingMaterial(true);
       return;
     }
@@ -311,7 +314,7 @@ export default function RecipesPage() {
             body { font-family: 'Inter', system-ui, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
             .header { border-bottom: 4px solid #F97316; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
             .title-section h1 { font-size: 28px; font-weight: 900; margin: 0; color: #0f172a; text-transform: uppercase; letter-spacing: -0.02em; }
-            .product { color: #64748b; font-size: 14px; margin-top: 4px; font-bold; text-transform: uppercase; letter-spacing: 0.05em; }
+            .product { color: #64748b; font-size: 14px; margin-top: 4px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; }
             .date { font-size: 12px; color: #94a3b8; font-weight: bold; }
             .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
             .stat-box { background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; }
@@ -394,6 +397,7 @@ export default function RecipesPage() {
     printWindow.document.write(html);
     printWindow.document.close();
   };
+
   const scaleMultiplier = scalingRecipe ? scaleTargetYield / scalingRecipe.yieldQty : 1;
 
   const scaledItems = scalingRecipe?.recipeItems?.map((item: any) => {
@@ -470,15 +474,13 @@ export default function RecipesPage() {
                 placeholder="Search by recipe name or product..."
                 className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50/50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
               />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
-            )}
-            </div>
-            <div className="flex items-center gap-2">
+              {search && (
+                <X 
+                  size={14} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                  onClick={() => setSearch("")} 
+                />
+              )}
             </div>
           </div>
 
@@ -525,7 +527,7 @@ export default function RecipesPage() {
                       <td className="px-6 py-5">
                         <div className="flex flex-col">
                           <span className="text-sm font-black text-gray-700 dark:text-slate-200">{recipe.yieldQty} Units</span>
-                          <span className="text-[10px] text-gray-400 font-bold uppercase">per {recipe.batchSize} {recipe.recipeItems?.[0]?.unit || 'KG'} Batch</span>
+                          <span className="text-[10px] text-gray-400 font-bold uppercase">per {recipe.batchSize || '1'} {recipe.recipeItems?.[0]?.unit || 'KG'} Batch</span>
                         </div>
                       </td>
                       <td className="px-6 py-5">
@@ -654,7 +656,7 @@ export default function RecipesPage() {
                 <select
                   value={formData.productId}
                   onChange={(e) => {
-                    if (e.target.value === "___NEW_PRODUCT___") {
+                    if (e.target.value === "___NEW___") {
                       setIsAddingProduct(true);
                     } else {
                       setFormData({ ...formData, productId: e.target.value });
@@ -662,32 +664,31 @@ export default function RecipesPage() {
                   }}
                   className="w-full h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
                 >
-                  <option value="">None</option>
+                  <option value="">Select Product (Optional)</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  <option value="___NEW_PRODUCT___" className="font-bold text-orange-600">+ Add New Product</option>
+                  <option value="___NEW___">+ Add New Product</option>
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Yield (Units/Batch) *</label>
-                <div className="flex items-center gap-2">
+                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Yield *</label>
+                <div className="flex gap-2">
                   <input
                     type="number"
                     value={formData.yieldQty}
-                    onChange={(e) => setFormData({ ...formData, yieldQty: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
-                    className="flex-1 h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
+                    onChange={(e) => setFormData({ ...formData, yieldQty: Number(e.target.value) })}
+                    className="w-24 h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
                   />
                   <select
-                    value={formData.yieldUnit?.toUpperCase() || "KG"}
+                    value={formData.yieldUnit}
                     onChange={(e) => setFormData({ ...formData, yieldUnit: e.target.value })}
-                    className="w-24 h-10 bg-slate-50 dark:bg-white/5 border-0 px-2 rounded-xl font-bold text-[10px] uppercase outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white cursor-pointer"
+                    className="flex-1 h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white uppercase"
                   >
-                    <option value="KG">KG</option>
-                    <option value="G">G</option>
-                    <option value="L">L</option>
-                    <option value="ML">ML</option>
-                    <option value="UNIT">UNIT</option>
-                    <option value="PCS">PCS</option>
+                    <option value="units">Units</option>
+                    <option value="kg">KG</option>
+                    <option value="g">G</option>
+                    <option value="pcs">Pcs</option>
+                    <option value="pkts">Pkts</option>
                   </select>
                 </div>
               </div>
@@ -696,22 +697,17 @@ export default function RecipesPage() {
             <div className="space-y-1.5">
               <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Instructions</label>
               <textarea
-                ref={(el) => {
-                  if (el) {
-                    el.style.height = 'auto';
-                    el.style.height = `${el.scrollHeight}px`;
-                  }
-                }}
                 value={formData.instructions}
                 onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
                 rows={2}
-                placeholder="Step-by-step production instructions..."
-                className="w-full min-h-[5rem] bg-slate-50 dark:bg-white/5 border-0 px-4 py-3 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-orange-500/50 transition-all resize-none text-slate-900 dark:text-white placeholder:text-slate-400 overflow-hidden"
+                placeholder="Production steps and notes..."
+                className="w-full bg-slate-50 dark:bg-white/5 border-0 p-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white resize-none placeholder:text-slate-400"
               />
             </div>
 
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between mb-2">
+            {/* Ingredients Table */}
+            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-white/5">
+              <div className="flex items-center justify-between">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Ingredients / Bill of Materials *</label>
                 <button onClick={addItem} className="flex items-center gap-1.5 text-[11px] font-black text-[#F97316] bg-orange-50 hover:bg-orange-100 dark:bg-orange-500/10 dark:hover:bg-orange-500/20 px-4 py-2 rounded-xl transition-all uppercase tracking-wider">
                   <Plus size={14} strokeWidth={3} /> Add Ingredient
@@ -747,7 +743,7 @@ export default function RecipesPage() {
                             <>
                               <div className="fixed inset-0 z-40" onClick={() => setActiveSearchIdx(null)} />
                               <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-slate-900 border border-orange-500 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                <div className="p-3 border-b border-slate-100 dark:border-white/10 flex items-center gap-2">
+                                <div className="p-3 border-b border-slate-100 dark:border-white/10 flex items-center gap-2 relative">
                                   <Search size={14} className="text-orange-500" />
                                   <input
                                     autoFocus
@@ -756,18 +752,17 @@ export default function RecipesPage() {
                                     placeholder="Type to search..."
                                     className="flex-1 bg-transparent border-none outline-none text-xs font-bold text-slate-900 dark:text-white"
                                   />
-            {materialSearchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setMaterialSearchQuery("")} 
-              />
-            )}
+                                  {materialSearchQuery && (
+                                    <X 
+                                      size={14} 
+                                      className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                                      onClick={() => setMaterialSearchQuery("")} 
+                                    />
+                                  )}
                                 </div>
-                                <div className="max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                                <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5">
                                   {materials
                                     .filter(m => m.name.toLowerCase().includes(materialSearchQuery.toLowerCase()))
-                                    .filter(m => !formData.items.some((existing, i) => i !== idx && existing.inventoryItemId === m.id))
                                     .map(m => (
                                       <div
                                         key={m.id}
@@ -775,54 +770,59 @@ export default function RecipesPage() {
                                           updateItem(idx, 'inventoryItemId', m.id);
                                           setActiveSearchIdx(null);
                                         }}
-                                        className="p-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-orange-500/10 hover:text-orange-600 rounded-lg cursor-pointer transition-colors flex items-center justify-between group"
+                                        className="p-3 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-orange-500 hover:text-white cursor-pointer transition-colors flex items-center justify-between"
                                       >
-                                        {m.name}
-                                        <span className="text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 uppercase">{m.sku}</span>
+                                        <span>{m.name}</span>
+                                        <span className="text-[10px] uppercase opacity-60">{m.unit || 'KG'}</span>
                                       </div>
                                     ))}
-                                    <div
-                                      onClick={() => {
-                                        updateItem(idx, 'inventoryItemId', '___NEW___');
-                                        setActiveSearchIdx(null);
-                                      }}
-                                      className="p-3 text-xs font-bold text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg cursor-pointer transition-colors"
-                                    >
-                                      + Add New Material
-                                    </div>
+                                  <div
+                                    onClick={() => {
+                                      setMaterialRowIdx(idx);
+                                      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
+                                      setIsAddingMaterial(true);
+                                      setActiveSearchIdx(null);
+                                    }}
+                                    className="p-3 text-xs font-bold text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 cursor-pointer transition-colors flex items-center gap-2 border-t border-orange-100 dark:border-white/10"
+                                  >
+                                    <Plus size={14} /> Add New Material
+                                  </div>
                                 </div>
                               </div>
                             </>
                           )}
                         </div>
                       </div>
+
                       <div className="w-24 space-y-1.5">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Qty</label>
                         <input
                           type="number"
                           value={item.quantityRequired}
-                          onChange={(e) => updateItem(idx, 'quantityRequired', e.target.value === '' ? '' : Number(e.target.value))}
-                          className="w-full h-10 bg-white dark:bg-slate-900 border-0 px-2 rounded-lg text-xs font-black outline-none text-slate-900 dark:text-white text-center"
+                          onChange={(e) => updateItem(idx, 'quantityRequired', Number(e.target.value))}
+                          className="w-full h-10 bg-white dark:bg-slate-900 border-0 px-3 rounded-lg text-xs font-bold text-center outline-none focus:ring-2 focus:ring-orange-500/50 text-slate-900 dark:text-white"
                         />
                       </div>
+
                       <div className="w-24 space-y-1.5">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Unit</label>
                         <select
-                          value={item.unit?.toUpperCase()}
+                          value={item.unit}
                           onChange={(e) => updateItem(idx, 'unit', e.target.value)}
-                          className="w-full h-10 bg-white dark:bg-slate-900 border-0 px-2 rounded-lg text-[10px] font-black text-center text-slate-900 dark:text-white uppercase outline-none"
+                          className="w-full h-10 bg-white dark:bg-slate-900 border-0 px-2 rounded-lg text-xs font-bold outline-none uppercase text-slate-900 dark:text-white cursor-pointer"
                         >
                           <option value="KG">KG</option>
                           <option value="G">G</option>
                           <option value="L">L</option>
                           <option value="ML">ML</option>
-                          <option value="UNIT">UNIT</option>
                           <option value="PCS">PCS</option>
+                          <option value="PKT">PKT</option>
                         </select>
                       </div>
+
                       <button
                         onClick={() => removeItem(idx)}
-                        className="p-3 mb-[2px] text-slate-300 hover:text-red-500 hover:bg-white dark:hover:bg-slate-900 rounded-xl transition-all"
+                        className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -832,109 +832,74 @@ export default function RecipesPage() {
               )}
             </div>
 
-            <div className="flex justify-between items-center pt-6">
+            <div className="flex items-center justify-between pt-6 border-t border-slate-100 dark:border-white/5">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-6 py-2.5 font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 uppercase tracking-widest text-[11px] transition-colors"
+                className="px-6 py-3 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-50 dark:hover:bg-white/5 transition-all"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSave}
-                disabled={saving}
-                className="bg-[#F97316] text-white px-8 py-3 rounded-xl font-black text-xs hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20 uppercase tracking-widest flex items-center gap-2"
+                disabled={saving || !formData.name || formData.items.length === 0}
+                className="bg-[#F97316] text-white px-8 py-3.5 rounded-xl font-black text-xs hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20 uppercase tracking-widest flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                {saving ? "Saving..." : (editingRecipe ? "Update Recipe" : "Create Recipe")}
+                {saving ? "Saving..." : (editingRecipe ? "Update Recipe" : "Save Recipe")}
               </button>
             </div>
           </div>
         </div>
       </Modal>
 
-      {/* Formula Scaling & Costing Modal */}
-      <Modal
-        isOpen={showScaleModal}
-        onClose={() => setShowScaleModal(false)}
-        title={`Formula Scaling & Costing Calculator`}
-        size="lg"
-        footer={
-          <div className="flex justify-end w-full">
-            <button
-              onClick={() => setShowScaleModal(false)}
-              className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-black text-sm hover:bg-slate-800 transition-all"
-            >
-              Close Calculator
-            </button>
-          </div>
-        }
-      >
-        {scalingRecipe && (
-          <div className="space-y-6 text-slate-900 dark:text-white">
-            <div className="bg-orange-50 dark:bg-orange-500/5 p-5 rounded-2xl border border-orange-100 dark:border-orange-500/20">
-              <h3 className="text-sm font-black text-orange-800 dark:text-orange-400 uppercase tracking-wider">{scalingRecipe.name}</h3>
-              <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase">Finished Product: {scalingRecipe.product?.name}</p>
+      {/* Scale Modal */}
+      {scalingRecipe && (
+        <Modal
+          isOpen={showScaleModal}
+          onClose={() => setShowScaleModal(false)}
+          hideHeader
+          size="2xl"
+        >
+          <div className="p-6 space-y-6 text-slate-900 dark:text-white">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-black">{scalingRecipe.name}</h3>
+                <p className="text-xs text-slate-400">Scale batch formulation</p>
+              </div>
+              <button onClick={() => setShowScaleModal(false)} className="p-2 text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block mb-2">Original Batch Yield</label>
-                <div className="text-lg font-black text-slate-700 dark:text-slate-300">{scalingRecipe.yieldQty} Units</div>
-              </div>
-              <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl border border-orange-500/20">
-                <label className="text-[10px] font-black text-orange-500 dark:text-orange-400 tracking-widest block mb-1">Target Yield (Units)</label>
+            <div className="bg-orange-50 dark:bg-orange-500/10 p-4 rounded-xl flex items-center justify-between">
+              <div>
+                <label className="text-xs font-black text-orange-600">Target Output Units</label>
                 <input
                   type="number"
-                  min="1"
                   value={scaleTargetYield}
-                  onChange={(e) => setScaleTargetYield(e.target.value === '' ? ('' as any) : Number(e.target.value))}
-                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl p-2 text-sm font-black outline-none focus:ring-2 focus:ring-orange-500/20 text-slate-900"
+                  onChange={(e) => setScaleTargetYield(Number(e.target.value) || 1)}
+                  className="w-32 h-10 mt-1 bg-white dark:bg-slate-900 border-0 px-3 rounded-lg text-sm font-bold text-slate-900 dark:text-white"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-emerald-50 dark:bg-emerald-500/5 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-500/20">
-                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest mb-1">Total Scaled Cost</p>
-                <p className="text-xl font-black text-emerald-600">{formatCurrency(totalScaledCost)}</p>
-              </div>
-              <div className="bg-blue-50 dark:bg-blue-500/5 p-4 rounded-2xl border border-blue-100 dark:border-blue-500/20">
-                <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-1">Cost Per Yield Unit</p>
-                <p className="text-xl font-black text-blue-600">{formatCurrency(scaleTargetYield > 0 ? totalScaledCost / scaleTargetYield : 0)}</p>
-              </div>
-              <div className="bg-amber-50 dark:bg-amber-500/5 p-4 rounded-2xl border border-amber-100 dark:border-amber-500/20">
-                <p className="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-1">Yield Efficiency</p>
-                <p className="text-xl font-black text-amber-600">{yieldPct.toFixed(1)}%</p>
+              <div className="text-right">
+                <div className="text-xs font-bold text-slate-500">Est. Batch Cost</div>
+                <div className="text-xl font-black text-orange-600">{formatCurrency(totalScaledCost)}</div>
               </div>
             </div>
 
-            <div className="border border-slate-200 dark:border-white/5 rounded-2xl overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-white/5 text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-white/5">
-                    <th className="px-4 py-2">Ingredient</th>
-                    <th className="px-4 py-2 text-center">Base Qty</th>
-                    <th className="px-4 py-2 text-center">Scaled Qty</th>
-                    <th className="px-4 py-2 text-right">Unit Cost</th>
-                    <th className="px-4 py-2 text-right">Scaled Cost</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {scaledItems.map((item: any, i: number) => (
-                    <tr key={i} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
-                      <td className="px-4 py-2.5">{item.name}</td>
-                      <td className="px-4 py-2.5 text-center">{item.originalQty} {item.unit}</td>
-                      <td className="px-4 py-2.5 text-center text-orange-600 font-black">{item.scaledQty.toFixed(2)} {item.unit}</td>
-                      <td className="px-4 py-2.5 text-right">{formatCurrency(item.unitCost)} / {item.unit}</td>
-                      <td className="px-4 py-2.5 text-right text-emerald-600 font-black">{formatCurrency(item.lineCost)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {scaledItems.map((item: any, i: number) => (
+                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 dark:bg-white/5 rounded-xl text-xs">
+                  <span className="font-bold">{item.name}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="font-bold">{item.scaledQty.toFixed(2)} {item.unit}</span>
+                    <span className="text-slate-400 font-semibold">{formatCurrency(item.lineCost)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
-      </Modal>
+        </Modal>
+      )}
 
       {/* Category Creation SlideOver */}
       <SlideOver
@@ -942,9 +907,6 @@ export default function RecipesPage() {
         onClose={() => {
           setIsAddingCategory(false);
           setNewCategoryName("");
-          if (formData.category === "") {
-            setFormData(prev => ({ ...prev, category: "" }));
-          }
         }}
         title="Add New Category"
       >
@@ -954,7 +916,7 @@ export default function RecipesPage() {
             <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="e.g. Beverages"
+              placeholder="e.g. Instant Mixes"
               autoFocus
               className="w-full h-12 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white placeholder:text-slate-400"
             />
@@ -974,42 +936,76 @@ export default function RecipesPage() {
         isOpen={isAddingMaterial}
         onClose={() => {
           setIsAddingMaterial(false);
-          setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+          setMaterialList([{ id: "1", name: "", unit: "kg" }]);
           setMaterialRowIdx(null);
         }}
         title="Add New Material"
       >
         <div className="space-y-6">
-          <div className="space-y-2">
+          <div className="flex items-center justify-between">
             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Material Name *</label>
-            <input
-              value={newMaterial.name}
-              onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })}
-              placeholder="e.g. Black Grams"
-              autoFocus
-              className="w-full h-12 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white placeholder:text-slate-400"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Unit</label>
-            <select
-              value={newMaterial.unit}
-              onChange={(e) => setNewMaterial({ ...newMaterial, unit: e.target.value })}
-              className="w-full h-12 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white uppercase"
+            <button
+              type="button"
+              onClick={() => setMaterialList(prev => [...prev, { id: Math.random().toString(36).slice(2), name: "", unit: "kg" }])}
+              className="text-xs font-bold text-orange-500 hover:text-orange-600 flex items-center gap-1 transition-colors"
             >
-              <option value="kg">KG</option>
-              <option value="g">G</option>
-              <option value="L">L</option>
-              <option value="ml">ML</option>
-              <option value="units">UNITS</option>
-              <option value="pcs">PCS</option>
-            </select>
+              <Plus size={13} /> Add
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {materialList.map((item, idx) => (
+              <div key={item.id} className="space-y-4 pt-1 pb-4 border-b border-gray-100 dark:border-white/5 last:border-0 last:pb-0">
+                <div className="space-y-2">
+                  {materialList.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Item #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMaterialList(prev => prev.filter(m => m.id !== item.id))}
+                        className="text-gray-400 hover:text-red-500 text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    value={item.name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, name: val } : m));
+                    }}
+                    placeholder="e.g. Black Grams"
+                    autoFocus={idx === 0}
+                    className="w-full h-12 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white placeholder:text-slate-400"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Unit</label>
+                  <select
+                    value={item.unit}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, unit: val } : m));
+                    }}
+                    className="w-full h-12 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white uppercase"
+                  >
+                    <option value="kg">KG</option>
+                    <option value="g">G</option>
+                    <option value="L">L</option>
+                    <option value="ml">ML</option>
+                    <option value="units">UNITS</option>
+                    <option value="pcs">PCS</option>
+                  </select>
+                </div>
+              </div>
+            ))}
           </div>
           
           <button
             onClick={handleCreateMaterial}
-            disabled={savingMaterial || !newMaterial.name.trim()}
+            disabled={savingMaterial || !materialList.some(m => m.name.trim())}
             className="w-full bg-[#F97316] text-white px-8 py-4 rounded-xl font-black text-sm hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20 uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {savingMaterial ? "Saving..." : "Create Material"}
@@ -1062,5 +1058,3 @@ export default function RecipesPage() {
     </>
   );
 }
-
-

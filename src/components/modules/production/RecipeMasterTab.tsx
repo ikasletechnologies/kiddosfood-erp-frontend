@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { X,
+import {
+  X,
   Plus,
   Pencil,
   Trash2,
@@ -63,7 +64,7 @@ export default function RecipeMasterTab() {
 
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [materialRowIdx, setMaterialRowIdx] = useState<number | null>(null);
-  const [newMaterial, setNewMaterial] = useState({ name: "", unit: "kg", costPrice: 0 });
+  const [materialList, setMaterialList] = useState<{ id: string; name: string; unit: string }[]>([{ id: "1", name: "", unit: "kg" }]);
   const [savingMaterial, setSavingMaterial] = useState(false);
 
   const uniqueCategories = categories.map(c => c.name);
@@ -299,7 +300,7 @@ export default function RecipeMasterTab() {
             </div>
             <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
           </div>
-
+          
           <div class="stats">
             <div class="stat-box">
               <div class="stat-label">Yield Units</div>
@@ -375,27 +376,31 @@ export default function RecipeMasterTab() {
   };
 
   const handleCreateMaterial = async () => {
-    if (!newMaterial.name.trim()) return;
+    const validMaterials = materialList.filter(m => m.name.trim());
+    if (validMaterials.length === 0) return;
     setSavingMaterial(true);
     try {
-      const res = await rawMaterialsApi.create({
-        name: newMaterial.name.trim(),
-        unit: newMaterial.unit,
-        costPrice: newMaterial.costPrice
-      });
+      let lastRes: any = null;
+      for (const mat of validMaterials) {
+        lastRes = await rawMaterialsApi.create({
+          name: mat.name.trim(),
+          unit: mat.unit,
+          costPrice: 0
+        });
+      }
       await fetchAll();
 
-      if (materialRowIdx !== null) {
+      if (materialRowIdx !== null && lastRes) {
         setForm(f => {
           const newItems = [...f.items];
-          newItems[materialRowIdx].inventoryItemId = res.data.id;
+          newItems[materialRowIdx].inventoryItemId = lastRes.data.id;
           return { ...f, items: newItems };
         });
       }
       setIsAddingMaterial(false);
-      setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
       setMaterialRowIdx(null);
-      toast.success("Material created");
+      toast.success(validMaterials.length > 1 ? "Materials created" : "Material created");
     } catch (e: any) {
       console.error(e);
       toast.error(e?.response?.data?.error ?? "Failed to create material");
@@ -448,7 +453,7 @@ export default function RecipeMasterTab() {
   const updateItem = (idx: number, patch: Partial<RecipeItem>) => {
     if (patch.inventoryItemId === "___NEW___") {
       setMaterialRowIdx(idx);
-      setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
       setIsAddingMaterial(true);
       return;
     }
@@ -897,42 +902,76 @@ export default function RecipeMasterTab() {
         isOpen={isAddingMaterial}
         onClose={() => {
           setIsAddingMaterial(false);
-          setNewMaterial({ name: "", unit: "kg", costPrice: 0 });
+          setMaterialList([{ id: "1", name: "", unit: "kg" }]);
           setMaterialRowIdx(null);
         }}
         title="Add New Material"
       >
         <div className="space-y-4">
-          <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-gray-700">Material Name *</label>
-            <input
-              value={newMaterial.name}
-              onChange={(e) => setNewMaterial({ ...newMaterial, name: e.target.value })}
-              placeholder="e.g. Black Grams"
-              autoFocus
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
-            />
+            <button
+              type="button"
+              onClick={() => setMaterialList(prev => [...prev, { id: Math.random().toString(36).slice(2), name: "", unit: "kg" }])}
+              className="text-xs font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-1 transition-colors"
+            >
+              <Plus size={13} /> Add
+            </button>
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Unit</label>
-            <select
-              value={newMaterial.unit}
-              onChange={(e) => setNewMaterial({ ...newMaterial, unit: e.target.value })}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 uppercase outline-none focus:border-[#f58220] transition-all"
-            >
-              <option value="kg">KG</option>
-              <option value="g">G</option>
-              <option value="L">L</option>
-              <option value="ml">ML</option>
-              <option value="units">UNITS</option>
-              <option value="pcs">PCS</option>
-            </select>
+          <div className="space-y-4">
+            {materialList.map((item, idx) => (
+              <div key={item.id} className="space-y-3 pt-1 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+                <div className="space-y-1.5">
+                  {materialList.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Item #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setMaterialList(prev => prev.filter(m => m.id !== item.id))}
+                        className="text-gray-400 hover:text-red-500 text-xs transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    value={item.name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, name: val } : m));
+                    }}
+                    placeholder="e.g. Black Grams"
+                    autoFocus={idx === 0}
+                    className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-700">Unit</label>
+                  <select
+                    value={item.unit}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, unit: val } : m));
+                    }}
+                    className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 uppercase outline-none focus:border-[#f58220] transition-all"
+                  >
+                    <option value="kg">KG</option>
+                    <option value="g">G</option>
+                    <option value="L">L</option>
+                    <option value="ml">ML</option>
+                    <option value="units">UNITS</option>
+                    <option value="pcs">PCS</option>
+                  </select>
+                </div>
+              </div>
+            ))}
           </div>
 
           <button
             onClick={handleCreateMaterial}
-            disabled={savingMaterial || !newMaterial.name.trim()}
+            disabled={savingMaterial || !materialList.some(m => m.name.trim())}
             className="w-full bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {savingMaterial ? "Saving..." : "Create Material"}
