@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   LogOut,
   ChevronRight,
@@ -19,7 +19,7 @@ import {
   Search
 } from "lucide-react";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { clsx } from "clsx";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -28,6 +28,9 @@ import { SUPER_ADMIN_SIDEBAR, franchiseMenuSections } from "@/config/navigation"
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentQuery = searchParams?.toString();
+  const fullPath = currentQuery ? `${pathname}?${currentQuery}` : pathname;
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const { isCollapsed, toggleCollapsed, isMobileOpen, closeMobile } = useSidebar();
@@ -224,9 +227,16 @@ export default function Sidebar() {
                       const itemIcon = item.icon;
                       const isExpanded = expandedMenus.includes(item.label) || !!searchTerm;
                       const hasChildren = !!item.children?.length;
-                      const isActive =
-                        pathname === item.href ||
-                        (hasChildren && item.children?.some((c) => pathname === c.href));
+
+                      const currentReportParent = pathname === "/reports" ? (searchParams?.get("parent") || "production") : null;
+                      const isReportItem = item.href.startsWith("/reports?parent=");
+                      const itemReportParent = isReportItem ? item.href.replace("/reports?parent=", "") : null;
+
+                      const isActive = isReportItem
+                        ? pathname === "/reports" && currentReportParent === itemReportParent
+                        : pathname === item.href ||
+                          fullPath === item.href ||
+                          (hasChildren && item.children?.some((c) => pathname === c.href || fullPath === c.href));
                       const isHovered = hoveredItem === item.label;
                       const isComingSoon = item.isComingSoon;
 
