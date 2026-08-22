@@ -111,6 +111,23 @@ export default function RecipeMasterTab() {
     sessionStorage.removeItem(RESUME_KEY);
 
     (async () => {
+      let freshProducts: any[] = [];
+      try {
+        const [rRes, mRes, pRes, cRes] = await Promise.all([
+          recipesApi.getAll(),
+          rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
+          productsApi.getAll(),
+          recipesApi.getCategories()
+        ]);
+        setRecipes(rRes.data ?? []);
+        setMaterials(mRes.data ?? []);
+        freshProducts = pRes.data ?? [];
+        setProducts(freshProducts);
+        setCategories(cRes.data ?? []);
+      } catch (e) {
+        console.error("Failed to refresh lists on resume", e);
+      }
+
       let productId = "";
       let shelfLifeDays: number | null = null;
       // Distinguishes "nothing to look up" / "not found" / "found but
@@ -126,8 +143,7 @@ export default function RecipeMasterTab() {
           // minutes old at most), not a stale leftover from some earlier,
           // unrelated visit to the add-product page.
           if (created?.name && Date.now() - (created.at || 0) < 10 * 60 * 1000) {
-            const res = await productsApi.getAll();
-            const match = (res.data || []).find((p: any) => p.name?.toLowerCase() === created.name.toLowerCase());
+            const match = freshProducts.find((p: any) => p.name?.toLowerCase() === created.name.toLowerCase());
             if (!match) {
               outcome = "not-found";
             } else {
@@ -681,7 +697,7 @@ export default function RecipeMasterTab() {
                 className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
               >
                 <option value="">None</option>
-                {products.map((p: any) => (
+                {products.filter((p: any) => p.productType === "FINISHED_GOOD" || !p.productType).map((p: any) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
                 <option value="___NEW_PRODUCT___" className="font-bold text-[#f58220]">+ Add New Product</option>
