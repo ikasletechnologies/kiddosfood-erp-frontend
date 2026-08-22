@@ -177,7 +177,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       />
 
       {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-50 bg-white dark:bg-[#0B0D14] border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             type="button"
