@@ -994,27 +994,29 @@ export default function VendorsClient() {
                 <div className="bg-white dark:bg-card p-6 rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm">
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Balance Formula</h4>
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                      <p className={`text-2xl font-black ${Number(selectedVendor.balance) > 0 ? "text-rose-500" : Number(selectedVendor.balance) < 0 ? "text-emerald-500" : "text-slate-500"}`}>
-                        ₹ {Math.round(Math.abs(selectedVendor.balance || 0)).toLocaleString()}
-                        {Number(selectedVendor.balance) !== 0 && (
-                          <span className="text-xs font-bold uppercase tracking-wider ml-1.5 text-slate-400">
-                            {Number(selectedVendor.balance) > 0 ? "To Pay" : "Advance Credit"}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
-                        {Number(selectedVendor.balance) > 0 ? "Outstanding Balance" : Number(selectedVendor.balance) < 0 ? "Balance — Paid Ahead of Purchases" : "Balance"}
-                      </p>
-                    </div>
-                    <div className="text-2xl text-slate-300 font-light hidden md:block">=</div>
+                    {/* 1. Total Purchases */}
                     <div>
                       <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
                         ₹ {Math.round(selectedVendor.totalPurchased || 0).toLocaleString()}
                       </p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Total Purchases</p>
                     </div>
+
                     <div className="text-2xl text-slate-300 font-light hidden md:block">-</div>
+
+                    {/* 2. To Pay */}
+                    <div className="text-center">
+                      <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
+                        ₹ {Math.round(Math.abs(selectedVendor.balance || 0)).toLocaleString()}
+                      </p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5 text-center">
+                        {Number(selectedVendor.balance) > 0 ? "To Pay" : Number(selectedVendor.balance) < 0 ? "Advance Credit" : "To Pay"}
+                      </p>
+                    </div>
+
+                    <div className="text-2xl text-slate-300 font-light hidden md:block">=</div>
+
+                    {/* 3. Payments Made */}
                     <div>
                       <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
                         ₹ {Math.round(selectedVendor.totalPayments || 0).toLocaleString()}
@@ -1024,74 +1026,27 @@ export default function VendorsClient() {
                   </div>
                 </div>
 
-                {/* Workflow Pipeline */}
-                <div className="bg-white dark:bg-card p-6 rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm">
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Procurement Workflow</h4>
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-2 text-center">
-                    <div className="flex flex-col items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-                        <CheckCircle2 size={18} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 mt-2 uppercase tracking-wider">Vendor Onboarded</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">{selectedVendor.status || 'ACTIVE'}</p>
-                    </div>
-                    <div className="text-slate-300 font-light hidden md:block">&rarr;</div>
-                    <div className="flex flex-col items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-                        <Package size={18} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 mt-2 uppercase tracking-wider">POs Linked</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">{selectedVendorDetail?.orders?.length || 0} orders</p>
-                    </div>
-                    <div className="text-slate-300 font-light hidden md:block">&rarr;</div>
-                    <div className="flex flex-col items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-                        <Truck size={18} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 mt-2 uppercase tracking-wider">GRN Linked</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">
-                        {selectedVendorDetail?.orders?.flatMap((o: any) => o.goodsReceipts || [])?.length || 0} received
-                      </p>
-                    </div>
-                    <div className="text-slate-300 font-light hidden md:block">&rarr;</div>
-                    <div className="flex flex-col items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
-                        <Receipt size={18} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 mt-2 uppercase tracking-wider">Bills Linked</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">{selectedVendorDetail?.invoices?.length || 0} invoices</p>
-                    </div>
-                    <div className="text-slate-300 font-light hidden md:block">&rarr;</div>
-                    <div className="flex flex-col items-center flex-1">
-                      <div className="w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center text-white shadow-lg shadow-violet-500/20">
-                        <Wallet size={18} />
-                      </div>
-                      <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 mt-2 uppercase tracking-wider">Payments Linked</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">₹ {Math.round(selectedVendor.totalPaid || 0).toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Profile Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white dark:bg-card p-6 rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm space-y-4">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Business Identity</h4>
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Business Identity */}
+                  <div className="bg-white dark:bg-card p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+                    <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-4">Business Identity</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Vendor Code</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.vendorCode || selectedVendor.vendorCode || "—"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Vendor Code</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.vendorCode || selectedVendor.vendorCode || "—"}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">GSTIN</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.gstNumber || selectedVendor.gstNumber || "—"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">GSTIN</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.gstNumber || selectedVendor.gstNumber || "—"}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Material Category</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.category || selectedVendor.category || "General Supplier"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Material Category</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.category || selectedVendor.category || "General Supplier"}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Credit Period (Payment Terms)</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Credit Period</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                           {(() => {
                             const terms = selectedVendorDetail?.paymentTerms || selectedVendor.paymentTerms;
                             if (terms === 'NET_7') return '7 Days';
@@ -1104,20 +1059,31 @@ export default function VendorsClient() {
                     </div>
                   </div>
 
-                  <div className="bg-white dark:bg-card p-6 rounded-3xl border border-slate-100 dark:border-white/5 shadow-sm space-y-4">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Contact & Location</h4>
-                    <div className="grid grid-cols-2 gap-4">
+                  {/* Contact & Location */}
+                  <div className="bg-white dark:bg-card p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+                    <h4 className="text-[11px] font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-4">Contact &amp; Location</h4>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Phone Number</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.contact || selectedVendor.contact || "—"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Phone Number</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.contact || selectedVendor.contact || "—"}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Email Address</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.email || selectedVendor.email || "—"}</p>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Email Address</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.email || selectedVendor.email || "—"}</p>
                       </div>
-                      <div className="col-span-2">
-                        <p className="text-[10px] text-slate-400 uppercase font-black">Registered Address</p>
-                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{selectedVendorDetail?.address || selectedVendor.address || "—"}</p>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Registered Address</p>
+                        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{selectedVendorDetail?.address || selectedVendor.address || "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">City and Pincode</p>
+                        {(selectedVendorDetail?.city || selectedVendor.city || selectedVendorDetail?.pincode || selectedVendor.pincode) ? (
+                          <span className="inline-block text-sm font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-white/10 px-2.5 py-0.5 rounded-lg">
+                            {[selectedVendorDetail?.city || selectedVendor.city, selectedVendorDetail?.pincode || selectedVendor.pincode].filter(Boolean).join(', ')}
+                          </span>
+                        ) : (
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">—</p>
+                        )}
                       </div>
                     </div>
                   </div>

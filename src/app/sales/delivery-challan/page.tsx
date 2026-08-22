@@ -405,8 +405,13 @@ export default function DeliveryChallanPage() {
     };
 
     try {
-      await salesApi.createDeliveryChallan(apiPayload);
-      showToast("Delivery Challan saved successfully", "success");
+      if (draftId) {
+        await salesApi.updateDeliveryChallan(draftId, apiPayload);
+        showToast("Delivery Challan updated successfully", "success");
+      } else {
+        await salesApi.createDeliveryChallan(apiPayload);
+        showToast("Delivery Challan saved successfully", "success");
+      }
       fetchData();
       setView("list");
       resetForm();
@@ -453,17 +458,21 @@ export default function DeliveryChallanPage() {
     if (raw.items && raw.items.length > 0) {
       setItems(raw.items);
     } else if (dc.items && dc.items.length > 0) {
-      setItems(dc.items.map((it: any) => ({
-        id: it.id || Math.random().toString(36).slice(2),
-        productId: it.productId || "",
-        itemSearch: it.description,
-        qty: it.qty,
-        unit: it.unit || "NONE",
-        rate: it.rate || 0,
-        taxPct: it.taxPct || 0,
-        taxLabel: TAX_OPTIONS.find(o => o.value === (it.taxPct || 0))?.label || "NONE",
-        remarks: it.remarks || "",
-      })));
+      setItems(dc.items.map((it: any) => {
+        const taxPct = Number(it.taxPercent ?? it.taxPct ?? 0);
+        return {
+          id: it.id || Math.random().toString(36).slice(2),
+          productId: it.productId || "",
+          itemSearch: it.productName || it.description || "",
+          qty: Number(it.quantity ?? it.qty ?? 1),
+          unit: it.unit || "NONE",
+          rate: Number(it.rate ?? it.unitPrice ?? 0),
+          taxPct,
+          taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
+          batchNumber: it.batchNumber || "",
+          remarks: it.remarks || "",
+        };
+      }));
     } else {
       setItems([makeItem()]);
     }
@@ -651,13 +660,8 @@ export default function DeliveryChallanPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
-                const hasInput = selectedCustomer || items.some(it => it.itemSearch !== "");
-                if (hasInput) {
-                  handleSave("DRAFT");
-                } else {
-                  setView("list");
-                  resetForm();
-                }
+                setView("list");
+                resetForm();
               }}
               className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
             >
