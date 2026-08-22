@@ -1657,7 +1657,7 @@ export default function VendorsClient() {
                           <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                             <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
                             <td className="px-6 py-4 text-xs text-slate-500">{m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.unit || "Units"}</td>
+                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.unit ? m.material.unit.replace(/^1\s*/, "") : "Units"}</td>
                             <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {m.price || m.material?.basePrice || 0}</td>
                             <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
                           </tr>

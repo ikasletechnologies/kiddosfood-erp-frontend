@@ -30,15 +30,12 @@ export default function StockSummaryReport() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const params: any = {};
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = endDate;
-        
         // Uses the newly registered endpoint /api/reports/stock-summary
         const res = await reportsApi.getStockSummary();
         // Fallback to stock-summary service or fallback response
@@ -73,16 +70,16 @@ export default function StockSummaryReport() {
     const matchesInStock = showInStockOnly ? row.stockQty > 0 : true;
     
     let matchesCategory = true;
-    if (selectedCategory !== "All Categories") {
+    if (selectedCategory !== "ALL") {
       const cat = row.category;
-      if (selectedCategory === "Raw Material") {
+      if (selectedCategory === "RAW_MATERIAL") {
         matchesCategory = cat === "RAW_MATERIAL" || cat.startsWith("RAW_");
-      } else if (selectedCategory === "Finished Goods") {
+      } else if (selectedCategory === "FINISHED_GOOD") {
         matchesCategory = cat === "FINISHED_GOOD" || cat.startsWith("FINISHED_");
-      } else if (selectedCategory === "Packaging Material") {
-        matchesCategory = cat === "PACKAGING_MATERIAL" || cat.startsWith("PACKAGING_");
-      } else if (selectedCategory === "Other Material") {
-        matchesCategory = !cat.startsWith("RAW_") && !cat.startsWith("FINISHED_") && !cat.startsWith("PACKAGING_");
+      } else if (selectedCategory === "PACKAGING") {
+        matchesCategory = cat === "PACKAGING" || cat.startsWith("PACKAGING_");
+      } else if (selectedCategory === "SEMI_FINISHED") {
+        matchesCategory = cat === "SEMI_FINISHED" || cat.startsWith("SEMI_FINISHED_");
       }
     }
 
@@ -123,9 +120,18 @@ export default function StockSummaryReport() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Category Filter */}
           <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              All Categories <ChevronDownIcon size={12} />
-            </button>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="flex items-center gap-2 pl-4 pr-8 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 outline-none cursor-pointer appearance-none"
+            >
+              {CATEGORY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+              <ChevronDownIcon size={10} />
+            </div>
           </div>
 
           {/* Date Filter */}

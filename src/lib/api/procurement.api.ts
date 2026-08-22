@@ -14,7 +14,7 @@ export const vendorsApi = {
   getLedger: (id: string, params: any = {}) => api.get(`/api/vendors/${id}/ledger`, { params }),
   getAging: (id: string) => api.get(`/api/vendors/${id}/aging`),
   getNextPaymentNumber: (date?: string) => api.get('/api/vendors/next-payment-number', { params: { date } }),
-  recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string; idempotencyKey?: string; allowOverpayment?: boolean }) => api.post(`/api/vendors/${id}/payment`, data),
+  recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string; idempotencyKey?: string; allowOverpayment?: boolean; date?: string }) => api.post(`/api/vendors/${id}/payment`, data),
   recordAdjustment: (id: string, data: { amount: number; type: 'CREDIT' | 'DEBIT'; note: string; referenceType?: string, referenceId?: string }) => api.post(`/api/vendors/${id}/adjustment`, data),
 };
 

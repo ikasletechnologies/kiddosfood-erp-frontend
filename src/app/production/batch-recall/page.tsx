@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   ShieldAlert, Search, Package, Store, AlertTriangle,
   CheckCircle2, XCircle, Truck, Clock, RefreshCw,
