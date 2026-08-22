@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
-  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon 
+  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon, X 
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { reportsApi } from "@/lib/api/accounting.api";

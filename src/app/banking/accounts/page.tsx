@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Landmark,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { SlideOver } from '@/components/ui/SlideOver';
 import clsx from 'clsx';

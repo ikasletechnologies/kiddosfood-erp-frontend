@@ -14,7 +14,8 @@ import {
   Pencil,
   Lock,
   CheckCircle2,
-  XCircle
+  XCircle,
+  X
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
