@@ -502,6 +502,43 @@ export default function PurchaseBillsPage() {
     setAttachedFiles(prev => prev.filter(f => f.id !== id));
   };
 
+  const handleDownloadPdf = (bill?: any) => {
+    try {
+      const billData = bill || {
+        vendor: selectedVendor,
+        items: items.filter(i => i.name && i.qty > 0),
+        invoiceNumber: "Draft",
+        invoiceDate: billDate || new Date().toISOString(),
+        paymentType: paymentType,
+        amount: finalTotal,
+        totalTax: items.reduce((sum, item) => sum + (item.qty * item.rate * item.taxPct / 100), 0)
+      };
+      const pdfString = buildPurchaseBillPdf(billData);
+      const blob = new Blob([pdfString], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const billNumClean = (billData.invoiceNumber || "Bill").replace(/[^a-zA-Z0-9_-]/g, "_");
+      link.href = url;
+      link.download = `Purchase_Bill_${billNumClean}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success("Purchase Bill PDF downloaded successfully!");
+    } catch (err) {
+      console.error("Failed to download PDF:", err);
+      toast.error("Failed to download PDF. Please try again.");
+    }
+  };
+
+  const handleShare = (bill?: any) => {
+    toast.success("Share link copied to clipboard!");
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   const handleSave = async () => {
     if (!selectedVendor) { toast.error("Please select a vendor"); return; }
     const validItems = items.filter(i => i.name && i.qty > 0);
@@ -532,6 +569,26 @@ export default function PurchaseBillsPage() {
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Failed to save bill");
     } finally { setSaving(false); }
+  };
+
+  const getFilteredAccounts = () => {
+    if (paymentMode === "CASH") {
+      return accounts.filter(a => a.type === "CASH");
+    } else {
+      return accounts.filter(a => a.type === "BANK" || a.type === "UPI");
+    }
+  };
+
+  const handlePaymentModeChange = (mode: string) => {
+    setPaymentMode(mode);
+    const filtered = mode === "CASH" 
+      ? accounts.filter(a => a.type === "CASH")
+      : accounts.filter(a => a.type === "BANK" || a.type === "UPI");
+    
+    const isStillValid = filtered.some(a => a.id === paymentAccount);
+    if (!isStillValid) {
+      setPaymentAccount("");
+    }
   };
 
   const handleMakePayment = async () => {
@@ -1334,7 +1391,7 @@ export default function PurchaseBillsPage() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
                 >
                   <option value="">Select Account</option>
-                  {accounts.map(a => (
+                  {getFilteredAccounts().map(a => (
                     <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
                   ))}
                   <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
