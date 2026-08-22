@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import DocumentOptions from "@/components/documents/DocumentOptions";
-import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package } from "lucide-react";
+import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
@@ -58,10 +58,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       try {
         const response = await inventoryApi.getWarehouses();
         setWarehouses(response.data);
-        if (response.data && response.data.length > 0 && !warehouseId) {
-          const central = response.data.find((w: any) => w.name.toLowerCase().includes('central')) || response.data[0];
-          setWarehouseId(central.id);
-        }
       } catch (error) {
         console.error("Failed to fetch warehouses", error);
       }
@@ -282,12 +278,29 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
                     <Calendar size={11} /> Expected Delivery
                   </label>
-                  <input
-                    type="date"
-                    value={expectedDeliveryDate}
-                    onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type="date"
+                      value={expectedDeliveryDate}
+                      onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                      className={clsx(
+                        "w-full border border-gray-300 rounded-lg py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400 pl-3",
+                        expectedDeliveryDate ? "pr-16" : "pr-8"
+                      )}
+                    />
+                    <div className="absolute right-2.5 flex items-center gap-1">
+                      {expectedDeliveryDate && (
+                        <button
+                          type="button"
+                          onClick={() => setExpectedDeliveryDate("")}
+                          className="p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                          title="Clear Date"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
@@ -298,6 +311,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                     onChange={(e) => setPaymentTerms(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
                   >
+                    <option value="">Select Terms</option>
                     <option value="IMMEDIATE">Immediate</option>
                     <option value="ADVANCE_100">Advance Payment (100%)</option>
                     <option value="ADVANCE_PARTIAL">Advance Payment (Partial)</option>
@@ -315,13 +329,32 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                   <div className="text-sm font-bold text-gray-800 font-mono">{poNumber}</div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Purchase Date</label>
-                  <input
-                    type="date"
-                    value={purchaseDate}
-                    onChange={(e) => setPurchaseDate(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400"
-                  />
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
+                    <Calendar size={11} /> Purchase Date
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="date"
+                      value={purchaseDate}
+                      onChange={(e) => setPurchaseDate(e.target.value)}
+                      className={clsx(
+                        "w-full border border-gray-300 rounded-lg py-2 text-sm text-gray-700 bg-white outline-none focus:border-orange-400 pl-3",
+                        purchaseDate ? "pr-16" : "pr-8"
+                      )}
+                    />
+                    <div className="absolute right-2.5 flex items-center gap-1">
+                      {purchaseDate && (
+                        <button
+                          type="button"
+                          onClick={() => setPurchaseDate("")}
+                          className="p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                          title="Clear Date"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -184,7 +184,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [purchaseType, setPurchaseType] = useState("RAW_MATERIAL");
-  const [paymentTerms, setPaymentTerms] = useState("NET_30");
+  const [paymentTerms, setPaymentTerms] = useState("");
   const [poStatus, setPoStatus] = useState("DRAFT");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [freightCost, setFreightCost] = useState(0);
