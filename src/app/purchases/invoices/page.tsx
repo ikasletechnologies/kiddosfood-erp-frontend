@@ -179,7 +179,7 @@ function buildPurchaseBillPdf(bill: any): string {
   const vendorName = (bill.vendor?.name || bill.vendorSearch || "Vendor").replace(/[()\\\r\n]/g, "");
   const vendorPhone = (bill.vendor?.phone || bill.vendor?.contact || bill.vendorPhone || "-").replace(/[()\\\r\n]/g, "");
   const billNum = (bill.invoiceNumber || bill.billNumber || "PB-001").replace(/[()\\\r\n]/g, "");
-  const bDate = bill.invoiceDate ? new Date(bill.invoiceDate).toLocaleDateString() : (bill.billDate || new Date().toLocaleDateString());
+  const bDate = bill.billDate ? new Date(bill.billDate).toLocaleDateString() : (bill.invoiceDate ? new Date(bill.invoiceDate).toLocaleDateString() : "—");
   const pType = bill.paymentType || "CASH";
 
   while (currentRow < items.length || pageNum === 1) {
@@ -541,6 +541,7 @@ export default function PurchaseBillsPage() {
 
   const handleSave = async () => {
     if (!selectedVendor) { toast.error("Please select a vendor"); return; }
+    if (!billDate) { toast.error("Bill Date / Invoice Date is required"); return; }
     const validItems = items.filter(i => i.name && i.qty > 0);
     if (validItems.length === 0) { toast.error("Add at least one item"); return; }
     setSaving(true);
@@ -647,9 +648,10 @@ export default function PurchaseBillsPage() {
       b.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ||
       b.vendor?.name?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || b.status === statusFilter;
+    const targetDate = b.billDate || b.invoiceDate;
     let matchDate = true;
-    if (b.invoiceDate) {
-      const bD = b.invoiceDate.split("T")[0];
+    if (targetDate) {
+      const bD = typeof targetDate === "string" ? targetDate.split("T")[0] : new Date(targetDate).toISOString().split("T")[0];
       if (dateFrom && bD < dateFrom) matchDate = false;
       if (dateTo && bD > dateTo) matchDate = false;
     }
@@ -756,7 +758,7 @@ export default function PurchaseBillsPage() {
                   <span className="text-sm font-semibold text-gray-700">Auto</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Bill Date</span>
+                  <span className="text-xs font-medium text-gray-500">Bill Date <span className="text-rose-500 font-bold">*</span></span>
                   <div className="relative" ref={calendarRef}>
                     <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors w-48 justify-between">
                       <button
@@ -1279,7 +1281,7 @@ export default function PurchaseBillsPage() {
                   return (
                     <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {b.invoiceDate ? new Date(b.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                        {b.billDate ? new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                       </td>
                       <td className="px-4 py-3 text-xs font-bold text-gray-800">
                         {b.invoiceNumber || "—"}
