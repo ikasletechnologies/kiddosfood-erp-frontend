@@ -7,7 +7,7 @@ import {
   AlignLeft, FileText, ArrowLeft, ArrowRight, FileClock, Pencil, Truck
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi } from "@/lib/api";
+import { customersApi, rawMaterialsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
@@ -84,6 +84,21 @@ interface LineItem {
   discountPct: number;
   taxPct: number;
   taxLabel?: string;
+}
+
+// InventoryItem.unit is free-text from Item Master (e.g. "kg", "Ltr") and
+// won't exact-match the <select>'s uppercase codes (KGS, LTR, ...), which
+// silently renders as "None" even though the raw value round-trips fine —
+// resolve it to the matching UNITS code so the dropdown actually shows it.
+function normalizeUnit(raw: string | undefined | null): string {
+  if (!raw) return "NONE";
+  const needle = raw.trim().toUpperCase();
+  if (!needle || needle === "NONE") return "NONE";
+  const match = UNITS.find(u => {
+    const short = u.short.toUpperCase();
+    return u.code === needle || short === needle || short.startsWith(needle) || needle.startsWith(short);
+  });
+  return match ? match.code : "NONE";
 }
 
 function makeItem(): LineItem {
@@ -295,7 +310,11 @@ export default function EstimationsPage() {
       const [eRes, cRes, pRes] = await Promise.allSettled([
         api.get("/api/sales/quotations").catch(() => ({ data: [] })),
         customersApi.getAll(),
-        productsFullApi.getAll(),
+        // Estimates sell finished goods, not raw materials/semi-finished/packaging —
+        // exclude those categories to get the sellable Finished Goods catalog
+        // (real InventoryItem rows, with a real `unit`, unlike the old Product
+        // source this used to read from).
+        rawMaterialsApi.getAll(false, undefined, "RAW_MATERIAL,SEMI_FINISHED,PACKAGING"),
       ]);
       
       let apiEstimations = eRes.status === "fulfilled" ? (eRes.value as any).data || [] : [];
@@ -339,7 +358,11 @@ export default function EstimationsPage() {
   // ── Computed totals ────────────────────────────────────────────────────────
   const withTax = priceMode === "with_tax";
   const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
-  const totalQty = items.reduce((s, i) => s + i.qty, 0);
+  // Blank rows default qty to 1 for a nicer typing experience, but a row
+  // with no item selected yet shouldn't count toward the displayed total.
+  const totalQty = items
+    .filter(i => i.productId || i.itemSearch.trim())
+    .reduce((s, i) => s + i.qty, 0);
   const totalDisc = parseFloat(rowData.reduce((s, r) => s + r.discAmt, 0).toFixed(2));
   const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
   const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
@@ -393,9 +416,11 @@ export default function EstimationsPage() {
       setShowDesc(raw.showDesc || !!raw.description);
       setRoundOffEnabled(raw.roundOffEnabled ?? true);
     } else {
-      const customer = customers.find((c: any) => c.id === draft.customerId) || null;
+      // Prefer the customer relation the backend already includes over the
+      // (frequently null on older rows) denormalized customerName string.
+      const customer = draft.customer || customers.find((c: any) => c.id === draft.customerId) || null;
       setSelectedCustomer(customer);
-      setCustomerSearch(draft.customerName || (customer ? customer.name : ""));
+      setCustomerSearch((customer ? customer.name : "") || draft.customerName || "");
       setCustomerPhone(draft.customerPhone || (customer ? customer.contact || customer.phone : ""));
       setInvoiceDate(draft.validUntil ? new Date(draft.validUntil).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
       setStateOfSupply(customer?.state || "");
@@ -407,7 +432,7 @@ export default function EstimationsPage() {
             productId: i.productId,
             itemSearch: i.productName,
             qty: i.quantity,
-            unit: i.unit || "NONE",
+            unit: normalizeUnit(i.unit),
             rate: i.rate,
             discountPct: 0,
             taxPct: i.taxPercent || 0,
@@ -436,15 +461,16 @@ export default function EstimationsPage() {
   };
 
   const selectProduct = (idx: number, p: any) => {
+    const taxPct = p.gstRate ?? p.taxPercent ?? 0;
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
-        rate: p.basePrice || p.price || 0,
-        unit: p.unit || "NONE",
-        taxPct: p.taxPercent || 0,
-        taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
+        rate: p.customerPrice || p.basePrice || p.price || 0,
+        unit: normalizeUnit(p.unit),
+        taxPct,
+        taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
       } : it
     ));
     setOpenItemDrop(null);
@@ -568,11 +594,90 @@ export default function EstimationsPage() {
     }
   };
 
+  // Isolates just the clicked estimate into a printable document instead of
+  // printing the whole list page, and never touches any other record.
+  const handlePrintEstimate = (est: any) => {
+    const partyName = est.customer?.name || est.customerName || "—";
+    const itemsHtml = (est.items || []).map((it: any, idx: number) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${it.productName || "—"}</td>
+        <td style="text-align:center">${it.quantity}</td>
+        <td style="text-align:center">${it.unit || "—"}</td>
+        <td style="text-align:right">₹${(it.rate || 0).toFixed(2)}</td>
+        <td style="text-align:right">${it.taxPercent || 0}%</td>
+        <td style="text-align:right">₹${(it.totalAmount || 0).toFixed(2)}</td>
+      </tr>
+    `).join("");
+    const win = window.open("", "_blank", "width=800,height=900");
+    if (!win) { showToast("Please allow pop-ups to print", "error"); return; }
+    win.document.write(`
+      <html>
+        <head>
+          <title>Estimate ${est.quotationNumber}</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #111827; }
+            h2 { margin: 0 0 4px; font-size: 18px; }
+            p { margin: 2px 0; font-size: 13px; color: #4b5563; }
+            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+            th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; font-size: 13px; }
+            th { text-align: left; background: #f9fafb; }
+            .totals { width: 260px; margin-left: auto; margin-top: 12px; }
+            .totals td { border: none; font-weight: 600; }
+          </style>
+        </head>
+        <body>
+          <h2>Estimate ${est.quotationNumber}</h2>
+          <p>Party: ${partyName}${est.customerPhone ? ` · ${est.customerPhone}` : ""}</p>
+          <p>Date: ${new Date(est.createdAt).toLocaleDateString("en-IN")}${est.validUntil ? ` · Valid Until: ${new Date(est.validUntil).toLocaleDateString("en-IN")}` : ""}</p>
+          <table>
+            <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Tax</th><th>Amount</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+          <table class="totals">
+            <tr><td>Subtotal</td><td style="text-align:right">₹${(est.subTotal || 0).toFixed(2)}</td></tr>
+            <tr><td>Tax</td><td style="text-align:right">₹${(est.taxAmount || 0).toFixed(2)}</td></tr>
+            <tr><td>Total</td><td style="text-align:right">₹${(est.totalAmount || 0).toFixed(2)}</td></tr>
+          </table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const handleShareEstimate = async (est: any) => {
+    const partyName = est.customer?.name || est.customerName || "—";
+    const lines = [
+      `Estimate ${est.quotationNumber}`,
+      `Party: ${partyName}`,
+      ...(est.items || []).map((it: any) => `${it.productName} x${it.quantity} ${it.unit || ""} — ₹${(it.totalAmount || 0).toFixed(2)}`),
+      `Total: ₹${(est.totalAmount || 0).toFixed(2)}`,
+    ];
+    const text = lines.join("\n");
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      try {
+        await (navigator as any).share({ title: `Estimate ${est.quotationNumber}`, text });
+      } catch {
+        // user cancelled the share sheet — no-op
+      }
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      showToast("Estimate details copied to clipboard", "success");
+      return;
+    }
+    showToast("Sharing is not supported in this browser", "error");
+  };
+
   // ── Filtered list ──────────────────────────────────────────────────────────
   const filtered = estimations.filter(est => {
+    const partyName = est.customer?.name || est.customerName;
     const matchSearch = !search ||
       est.quotationNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      est.customerName?.toLowerCase().includes(search.toLowerCase());
+      partyName?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || est.status === statusFilter;
     // Add date filtering logic if required here
     return matchSearch && matchStatus;
@@ -759,7 +864,9 @@ export default function EstimationsPage() {
                 {items.map((item, idx) => {
                   const { taxAmt, amount } = computeRow(item, withTax);
                   const filtProd = products.filter(p =>
-                    !item.itemSearch || p.name?.toLowerCase().includes(item.itemSearch.toLowerCase())
+                    !item.itemSearch ||
+                    p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
+                    p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
                   ).slice(0, 10);
                   return (
                     <tr key={item.id} className="hover:bg-gray-50/50">
@@ -814,7 +921,7 @@ export default function EstimationsPage() {
                                   >
                                     <div>
                                       <div className="text-sm font-medium text-gray-800">{p.name}</div>
-                                      <div className="text-xs text-gray-400">₹{p.basePrice || p.price || 0}</div>
+                                      <div className="text-xs text-gray-400">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
                                     </div>
                                   </button>
                                 ))
@@ -1090,7 +1197,7 @@ export default function EstimationsPage() {
               <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-6 py-4 flex items-center justify-between text-white">
                 <div>
                   <h3 className="font-bold text-lg">Convert to Sales Order</h3>
-                  <p className="text-white/80 text-xs mt-0.5">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customerName || "No Customer Name"}</p>
+                  <p className="text-white/80 text-xs mt-0.5">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customer?.name || selectedEstForConvert.customerName || "No Customer Name"}</p>
                 </div>
                 <button
                   onClick={() => setShowConvertModal(false)}
@@ -1415,7 +1522,7 @@ export default function EstimationsPage() {
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span className="font-medium text-gray-800">
-                          {est.customerName || "—"}
+                          {est.customer?.name || est.customerName || "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">
@@ -1471,14 +1578,14 @@ export default function EstimationsPage() {
                                 </button>
                               )}
                               <button
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                 title="Print"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); handleShareEstimate(est); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                                 title="Share"
                               >

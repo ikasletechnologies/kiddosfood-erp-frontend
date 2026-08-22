@@ -42,6 +42,10 @@ export interface MenuItem {
   isNew?: boolean;
   isHot?: boolean;
   isComingSoon?: boolean;
+  // Only shown to a FRANCHISE_ADMIN-tier user if they've additionally been
+  // assigned a department Role (see AuthContext.User.customRole) — used for
+  // items like Approval Workflows that a plain franchise admin shouldn't see.
+  requiresCustomRole?: boolean;
   children?: {
     label: string;
     href: string;
@@ -398,7 +402,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: BarChart3,
-        label: "Franchise",
+        label: "Party Statement",
         href: "/reports?report=Party Statement",
         roles: SUPER_ONLY,
       },
@@ -416,13 +420,13 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       {
         icon: UserCheck,
         label: "Roles",
-        href: "/admin/users",
+        href: "/admin/roles",
         roles: SUPER_ONLY,
       },
       {
         icon: Lock,
         label: "Permissions",
-        href: "/admin/users",
+        href: "/admin/permissions",
         roles: SUPER_ONLY,
       },
       {
@@ -578,6 +582,18 @@ export const franchiseMenuSections: MenuSection[] = [
         label: "Returns",
         href: "/sales/returns",
         roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "APPROVALS",
+    items: [
+      {
+        icon: UserCheck,
+        label: "Approval Workflows",
+        href: "/admin/approvals",
+        roles: FRANCHISE_ONLY,
+        requiresCustomRole: true,
       },
     ],
   },

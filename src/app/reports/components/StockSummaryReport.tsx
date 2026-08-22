@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
-  SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
-  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon 
+import {
+  SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon,
+  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { reportsApi } from "@/lib/api/accounting.api";
 
 interface StockRow {
@@ -15,24 +16,39 @@ interface StockRow {
   stockValue: number;
 }
 
+const CATEGORY_OPTIONS = [
+  { value: "ALL", label: "All Categories" },
+  { value: "RAW_MATERIAL", label: "Raw Material" },
+  { value: "SEMI_FINISHED", label: "Semi Finished" },
+  { value: "FINISHED_GOOD", label: "Finished Good" },
+  { value: "PACKAGING", label: "Packaging" },
+];
+
 export default function StockSummaryReport() {
   const [reportData, setReportData] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
+  const [category, setCategory] = useState("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
         // Uses the newly registered endpoint /api/reports/stock-summary
-        const res = await reportsApi.getStockSummary();
+        const res = await reportsApi.getStockSummary({
+          category: category !== "ALL" ? category : undefined,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        });
         // Fallback to stock-summary service or fallback response
         const data = await res.data;
-        
+
         // If the return is not an array (e.g. wrapper), try to extract array
         const rows = Array.isArray(data) ? data : (data?.rows || []);
-        
+
         // Match the columns expected: Item Name, Sale Price, Purchase Price, Stock Qty, Stock Value
         const formatted = rows.map((r: any) => ({
           itemName: r.itemName || r.name || "—",
@@ -51,7 +67,7 @@ export default function StockSummaryReport() {
       }
     }
     fetchData();
-  }, []);
+  }, [category, startDate, endDate]);
 
   const filtered = reportData.filter(row => {
     const matchesSearch = row.itemName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -66,24 +82,21 @@ export default function StockSummaryReport() {
     window.print();
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     const headers = ["Item Name", "Sale Price", "Purchase Price", "Stock Qty", "Stock Value"];
     const rows = filtered.map(r => [
       r.itemName,
-      r.salePrice.toFixed(2),
-      r.purchasePrice.toFixed(2),
+      r.salePrice,
+      r.purchasePrice,
       r.stockQty,
-      r.stockValue.toFixed(2)
+      r.stockValue
     ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const totalsRow = ["Total", "", "", totalStockQty, totalStockValue];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows, totalsRow]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Stock Summary");
+    XLSX.writeFile(wb, `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
@@ -93,16 +106,33 @@ export default function StockSummaryReport() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Category Filter */}
           <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              All Categories <ChevronDownIcon size={12} />
-            </button>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="appearance-none flex items-center gap-2 pl-4 pr-8 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 outline-none cursor-pointer focus:border-orange-500"
+            >
+              {CATEGORY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <ChevronDownIcon size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
           {/* Date Filter */}
-          <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              Date Filter <ChevronDownIcon size={12} />
-            </button>
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 outline-none focus:border-orange-500"
+            />
+            <span className="text-xs font-bold text-slate-400">To</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 outline-none focus:border-orange-500"
+            />
           </div>
 
           {/* Toggle */}
@@ -130,8 +160,8 @@ export default function StockSummaryReport() {
             />
           </div>
 
-          <button 
-            onClick={handleExportCSV}
+          <button
+            onClick={handleExportExcel}
             className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50"
             title="Excel Export"
           >
@@ -148,7 +178,7 @@ export default function StockSummaryReport() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <div className="p-3.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-xl">
             <PackageIcon size={24} />
@@ -156,6 +186,16 @@ export default function StockSummaryReport() {
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Items Listed</span>
             <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{filtered.length}</span>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="p-3.5 bg-sky-50 dark:bg-sky-950/20 text-sky-600 rounded-xl">
+            <TrendingUpIcon size={24} />
+          </div>
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Stock Qty</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{totalStockQty}</span>
           </div>
         </div>
 

@@ -22,7 +22,6 @@ import {
   Landmark as LandmarkIcon,
   Printer as PrinterIcon,
   Share2 as ShareIcon,
-  MoreVertical as MoreVerticalIcon,
   BarChart4 as ChartIcon,
   FileSpreadsheet as ExcelIcon,
   Loader2 as LoaderIcon,
@@ -104,6 +103,10 @@ interface ReportData {
   rows: Record<string, any>[];
   revenue?: number;
   cogs?: number;
+  purchase?: number;
+  tax?: number;
+  taxPayable?: number;
+  taxReceivable?: number;
   grossProfit?: number;
   expenses?: number;
   netProfit?: number;
@@ -113,6 +116,8 @@ interface ReportData {
   cashOut?: number;
   totalDebit?: number;
   totalCredit?: number;
+  openingBalance?: number;
+  closingBalance?: number;
 }
 
 // ─── Sidebar Categories ───────────────────────────────────────────────────────
@@ -252,7 +257,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
     kpiLabel: "Daily Net Cash Flow",
     tableTitle: "Daily Ledger Entries",
     columns: [
-      { key: "time", label: "Time" },
+      { key: "time", label: "Date / Time" },
       { key: "particulars", label: "Particulars" },
       { key: "voucherType", label: "Voucher Type" },
       { key: "voucherNo", label: "Voucher No" },
@@ -914,15 +919,25 @@ function transformPurchases(data: any): ReportData {
 
 function transformDayBook(data: any): ReportData {
   const entries = toArr(data);
-  const cashIn = entries.filter((e: any) => e.type === "DEBIT" || e.side === "IN" || e.direction === "IN").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  const cashOut = entries.filter((e: any) => e.type === "CREDIT" || e.side === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  // Prefer the backend's full-range aggregates over summing just the
+  // (possibly paginated) `entries` page, so Net Cash Flow stays correct
+  // once a period has more rows than one page.
+  const hasBackendTotals = data && (data.openingBalance !== undefined || data.closingBalance !== undefined);
+  const cashIn = hasBackendTotals
+    ? Number(data.totalDebit) || 0
+    : entries.filter((e: any) => e.type === "DEBIT" || e.side === "IN" || e.direction === "IN").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const cashOut = hasBackendTotals
+    ? Number(data.totalCredit) || 0
+    : entries.filter((e: any) => e.type === "CREDIT" || e.side === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const openingBalance = Number(data?.openingBalance) || 0;
+  const closingBalance = hasBackendTotals ? Number(data.closingBalance) || 0 : openingBalance + cashIn - cashOut;
   return {
-    kpiValue: fmtCurrency(cashIn - cashOut),
-    kpiSubText: `Cash In: ${fmtCurrency(cashIn)}  Cash Out: ${fmtCurrency(cashOut)}`,
+    kpiValue: fmtCurrency(closingBalance - openingBalance),
+    kpiSubText: `Cash In: ${fmtCurrency(cashIn)}  Cash Out: ${fmtCurrency(cashOut)}  Closing: ${fmtCurrency(closingBalance)}`,
     rows: entries.map((e: any) => {
       const isIn = e.type === "DEBIT" || e.side === "IN" || e.direction === "IN";
       return {
-        time: e.time || fmtDate(e.createdAt),
+        time: e.time ? `${fmtDate(e.createdAt)} ${e.time}` : fmtDate(e.createdAt),
         particulars: e.particulars || e.description || e.narration || "—",
         voucherType: e.voucherType || e.type || "—",
         voucherNo: e.voucherNo || e.referenceNumber || e._id?.slice(-6) || "—",
@@ -930,13 +945,24 @@ function transformDayBook(data: any): ReportData {
         credit: !isIn ? fmtCurrency(e.amount) : "—",
       };
     }),
+    totalDebit: cashIn,
+    totalCredit: cashOut,
+    openingBalance,
+    closingBalance,
   };
 }
 
 function transformTransactions(data: any): ReportData {
   const rows = toArr(data);
-  const totalDebit = rows.filter((r: any) => r.type === "DEBIT" || r.side === "IN").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-  const totalCredit = rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  // Prefer the backend's full-range aggregates over summing just the
+  // (possibly paginated) `rows` page.
+  const hasBackendTotals = data && (data.totalDebit !== undefined || data.totalCredit !== undefined);
+  const totalDebit = hasBackendTotals
+    ? Number(data.totalDebit) || 0
+    : rows.filter((r: any) => r.type === "DEBIT" || r.side === "IN").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  const totalCredit = hasBackendTotals
+    ? Number(data.totalCredit) || 0
+    : rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
   return {
     kpiValue: `${rows.length} Transactions`,
     kpiSubText: `Debit Total: ${fmtCurrency(totalDebit)}  Credit Total: ${fmtCurrency(totalCredit)}`,
@@ -948,6 +974,8 @@ function transformTransactions(data: any): ReportData {
       amount: fmtCurrency(r.amount),
       status: r.status || "—",
     })),
+    totalDebit,
+    totalCredit,
   };
 }
 
@@ -956,6 +984,9 @@ function transformProfitLoss(data: any): ReportData {
   const revenue = Number(data?.totalRevenue || data?.revenue || 0);
   const expenses = Number(data?.totalExpenses || data?.expenses || 0);
   const cogs = Number(data?.cogs || 0);
+  const purchase = Number(data?.purchase || 0);
+  const taxPayable = Number(data?.taxPayable ?? data?.tax ?? 0);
+  const taxReceivable = Number(data?.taxReceivable || 0);
   const grossProfit = Number(data?.grossProfit || (revenue - cogs));
   return {
     kpiValue: fmtCurrency(netProfit),
@@ -963,6 +994,10 @@ function transformProfitLoss(data: any): ReportData {
     rows: [],
     revenue,
     cogs,
+    purchase,
+    tax: taxPayable,
+    taxPayable,
+    taxReceivable,
     grossProfit,
     expenses,
     netProfit
@@ -1262,7 +1297,7 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
 
 async function fetchReport(
   label: string,
-  params: { startDate: string; endDate: string }
+  params: { startDate: string; endDate: string; search?: string }
 ): Promise<ReportData> {
   const meta = REPORT_METADATA[label];
   try {
@@ -1458,18 +1493,29 @@ export default function CentralReports() {
     }
   }, []);
 
-  // Reload whenever report or date range changes
+  // Debounce the table search so it doesn't refetch on every keystroke.
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearchTerm(tableSearchTerm), 400);
+    return () => clearTimeout(t);
+  }, [tableSearchTerm]);
+
+  // Reload whenever report, date range, or search term changes. The search
+  // term is forwarded to the backend (currently only consumed by the
+  // Purchase report's poNumber/vendor search) so a match outside the
+  // currently-loaded page/date-scoped rows still gets found — the client-side
+  // `filteredRows` filter below only ever sees whatever this fetch loaded.
   useEffect(() => {
     if (!mounted) return;
     let cancelled = false;
     const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
     setLoading(true);
     setReportData(null);
-    fetchReport(selectedReport, { startDate: from, endDate: to })
+    fetchReport(selectedReport, { startDate: from, endDate: to, search: debouncedSearchTerm || undefined })
       .then((d) => { if (!cancelled) setReportData(d); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [mounted, selectedReport, dateFilter, customStartDate, customEndDate]);
+  }, [mounted, selectedReport, dateFilter, customStartDate, customEndDate, debouncedSearchTerm]);
 
   if (!mounted) return <div className="min-h-screen bg-slate-50 dark:bg-[#020617]" />;
 
@@ -1495,6 +1541,59 @@ export default function CentralReports() {
   const handlePrint = () => {
     toast.success(`Preparing print layout for ${currentMeta.title}...`);
     window.print();
+  };
+
+  // Row-level print: isolates just the clicked record instead of reusing
+  // handlePrint (which prints the whole current report view).
+  const handlePrintRow = (row: Record<string, any>) => {
+    const cols = currentMeta.columns;
+    const rowsHtml = cols
+      .map((c) => `<tr><td style="padding:6px 14px;font-weight:600;color:#475569;white-space:nowrap;">${c.label}</td><td style="padding:6px 14px;">${row[c.key] ?? "—"}</td></tr>`)
+      .join("");
+    const win = window.open("", "_blank", "width=480,height=640");
+    if (!win) {
+      toast.error("Please allow pop-ups to print");
+      return;
+    }
+    win.document.write(`
+      <html>
+        <head>
+          <title>${currentMeta.title} — ${row[cols[0]?.key] ?? ""}</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
+            h2 { font-size: 16px; margin-bottom: 16px; }
+            table { border-collapse: collapse; width: 100%; }
+            td { border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+          </style>
+        </head>
+        <body>
+          <h2>${currentMeta.title}</h2>
+          <table>${rowsHtml}</table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const handleShareRow = async (row: Record<string, any>) => {
+    const cols = currentMeta.columns;
+    const text = [currentMeta.title, ...cols.map((c) => `${c.label}: ${row[c.key] ?? "—"}`)].join("\n");
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      try {
+        await (navigator as any).share({ title: currentMeta.title, text });
+      } catch {
+        // user cancelled the share sheet — no-op
+      }
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      toast.success("Details copied to clipboard");
+      return;
+    }
+    toast.error("Sharing is not supported in this browser");
   };
 
   const handleExportCSV = () => {
@@ -1637,9 +1736,6 @@ export default function CentralReports() {
             >
               <PlusIcon size={14} className="stroke-[2.5]" />
             </button>
-            <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-              <MoreVerticalIcon size={14} />
-            </button>
           </div>
         </div>
 
@@ -1706,13 +1802,6 @@ export default function CentralReports() {
                 <span>{displayRange}</span>
               </div>
             )}
-
-            <div className="relative">
-              <select className="appearance-none pl-3 pr-8 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-orange-500">
-                <option>All Firms</option>
-              </select>
-              <ChevronDownIcon size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-            </div>
 
             {loading && (
               <div className="flex items-center gap-1.5 text-slate-400">
@@ -1975,14 +2064,11 @@ export default function CentralReports() {
                               ))}
                               <td className="px-5 py-4 text-right">
                                 <div className="inline-flex items-center gap-2.5 text-slate-400">
-                                  <button onClick={handlePrint} className="p-1 hover:text-orange-500 transition-colors" title="Print">
+                                  <button onClick={() => handlePrintRow(row)} className="p-1 hover:text-orange-500 transition-colors" title="Print">
                                     <PrinterIcon size={12} />
                                   </button>
-                                  <button className="p-1 hover:text-orange-500 transition-colors" title="Share">
+                                  <button onClick={() => handleShareRow(row)} className="p-1 hover:text-orange-500 transition-colors" title="Share">
                                     <ShareIcon size={12} />
-                                  </button>
-                                  <button className="p-1 hover:text-slate-600 dark:hover:text-slate-300">
-                                    <MoreVerticalIcon size={12} />
                                   </button>
                                 </div>
                               </td>

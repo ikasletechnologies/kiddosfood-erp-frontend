@@ -77,6 +77,8 @@ interface PurchaseOrderContextType {
   autoFilledIds: Set<string>;
   setAutoFilledIds: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   editId?: string;
+  contextMessage: string | null;
+  setContextMessage: (msg: string | null) => void;
 }
 
 const PurchaseOrderContext = createContext<PurchaseOrderContextType | undefined>(undefined);
@@ -86,6 +88,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [items, setItems] = useState<LineItem[]>([
     { id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }
   ]);
+  const [contextMessage, setContextMessage] = useState<string | null>(null);
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -122,14 +125,37 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
-      const saved = localStorage.getItem('draftPurchaseOrder');
-      if (saved) {
+      const prefilled = sessionStorage.getItem('prefilledPoItems');
+      if (prefilled) {
         try {
-          const parsed = JSON.parse(saved);
-          if (parsed.selectedVendor) setSelectedVendor(parsed.selectedVendor);
-          if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+          const parsed = JSON.parse(prefilled);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const mapped = parsed.map((item: any, idx: number) => ({
+              id: (idx + 1).toString(),
+              materialId: item.materialId,
+              name: item.name,
+              quantity: item.shortage,
+              unit: item.unit || "KG",
+              price: 0,
+              gstRate: 5
+            }));
+            setItems(mapped);
+            setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.`);
+            sessionStorage.removeItem('prefilledPoItems');
+          }
         } catch (e) {
-          console.error("Failed to parse draft PO", e);
+          console.error("Failed to parse prefilled PO items", e);
+        }
+      } else {
+        const saved = localStorage.getItem('draftPurchaseOrder');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.selectedVendor) setSelectedVendor(parsed.selectedVendor);
+            if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+          } catch (e) {
+            console.error("Failed to parse draft PO", e);
+          }
         }
       }
       setIsLoaded(true);
@@ -358,6 +384,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       getVendorPrice,
       autoFilledIds,
       setAutoFilledIds,
+      contextMessage,
+      setContextMessage,
     }}>
       {children}
     </PurchaseOrderContext.Provider>

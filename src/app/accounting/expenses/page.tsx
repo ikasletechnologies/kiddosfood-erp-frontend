@@ -17,6 +17,15 @@ interface LineItem { id: string; item: string; qty: number; rate: number; }
 const CATEGORIES = ["RENT", "SALARY", "TRANSPORT", "UTILITIES", "MARKETING", "MAINTENANCE", "OTHER"];
 const PAYMENT_TYPES = ["Cash", "Bank Transfer", "UPI", "Cheque", "Card"];
 
+// Which Account.type a chosen Payment Type can draw from — matches the
+// mapping the backend already uses for payment-mode classification
+// (Cheque/Card settle out of a bank account, same as Bank Transfer).
+function compatibleAccountType(paymentType: string): "CASH" | "BANK" | "UPI" {
+  if (paymentType === "Cash") return "CASH";
+  if (paymentType === "UPI") return "UPI";
+  return "BANK";
+}
+
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PAID:    { label: "Paid",    color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
   PENDING: { label: "Pending", color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
@@ -88,6 +97,7 @@ export default function ExpensesPage() {
   const [showDateCal, setShowDateCal] = useState(false);
   const [items, setItems] = useState<LineItem[]>([makeItem(), makeItem()]);
   const [paymentType, setPaymentType] = useState("Cash");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [roundOffEnabled, setRoundOffEnabled] = useState(true);
   const [isGstEnabled, setIsGstEnabled] = useState(false);
   const [showNote, setShowNote] = useState(false);
@@ -124,6 +134,23 @@ export default function ExpensesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const compatibleAccounts = accounts.filter(
+    a => a.status === "ACTIVE" && a.type === compatibleAccountType(paymentType)
+  );
+
+  // Whenever the payment type changes (or accounts load), make sure the
+  // selected account is still one of the compatible ones — auto-pick the
+  // first compatible account, but never silently fall back to some other
+  // unrelated account the way the old hardcoded default did.
+  useEffect(() => {
+    if (!compatibleAccounts.some(a => a.id === selectedAccountId)) {
+      setSelectedAccountId(compatibleAccounts[0]?.id || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentType, accounts]);
+
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+
   const totalUnrounded = items.reduce((s, it) => s + it.qty * it.rate, 0);
   const roundOffAmt = roundOffEnabled ? Math.round(totalUnrounded) - totalUnrounded : 0;
   const grandTotal = totalUnrounded + roundOffAmt;
@@ -136,7 +163,7 @@ export default function ExpensesPage() {
 
   const resetForm = () => {
     setCategory("OTHER"); setExpenseDate(todayStr()); setItems([makeItem(), makeItem()]);
-    setPaymentType("Cash"); setRoundOffEnabled(true); setIsGstEnabled(false);
+    setPaymentType("Cash"); setSelectedAccountId(""); setRoundOffEnabled(true); setIsGstEnabled(false);
     setNoteText(""); setShowNote(false);
   };
 
@@ -145,9 +172,13 @@ export default function ExpensesPage() {
   const handleSave = async () => {
     const valid = items.filter(it => it.item.trim() || it.rate > 0);
     if (!valid.length) { toast.error("Add at least one item"); return; }
+    if (!selectedAccountId) { toast.error("Select a payment account to pay from"); return; }
+    if (selectedAccount && selectedAccount.balance < grandTotal) {
+      toast.error(`Insufficient balance in ${selectedAccount.name}. Available: ₹${selectedAccount.balance.toLocaleString("en-IN")}`);
+      return;
+    }
     setSaving(true);
     try {
-      const defaultAccount = accounts.find(a => a.type === "CASH") || accounts[0];
       await accountingApi.recordExpense({
         category,
         payee: valid[0].item.trim() || category,
@@ -155,7 +186,7 @@ export default function ExpensesPage() {
         note: JSON.stringify({ items: valid, isGstEnabled, noteText }),
         date: expenseDate,
         isPaidImmediately: true,
-        accountId: defaultAccount?.id || undefined,
+        accountId: selectedAccountId,
         paymentMode: paymentType.toUpperCase(),
       });
       toast.success("Expense saved");
@@ -346,6 +377,42 @@ export default function ExpensesPage() {
                 >
                   {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-4 mb-2">Paid From</p>
+                {compatibleAccounts.length === 0 ? (
+                  <p className="text-xs text-rose-500 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                    No active {compatibleAccountType(paymentType)} account found. Create one under Business Accounts.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {compatibleAccounts.map(acc => {
+                      const insufficient = grandTotal > 0 && acc.balance < grandTotal;
+                      const isSelected = acc.id === selectedAccountId;
+                      return (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => setSelectedAccountId(acc.id)}
+                          className={clsx(
+                            "w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-colors",
+                            isSelected ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:border-gray-300"
+                          )}
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{acc.name}</p>
+                            <p className="text-[10px] text-gray-400">{acc.accountCode}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={clsx("text-sm font-semibold", insufficient ? "text-rose-500" : "text-gray-700")}>
+                              ₹{acc.balance.toLocaleString("en-IN")}
+                            </p>
+                            {insufficient && <p className="text-[10px] font-semibold text-rose-500">Insufficient Funds</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {!showNote ? (
                 <button onClick={() => setShowNote(true)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-orange-500 transition-colors">
@@ -423,7 +490,7 @@ export default function ExpensesPage() {
             </div>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !selectedAccountId || (!!selectedAccount && grandTotal > 0 && selectedAccount.balance < grandTotal)}
               className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
               style={{ background: saving ? "#f5a050" : "linear-gradient(135deg, #f58220, #e8740e)" }}
             >

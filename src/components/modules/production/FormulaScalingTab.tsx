@@ -152,8 +152,24 @@ export default function FormulaScalingTab() {
   const handleStartProduction = async () => {
     if (!recipe) return;
     if (hasShortage) {
-      toast.error("Not enough stock for this batch — taking you to Purchase Orders to restock first.");
-      router.push('/purchases/orders');
+      const shortageItems = recipe.recipeItems
+        .map((item) => {
+          const required = item.quantityRequired * multiplier;
+          const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku);
+          const shortage = required - stock;
+          return {
+            materialId: item.inventoryItemId,
+            name: item.inventoryItem?.name || "",
+            required,
+            stock,
+            shortage,
+            unit: item.unit || "KG",
+          };
+        })
+        .filter((item) => item.shortage > 0);
+
+      sessionStorage.setItem('prefilledPoItems', JSON.stringify(shortageItems));
+      router.push('/purchases/new');
       return;
     }
     if (!selectedWarehouseId) {

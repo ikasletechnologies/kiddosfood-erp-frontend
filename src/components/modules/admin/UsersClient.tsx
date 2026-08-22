@@ -1,33 +1,41 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
-  MoreHorizontal, 
-  Shield, 
-  Building2, 
-  Mail, 
+import {
+  Users,
+  UserPlus,
+  Search,
+  MoreHorizontal,
+  Shield,
+  Building2,
+  Mail,
   Phone,
   Trash2,
+  Pencil,
   Lock,
   CheckCircle2,
   XCircle
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import axios from "axios";
-import { userGovernanceApi, franchiseApi } from "@/lib/api";
+import { userGovernanceApi, franchiseApi, rolesApi } from "@/lib/api";
 
 interface User {
   id: string;
   fullName: string;
   email: string;
   phone: string;
-  role: { name: string };
+  role: string;
+  customRole: { id: string; name: string } | null;
+  franchiseId?: string | null;
   franchise?: { name: string };
   is_active: boolean;
   createdAt: string;
+}
+
+interface RoleOption {
+  id: string;
+  name: string;
 }
 
 export default function UsersClient() {
@@ -35,7 +43,8 @@ export default function UsersClient() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
-  
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+
   // Form State
   const [formData, setFormData] = useState({
     fullName: "",
@@ -43,14 +52,17 @@ export default function UsersClient() {
     phone: "",
     password: "",
     franchiseId: "",
-    roleName: "FRANCHISE_ADMIN" // Fixed for this view
+    roleName: "FRANCHISE_ADMIN", // Fixed for this view
+    customRoleId: ""
   });
 
   const [franchises, setFranchises] = useState<{id: string, name: string}[]>([]);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
 
   useEffect(() => {
     fetchUsers();
     fetchFranchises();
+    fetchRoleOptions();
   }, []);
 
   const fetchUsers = async () => {
@@ -73,16 +85,60 @@ export default function UsersClient() {
     }
   };
 
+  const fetchRoleOptions = async () => {
+    try {
+      const res = await rolesApi.getAll();
+      setRoleOptions(res.data);
+    } catch (error) {
+      console.error("Failed to fetch roles");
+    }
+  };
+
+  const resetForm = () =>
+    setFormData({ fullName: "", email: "", phone: "", password: "", franchiseId: "", roleName: "FRANCHISE_ADMIN", customRoleId: "" });
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await userGovernanceApi.create(formData);
+      await userGovernanceApi.create({ ...formData, role: formData.roleName });
       toast.success("User created successfully");
       setShowAddModal(false);
-      setFormData({ fullName: "", email: "", phone: "", password: "", franchiseId: "", roleName: "FRANCHISE_ADMIN" });
+      resetForm();
       fetchUsers();
     } catch (error: any) {
       toast.error(error.response?.data?.error || "Failed to create user");
+    }
+  };
+
+  const openEdit = (user: User) => {
+    setEditingUser(user);
+    setFormData({
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone || "",
+      password: "",
+      franchiseId: user.franchiseId || "",
+      roleName: user.role,
+      customRoleId: user.customRole?.id || "",
+    });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      await userGovernanceApi.update(editingUser.id, {
+        fullName: formData.fullName,
+        franchiseId: formData.franchiseId,
+        role: formData.roleName,
+        customRoleId: formData.customRoleId,
+      });
+      toast.success("User updated successfully");
+      setEditingUser(null);
+      resetForm();
+      fetchUsers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to update user");
     }
   };
 
@@ -160,6 +216,7 @@ export default function UsersClient() {
               <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">User Details</th>
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Franchise</th>
+                <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Role</th>
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Status</th>
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Joined Date</th>
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500 text-right">Actions</th>
@@ -169,12 +226,12 @@ export default function UsersClient() {
               {loading ? (
                 Array(5).fill(0).map((_, i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={5} className="px-6 py-4 h-16 bg-slate-50/50 dark:bg-slate-800/20" />
+                    <td colSpan={6} className="px-6 py-4 h-16 bg-slate-50/50 dark:bg-slate-800/20" />
                   </tr>
                 ))
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
                     No users found matching your criteria.
                   </td>
                 </tr>
@@ -202,7 +259,21 @@ export default function UsersClient() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <button 
+                      <div className="flex flex-col gap-1">
+                        <span className="w-fit px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                          {user.role === "SUPER_ADMIN" ? "Super Admin HQ" : "Franchise Admin"}
+                        </span>
+                        {user.customRole ? (
+                          <span className="w-fit px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                            {user.customRole.name}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-slate-400 italic">No department role</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <button
                         onClick={() => toggleStatus(user.id, user.is_active)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase transition-all ${
                           user.is_active 
@@ -219,7 +290,13 @@ export default function UsersClient() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">
-                        <button 
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="p-2 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-slate-400 hover:text-orange-500 transition-colors"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
                           onClick={() => handleDelete(user.id)}
                           className="p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg text-slate-400 hover:text-rose-500 transition-colors"
                         >
@@ -310,6 +387,19 @@ export default function UsersClient() {
                 </div>
               </div>
               <div className="space-y-1">
+                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Department Role (optional)</label>
+                <select
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
+                  value={formData.customRoleId}
+                  onChange={e => setFormData({...formData, customRoleId: e.target.value})}
+                >
+                  <option value="">No department role</option>
+                  {roleOptions.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1">
                 <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Initial Password</label>
                 <input
                   required
@@ -334,6 +424,89 @@ export default function UsersClient() {
                   className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/20"
                 >
                   Create User
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-black text-slate-900 dark:text-white">Edit User</h3>
+              <button onClick={() => { setEditingUser(null); resetForm(); }} className="text-slate-400 hover:text-rose-500 transition-colors">
+                <XCircle size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Full Name</label>
+                <input
+                  required
+                  type="text"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none"
+                  value={formData.fullName}
+                  onChange={e => setFormData({...formData, fullName: e.target.value})}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Account Tier</label>
+                  <select
+                    required
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
+                    value={formData.roleName}
+                    onChange={e => setFormData({...formData, roleName: e.target.value, franchiseId: e.target.value === 'SUPER_ADMIN' ? "" : formData.franchiseId})}
+                  >
+                    <option value="FRANCHISE_ADMIN">Franchise Admin</option>
+                    <option value="SUPER_ADMIN">HQ Super Admin</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Assign Franchise</label>
+                  <select
+                    disabled={formData.roleName === 'SUPER_ADMIN'}
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none disabled:opacity-30 font-bold text-sm"
+                    value={formData.franchiseId}
+                    onChange={e => setFormData({...formData, franchiseId: e.target.value})}
+                  >
+                    <option value="">{formData.roleName === 'SUPER_ADMIN' ? "N/A (Global)" : "Select a Franchise"}</option>
+                    {franchises.map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Department Role (optional)</label>
+                <select
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-sm"
+                  value={formData.customRoleId}
+                  onChange={e => setFormData({...formData, customRoleId: e.target.value})}
+                >
+                  <option value="">No department role</option>
+                  {roleOptions.map(r => (
+                    <option key={r.id} value={r.id}>{r.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setEditingUser(null); resetForm(); }}
+                  className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/20"
+                >
+                  Save Changes
                 </button>
               </div>
             </form>

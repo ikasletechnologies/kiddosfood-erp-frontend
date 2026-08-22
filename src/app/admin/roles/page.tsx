@@ -1,10 +1,10 @@
-import UsersClient from "@/components/modules/admin/UsersClient";
+import RolesClient from "@/components/modules/admin/RolesClient";
 import RequireSuperAdmin from "@/components/auth/RequireSuperAdmin";
 
-export default function UsersPage() {
+export default function RolesPage() {
   return (
     <RequireSuperAdmin>
-      <UsersClient />
+      <RolesClient />
     </RequireSuperAdmin>
   );
 }

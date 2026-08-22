@@ -16,6 +16,7 @@ import {
 import { auditApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { clsx } from "clsx";
+import RequireSuperAdmin from "@/components/auth/RequireSuperAdmin";
 
 interface AuditLog {
   id: string;
@@ -64,6 +65,7 @@ export default function AuditLogsPage() {
   };
 
   return (
+    <RequireSuperAdmin>
     <div className="space-y-6 max-w-[1400px] mx-auto p-4 md:p-6 animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -209,5 +211,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
     </div>
+    </RequireSuperAdmin>
   );
 }

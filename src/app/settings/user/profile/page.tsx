@@ -82,7 +82,7 @@ export default function UserProfileSettingsPage() {
               </div>
               <div className="space-y-0.5">
                  <h3 className="text-[15px] font-black text-[#1A1A1A] dark:text-white">{user?.fullName || "User"}</h3>
-                 <p className="text-[12px] font-bold text-[#999] uppercase">{user?.role?.name?.replace('_', ' ') || "No Role"}</p>
+                 <p className="text-[12px] font-bold text-[#999] uppercase">{(user?.customRole?.name || user?.role || "").toString().replace(/_/g, ' ') || "No Role"}</p>
                  <p className="text-[11px] font-medium text-[#7C3AED]">{user?.email}</p>
               </div>
            </div>

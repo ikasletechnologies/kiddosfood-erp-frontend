@@ -10,6 +10,7 @@ interface User {
   email: string;
   role: string;
   franchiseId?: string;
+  customRole?: { id: string; name: string; permissions: string[] } | null;
 }
 
 interface AuthContextType {

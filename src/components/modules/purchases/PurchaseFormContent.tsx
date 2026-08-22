@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import DocumentOptions from "@/components/documents/DocumentOptions";
-import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package } from "lucide-react";
+import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
@@ -41,7 +41,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     vendorNotes, setVendorNotes,
     setSelectedVendor,
     isValid, errors, isSubmitting, setIsSubmitting,
-    selectedVendor, items, totals, notes
+    selectedVendor, items, totals, notes,
+    contextMessage, setContextMessage
   } = usePurchaseOrder();
   
   const router = useRouter();
@@ -217,6 +218,26 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       </div>
 
       <div className="p-5 space-y-4">
+        {contextMessage && (
+          <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
+                <Package size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-orange-800">{contextMessage}</h3>
+                <p className="text-xs text-orange-600">The quantities have been pre-filled with the calculated shortage amount. Please select a vendor and confirm the price.</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => setContextMessage(null)}
+              className="text-orange-400 hover:text-orange-600 p-1 hover:bg-orange-100 rounded-lg transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-12 gap-5">
           {/* Left Main Content */}
           <div className="col-span-12 lg:col-span-9 space-y-4">
