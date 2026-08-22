@@ -141,7 +141,7 @@ export default function ApprovalsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
               <Workflow size={20} />
             </div>
             <div>
@@ -155,11 +155,11 @@ export default function ApprovalsPage() {
       {/* Your Access */}
       <div className="bg-white dark:bg-card/40 backdrop-blur-xl border border-slate-100 dark:border-white/5 rounded-3xl p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
-          <ShieldCheck className="text-indigo-500" size={18} />
+          <ShieldCheck className="text-orange-500" size={18} />
           <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Your Access</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+          <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
             <User size={12} /> {isSuperAdmin ? "Super Admin (HQ)" : "Franchise Admin"}
           </span>
         </div>
@@ -189,7 +189,7 @@ export default function ApprovalsPage() {
               className={clsx(
                 "pb-3.5 px-4 text-left border-b-2 font-black text-xs uppercase tracking-wider transition-all",
                 active
-                  ? "border-indigo-500 text-indigo-500 dark:text-white"
+                  ? "border-orange-500 text-orange-500 dark:text-white"
                   : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
               )}
             >
@@ -209,7 +209,7 @@ export default function ApprovalsPage() {
             return (
               <div key={s.key} className="flex-1 flex items-center gap-3 min-w-[160px]">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
+                  <div className="w-8 h-8 rounded-full bg-orange-500/10 dark:bg-orange-500/20 text-orange-500 dark:text-orange-400 flex items-center justify-center font-black text-xs">
                     {idx + 1}
                   </div>
                   <div>
@@ -258,12 +258,12 @@ export default function ApprovalsPage() {
                     onClick={() => setSelectedItem(item)}
                     className={clsx(
                       "bg-white dark:bg-card/40 border rounded-[2rem] p-5 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between space-y-4 relative overflow-hidden group",
-                      selectedItem?.id === item.id ? "border-indigo-500 ring-2 ring-indigo-500/10" : "border-slate-100 dark:border-white/5"
+                      selectedItem?.id === item.id ? "border-orange-500 ring-2 ring-orange-500/10" : "border-slate-100 dark:border-white/5"
                     )}
                   >
                     <div>
                       <div className="flex justify-between items-start gap-2 mb-2">
-                        <span className="text-[9px] font-black font-mono bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 px-2 py-0.5 rounded">
+                        <span className="text-[9px] font-black font-mono bg-orange-50 dark:bg-orange-500/10 text-orange-500 dark:text-orange-400 px-2 py-0.5 rounded">
                           {item.displayId}
                         </span>
                         {item.amount != null && (
@@ -273,7 +273,7 @@ export default function ApprovalsPage() {
                         )}
                       </div>
 
-                      <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors uppercase leading-tight line-clamp-2">
+                      <h4 className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-orange-500 dark:group-hover:text-orange-400 transition-colors uppercase leading-tight line-clamp-2">
                         {item.title}
                       </h4>
                       <p className="text-[10px] text-slate-400 mt-1 font-semibold">Initiated by {item.initiatedBy}</p>
@@ -299,7 +299,7 @@ export default function ApprovalsPage() {
                           <div
                             className={clsx(
                               "h-full rounded-full transition-all duration-500",
-                              isFinished ? "bg-emerald-500" : "bg-indigo-500"
+                              isFinished ? "bg-emerald-500" : "bg-orange-500"
                             )}
                             style={{ width: `${progressPct}%` }}
                           />
@@ -326,7 +326,7 @@ export default function ApprovalsPage() {
                           className={clsx(
                             "px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all disabled:opacity-50",
                             nextAuthorized
-                              ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
+                              ? "bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
                               : "bg-slate-100 text-slate-400 dark:bg-white/5 cursor-not-allowed"
                           )}
                           title="Click to approve"
@@ -353,7 +353,7 @@ export default function ApprovalsPage() {
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black font-mono bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 px-2.5 py-1 rounded">
+                    <span className="text-[10px] font-black font-mono bg-orange-50 dark:bg-orange-500/10 text-orange-500 dark:text-orange-400 px-2.5 py-1 rounded">
                       {selectedItem.displayId}
                     </span>
                     <span className="text-[10px] text-slate-400 font-bold uppercase">{selectedItem.category} FLOW</span>
@@ -433,7 +433,7 @@ export default function ApprovalsPage() {
                     <button
                       disabled={approving}
                       onClick={() => handleApprove(selectedItem.id)}
-                      className="w-full py-3.5 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      className="w-full py-3.5 bg-orange-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                     >
                       Sign & Release To Next Gate <ArrowRight size={14} />
                     </button>
