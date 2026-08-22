@@ -1204,6 +1204,9 @@ function transformProfitLoss(data: any): ReportData {
   const expenses = Number(data?.totalExpenses || data?.expenses || 0);
   const cogs = Number(data?.cogs || 0);
   const grossProfit = Number(data?.grossProfit || revenue - cogs);
+  const purchase = Number(data?.purchase || 0);
+  const taxPayable = Number(data?.taxPayable ?? data?.tax ?? 0);
+  const taxReceivable = Number(data?.taxReceivable || 0);
   return {
     kpiValue: fmtCurrency(netProfit),
     kpiSubText: `Revenue: ${fmtCurrency(revenue)} • Expenses: ${fmtCurrency(expenses)}`,
