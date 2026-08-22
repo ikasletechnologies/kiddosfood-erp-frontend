@@ -214,11 +214,11 @@ export default function ProductBatchesPage() {
             
             {/* Table header */}
             <div className={clsx("border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.01]", gridClasses)}>
-              {isSuper 
-                ? ["Batch Code", "Product", "Branch Outlet", "Qty", "Produced", "Expiry Date", "Status"].map((h) => (
+              {isSuper
+                ? ["Batch Code", "Product", "Branch Outlet", "Bulk Remaining", "Produced", "Expiry Date", "Status"].map((h) => (
                     <p key={h} className="text-[8px] font-black text-slate-400 uppercase tracking-[0.25em]">{h}</p>
                   ))
-                : ["Batch Code", "Product", "Qty", "Produced", "Expiry Date", "Status"].map((h) => (
+                : ["Batch Code", "Product", "Bulk Remaining", "Produced", "Expiry Date", "Status"].map((h) => (
                     <p key={h} className="text-[8px] font-black text-slate-400 uppercase tracking-[0.25em]">{h}</p>
                   ))
               }
@@ -263,12 +263,18 @@ export default function ProductBatchesPage() {
                       </div>
                     )}
 
-                    {/* Quantity */}
+                    {/* Bulk remaining — batch.quantity is the original
+                        produced amount and never changes, so once part of
+                        a batch has been packaged into retail units it no
+                        longer reflects what's actually still sitting as
+                        loose bulk (the form still at risk of expiring
+                        as-is). bulkQuantity = approvedQty - packagedQty,
+                        already computed server-side in getProductBatches(). */}
                     <p className="text-[13px] font-black text-slate-900 dark:text-white tabular-nums">
-                      {batch.quantity}
-                      {batch.product?.unit && (
-                        <span className="text-[9px] text-slate-400 ml-1 font-bold uppercase">{batch.product.unit}</span>
-                      )}
+                      {batch.bulkQuantity ?? batch.quantity}
+                      <span className="text-[9px] text-slate-400 ml-1 font-bold uppercase">
+                        {batch.production?.recipe?.yieldUnit || "KG"}
+                      </span>
                     </p>
 
                     {/* Produced date */}

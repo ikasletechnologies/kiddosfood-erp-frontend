@@ -73,6 +73,24 @@ export default function StockReconciliationPage() {
 
   const enteredCount = Object.values(counts).filter((v) => v.trim() !== "").length;
 
+  // A physical count relies entirely on the operator matching what's in
+  // front of them to the right row by name — two items whose names differ
+  // only in letter case (e.g. a bulk-by-weight master "Idly Batter 1 Kg"
+  // vs a same-size retail pack "Idly Batter 1 KG") are otherwise
+  // indistinguishable at a glance despite being different SKUs/units. Tag
+  // every row that collides on name (case/whitespace-insensitive) with its
+  // unit so it can't be mistaken for another item during a count.
+  const normalizedName = (name: string) => (name || "").trim().toLowerCase();
+  const nameCollisionCounts = new Map<string, number>();
+  sheet.forEach((row) => {
+    const key = normalizedName(row.name);
+    nameCollisionCounts.set(key, (nameCollisionCounts.get(key) || 0) + 1);
+  });
+  const displayName = (row: SheetRow) =>
+    (nameCollisionCounts.get(normalizedName(row.name)) || 0) > 1
+      ? `${row.name} — ${(row.unit || "UNIT").toUpperCase()}`
+      : row.name;
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 py-4">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-100 pb-6">
@@ -122,7 +140,7 @@ export default function StockReconciliationPage() {
                   return (
                     <tr key={row.itemId} className="border-b border-gray-50 last:border-0">
                       <td className="px-5 py-3">
-                        <p className="font-semibold text-slate-800">{row.name}</p>
+                        <p className="font-semibold text-slate-800">{displayName(row)}</p>
                         <p className="text-[10px] text-slate-400">{row.sku} · {row.category}</p>
                       </td>
                       <td className="px-5 py-3 text-right font-mono text-slate-600">{row.systemStock} {row.unit}</td>
