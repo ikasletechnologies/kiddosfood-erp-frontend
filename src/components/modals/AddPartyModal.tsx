@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, Info } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
-import { vendorsApi } from "@/lib/api";
+import { vendorsApi, customersApi } from "@/lib/api";
 
 export interface AddPartyModalProps {
   isOpen: boolean;
@@ -48,6 +48,112 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"GST" | "CREDIT">("GST");
   const [fetchingGst, setFetchingGst] = useState(false);
+
+  const [contactError, setContactError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [gstError, setGstError] = useState("");
+
+  const validateFieldUniqueness = async (field: 'contact' | 'email' | 'gstNumber', value: string) => {
+    if (!value || !value.trim()) {
+      if (field === 'contact') setContactError("");
+      if (field === 'email') setEmailError("");
+      if (field === 'gstNumber') setGstError("");
+      return;
+    }
+
+    try {
+      if (partyType === 'vendor') {
+        const res = await vendorsApi.getAll();
+        const allVendors = res.data?.vendors || res.data || [];
+        const duplicate = allVendors.find((v: any) => {
+          if (v.id === initialData?.id) return false;
+          if (field === 'contact') {
+            const vContact = (v.contact || v.phone || "").trim();
+            return vContact === value.trim();
+          }
+          if (field === 'email') {
+            return (v.email || "").trim().toLowerCase() === value.trim().toLowerCase();
+          }
+          if (field === 'gstNumber') {
+            return (v.gstNumber || v.gstin || "").trim().toUpperCase() === value.trim().toUpperCase();
+          }
+          return false;
+        });
+
+        if (duplicate) {
+          if (field === 'contact') setContactError("Contact number already registered.");
+          if (field === 'email') setEmailError("Email address already registered.");
+          if (field === 'gstNumber') setGstError("GST Number already registered.");
+        } else {
+          if (field === 'contact') setContactError("");
+          if (field === 'email') setEmailError("");
+          if (field === 'gstNumber') setGstError("");
+        }
+      } else {
+        const res = await customersApi.getAll();
+        const allCustomers = res.data?.customers || res.data || [];
+        const duplicate = allCustomers.find((c: any) => {
+          if (c.id === initialData?.id) return false;
+          if (field === 'contact') {
+            const cContact = (c.contact || c.phone || "").trim();
+            return cContact === value.trim();
+          }
+          if (field === 'email') {
+            return (c.email || "").trim().toLowerCase() === value.trim().toLowerCase();
+          }
+          if (field === 'gstNumber') {
+            return (c.gstNumber || c.gstin || "").trim().toUpperCase() === value.trim().toUpperCase();
+          }
+          return false;
+        });
+
+        if (duplicate) {
+          if (field === 'contact') setContactError("Contact number already registered.");
+          if (field === 'email') setEmailError("Email address already registered.");
+          if (field === 'gstNumber') setGstError("GST Number already registered.");
+        } else {
+          if (field === 'contact') setContactError("");
+          if (field === 'email') setEmailError("");
+          if (field === 'gstNumber') setGstError("");
+        }
+      }
+    } catch (err) {
+      console.error(`Unique check failed for ${field}:`, err);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setContactError("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      validateFieldUniqueness('contact', form.contact);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.contact, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEmailError("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      validateFieldUniqueness('email', form.email);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.email, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setGstError("");
+      return;
+    }
+    const timer = setTimeout(() => {
+      validateFieldUniqueness('gstNumber', form.gstNumber);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form.gstNumber, isOpen]);
 
   // Auto-fetch GST details from Next.js server-side route
   const fetchGstDetails = async (gstin: string) => {
@@ -123,118 +229,123 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   if (!isOpen) return null;
 
   const handleConfirm = async () => {
-    const trimmedName = form.name.trim();
-    if (!trimmedName) {
-      toast.error(partyType === 'vendor' ? "Vendor Name is required." : "Party Name is required.");
+    if (saving) return;
+    if (contactError || emailError || gstError) {
+      toast.error(contactError || emailError || gstError || "Please resolve duplicate field errors before saving.");
       return;
     }
-
-    const nameRegex = /^[A-Za-z0-9\s&.,\-()]+$/;
-    if (!nameRegex.test(trimmedName)) {
-      toast.error(
-        partyType === 'vendor'
-          ? "Vendor Name must only contain alphanumeric characters, spaces, and standard symbols (& . , - ())."
-          : "Party Name must only contain alphanumeric characters, spaces, and standard symbols (& . , - ())."
-      );
-      return;
-    }
-
-    if (!form.contact) {
-      if (partyType === 'vendor') {
-        toast.error("Contact Number is required.");
-        return;
-      }
-    } else {
-      if (!/^\d{10}$/.test(form.contact)) {
-        toast.error("Contact Number must be a valid 10-digit number.");
-        return;
-      }
-    }
-
-    if (form.email) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        toast.error("Please enter a valid email address.");
-        return;
-      }
-    }
-
-    if (form.gstNumber && form.gstNumber.trim()) {
-      const cleanGst = form.gstNumber.trim().toUpperCase();
-      try {
-        if (partyType === 'vendor') {
-          const res = await vendorsApi.getAll();
-          const allVendors = res.data?.vendors || res.data || [];
-          const duplicate = allVendors.find((v: any) => 
-            v.id !== initialData?.id && 
-            (v.gstNumber || v.gstin || "").trim().toUpperCase() === cleanGst
-          );
-          if (duplicate) {
-            toast.error("GST Number already exists.");
-            setActiveTab("GST");
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Duplicate GST check failed:", err);
-      }
-    }
-
-    if (!form.billingAddress || !form.billingAddress.trim()) {
-      toast.error("Billing Address is required.");
-      setActiveTab("GST");
-      return;
-    }
-
-    if (!form.shippingAddress || !form.shippingAddress.trim()) {
-      toast.error("Shipping Address is required.");
-      setActiveTab("GST");
-      return;
-    }
-
-    const cleanPincode = form.pincode ? form.pincode.replace(/\D/g, "") : "";
-    if (!cleanPincode || cleanPincode.length !== 6) {
-      toast.error("Pincode must be exactly 6 digits.");
-      setActiveTab("GST");
-      return;
-    }
-
-    // Opening Balance validation (must be non-negative)
-    if (form.openingBalance !== "") {
-      const openingBalNum = Number(form.openingBalance);
-      if (isNaN(openingBalNum) || openingBalNum < 0) {
-        toast.error("Opening Balance must be a non-negative number.");
-        return;
-      }
-    }
-
-    // As Of Date validation (must not be in the future)
-    if (form.asOfDate) {
-      const selectedDate = new Date(form.asOfDate);
-      const today = new Date();
-      selectedDate.setHours(0, 0, 0, 0);
-      today.setHours(0, 0, 0, 0);
-      if (selectedDate > today) {
-        toast.error("As Of Date cannot be in the future.");
-        return;
-      }
-    }
-
-    // Credit Limit validation (must be non-negative and is required if Custom Limit is selected)
-    if (!form.noCreditLimit) {
-      const limitStr = String(form.customCreditLimit).trim();
-      if (limitStr === "") {
-        toast.error("Credit Limit is required when Custom Limit is selected.");
-        return;
-      }
-      const limitNum = Number(limitStr);
-      if (isNaN(limitNum) || limitNum < 0) {
-        toast.error("Credit Limit must be a non-negative number.");
-        return;
-      }
-    }
-
     setSaving(true);
     try {
+      const trimmedName = form.name.trim();
+      if (!trimmedName) {
+        toast.error(partyType === 'vendor' ? "Vendor Name is required." : "Party Name is required.");
+        return;
+      }
+
+      const nameRegex = /^[A-Za-z0-9\s&.,\-()]+$/;
+      if (!nameRegex.test(trimmedName)) {
+        toast.error(
+          partyType === 'vendor'
+            ? "Vendor Name must only contain alphanumeric characters, spaces, and standard symbols (& . , - ())."
+            : "Party Name must only contain alphanumeric characters, spaces, and standard symbols (& . , - ())."
+        );
+        return;
+      }
+
+      if (!form.contact) {
+        if (partyType === 'vendor') {
+          toast.error("Contact Number is required.");
+          return;
+        }
+      } else {
+        if (!/^\d{10}$/.test(form.contact)) {
+          toast.error("Contact Number must be a valid 10-digit number.");
+          return;
+        }
+      }
+
+      if (form.email) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+          toast.error("Please enter a valid email address.");
+          return;
+        }
+      }
+
+      if (form.gstNumber && form.gstNumber.trim()) {
+        const cleanGst = form.gstNumber.trim().toUpperCase();
+        try {
+          if (partyType === 'vendor') {
+            const res = await vendorsApi.getAll();
+            const allVendors = res.data?.vendors || res.data || [];
+            const duplicate = allVendors.find((v: any) => 
+              v.id !== initialData?.id && 
+              (v.gstNumber || v.gstin || "").trim().toUpperCase() === cleanGst
+            );
+            if (duplicate) {
+              toast.error("GST Number already exists.");
+              setActiveTab("GST");
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Duplicate GST check failed:", err);
+        }
+      }
+
+      if (!form.billingAddress || !form.billingAddress.trim()) {
+        toast.error("Billing Address is required.");
+        setActiveTab("GST");
+        return;
+      }
+
+      if (!form.shippingAddress || !form.shippingAddress.trim()) {
+        toast.error("Shipping Address is required.");
+        setActiveTab("GST");
+        return;
+      }
+
+      const cleanPincode = form.pincode ? form.pincode.replace(/\D/g, "") : "";
+      if (!cleanPincode || cleanPincode.length !== 6) {
+        toast.error("Pincode must be exactly 6 digits.");
+        setActiveTab("GST");
+        return;
+      }
+
+      // Opening Balance validation (must be non-negative)
+      if (form.openingBalance !== "") {
+        const openingBalNum = Number(form.openingBalance);
+        if (isNaN(openingBalNum) || openingBalNum < 0) {
+          toast.error("Opening Balance must be a non-negative number.");
+          return;
+        }
+      }
+
+      // As Of Date validation (must not be in the future)
+      if (form.asOfDate) {
+        const selectedDate = new Date(form.asOfDate);
+        const today = new Date();
+        selectedDate.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        if (selectedDate > today) {
+          toast.error("As Of Date cannot be in the future.");
+          return;
+        }
+      }
+
+      // Credit Limit validation (must be non-negative and is required if Custom Limit is selected)
+      if (!form.noCreditLimit) {
+        const limitStr = String(form.customCreditLimit).trim();
+        if (limitStr === "") {
+          toast.error("Credit Limit is required when Custom Limit is selected.");
+          return;
+        }
+        const limitNum = Number(limitStr);
+        if (isNaN(limitNum) || limitNum < 0) {
+          toast.error("Credit Limit must be a non-negative number.");
+          return;
+        }
+      }
+
       let finalOpeningBalance = Number(form.openingBalance) || 0;
       if (partyType === 'vendor') {
         if (form.openingBalanceType === 'receive') finalOpeningBalance = -Math.abs(finalOpeningBalance);
@@ -317,7 +428,10 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       fetchGstDetails(val);
                     }
                   }} 
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors uppercase font-mono pr-12" 
+                  className={clsx(
+                    "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors uppercase font-mono pr-12",
+                    gstError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                  )}
                 />
                 {fetchingGst ? (
                   <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 animate-spin" />
@@ -325,6 +439,9 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-medium">{form.gstNumber.length}/15</span>
                 )}
               </div>
+              {gstError && (
+                <p className="text-[11px] text-rose-500 mt-1 font-medium">{gstError}</p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1.5">{partyType === 'customer' ? 'Party Name *' : 'Vendor Name *'}</label>
@@ -342,8 +459,14 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 value={form.contact} 
                 maxLength={10} 
                 onChange={(e) => setForm({...form, contact: e.target.value.replace(/\D/g, "")})} 
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors" 
+                className={clsx(
+                  "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors",
+                  contactError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                )}
               />
+              {contactError && (
+                <p className="text-[11px] text-rose-500 mt-1 font-medium">{contactError}</p>
+              )}
             </div>
 
             <div>
@@ -364,8 +487,14 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 placeholder="optional@gmail.com" 
                 value={form.email} 
                 onChange={(e) => setForm({...form, email: e.target.value})} 
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors" 
+                className={clsx(
+                  "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors",
+                  emailError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                )}
               />
+              {emailError && (
+                <p className="text-[11px] text-rose-500 mt-1 font-medium">{emailError}</p>
+              )}
             </div>
             {partyType === 'vendor' && (
               <>
