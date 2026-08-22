@@ -328,6 +328,26 @@ export default function PurchaseBillsPage() {
     } finally { setSaving(false); }
   };
 
+  const getFilteredAccounts = () => {
+    if (paymentMode === "CASH") {
+      return accounts.filter(a => a.type === "CASH");
+    } else {
+      return accounts.filter(a => a.type === "BANK" || a.type === "UPI");
+    }
+  };
+
+  const handlePaymentModeChange = (mode: string) => {
+    setPaymentMode(mode);
+    const filtered = mode === "CASH" 
+      ? accounts.filter(a => a.type === "CASH")
+      : accounts.filter(a => a.type === "BANK" || a.type === "UPI");
+    
+    const isStillValid = filtered.some(a => a.id === paymentAccount);
+    if (!isStillValid) {
+      setPaymentAccount("");
+    }
+  };
+
   const handleMakePayment = async () => {
     if (!paymentBill || !paymentAccount) {
       if (accounts.length === 0) {
@@ -338,6 +358,11 @@ export default function PurchaseBillsPage() {
       return toast.error("Please select an account.");
     }
     if (!paymentAmount || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0) return toast.error("Valid amount required.");
+
+    const outstanding = paymentBill.outstanding ?? Math.max(0, (paymentBill.amount || 0) - (paymentBill.advanceApplied || 0) - (paymentBill.paidAmount || 0));
+    if (Number(paymentAmount) > outstanding + 0.01) {
+      return toast.error(`Payment amount of ₹${paymentAmount} cannot exceed outstanding balance of ₹${outstanding.toFixed(2)}.`);
+    }
     
     try {
       setSubmittingPayment(true);
@@ -362,14 +387,11 @@ export default function PurchaseBillsPage() {
 
   const openPaymentModal = (bill: any) => {
     setPaymentBill(bill);
-    // Outstanding, not the bill's raw gross amount — a bill already partly
-    // settled by advance or a prior payment must default to what's actually
-    // still owed, not the full invoice total all over again.
     const outstanding = bill.outstanding ?? Math.max(0, (bill.amount || 0) - (bill.advanceApplied || 0) - (bill.paidAmount || 0));
     setPaymentAmount(outstanding.toString());
     setPaymentNote(`Payment for ${bill.invoiceNumber || 'Bill'}`);
     setPaymentMode("CASH");
-    if (accounts.length > 0) setPaymentAccount(accounts[0].id);
+    setPaymentAccount(""); // Default to "Select Account"
     setPaymentIdempotencyKey(`bill-pay-${bill.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     setShowPaymentModal(true);
   };
@@ -904,7 +926,7 @@ export default function PurchaseBillsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {b.status === "PENDING" && (
+                          {b.status !== "PAID" && (b.outstanding ?? 0) > 0.01 && (
                             <button onClick={() => openPaymentModal(b)} className="px-3 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-semibold rounded text-xs transition-colors">
                               Make Payment
                             </button>
@@ -949,7 +971,7 @@ export default function PurchaseBillsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Mode</label>
-              <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
+              <select value={paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
                 <option value="CASH">Cash</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
                 <option value="UPI">UPI</option>
@@ -981,7 +1003,7 @@ export default function PurchaseBillsPage() {
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
                 >
                   <option value="">Select Account</option>
-                  {accounts.map(a => (
+                  {getFilteredAccounts().map(a => (
                     <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
                   ))}
                   <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
