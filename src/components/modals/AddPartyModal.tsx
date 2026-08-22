@@ -69,6 +69,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           ...prev,
           name: data.legalName || prev.name,
           billingAddress: data.address || prev.billingAddress,
+          shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
           state: data.state || prev.state,
           district: data.district || prev.district,
           city: data.city || prev.city,
@@ -103,6 +104,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           name: initialData.name || "",
           contact: initialData.contact || initialData.phone || "",
           billingAddress: initialData.address || initialData.billingAddress || "",
+          shippingAddress: initialData.shippingAddress || initialData.address || initialData.billingAddress || "",
           pincode: initialData.pinCode || initialData.pincode || "",
           openingBalance: Math.abs(bal) || "",
           openingBalanceType: mappedBalanceType,
@@ -155,11 +157,16 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
       }
     }
 
-    if (partyType === 'vendor') {
-      if (!form.billingAddress || !form.billingAddress.trim()) {
-        toast.error("Registered Office Address is required.");
-        return;
-      }
+    if (!form.billingAddress || !form.billingAddress.trim()) {
+      toast.error("Billing Address is required.");
+      setActiveTab("GST");
+      return;
+    }
+
+    if (!form.shippingAddress || !form.shippingAddress.trim()) {
+      toast.error("Shipping Address is required.");
+      setActiveTab("GST");
+      return;
     }
 
     // Opening Balance validation (must be non-negative)
@@ -212,12 +219,13 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         name: trimmedName,
         contact: form.contact,
         email: form.email,
-        address: form.billingAddress,
+        address: form.billingAddress.trim(),
+        billingAddress: form.billingAddress.trim(),
+        shippingAddress: form.shippingAddress.trim(),
         state: form.state,
         district: form.district,
         city: form.city,
         pincode: form.pincode,
-        shippingAddress: form.shippingAddressEnabled ? form.shippingAddress : undefined,
         gstNumber: form.gstNumber,
         gstType: form.gstType,
         openingBalance: finalOpeningBalance,
@@ -395,7 +403,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   {/* Left Column */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Billing Address</label>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Billing Address *</label>
                       <textarea 
                         rows={3}
                         placeholder="Address..." 
@@ -405,7 +413,16 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Shipping Address</label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-medium text-gray-500">Shipping Address *</label>
+                        <button
+                          type="button"
+                          onClick={() => setForm(prev => ({ ...prev, shippingAddress: prev.billingAddress }))}
+                          className="text-[11px] text-orange-600 hover:text-orange-700 font-medium hover:underline"
+                        >
+                          Same as Billing Address
+                        </button>
+                      </div>
                       <textarea 
                         rows={3}
                         placeholder="Shipping Address..." 

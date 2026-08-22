@@ -522,7 +522,108 @@ export default function VendorsClient() {
     printWindow.document.close();
   };
 
-  const handleExportLedger = (format: 'csv' | 'xlsx', range: 'all' | 'filtered') => {
+  function buildLedgerPdf(title: string, vendorName: string, headers: string[], rows: any[][]): string {
+    const contentObjects: string[] = [];
+    const rowHeight = 20;
+    const topMargin = 780;
+    const bottomMargin = 50;
+    const pageHeight = 842;
+    const pageWidth = 595;
+    const leftMargin = 40;
+    const colWidths = [65, 75, 75, 125, 55, 55, 65];
+
+    let currentRow = 0;
+    let pageNum = 1;
+
+    while (currentRow < rows.length || pageNum === 1) {
+      let y = topMargin;
+      let stream = "";
+
+      stream += `BT /F2 14 Tf ${leftMargin} ${y} Td (${title.replace(/[()\\\r\n]/g, "")}) Tj ET\n`;
+      y -= 18;
+      stream += `BT /F1 9 Tf ${leftMargin} ${y} Td (Vendor: ${vendorName.replace(/[()\\\r\n]/g, "")} | Date: ${new Date().toLocaleDateString()}) Tj ET\n`;
+      y -= 22;
+
+      stream += `0.93 0.94 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
+      stream += `0.7 0.7 0.7 RG 0.5 w ${leftMargin} ${y - 4} 515 18 re S\n`;
+
+      let x = leftMargin + 4;
+      headers.forEach((h, i) => {
+        stream += `BT /F2 8.5 Tf 0.2 0.2 0.2 rg ${x} ${y} Td (${h.replace(/[()\\\r\n]/g, "")}) Tj ET\n`;
+        x += colWidths[i];
+      });
+      y -= rowHeight;
+
+      while (currentRow < rows.length && y > bottomMargin + 20) {
+        const row = rows[currentRow];
+        const isTotal = row[0] === "Totals";
+        if (isTotal) {
+          stream += `0.95 0.95 0.95 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
+          stream += `0.6 0.6 0.6 RG 1 w ${leftMargin} ${y - 4} 515 18 re S\n`;
+        } else {
+          stream += `0.85 0.85 0.85 RG 0.3 w ${leftMargin} ${y - 4} m ${leftMargin + 515} ${y - 4} l S\n`;
+        }
+
+        let rx = leftMargin + 4;
+        row.forEach((cell, ci) => {
+          const font = isTotal ? "/F2" : "/F1";
+          const val = String(cell ?? "").replace(/[()\\\r\n]/g, "").slice(0, 25);
+          stream += `BT ${font} 8 Tf 0.15 0.15 0.15 rg ${rx} ${y} Td (${val}) Tj ET\n`;
+          rx += colWidths[ci];
+        });
+
+        y -= rowHeight;
+        currentRow++;
+      }
+
+      stream += `BT /F1 8 Tf 0.5 0.5 0.5 rg ${pageWidth / 2 - 20} 25 Td (Page ${pageNum}) Tj ET\n`;
+
+      contentObjects.push(stream);
+      pageNum++;
+      if (currentRow >= rows.length) break;
+    }
+
+    const numPages = contentObjects.length;
+    const allObjs: string[] = [];
+    allObjs.push("<< /Type /Catalog /Pages 2 0 R >>");
+
+    const pageObjIds: string[] = [];
+    for (let i = 0; i < numPages; i++) {
+      pageObjIds.push(`${5 + i * 2} 0 R`);
+    }
+    allObjs.push(`<< /Type /Pages /Kids [${pageObjIds.join(" ")}] /Count ${numPages} >>`);
+    allObjs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+    allObjs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+
+    for (let i = 0; i < numPages; i++) {
+      const contentObjId = 6 + i * 2;
+      const contentStream = contentObjects[i];
+      const streamLen = new TextEncoder().encode(contentStream).length;
+
+      allObjs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>`);
+      allObjs.push(`<< /Length ${streamLen} >>\nstream\n${contentStream}\nendstream`);
+    }
+
+    let pdf = "%PDF-1.4\n";
+    const offsets: number[] = [];
+    const encoder = new TextEncoder();
+
+    allObjs.forEach((obj, i) => {
+      offsets.push(encoder.encode(pdf).length);
+      pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`;
+    });
+
+    const xrefStart = encoder.encode(pdf).length;
+    pdf += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
+    offsets.forEach(offset => {
+      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    });
+
+    pdf += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+    return pdf;
+  }
+
+  const handleExportLedger = (format: 'xlsx' | 'pdf', range: 'all' | 'filtered') => {
     if (!selectedVendorDetail) return;
     
     const targetData = range === 'all' ? ledger : filteredLedger;
@@ -564,31 +665,44 @@ export default function VendorsClient() {
       `${Math.abs(Math.round(runningCredit - runningDebit))} ${(runningCredit - runningDebit) >= 0 ? 'Cr' : 'Dr'}`
     ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(val => {
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-      }).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    
     const vendorCleanName = selectedVendorDetail.name.replace(/[^a-zA-Z0-9]/g, '_');
     const todayStr = new Date().toISOString().split('T')[0];
     const filename = `Vendor_Ledger_${vendorCleanName}_${todayStr}.${format}`;
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast(`Exported ${format.toUpperCase()} successfully`, "success");
+
+    if (format === 'xlsx') {
+      const ws = XLSX.utils.aoa_to_sheet([
+        [`Vendor Transactions Ledger - ${selectedVendorDetail.name}`],
+        [`Vendor Code: ${selectedVendorDetail.vendorCode || '-'} | GSTIN: ${selectedVendorDetail.gstNumber || '-'} | Date: ${new Date().toLocaleDateString()}`],
+        [],
+        headers,
+        ...rows
+      ]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Ledger");
+      XLSX.writeFile(wb, filename);
+      showToast("Excel file (.xlsx) downloaded successfully", "success");
+      return;
+    }
+
+    if (format === 'pdf') {
+      const pdfData = buildLedgerPdf(
+        `Transactions Ledger - ${selectedVendorDetail.name}`,
+        `${selectedVendorDetail.name}`,
+        headers,
+        rows
+      );
+      const blob = new Blob([pdfData], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("PDF file (.pdf) downloaded successfully", "success");
+      return;
+    }
   };
 
   // -- Excel Import --
@@ -795,11 +909,11 @@ export default function VendorsClient() {
 
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
             <div 
-              className="flex items-center gap-2 cursor-pointer"
+              className="flex items-center gap-1.5 cursor-pointer select-none group"
               onClick={() => setIsFilterOpen(!isFilterOpen)}
             >
-              <span className="text-[12px] font-bold text-slate-500">Vendor Name</span>
-              <Filter size={12} className="text-orange-500" />
+              <span className="text-[12px] font-bold text-slate-500 group-hover:text-slate-700">Vendor Name</span>
+              <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180 text-orange-500' : 'group-hover:text-slate-600'}`} />
             </div>
 
             {/* Filter Popover */}
@@ -1137,44 +1251,21 @@ export default function VendorsClient() {
                         className={`transition-colors p-1 rounded-lg text-emerald-600 ${isExportDropdownOpen ? 'bg-emerald-500/10' : 'hover:text-emerald-700'}`}
                         title="Export Ledger"
                       >
-                        <FileText size={16} className="opacity-80" />
+                        <Download size={16} className="opacity-80" />
                       </button>
                       {isExportDropdownOpen && (
-                        <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-50 py-1 font-normal text-slate-700 dark:text-slate-300">
+                        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl shadow-xl z-50 py-1 font-normal text-slate-700 dark:text-slate-300">
                           <div className="px-3 py-1.5 border-b border-slate-100 dark:border-white/5">
                             <span className="text-[10px] font-black uppercase text-slate-400 dark:text-slate-500">Export Options</span>
                           </div>
                           
-                          {/* Filtered options */}
                           <div className="p-1">
                             <button onClick={() => { handleExportLedger('xlsx', 'filtered'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export Filtered to Excel</span>
+                              <span>Export to Excel</span>
                               <span className="text-[10px] text-slate-400 font-mono">.xlsx</span>
                             </button>
-                            <button onClick={() => { handleExportLedger('csv', 'filtered'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export Filtered to CSV</span>
-                              <span className="text-[10px] text-slate-400 font-mono">.csv</span>
-                            </button>
-                            <button onClick={() => { handlePrintLedger('filtered'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export Filtered to PDF</span>
-                              <span className="text-[10px] text-slate-400 font-mono">.pdf</span>
-                            </button>
-                          </div>
-
-                          <div className="border-t border-slate-100 dark:border-white/5 my-1"></div>
-
-                          {/* All options */}
-                          <div className="p-1">
-                            <button onClick={() => { handleExportLedger('xlsx', 'all'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export All to Excel</span>
-                              <span className="text-[10px] text-slate-400 font-mono">.xlsx</span>
-                            </button>
-                            <button onClick={() => { handleExportLedger('csv', 'all'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export All to CSV</span>
-                              <span className="text-[10px] text-slate-400 font-mono">.csv</span>
-                            </button>
-                            <button onClick={() => { handlePrintLedger('all'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
-                              <span>Export All to PDF</span>
+                            <button onClick={() => { handleExportLedger('pdf', 'filtered'); setIsExportDropdownOpen(false); }} className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg text-xs flex items-center justify-between">
+                              <span>Export to PDF</span>
                               <span className="text-[10px] text-slate-400 font-mono">.pdf</span>
                             </button>
                           </div>
@@ -1317,11 +1408,9 @@ export default function VendorsClient() {
                     <thead className="bg-white dark:bg-[#0b0c14] sticky top-0 z-10 border-b border-slate-200 dark:border-white/5">
                       <tr>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 dark:border-white/5 relative filter-popover-container">
-                          <div className="flex items-center justify-between">
-                            Type
-                            <button onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
-                              <Filter size={14} className="text-slate-400 hover:text-slate-700" />
-                            </button>
+                          <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
+                            <span>Type</span>
+                            <ChevronDown size={14} className={`text-slate-400 hover:text-slate-700 transition-transform ${isTypeFilterOpen ? 'rotate-180 text-orange-500' : ''}`} />
                           </div>
                           {/* Type Filter Popover */}
                           {isTypeFilterOpen && (
@@ -1360,11 +1449,9 @@ export default function VendorsClient() {
                           )}
                         </th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 dark:border-white/5 relative">
-                          <div className="flex items-center justify-between">
-                            Ref No
-                            <button onClick={() => setIsNumberFilterOpen(!isNumberFilterOpen)}>
-                              <Filter size={14} className="text-slate-400 hover:text-slate-700" />
-                            </button>
+                          <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsNumberFilterOpen(!isNumberFilterOpen)}>
+                            <span>Ref No</span>
+                            <ChevronDown size={14} className={`text-slate-400 hover:text-slate-700 transition-transform ${isNumberFilterOpen ? 'rotate-180 text-orange-500' : ''}`} />
                           </div>
                           {isNumberFilterOpen && (
                             <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-300 normal-case tracking-normal">
@@ -1401,11 +1488,9 @@ export default function VendorsClient() {
                           )}
                         </th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 dark:border-white/5 relative">
-                          <div className="flex items-center justify-between">
-                            <span className="flex items-center gap-1">Date <ChevronDown size={12} className="text-slate-400" /></span>
-                            <button onClick={() => setIsDateFilterOpen(!isDateFilterOpen)}>
-                              <Filter size={14} className="text-slate-400 hover:text-slate-700" />
-                            </button>
+                          <div className="flex items-center justify-between cursor-pointer" onClick={() => setIsDateFilterOpen(!isDateFilterOpen)}>
+                            <span>Date</span>
+                            <ChevronDown size={14} className={`text-slate-400 hover:text-slate-700 transition-transform ${isDateFilterOpen ? 'rotate-180 text-orange-500' : ''}`} />
                           </div>
                           {isDateFilterOpen && (
                             <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-300 normal-case tracking-normal">
@@ -1470,11 +1555,9 @@ export default function VendorsClient() {
                           Credit
                         </th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 dark:border-white/5 relative text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            Balance
-                            <button onClick={() => setIsBalanceFilterOpen(!isBalanceFilterOpen)}>
-                              <Filter size={14} className="text-slate-400 hover:text-slate-700" />
-                            </button>
+                          <div className="flex items-center justify-end gap-2 cursor-pointer" onClick={() => setIsBalanceFilterOpen(!isBalanceFilterOpen)}>
+                            <span>Balance</span>
+                            <ChevronDown size={14} className={`text-slate-400 hover:text-slate-700 transition-transform ${isBalanceFilterOpen ? 'rotate-180 text-orange-500' : ''}`} />
                           </div>
                           {isBalanceFilterOpen && (
                             <div className="absolute top-full right-0 mt-1 w-56 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-300 normal-case tracking-normal text-left">
