@@ -212,7 +212,11 @@ export default function ActiveProductionRunsClient() {
           activeRuns.map((run) => {
             const shortItems = (run.recipe?.recipeItems || []).filter((item: any) => {
               const required = (item.quantityRequired || 0) * (run.quantity || 1);
-              return getAvailableFor(run, item) < required;
+              // Since this batch is already active (IN_PROGRESS/STOPPED), its raw materials 
+              // have already been deducted from the warehouse stock. We add the required quantity 
+              // back to get the pre-deduction available stock for a true shortage check.
+              const available = getAvailableFor(run, item) + required;
+              return available < required;
             });
 
             return (
@@ -301,7 +305,7 @@ export default function ActiveProductionRunsClient() {
                         <tbody className="divide-y divide-rose-200/50">
                           {shortItems.map((item: any, idx: number) => {
                             const required = (item.quantityRequired || 0) * (run.quantity || 1);
-                            const available = getAvailableFor(run, item);
+                            const available = getAvailableFor(run, item) + required;
                             const short = required - available;
                             return (
                               <tr key={idx} className="text-rose-900 font-bold">

@@ -186,21 +186,15 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     title: "INVENTORY",
     items: [
       {
-        icon: Layers,
-        label: "Raw Materials",
+        icon: ClipboardList,
+        label: "Item Master",
         href: "/inventory/raw-material-stock",
         roles: SUPER_ONLY,
       },
       {
-        icon: Package,
-        label: "Finished Goods",
-        href: "/inventory/stock?type=FINISHED",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Clock,
-        label: "Expiry Tracking",
-        href: "/inventory/expiry-tracking",
+        icon: Layers,
+        label: "Stock Hub",
+        href: "/inventory/stock",
         roles: SUPER_ONLY,
       },
       {
@@ -213,6 +207,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: ClipboardList,
         label: "Stock Reconciliation",
         href: "/inventory/reconciliation",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Clock,
+        label: "Expiry Tracking",
+        href: "/inventory/expiry-tracking",
         roles: SUPER_ONLY,
       },
     ],

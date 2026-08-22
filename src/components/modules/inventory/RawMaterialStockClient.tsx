@@ -300,14 +300,14 @@ export default function RawMaterialStockClient() {
       <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-slate-900 rounded-2xl shadow-xl shadow-slate-900/10 shrink-0">
-              <Database size={24} className="text-white" />
+            <div className="p-2.5 bg-orange-500/10 text-orange-500 rounded-xl shrink-0">
+              <Database size={22} />
             </div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white uppercase">
                 Item Master <span className="text-slate-400 font-medium ml-1 italic">& Inventory</span>
               </h1>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+              <p className="text-xs font-semibold text-slate-500 flex items-center gap-2">
                 <BarChart3 size={12} className="text-orange-500" /> Operational stock ledger & valuation engine
               </p>
             </div>
@@ -316,20 +316,20 @@ export default function RawMaterialStockClient() {
         <div className="flex items-center gap-3">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-2 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl hover:border-emerald-300 hover:text-emerald-600 transition-all shadow-sm text-slate-500"
+            className="px-4 py-2 text-sm font-semibold border border-gray-250 hover:bg-gray-50 rounded-lg text-slate-600 transition-colors flex items-center gap-1.5"
             title="Download CSV"
           >
             <Download size={16} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Export</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">Export</span>
           </button>
-          <button onClick={fetchItems} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl hover:border-slate-300 transition-all shadow-sm">
+          <button onClick={fetchItems} className="p-2 border border-gray-250 hover:bg-gray-50 rounded-lg text-slate-500 transition-colors">
             <RefreshCw size={16} className={clsx("text-slate-400", loading && "animate-spin")} />
           </button>
           <Link
             href="/inventory/stock/add"
-            className="flex items-center gap-3 bg-slate-900 text-white px-8 py-3.5 rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] hover:bg-slate-800 transition-all shadow-2xl shadow-slate-900/20"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors"
           >
-            <Plus size={18} strokeWidth={3} /> Create New Item
+            <Plus size={16} /> Create New Item
           </Link>
         </div>
       </header>
@@ -357,8 +357,8 @@ export default function RawMaterialStockClient() {
         ))}
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-white/5 p-2 rounded-[2rem] border border-slate-100 dark:border-white/5">
-        <div className="flex gap-1 overflow-x-auto hide-scrollbar">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#0A0D14] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex gap-1 overflow-x-auto hide-scrollbar bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
           {[
             { id: "ALL", label: "All Items" },
             { id: "RAW", label: "Raw Materials" },
@@ -371,25 +371,25 @@ export default function RawMaterialStockClient() {
               key={cat.id}
               onClick={() => setCategory(cat.id)}
               className={clsx(
-                "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                category === cat.id ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm border border-slate-100 dark:border-white/10" : "text-slate-400"
+                "px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap",
+                category === cat.id ? "bg-white dark:bg-slate-800 text-orange-500 shadow-sm border border-slate-100 dark:border-white/10" : "text-slate-450"
               )}
             >
               {cat.label}
             </button>
           ))}
         </div>
-        <div className="relative group w-full md:w-80 px-2">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+        <div className="relative group w-full md:w-80 flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-sm">
+          <Search className="text-slate-450" size={16} />
           <input
             type="text"
             placeholder="Search SKU / Item Name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
+            className="w-full bg-transparent outline-none text-xs font-medium text-slate-700 dark:text-zinc-300 placeholder:text-slate-400"
           />
             {search && (
-              <X 
+              <CloseIcon 
                 size={14} 
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
                 onClick={() => setSearch("")} 
@@ -399,19 +399,19 @@ export default function RawMaterialStockClient() {
       </div>
 
       {/* Dense Table Layout */}
-      <div className="bg-white dark:bg-card/40 border border-slate-200 dark:border-white/5 rounded-[2.5rem] shadow-xl overflow-hidden">
+      <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-850 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left table-fixed">
-            <thead className="bg-slate-50/50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5">
-              <tr className="text-slate-400">
-                <th className="w-[24%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Item Specification</th>
-                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Movement</th>
-                <th className="w-[16%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Stock Balance</th>
-                <th className="w-[9%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Avg. Cost</th>
-                <th className="w-[9%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Sale Price</th>
-                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Valuation</th>
-                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-center">Status</th>
-                <th className="w-[12%] px-8 py-4"></th>
+            <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800">
+              <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                <th className="w-[24%] px-6 py-4">Item Specification</th>
+                <th className="w-[10%] px-6 py-4 text-center">Movement</th>
+                <th className="w-[16%] px-6 py-4">Stock Balance</th>
+                <th className="w-[9%] px-6 py-4">Avg. Cost</th>
+                <th className="w-[9%] px-6 py-4">Sale Price</th>
+                <th className="w-[10%] px-6 py-4 text-right">Valuation</th>
+                <th className="w-[10%] px-6 py-4 text-center">Status</th>
+                <th className="w-[12%] px-6 py-4"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-white/5">
@@ -426,18 +426,18 @@ export default function RawMaterialStockClient() {
 
                 return (
                   <tr key={item.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
-                    <td className="px-8 py-3">
+                    <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center font-black text-[9px] border shrink-0",
+                        <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs border shrink-0",
                           status.label === "CRITICAL" ? "bg-red-50 text-red-500 border-red-100" : "bg-slate-50 text-slate-500 border-slate-200"
                         )}>
                           {item.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-black text-slate-900 dark:text-white uppercase tracking-tight text-[12px] truncate leading-none mb-1">{item.name}</p>
+                          <p className="font-semibold text-slate-800 dark:text-white uppercase tracking-tight text-[12px] truncate leading-none mb-1">{item.name}</p>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter">{item.sku}</span>
-                            <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">• {item.category?.replace(/_/g, " ")}</span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{item.sku}</span>
+                            <span className="text-[10px] font-medium text-slate-350 uppercase tracking-wide">• {item.category?.replace(/_/g, " ")}</span>
                             {isRaw && (
                               <span className={clsx(
                                 "text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide",
@@ -454,26 +454,26 @@ export default function RawMaterialStockClient() {
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        <span className="text-[10px] font-black text-emerald-500">↑{(item.inbound || 0).toFixed(0)}</span>
-                        <span className="text-[10px] font-black text-orange-500">↓{(item.outbound || 0).toFixed(0)}</span>
+                        <span className="text-[10px] font-bold text-emerald-500">↑{(item.inbound || 0).toFixed(0)}</span>
+                        <span className="text-[10px] font-bold text-orange-500">↓{(item.outbound || 0).toFixed(0)}</span>
                       </div>
                     </td>
                     <td className="px-6 py-3">
                       <div className="flex flex-col gap-1.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={clsx("text-sm font-extrabold tracking-tight", 
+                          <span className={clsx("text-sm font-bold tracking-tight", 
                             status.label === "CRITICAL" ? "text-red-600 dark:text-red-400 animate-pulse" :
                             status.label === "LOW STOCK" ? "text-orange-600 dark:text-orange-400" :
                             "text-slate-900 dark:text-slate-200"
                           )}>
                             {balance.qty}
                           </span>
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">
+                          <span className="text-xs font-semibold text-slate-550 dark:text-slate-300 uppercase tracking-wide">
                             {balance.unit}
                           </span>
 
                           {balance.total && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-[10px] font-bold text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-500/20">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-[10px] font-semibold text-orange-600 dark:text-orange-400 border border-orange-100 dark:border-orange-500/20">
                               ≈ {balance.total}
                             </span>
                           )}
@@ -539,16 +539,16 @@ export default function RawMaterialStockClient() {
                       </div>
                     </td>
                     <td className="px-6 py-3">
-                      <span className="text-[12px] font-bold text-slate-500">₹{(item.costPrice || 0).toLocaleString()}</span>
+                      <span className="text-[12px] font-semibold text-slate-500">₹{(item.costPrice || 0).toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-3">
-                      <span className="text-[12px] font-black text-blue-600 dark:text-blue-400">₹{(item.basePrice || 0).toLocaleString()}</span>
+                      <span className="text-[12px] font-bold text-blue-600 dark:text-blue-400">₹{(item.basePrice || 0).toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-3 text-right">
-                      <span className="text-[12px] font-black text-slate-900 dark:text-white">₹{stockVal.toLocaleString()}</span>
+                      <span className="text-[12px] font-bold text-slate-900 dark:text-white">₹{stockVal.toLocaleString()}</span>
                     </td>
                     <td className="px-6 py-3 text-center">
-                      <span className={clsx("inline-block px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-wider border", status.color)}>
+                      <span className={clsx("inline-block px-2.5 py-0.5 rounded text-[11px] font-semibold border", status.color)}>
                         {status.label}
                       </span>
                     </td>
