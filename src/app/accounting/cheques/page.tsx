@@ -93,9 +93,14 @@ export default function ChequeRegistryPage() {
   const fetchFranchises = async () => {
     try {
       const res = await franchiseApi.getAll();
-      setFranchises(res.data);
-      if (res.data.length > 0) {
-        setFormData(prev => ({ ...prev, franchiseId: res.data[0].id }));
+      const list = res.data || [];
+      setFranchises(list);
+      if (list.length > 0) {
+        // Deterministic default: open at HQ if one is configured, rather
+        // than whichever franchise the DB happened to return first.
+        const hq = list.find((f: any) => f.isHQ);
+        const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+        setFormData(prev => ({ ...prev, franchiseId: (hq || fallback).id }));
       }
     } catch (error) {}
   };
@@ -118,7 +123,7 @@ export default function ChequeRegistryPage() {
         issueDate: new Date().toISOString().split('T')[0],
         dueDate: new Date().toISOString().split('T')[0],
         notes: "",
-        franchiseId: franchises[0]?.id || ""
+        franchiseId: (franchises.find((f: any) => f.isHQ) || [...franchises].sort((a: any, b: any) => a.name.localeCompare(b.name))[0])?.id || ""
       });
     } catch (error: any) {
       toast.error(error.response?.data?.error || "Failed to record cheque");

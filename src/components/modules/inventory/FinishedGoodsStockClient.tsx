@@ -79,7 +79,14 @@ export default function FinishedGoodsStockClient() {
     setLoading(true);
     try {
       const [pRes, fprRes, foRes, frRes, iRes] = await Promise.all([
-        productsFullApi.getAll().catch(() => ({ data: [] })),
+        // stockSource: 'GLOBAL' — Stock Hub needs the full finished-goods
+        // catalog regardless of which franchise (if any) stocks each product;
+        // without it, a Super Admin's default /api/products call is narrowed
+        // to one franchise's inventory and silently drops branch-only items.
+        // The backend only honors this for SUPER_ADMIN (checked server-side);
+        // per-franchise stock numbers still come entirely from the
+        // rawMaterialsApi call below, not from this catalog fetch.
+        productsFullApi.getAll({ stockSource: "GLOBAL" }).catch(() => ({ data: [] })),
         franchiseProductRequestsApi.getAll().catch(() => ({ data: [] })),
         franchiseOrdersApi.getAll().catch(() => ({ data: [] })),
         franchiseApi.getAll().catch(() => ({ data: [] })),

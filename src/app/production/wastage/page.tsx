@@ -62,10 +62,15 @@ export default function WastagePage() {
           franchiseApi.getAll(),
           inventoryApi.getWarehouses()
         ]);
-        setFranchises(fRes.data || []);
+        const franchiseList = fRes.data || [];
+        setFranchises(franchiseList);
         setWarehouses(wRes.data || []);
-        if (fRes.data?.length > 0) {
-          setSelectedFranchiseId(fRes.data[0].id);
+        if (franchiseList.length > 0) {
+          // Deterministic default: open at HQ if one is configured, rather
+          // than whichever franchise the DB happened to return first.
+          const hq = franchiseList.find((f: any) => f.isHQ);
+          const fallback = [...franchiseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setSelectedFranchiseId((hq || fallback).id);
         }
         if (wRes.data?.length > 0) {
           setFormData(prev => ({ ...prev, warehouseId: wRes.data[0].id }));

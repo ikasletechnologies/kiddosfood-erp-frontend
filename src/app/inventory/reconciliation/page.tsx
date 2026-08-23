@@ -38,8 +38,15 @@ export default function StockReconciliationPage() {
     franchiseApi
       .getAll()
       .then((res) => {
-        setFranchises(res.data || []);
-        if (res.data?.length > 0) setSelectedFranchiseId(res.data[0].id);
+        const list = res.data || [];
+        setFranchises(list);
+        if (list.length > 0) {
+          // Deterministic default: open at HQ if one is configured, rather
+          // than whichever franchise the DB happened to return first.
+          const hq = list.find((f: any) => f.isHQ);
+          const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setSelectedFranchiseId((hq || fallback).id);
+        }
       })
       .catch(() => toast.error("Failed to load franchises"));
   }, []);

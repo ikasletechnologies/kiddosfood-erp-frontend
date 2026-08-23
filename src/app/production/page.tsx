@@ -76,7 +76,11 @@ export default function ProductionPlanningPage() {
         }
         const franchiseList = fRes.data || [];
         if (franchiseList.length > 0) {
-          setFranchiseId(franchiseList[0].id);
+          // Deterministic default: open at HQ if one is configured, rather
+          // than whichever franchise the DB happened to return first.
+          const hq = franchiseList.find((f: any) => f.isHQ);
+          const fallback = [...franchiseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setFranchiseId((hq || fallback).id);
         }
       } catch (err) {
         toast.error("Failed to load recipes or warehouses");
