@@ -69,15 +69,6 @@ export default function RecipeMasterTab() {
 
   const uniqueCategories = categories.map(c => c.name);
 
-  // "+ Add New Product" navigates to the Finished Goods add page instead of
-  // an inline form. The in-progress recipe form is stashed here so it can
-  // be restored when the user comes back (via ?returnTo=), and the newly
-  // created product's name is looked up in the freshly-fetched product list
-  // to auto-select it — AddInventoryProductForm has no other way to hand
-  // back which product it just made.
-  const RESUME_KEY = "recipeMaster:pendingFormForNewProduct";
-  const NEW_PRODUCT_KEY = "lastCreatedInventoryProduct";
-
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -99,98 +90,6 @@ export default function RecipeMasterTab() {
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  // Resume a recipe form left in progress when the user was sent off to
-  // create a new linked product, and auto-select whatever they just created.
-  useEffect(() => {
-    let pending: any = null;
-    try {
-      const raw = sessionStorage.getItem(RESUME_KEY);
-      if (raw) pending = JSON.parse(raw);
-    } catch { /* ignore malformed/unavailable storage */ }
-    if (!pending) return;
-    sessionStorage.removeItem(RESUME_KEY);
-
-    (async () => {
-      let freshProducts: any[] = [];
-      try {
-        const [rRes, mRes, pRes, cRes] = await Promise.all([
-          recipesApi.getAll(),
-          rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
-          productsApi.getAll(),
-          recipesApi.getCategories()
-        ]);
-        setRecipes(rRes.data ?? []);
-        setMaterials(mRes.data ?? []);
-        freshProducts = pRes.data ?? [];
-        setProducts(freshProducts);
-        setCategories(cRes.data ?? []);
-      } catch (e) {
-        console.error("Failed to refresh lists on resume", e);
-      }
-
-      let productId = "";
-      let shelfLifeDays: number | null = null;
-      // Distinguishes "nothing to look up" / "not found" / "found but
-      // conflicting" (its own toast, shown inline below) / "found cleanly" —
-      // each needs a different message, or none.
-      let outcome: "found" | "not-found" | "conflict" | "none" = "none";
-      try {
-        const rawNew = sessionStorage.getItem(NEW_PRODUCT_KEY);
-        if (rawNew) {
-          sessionStorage.removeItem(NEW_PRODUCT_KEY);
-          const created = JSON.parse(rawNew);
-          // Only trust it if it was stashed for this same trip (a few
-          // minutes old at most), not a stale leftover from some earlier,
-          // unrelated visit to the add-product page.
-          if (created?.name && Date.now() - (created.at || 0) < 10 * 60 * 1000) {
-            const match = freshProducts.find((p: any) => p.name?.toLowerCase() === created.name.toLowerCase());
-            if (!match) {
-              outcome = "not-found";
-            } else {
-              // A name that collides with an existing item gets merged into
-              // it server-side (inventory→product sync matches by name), so
-              // "the product just created" can actually be a pre-existing
-              // one — including one another recipe already owns. Recipe.
-              // productId is unique, so surface that now rather than let the
-              // user hit an opaque save failure later.
-              const recipesRes = await recipesApi.getAll();
-              const conflict = (recipesRes.data || []).find(
-                (r: any) => r.productId === match.id && r.id !== pending.editingId
-              );
-              if (conflict) {
-                outcome = "conflict";
-                toast.error(`"${match.name}" is already linked to recipe "${conflict.name}" — pick a different product, or edit that recipe instead.`);
-              } else {
-                outcome = "found";
-                productId = match.id;
-                shelfLifeDays = match.shelfLifeDays ?? null;
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Failed to resolve newly created product", e);
-        outcome = "not-found";
-      }
-
-      setForm({
-        ...emptyForm,
-        ...pending.form,
-        ...(productId ? { productId, shelfLifeDays } : {}),
-      });
-      setEditingId(pending.editingId ?? null);
-      setError("");
-      setShowForm(true);
-      if (outcome === "found") {
-        toast.success("Linked product created and selected");
-      } else if (outcome === "not-found") {
-        toast.error("Couldn't find the product you just created — please select it manually.");
-      }
-    })();
-    // Runs once on mount only — intentionally not re-triggered by fetchAll/products changing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const openCreate = () => {
     setIsAddingCategory(false);
@@ -416,18 +315,6 @@ export default function RecipeMasterTab() {
     } finally {
       setSavingMaterial(false);
     }
-  };
-
-  // "+ Add New Product" leaves this recipe form for the Finished Goods add
-  // page instead of opening an inline form here. Stash the in-progress
-  // recipe so it survives the trip, then come back to it via ?returnTo=.
-  const goToAddNewProduct = () => {
-    try {
-      sessionStorage.setItem(RESUME_KEY, JSON.stringify({ form, editingId }));
-    } catch (e) {
-      console.error("Failed to stash recipe form before navigating", e);
-    }
-    router.push(`/inventory/stock/add?returnTo=${encodeURIComponent("/production/recipes")}`);
   };
 
   const handleDelete = async (id: string) => {
@@ -695,63 +582,39 @@ export default function RecipeMasterTab() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {form.productId && (
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Linked Product</label>
-              <select
-                value={form.productId}
-                onChange={e => {
-                  if (e.target.value === "___NEW_PRODUCT___") {
-                    goToAddNewProduct();
-                  } else {
-                    const selected = products.find((p: any) => p.id === e.target.value);
-                    setForm(f => ({ ...f, productId: e.target.value, shelfLifeDays: selected?.shelfLifeDays ?? null }));
-                  }
-                }}
+              <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="e.g. 7"
+                value={form.shelfLifeDays ?? ""}
+                onChange={e => setForm(f => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) }))}
                 className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-              >
-                <option value="">None</option>
-                {products.filter((p: any) => p.productType === "FINISHED_GOOD" || !p.productType).map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-                <option value="___NEW_PRODUCT___" className="font-bold text-[#f58220]">+ Add New Product</option>
-              </select>
+              />
+              <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
             </div>
+          )}
 
-            {form.productId && (
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="e.g. 7"
-                  value={form.shelfLifeDays ?? ""}
-                  onChange={e => setForm(f => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) }))}
-                  className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-                />
-                <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Yield *</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  value={form.yieldQty}
-                  onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
-                  className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-                />
-                <select
-                  value={form.yieldUnit}
-                  onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
-                  className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
-                >
-                  <option value="" disabled>Select...</option>
-                  {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
-              </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-gray-700">Yield *</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={form.yieldQty}
+                onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
+                className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+              />
+              <select
+                value={form.yieldUnit}
+                onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
+                className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
+              >
+                <option value="" disabled>Select...</option>
+                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
             </div>
           </div>
 
