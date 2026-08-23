@@ -70,12 +70,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         roles: SUPER_ONLY,
       },
       {
-        icon: Wallet,
-        label: "Cash Overview",
-        href: "/accounting/cash-flow",
-        roles: SUPER_ONLY,
-      },
-      {
         icon: AlertTriangle,
         label: "Inventory Alerts",
         href: "/alerts",

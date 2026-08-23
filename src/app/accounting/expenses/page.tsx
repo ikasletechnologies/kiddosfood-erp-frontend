@@ -208,16 +208,16 @@ export default function ExpensesPage() {
 
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50 -m-8" style={{ minHeight: "100vh" }}>
+      <div className="flex flex-col bg-slate-50 p-4 sm:p-6 min-h-screen space-y-4 animate-in fade-in duration-500">
         {/* Top Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setView("list"); resetForm(); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between z-20 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button onClick={() => { setView("list"); resetForm(); }} className="p-2 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors">
               <ArrowLeft size={18} />
             </button>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Purchase & Expense</p>
-              <h1 className="text-sm font-bold text-gray-900 leading-tight">New Expense</h1>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Purchase & Expense</p>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">New Expense</h1>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
@@ -234,9 +234,9 @@ export default function ExpensesPage() {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col gap-4">
           {/* Header Fields */}
-          <div className="bg-white border-b border-gray-200 px-6 py-5">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex flex-col lg:flex-row gap-6 justify-between">
               {/* Left: Category */}
               <div className="flex-1 max-w-xs">
@@ -290,7 +290,7 @@ export default function ExpensesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="mx-6 my-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -366,7 +366,7 @@ export default function ExpensesPage() {
           </div>
 
           {/* Bottom: Payment + Note + Summary */}
-          <div className="mx-6 mb-6 flex gap-4 flex-col lg:flex-row">
+          <div className="flex gap-4 flex-col lg:flex-row pb-6">
             {/* Left */}
             <div className="flex-1 space-y-3">
               <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -468,8 +468,8 @@ export default function ExpensesPage() {
         </div>
 
         {/* Sticky Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between gap-3 sticky bottom-0 z-20">
-          <span className="text-xs text-gray-400">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between gap-3 sticky bottom-4 z-20 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">
             {category} · {fmtDate(expenseDate)}
             {grandTotal > 0 && ` · ₹${grandTotal.toFixed(2)}`}
           </span>
@@ -507,29 +507,28 @@ export default function ExpensesPage() {
   // ── LIST VIEW ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 -m-8">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 space-y-4 animate-in fade-in duration-500">
       {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}>
-            <TrendingUp size={16} className="text-white" />
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-100">
+            <TrendingUp size={20} />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-gray-900">Expenses</h1>
-            <p className="text-xs text-gray-400">Track & record business expenses</p>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Expenses</h1>
+            <p className="text-sm font-medium text-slate-500">Track & record business expenses</p>
           </div>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
-          style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-sm transition-all"
         >
-          <Plus size={15} /> Add Expense
+          <Plus size={16} /> Add Expense
         </button>
       </div>
 
       {/* Summary Strip */}
-      <div className="px-6 py-4 grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: "Total Expenses", value: `₹${totalExpenses.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-orange-400" },
           { label: "This Month", value: `₹${filtered.filter(e => new Date(e.date).getMonth() === new Date().getMonth()).reduce((s, e) => s + (e.amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-blue-400" },
@@ -546,15 +545,15 @@ export default function ExpensesPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="px-6 pb-4 flex items-center gap-3 flex-wrap">
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center justify-end gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search category, payee..."
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 outline-none w-52 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
+              className="pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-800 outline-none w-52 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-sm"
             />
             {search && (
               <X 
@@ -564,18 +563,15 @@ export default function ExpensesPage() {
               />
             )}
           </div>
-          <button onClick={fetchData} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-orange-500 hover:border-orange-300 bg-white transition-colors" title="Refresh">
-            <RefreshCw size={15} />
-          </button>
-          <button className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 bg-white transition-colors" title="Print">
-            <Printer size={15} />
+          <button onClick={fetchData} className="p-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 bg-white transition-colors shadow-sm" title="Refresh">
+            <RefreshCw size={16} />
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="px-6 pb-8">
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           {loading ? (
             <div className="flex items-center justify-center py-24">
               <div className="flex flex-col items-center gap-3">
