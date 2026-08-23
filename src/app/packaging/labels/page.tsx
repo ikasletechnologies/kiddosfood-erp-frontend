@@ -39,9 +39,14 @@ export default function LabelsBarcodesPage() {
     async function initData() {
       try {
         const fRes = await franchiseApi.getAll();
-        setFranchises(fRes.data || []);
-        if (fRes.data?.length > 0) {
-          setSelectedFranchiseId(fRes.data[0].id);
+        const list = fRes.data || [];
+        setFranchises(list);
+        if (list.length > 0) {
+          // Deterministic default: open at HQ if one is configured, rather
+          // than whichever franchise the DB happened to return first.
+          const hq = list.find((f: any) => f.isHQ);
+          const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setSelectedFranchiseId((hq || fallback).id);
         }
       } catch (err) {
         toast.error("Failed to load franchises");

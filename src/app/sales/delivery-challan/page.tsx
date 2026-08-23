@@ -9,7 +9,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi, franchiseApi, salesApi, productionApi } from "@/lib/api";
+import { customersApi, productsFullApi, franchiseApi, salesApi, productBatchesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber } from "@/lib/utils";
 
@@ -63,8 +63,8 @@ const INDIAN_STATES = [
 // Unified Color Coding (from Invoice Page status colors)
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:      { label: "Draft",       color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  OPEN:       { label: "Open",        color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  CLOSED:     { label: "Closed",      color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+  IN_TRANSIT: { label: "In Transit",  color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
+  CLOSED:     { label: "Delivered",   color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
   CANCELLED:  { label: "Cancelled",   color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
 };
 
@@ -108,6 +108,18 @@ function computeRow(item: LineItem, withTax: boolean) {
   const taxAmt = parseFloat((gross * item.taxPct / 100).toFixed(2));
   return { taxAmt, amount: parseFloat((gross + taxAmt).toFixed(2)) };
 }
+
+// A batch is dispatchable when it has passed QC, isn't under an active recall,
+// hasn't expired, and still has packaged stock on hand.
+function batchIsUsable(b: any) {
+  const qcOk = b.qcStatus === "APPROVED" || b.qcStatus === "PARTIALLY_APPROVED";
+  const notRecalled = !(b.recall && (b.recall.status === "IN_PROGRESS" || b.recall.status === "COMPLETED"));
+  const notExpired = b.expiryStatus !== "EXPIRED";
+  const hasStock = (b.availableQuantity || 0) > 0;
+  return qcOk && notRecalled && notExpired && hasStock;
+}
+
+const isValidPhone = (v: string) => v === "" || /^\d{10}$/.test(v);
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -230,6 +242,7 @@ export default function DeliveryChallanPage() {
         }
         return {
           ...dc,
+          status: dc.status === "OPEN" ? "IN_TRANSIT" : dc.status,
           challanNo: formatERPNumber("DC", dc.challanNo || dc.challanNumber || dc.id, dc.createdAt || dc.challanDate),
           invoiceDate: dc.invoiceDate || (dc.challanDate ? dc.challanDate.split("T")[0] : new Date().toISOString().split("T")[0]),
           dueDate: dc.dueDate ? dc.dueDate.split("T")[0] : dc.invoiceDate || new Date().toISOString().split("T")[0],
@@ -278,12 +291,53 @@ export default function DeliveryChallanPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Fetch batches for the currently selected source warehouse/branch whenever it
+  // changes (including on entering the create/edit form), so the Batch No dropdown
+  // reflects real production/finished-goods inventory instead of staying empty.
+  useEffect(() => {
+    if (view !== "create" && view !== "edit") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await productBatchesApi.getAll({ franchiseId: sourceFranchiseId });
+        const d = (res as any).data;
+        if (!cancelled) setBatches(Array.isArray(d) ? d : d?.data || []);
+      } catch (e) {
+        console.error("Failed to load batches", e);
+        if (!cancelled) setBatches([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [view, sourceFranchiseId]);
+
+  // Keep each row's batch selection valid for the current source warehouse: drop it if
+  // it's no longer usable there, and auto-pick the single valid batch when there's only one.
+  useEffect(() => {
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const valid = batches.filter(b => b.productId === it.productId && b.franchiseId === sourceFranchiseId && batchIsUsable(b));
+      const stillValid = valid.some(b => (b.batchCode || b.id) === it.batchNumber);
+      if (stillValid) return it;
+      return { ...it, batchNumber: valid.length === 1 ? (valid[0].batchCode || valid[0].id) : "" };
+    }));
+  }, [batches, sourceFranchiseId]);
+
   // ── Calculations ────────────────────────────────────────────────────────────
 
   const withTax = priceMode === "with_tax";
   const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
+
+  // Batches for a product at the current source warehouse that are actually dispatchable.
+  const getValidBatches = (productId: string) =>
+    batches.filter(b => b.productId === productId && b.franchiseId === sourceFranchiseId && batchIsUsable(b));
+  // A product is "batch-controlled" if production has ever recorded a batch for it at
+  // this warehouse — such items must have a batch selected before the challan can save.
+  const isBatchControlled = (productId: string) =>
+    batches.some(b => b.productId === productId && b.franchiseId === sourceFranchiseId);
   
-  const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  // Rows with no item selected yet don't count toward the total — otherwise blank
+  // rows (which default to qty 1) inflate Total Qty before a product is even picked.
+  const totalQty = items.reduce((s, i) => s + (i.itemSearch.trim() !== "" ? (Number(i.qty) || 0) : 0), 0);
   const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
   const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
   const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
@@ -316,6 +370,8 @@ export default function DeliveryChallanPage() {
   };
 
   const selectProduct = (idx: number, p: any) => {
+    const validBatches = getValidBatches(p.id);
+    const autoBatch = validBatches.length === 1 ? (validBatches[0].batchCode || validBatches[0].id) : "";
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
@@ -325,6 +381,7 @@ export default function DeliveryChallanPage() {
         unit: p.unit || "NONE",
         taxPct: p.taxPercent || 0,
         taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
+        batchNumber: autoBatch,
       } : it
     ));
     setOpenItemDrop(null);
@@ -365,19 +422,49 @@ export default function DeliveryChallanPage() {
     setRoundOffEnabled(true);
   };
 
-  const handleSave = async (status: "DRAFT" | "OPEN") => {
-    if (destType === "CUSTOMER" && !selectedCustomer && status === "OPEN") {
+  const handleSave = async (status: "DRAFT" | "IN_TRANSIT") => {
+    // Applies to both Save Draft and Save Challan, and whether the number was typed
+    // or auto-filled from the selected customer/franchise record.
+    if (!isValidPhone(customerPhone)) {
+      showToast("Enter a valid 10-digit mobile number.", "error");
+      return;
+    }
+    if (destType === "CUSTOMER" && !selectedCustomer && status === "IN_TRANSIT") {
       showToast("Please select a customer", "error");
       return;
     }
-    if (destType === "FRANCHISE" && !selectedFranchise && status === "OPEN") {
+    if (destType === "FRANCHISE" && !selectedFranchise && status === "IN_TRANSIT") {
       showToast("Please select a franchise destination", "error");
       return;
     }
     const validItems = items.filter(it => it.itemSearch.trim() !== "" && it.qty > 0);
-    if (validItems.length === 0 && status === "OPEN") {
+    if (validItems.length === 0 && status === "IN_TRANSIT") {
       showToast("Add at least one item with valid quantity", "error");
       return;
+    }
+
+    if (status === "IN_TRANSIT") {
+      for (const it of validItems) {
+        if (!isBatchControlled(it.productId)) continue;
+        const valid = getValidBatches(it.productId);
+        if (valid.length === 0) {
+          showToast("No available batch found for this product in the selected warehouse.", "error");
+          return;
+        }
+        if (!it.batchNumber) {
+          showToast(`Select a batch for ${it.itemSearch}`, "error");
+          return;
+        }
+        const chosen = valid.find(b => (b.batchCode || b.id) === it.batchNumber);
+        if (!chosen) {
+          showToast(`Selected batch for ${it.itemSearch} is no longer available. Please reselect.`, "error");
+          return;
+        }
+        if (it.qty > (chosen.availableQuantity || 0)) {
+          showToast(`Quantity for ${it.itemSearch} exceeds available batch stock (${chosen.availableQuantity}).`, "error");
+          return;
+        }
+      }
     }
 
     setSaving(true);
@@ -644,7 +731,7 @@ export default function DeliveryChallanPage() {
 
   const stats = {
     total: challans.length,
-    open: challans.filter(d => d.status === "OPEN").length,
+    inTransit: challans.filter(d => d.status === "IN_TRANSIT").length,
     closed: challans.filter(d => d.status === "CLOSED").length,
     draft: challans.filter(d => d.status === "DRAFT").length,
   };
@@ -738,7 +825,18 @@ export default function DeliveryChallanPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400" placeholder="Phone Number" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+                    <input
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400"
+                      placeholder="10-digit phone number"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={customerPhone}
+                      onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    />
+                    {customerPhone && !isValidPhone(customerPhone) && (
+                      <p className="text-[11px] text-red-500 mt-1">Enter a valid 10-digit mobile number.</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">Source Branch</label>
@@ -833,19 +931,29 @@ export default function DeliveryChallanPage() {
                           <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 outline-none bg-transparent mt-1 focus:text-gray-600" />
                         </td>
                         <td className="px-3 py-2.5">
-<select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 cursor-pointer">
-<option value="">Select...</option>
-{batches.filter(b => b.productId === it.productId && b.franchiseId === sourceFranchiseId && b.quantity > 0).map(b => (
-<option key={b.id} value={b.batchCode || b.id}>{b.batchCode || 'No Code'} ({b.quantity} available)</option>
-))}
-</select>
+{(() => {
+  const validBatches = getValidBatches(it.productId);
+  return (
+    <>
+      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 cursor-pointer">
+        <option value="">Select...</option>
+        {validBatches.map(b => (
+          <option key={b.id} value={b.batchCode || b.id}>{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
+        ))}
+      </select>
+      {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
+        <div className="text-[10px] text-red-500 mt-1 leading-tight">No available batch found for this product in the selected warehouse.</div>
+      )}
+    </>
+  );
+})()}
 </td>
                         <td className="px-3 py-2.5">
 <input type="number" min={0} value={it.qty} onChange={e => {
   const val = Number(e.target.value) || 0;
-  const batch = batches.find(b => b.batchCode === it.batchNumber || b.id === it.batchNumber);
-  if (batch && val > batch.quantity) {
-    updateItem(idx, "qty", batch.quantity);
+  const batch = getValidBatches(it.productId).find(b => (b.batchCode || b.id) === it.batchNumber);
+  if (batch && val > (batch.availableQuantity || 0)) {
+    updateItem(idx, "qty", batch.availableQuantity || 0);
   } else {
     updateItem(idx, "qty", val);
   }
@@ -900,7 +1008,7 @@ export default function DeliveryChallanPage() {
           <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg">Cancel</button>
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={() => handleSave("OPEN")} disabled={saving} className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors">
+            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors">
               <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Challan"}
             </button>
           </div>
@@ -934,10 +1042,10 @@ export default function DeliveryChallanPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total",    value: stats.total,  color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "Open",     value: stats.open,   color: "text-blue-600",    dot: "bg-blue-500" },
-            { label: "Delivered",value: stats.closed,  color: "text-emerald-600", dot: "bg-emerald-500" },
-            { label: "Drafts",   value: stats.draft,  color: "text-amber-600",   dot: "bg-amber-500" },
+            { label: "Total",      value: stats.total,     color: "text-gray-700",    dot: "bg-gray-400" },
+            { label: "In Transit", value: stats.inTransit, color: "text-blue-600",    dot: "bg-blue-500" },
+            { label: "Delivered",  value: stats.closed,    color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Drafts",     value: stats.draft,     color: "text-amber-600",   dot: "bg-amber-500" },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
@@ -1057,7 +1165,7 @@ export default function DeliveryChallanPage() {
                               Resume
                             </button>
                           )}
-                          {dc.status === "OPEN" && (
+                          {dc.status === "IN_TRANSIT" && (
                             <button
                               onClick={async () => {
                                 if(window.confirm("Confirm delivery? This will add items to the destination inventory.")) {

@@ -8,7 +8,7 @@ import { FileText, Search, RefreshCw, Calendar,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
   AlertTriangle, X } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi } from "@/lib/api";
+import { customersApi, productsFullApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 
@@ -79,6 +79,8 @@ interface LineItem {
   taxPct: number;
   taxLabel: string;
   remarks: string;
+  baseUnit?: any;
+  conversions?: any[];
 }
 
 function makeItem(): LineItem {
@@ -104,6 +106,29 @@ function computeRow(item: LineItem, withTax: boolean) {
   }
   const taxAmt = parseFloat((gross * item.taxPct / 100).toFixed(2));
   return { taxAmt, amount: parseFloat((gross + taxAmt).toFixed(2)) };
+}
+
+// Item Master (InventoryItem) configured UOMs: base unit + any configured conversion units.
+// Falls back to the generic UNITS list when an item has no configured UOMs (e.g. no product selected yet).
+function getUnitOptions(item: LineItem): { code: string; short: string; label: string }[] {
+  const configured: { code: string; short: string; label: string }[] = [];
+  const seen = new Set<string>();
+  const addUnit = (u: any) => {
+    const short = u?.shortName || u?.name;
+    if (!short || seen.has(short)) return;
+    seen.add(short);
+    configured.push({ code: short, short, label: u?.name || short });
+  };
+  if (item.baseUnit) addUnit(item.baseUnit);
+  (item.conversions || []).forEach((c: any) => addUnit(c.unit));
+  return configured.length > 0 ? configured : UNITS;
+}
+
+// GST (same state) vs IGST (inter-state) determination against the company's home state.
+// "GST@..." and "IGST@..." labels are mutually exclusive prefixes, so a plain startsWith is enough.
+function taxOptionsFor(isSameState: boolean) {
+  const prefix = isSameState ? "GST" : "IGST";
+  return TAX_OPTIONS.filter(t => t.label === "NONE" || t.label.startsWith(prefix));
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -141,6 +166,7 @@ export default function SalesOrdersPage() {
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [stateOfSupply, setStateOfSupply] = useState("");
+  const [companyState, setCompanyState] = useState("");
   const [items, setItems] = useState<LineItem[]>([makeItem(), makeItem()]);
   const [priceMode, setPriceMode] = useState<"without_tax" | "with_tax">("without_tax");
   const [paymentType, setPaymentType] = useState("Cash");
@@ -164,10 +190,11 @@ export default function SalesOrdersPage() {
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const [custRes, prodRes, ordRes] = await Promise.allSettled([
+      const [custRes, prodRes, ordRes, companyRes] = await Promise.allSettled([
         customersApi.getAll(),
         productsFullApi.getAll(),
         api.get("/api/sales/orders").catch(() => ({ data: [] })),
+        settingsApi.getCompanyProfile().catch(() => ({ data: null })),
       ]);
 
       let salesOrders = ordRes.status === "fulfilled" ? (ordRes.value as any).data || [] : [];
@@ -188,6 +215,7 @@ export default function SalesOrdersPage() {
       setOrders(salesOrders);
       if (custRes.status === "fulfilled") setCustomers((custRes.value as any).data || []);
       if (prodRes.status === "fulfilled") setProducts((prodRes.value as any).data || []);
+      if (companyRes.status === "fulfilled") setCompanyState((companyRes.value as any).data?.state || "");
     } finally {
       setLoading(false);
     }
@@ -211,6 +239,8 @@ export default function SalesOrdersPage() {
   // ── Auto Computations ────────────────────────────────────────────────────────
 
   const withTax = priceMode === "with_tax";
+  // Same-state supply -> GST, inter-state -> IGST. Unknown state defaults to GST (same-state).
+  const isSameState = !companyState || !stateOfSupply || companyState.trim().toLowerCase() === stateOfSupply.trim().toLowerCase();
   const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
 
   const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
@@ -230,6 +260,17 @@ export default function SalesOrdersPage() {
     }
   }, [view, orders, draftId]);
 
+  // Keep each row's GST/IGST label in sync with the state-of-supply comparison
+  // (the numeric tax % from the Item Master never changes, only the GST/IGST split).
+  useEffect(() => {
+    setItems(prev => prev.map(it => {
+      const opts = taxOptionsFor(isSameState);
+      const match = opts.find(o => o.value === it.taxPct);
+      return match && match.label !== it.taxLabel ? { ...it, taxLabel: match.label } : it;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSameState]);
+
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const selectCustomer = (c: any) => {
@@ -240,15 +281,24 @@ export default function SalesOrdersPage() {
   };
 
   const selectProduct = (idx: number, p: any) => {
+    const taxPct = p.taxPercent || 0;
+    const taxLabel = taxOptionsFor(isSameState).find(o => o.value === taxPct)?.label || "NONE";
+    const baseUnit = p.baseUnit;
+    const conversions = p.conversions || [];
+    const unitOptions = getUnitOptions({ baseUnit, conversions } as LineItem);
+    const defaultUnit = unitOptions === UNITS ? (p.unit || "NONE") : unitOptions[0].code;
+
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
         rate: p.basePrice || p.price || 0,
-        unit: p.unit || "NONE",
-        taxPct: p.taxPercent || 0,
-        taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
+        unit: defaultUnit,
+        taxPct,
+        taxLabel,
+        baseUnit,
+        conversions,
       } : it
     ));
     setOpenItemDrop(null);
@@ -289,6 +339,10 @@ export default function SalesOrdersPage() {
   const handleSave = async (status: "DRAFT" | "OPEN" | "OVERDUE") => {
     if (!selectedCustomer && status !== "DRAFT") {
       showToast("Please select a customer", "error");
+      return;
+    }
+    if (customerPhone && customerPhone.length !== 10 && status !== "DRAFT") {
+      showToast("Enter a valid 10-digit phone number", "error");
       return;
     }
     const validItems = items.filter(it => it.itemSearch.trim() !== "" && it.qty > 0);
@@ -630,9 +684,12 @@ export default function SalesOrdersPage() {
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5">Phone</label>
                   <input
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
-                    placeholder="Phone number"
+                    placeholder="10-digit phone number"
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={customerPhone}
-                    onChange={e => setCustomerPhone(e.target.value)}
+                    onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   />
                 </div>
               </div>
@@ -767,7 +824,7 @@ export default function SalesOrdersPage() {
                           onChange={e => updateItem(idx, "unit", e.target.value)}
                           className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
                         >
-                          {UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
+                          {getUnitOptions(it).map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-2.5">
@@ -788,13 +845,13 @@ export default function SalesOrdersPage() {
                           value={it.taxPct}
                           onChange={e => {
                             const val = Number(e.target.value);
-                            const opt = TAX_OPTIONS.find(x => x.value === val);
+                            const opt = taxOptionsFor(isSameState).find(x => x.value === val);
                             updateItem(idx, "taxPct", val);
                             updateItem(idx, "taxLabel", opt?.label || "NONE");
                           }}
                           className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
                         >
-                          {TAX_OPTIONS.map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
+                          {taxOptionsFor(isSameState).map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
                         </select>
                         <div className="text-[10px] text-right text-gray-400 mt-0.5 font-mono">₹{comp.taxAmt.toFixed(2)}</div>
                       </td>

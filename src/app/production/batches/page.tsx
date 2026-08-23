@@ -123,6 +123,7 @@ function ProductBatchesRegistry() {
     const matchSearch = !search ||
       b.batchCode?.toLowerCase().includes(q) ||
       b.product?.name?.toLowerCase().includes(q) ||
+      b.production?.recipe?.name?.toLowerCase().includes(q) ||
       (b.createdAt && new Date(b.createdAt).toLocaleDateString().includes(q));
     const matchExpiry = expiryFilter === "ALL" || (b.expiryStatus ?? "VALID") === expiryFilter;
     return matchSearch && matchExpiry;
@@ -278,7 +279,7 @@ function ProductBatchesRegistry() {
                     <th className="text-left px-4 py-3">Unit Cost</th>
                     <th className="text-left px-4 py-3">Packed</th>
                     <th className="text-left px-4 py-3">Bulk</th>
-                    <th className="text-left px-4 py-3">Available</th>
+                    <th className="text-left px-4 py-3">Available Packets</th>
                     <th className="text-left px-4 py-3">Expiry</th>
                     <th className="text-center px-4 py-3">Status</th>
                     <th className="text-right px-4 py-3">Actions</th>
@@ -299,20 +300,20 @@ function ProductBatchesRegistry() {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span className="font-medium text-gray-800">
-                            {batch.product?.name ?? "—"}
+                            {batch.product?.name ?? batch.production?.recipe?.name ?? "—"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.quantity} <span className="text-xs text-gray-400">{batch.product?.unit}</span>
+                          {batch.quantity} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
                           {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.packedQuantity || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                          {batch.packedQuantity || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.bulkQuantity || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                          {batch.bulkQuantity || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
                           {batch.availableQuantity || 0} <span className="text-xs text-gray-400">pcs</span>
@@ -407,7 +408,7 @@ function ProductBatchesRegistry() {
                 <div className="flex justify-between items-end mb-4">
                   <div>
                     <p className="text-xs text-gray-500">Product</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBatch.product?.name}</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBatch.product?.name ?? selectedBatch.production?.recipe?.name ?? "—"}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500">Recipe Version</p>
@@ -474,10 +475,10 @@ function ProductBatchesRegistry() {
               {/* Yield & Cost */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Production Yield &amp; Cost</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-gray-500">Produced</p>
-                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatch.product?.unit || "KG"}</span></p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatch.production?.recipe?.yieldUnit || "KG"}</span></p>
                   </div>
                   <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-gray-500">Approved / Rejected</p>
@@ -490,6 +491,11 @@ function ProductBatchesRegistry() {
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-emerald-600 font-semibold">Unit Cost</p>
                     <p className="text-base font-bold text-emerald-700 mt-1 tabular-nums">₹{(selectedBatch.unitCost ?? 0).toFixed(2)}</p>
+                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-rose-600 font-semibold">QC Wastage Cost</p>
+                    <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">₹{((selectedBatch.rejectionQty ?? 0) * (selectedBatch.unitCost ?? 0)).toFixed(2)}</p>
+                    <p className="text-[11px] text-rose-400 mt-0.5">{selectedBatch.rejectionQty ?? 0} {selectedBatch.production?.recipe?.yieldUnit || "KG"} rejected</p>
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">

@@ -29,7 +29,7 @@ export default function TransitStockPage() {
   const fetchTransitStock = async () => {
     setLoading(true);
     try {
-      const res = await salesApi.getDeliveryChallans({ status: "OPEN" });
+      const res = await salesApi.getDeliveryChallans({ status: "IN_TRANSIT" });
       const challans = (res as any).data || [];
 
       const flatItems: TransitItem[] = [];
@@ -163,7 +163,7 @@ export default function TransitStockPage() {
                       </td>
                       <td className="px-5 py-3">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase bg-blue-50 text-blue-600 border border-blue-200">
-                          {item.status === 'OPEN' ? 'IN TRANSIT' : item.status}
+                          {item.status === 'IN_TRANSIT' || item.status === 'OPEN' ? 'IN TRANSIT' : item.status}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-center">

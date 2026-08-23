@@ -14,11 +14,12 @@ interface ProductBatch {
   id: string;
   batchCode: string;
   quantity: number;
-  approvedQty: number;
-  packagedQty: number;
+  approvedQty: number | null;
+  packagedQty: number | null;
   qcStatus: string;
   packagingStatus: string;
   expiryDate: string;
+  recall?: { status: string } | null;
   product: {
     name: string;
     sku: string;
@@ -26,11 +27,36 @@ interface ProductBatch {
   };
 }
 
-const QC_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  APPROVED: { label: "Pass", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  REJECTED: { label: "Fail", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },
-};
-const DEFAULT_QC_BADGE = { label: "Hold (QC)", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" };
+// Derive a human-readable packaging status label and styling for a batch.
+// Priority: recalled > fully packaged > QC not eligible > ready
+function getPackagingBadge(batch: ProductBatch): { label: string; color: string; bg: string; border: string } {
+  const isRecalled = batch.recall?.status === 'IN_PROGRESS';
+  if (isRecalled) {
+    return { label: 'Recalled — Packaging Blocked', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
+  }
+
+  const approvedQty = batch.approvedQty ?? 0;
+  const packagedQty = batch.packagedQty ?? 0;
+  const remaining = approvedQty - packagedQty;
+  const isEligibleQcStatus = batch.qcStatus === 'APPROVED' || batch.qcStatus === 'PARTIALLY_APPROVED';
+
+  if (!isEligibleQcStatus) {
+    if (batch.qcStatus === 'REJECTED') {
+      return { label: 'QC Rejected', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' };
+    }
+    return { label: 'Pending QC', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' };
+  }
+
+  if (remaining <= 0.001) {
+    return { label: 'Fully Packaged', color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200' };
+  }
+
+  if (batch.qcStatus === 'PARTIALLY_APPROVED') {
+    return { label: 'Partially Approved — Ready to Package', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+  }
+
+  return { label: 'Ready to Package', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' };
+}
 
 export default function PackagingQueuePage() {
   const [batches, setBatches] = useState<ProductBatch[]>([]);
@@ -91,7 +117,11 @@ export default function PackagingQueuePage() {
 
   const unitMultiplier = parseWeight(packetSize);
   const totalWeightNeeded = quantityPackets * unitMultiplier;
-  const availableBulk = selectedBatch ? selectedBatch.quantity - (selectedBatch.packagedQty || 0) : 0;
+  // IMPORTANT: approvedQty is the ceiling for packaging — never total produced quantity.
+  // This ensures rejected QC quantities never become packagable.
+  const availableBulk = selectedBatch
+    ? Math.max(0, (selectedBatch.approvedQty ?? 0) - (selectedBatch.packagedQty || 0))
+    : 0;
   const maxPackets = unitMultiplier > 0 ? Math.floor(availableBulk / unitMultiplier) : 0;
   const bulkRemaining = availableBulk - totalWeightNeeded;
 
@@ -193,16 +223,21 @@ export default function PackagingQueuePage() {
                         <th className="text-center px-4 py-3">QC Status</th>
                         <th className="text-right px-4 py-3">Yield Qty</th>
                         <th className="text-right px-4 py-3">Packaged Qty</th>
+                        <th className="text-right px-4 py-3">Balance Qty</th>
                         <th className="text-center px-4 py-3">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredBatches.map((batch) => {
-                        const isApproved = batch.qcStatus === "APPROVED";
-                        const badge = QC_BADGE[batch.qcStatus] || DEFAULT_QC_BADGE;
-                        const isFullyPackaged = batch.packagingStatus === "PACKAGED" || 
-                                                (batch.packagedQty !== undefined && batch.approvedQty !== undefined && batch.packagedQty >= batch.approvedQty) ||
-                                                ((batch.approvedQty || 0) - (batch.packagedQty || 0)) <= 0.001;
+                        const badge = getPackagingBadge(batch);
+                        const isRecalled = batch.recall?.status === 'IN_PROGRESS';
+                        const isEligibleQcStatus = batch.qcStatus === 'APPROVED' || batch.qcStatus === 'PARTIALLY_APPROVED';
+                        // Use approvedQty as the ceiling — rejected quantity must never be exposed
+                        const approvedQty = batch.approvedQty ?? 0;
+                        const packagedQty = batch.packagedQty ?? 0;
+                        const balanceQty = Math.max(0, approvedQty - packagedQty);
+                        const isFullyPackaged = batch.packagingStatus === 'PACKAGED' || balanceQty <= 0.001;
+                        const canPackage = isEligibleQcStatus && !isRecalled && !isFullyPackaged;
 
                         return (
                           <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
@@ -220,19 +255,26 @@ export default function PackagingQueuePage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700">
-                              {batch.quantity} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                              {approvedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700">
-                              {batch.packagedQty || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                              {packagedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-800">
+                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 font-normal">{batch.product?.unit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
                               {isFullyPackaged ? (
                                 <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
                                   Completed
                                 </span>
+                              ) : isRecalled ? (
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200">
+                                  Recalled
+                                </span>
                               ) : (
                                 <button
-                                  disabled={!isApproved}
+                                  disabled={!canPackage}
                                   onClick={() => {
                                     setSelectedBatch(batch);
                                     setPacketSize("");
@@ -256,11 +298,14 @@ export default function PackagingQueuePage() {
 
           {/* Right 1 Column: Conversion form panel */}
           <div className="lg:col-span-1">
-            {selectedBatch && !(
-              selectedBatch.packagingStatus === 'PACKAGED' || 
-              (selectedBatch.packagedQty !== undefined && selectedBatch.approvedQty !== undefined && selectedBatch.packagedQty >= selectedBatch.approvedQty) ||
-              ((selectedBatch.approvedQty || 0) - (selectedBatch.packagedQty || 0)) <= 0.001
-            ) ? (
+            {selectedBatch && (() => {
+              const isRecalled = selectedBatch.recall?.status === 'IN_PROGRESS';
+              const approvedQty = selectedBatch.approvedQty ?? 0;
+              const packagedQty = selectedBatch.packagedQty ?? 0;
+              const remaining = approvedQty - packagedQty;
+              const isFormEligible = !isRecalled && remaining > 0.001;
+              return isFormEligible;
+            })() ? (
               <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
                 <div className="flex justify-between items-start border-b border-gray-100 pb-3">
                   <div>
@@ -280,7 +325,8 @@ export default function PackagingQueuePage() {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Available approved bulk</span>
-                    <span className="text-gray-800 font-semibold">{selectedBatch.quantity - (selectedBatch.packagedQty || 0)} {selectedBatch.product?.unit || "KG"}</span>
+                    {/* approvedQty minus already packaged — never total produced quantity */}
+                    <span className="text-gray-800 font-semibold">{availableBulk} {selectedBatch.product?.unit || 'KG'}</span>
                   </div>
 
                   <div>
@@ -349,11 +395,11 @@ export default function PackagingQueuePage() {
 
                   <button
                     onClick={handlePackageRun}
-                    disabled={submitting || !packetSize || totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0))}
+                    disabled={submitting || !packetSize || totalWeightNeeded > availableBulk}
                     className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
-                    Package & Generate Labels
+                    Package &amp; Generate Labels
                   </button>
 
                   {!packetSize && (
@@ -363,7 +409,7 @@ export default function PackagingQueuePage() {
                     </div>
                   )}
 
-                  {packetSize && totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0)) && (
+                  {packetSize && totalWeightNeeded > availableBulk && (
                     <div className="flex gap-2 text-xs text-rose-600 font-medium p-2.5 border border-rose-200 bg-rose-50 rounded-lg">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       <span>Insufficient bulk stock to fulfill this quantity of packs.</span>

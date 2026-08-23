@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight, Printer, AlertCircle, AlertTriangle, CheckCircle2,
-  RefreshCw, ChefHat, Database, Pencil, Check, Plus, Warehouse, X, ShoppingCart
+  RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart
 } from "lucide-react";
 import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { UNITS } from "@/lib/constants";
 
 interface RecipeItem {
   id: string;
@@ -40,8 +41,6 @@ export default function ProductionPlanningPage() {
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [targetYield, setTargetYield] = useState<number>(0);
   const [targetUnit, setTargetUnit] = useState<string>("");
-  const [isEditingUnit, setIsEditingUnit] = useState(false);
-  const unitInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [stockLoading, setStockLoading] = useState(false);
   const [warehouseStock, setWarehouseStock] = useState<any[]>([]);
@@ -111,17 +110,7 @@ export default function ProductionPlanningPage() {
     if (found) {
       setTargetYield(found.yieldQty || 100);
       setTargetUnit(found.yieldUnit || "kg");
-      setIsEditingUnit(false);
     }
-  };
-
-  const handleUnitEditToggle = () => {
-    setIsEditingUnit(true);
-    setTimeout(() => unitInputRef.current?.focus(), 50);
-  };
-
-  const handleUnitConfirm = () => {
-    setIsEditingUnit(false);
   };
 
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYield / recipe.yieldQty : 1;
@@ -317,34 +306,16 @@ export default function ProductionPlanningPage() {
                 className="w-full bg-white border border-gray-200 text-gray-800 rounded-lg pl-3 pr-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
               />
             </div>
-            {isEditingUnit ? (
-              <div className="flex items-center gap-1">
-                <input
-                  ref={unitInputRef}
-                  type="text"
-                  value={targetUnit}
-                  onChange={(e) => setTargetUnit(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleUnitConfirm()}
-                  className="w-16 border border-[#f58220] rounded-md px-2 py-1.5 text-xs font-bold text-center text-gray-800 focus:outline-none"
-                />
-                <button
-                  onClick={handleUnitConfirm}
-                  title="Confirm unit"
-                  className="p-1.5 rounded-md bg-[#F97316] text-white hover:bg-orange-600 transition-colors"
-                >
-                  <Check size={12} />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleUnitEditToggle}
-                title="Edit unit"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-orange-50 border border-orange-200 text-[#F97316] hover:bg-orange-100 transition-colors group"
-              >
-                <span className="text-xs font-bold uppercase">{targetUnit || recipe?.yieldUnit || "Unit"}</span>
-                <Pencil size={10} className="opacity-60 group-hover:opacity-100 transition-opacity" />
-              </button>
-            )}
+            <select
+              value={targetUnit || recipe?.yieldUnit || "kg"}
+              onChange={(e) => setTargetUnit(e.target.value)}
+              title="Unit"
+              className="px-3 py-2 rounded-md bg-orange-50 border border-orange-200 text-[#F97316] text-xs font-bold uppercase focus:outline-none focus:border-[#f58220]"
+            >
+              {UNITS.map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
           </div>
         </div>
 

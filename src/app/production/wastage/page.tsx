@@ -15,6 +15,7 @@ interface WasteEntry {
   quantity: number;
   reason: string;
   note?: string;
+  costAtTime?: number;
   createdAt: string;
   inventoryItem: {
     name: string;
@@ -400,8 +401,13 @@ export default function WastagePage() {
                                 {log.reason}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-rose-600">
-                              -{log.quantity} <span className="text-xs text-gray-400">{log.inventoryItem?.unit}</span>
+                            <td className="px-4 py-3 text-right">
+                              <div className="font-semibold text-rose-600">
+                                -{log.quantity} <span className="text-xs text-gray-400">{log.inventoryItem?.unit}</span>
+                              </div>
+                              {typeof log.costAtTime === "number" && (
+                                <div className="text-xs text-gray-400 mt-0.5">Cost: ₹{log.costAtTime.toFixed(2)}</div>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <div className="text-gray-700">{log.note || 'N/A'}</div>

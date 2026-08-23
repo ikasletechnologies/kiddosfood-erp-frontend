@@ -588,6 +588,46 @@ export default function BatchRecallPage() {
                     </div>
                   )}
 
+                  {/* Recall Summary — restates the same eligibility/recall figures already
+                      shown above as a single non-additive breakdown, so the three audit-log
+                      quantities (quarantined / distributed / re-confirmed) can't be misread
+                      as summing to more stock than was ever approved. */}
+                  {recall && eligibility && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recall Summary</h4>
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg divide-y divide-gray-200">
+                        <div className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-xs text-gray-500">Approved Batch</span>
+                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.approvedQty} {eligibility.batch.unit}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
+                          <span className="text-xs text-gray-500">At Warehouse</span>
+                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.availableQty} {eligibility.batch.unit}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
+                          <span className="text-xs text-gray-500">Distributed</span>
+                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.distributedQty} {eligibility.batch.unit}</span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
+                          <span className="text-xs text-gray-500">Returned</span>
+                          <span className="text-sm font-semibold text-gray-800">
+                            {recall.returnedQty} / {recall.distributedQty} {eligibility.batch.unit}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-xs text-gray-500">Rejected in QC</span>
+                          <span className="text-sm font-semibold text-gray-800">
+                            {eligibility.batch.rejectedQty} {eligibility.batch.unit}
+                            <span className="ml-2 text-[10px] font-medium text-gray-400 uppercase">Not part of recall</span>
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-gray-400">
+                        "At Warehouse" and "Distributed" split the Approved Batch quantity — they add up to it, they don't add on top of it.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Collect Returned Stock — needs real user input, not auto-run */}
                   {isActive && (recall!.step === "REPORT_GENERATED" || recall!.step === "RETURN_COLLECTED") && pendingReturnQty > 0.001 && (
                     <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">

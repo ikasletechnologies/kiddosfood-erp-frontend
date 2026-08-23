@@ -17,10 +17,10 @@ import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
 import BranchStockDrawer from "./BranchStockDrawer";
 
-const HQ_FRANCHISE_ID = "hq-001";
+// HQ is now the explicit Franchise.isHQ field, not an id/name guess — a
+// franchise named anything (e.g. "Default") is HQ iff isHQ is true.
 const isHqFranchise = (franchiseId: string | undefined, franchises: any[]) =>
-  franchiseId === HQ_FRANCHISE_ID ||
-  !!franchises.find((f) => f.id === franchiseId)?.name?.toUpperCase().includes("HEADQUARTERS");
+  !!franchises.find((f) => f.id === franchiseId)?.isHQ;
 
 // Product (the recipe/catalog master) and InventoryItem (the actual stock
 // ledger, credited by packaging/production) aren't linked by a foreign key.
