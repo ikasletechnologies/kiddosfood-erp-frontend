@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
-import { Building2, Search, Filter, Plus, Edit2, CheckCircle2, AlertTriangle, Layers, MapPin, Package, X } from 'lucide-react';
+import { useEffect, useState, useMemo, Fragment } from 'react';
+import { Building2, Search, Filter, Plus, Edit2, CheckCircle2, AlertTriangle, Layers, MapPin, Package, X, ChevronRight, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { WarehouseApi, Warehouse, WarehouseStockItem, WarehouseBin, WarehouseListItem } from '@/lib/api/warehouse.api';
 import { inventoryApi, franchiseApi } from '@/lib/api';
@@ -32,6 +32,19 @@ export default function WarehousePage() {
   const [showManageBins, setShowManageBins] = useState(false);
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
   const [assignBinItem, setAssignBinItem] = useState<WarehouseStockItem | null>(null);
+
+  // Which item rows are expanded to show their batch/bin breakdown. The
+  // table's primary row is the net physical qty per item (summed across all
+  // its batch+bin rows) — drilling in shows the underlying lots, same idea
+  // as the ingredient-cost breakdown on the Batch Manufacturing detail view.
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const toggleExpanded = (itemId: string) => {
+    setExpandedItems(prev => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId); else next.add(itemId);
+      return next;
+    });
+  };
 
   const loadWarehouseList = async () => {
     try {
@@ -126,6 +139,35 @@ export default function WarehousePage() {
   const statuses = useMemo(() => Array.from(new Set(stock.map(s => s.status))), [stock]);
   const occupiedBins = useMemo(() => new Set(stock.filter(s => s.binId).map(s => s.binId)).size, [stock]);
   const availableBins = (warehouse?.bins.length || 0) - occupiedBins;
+  const totalDistinctItems = useMemo(() => new Set(stock.map(s => s.itemId)).size, [stock]);
+
+  // Net physical balance per item, rolled up across every batch/bin row —
+  // this is what "what's physically here" means: summing across all of an
+  // item's rows cancels out correctly even when an individual movement's
+  // batchId doesn't line up with the lot it originally came from (FIFO
+  // consumption spanning multiple lots leaves batchId null on that
+  // movement). The per-batch/bin rows are kept underneath as the drill-down.
+  type ItemGroup = {
+    itemId: string;
+    itemName: string;
+    itemSku: string;
+    unit: string;
+    totalBalance: number;
+    rows: WarehouseStockItem[];
+  };
+  const groupedStock = useMemo<ItemGroup[]>(() => {
+    const map = new Map<string, ItemGroup>();
+    for (const s of filteredStock) {
+      let g = map.get(s.itemId);
+      if (!g) {
+        g = { itemId: s.itemId, itemName: s.itemName, itemSku: s.itemSku, unit: s.unit, totalBalance: 0, rows: [] };
+        map.set(s.itemId, g);
+      }
+      g.totalBalance += s.balance;
+      g.rows.push(s);
+    }
+    return Array.from(map.values()).sort((a, b) => a.itemName.localeCompare(b.itemName));
+  }, [filteredStock]);
 
   const noWarehousesAtAll = listLoaded && warehouseList.length === 0;
 
@@ -207,7 +249,7 @@ export default function WarehousePage() {
           <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Total Items</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stock.length}</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{totalDistinctItems}</p>
             </div>
             <div className="h-12 w-12 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600">
               <Package className="h-6 w-6" />
@@ -285,54 +327,94 @@ export default function WarehousePage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">Loading...</td></tr>
-                ) : filteredStock.length === 0 ? (
+                ) : groupedStock.length === 0 ? (
                   <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">No stock found matching filters.</td></tr>
                 ) : (
-                  filteredStock.map((s, idx) => (
-                    <tr key={`${s.itemId}-${s.batchId}-${s.binId}-${idx}`} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{s.itemName}</div>
-                        <div className="text-xs text-gray-500">{s.itemSku}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {s.batchCode}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {s.binId ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {s.binCode}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-dashed border-gray-300">
-                            Not Assigned
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
-                        {s.balance.toLocaleString()} {s.unit}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={clsx(
-                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
-                          s.status === 'READY' || s.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-800' :
-                          s.status === 'QC_HOLD' ? 'bg-amber-100 text-amber-800' :
-                          'bg-rose-100 text-rose-800'
-                        )}>
-                          {s.status.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {!s.binId && (
-                          <button
-                            onClick={() => setAssignBinItem(s)}
-                            className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors"
-                          >
-                            Assign Bin
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                  groupedStock.map((g) => {
+                    const isExpanded = expandedItems.has(g.itemId);
+                    const binCount = new Set(g.rows.filter(r => r.binId).map(r => r.binId)).size;
+                    return (
+                      <Fragment key={g.itemId}>
+                        <tr
+                          className="hover:bg-gray-50 transition-colors cursor-pointer"
+                          onClick={() => toggleExpanded(g.itemId)}
+                        >
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{g.itemName}</div>
+                                <div className="text-xs text-gray-500">{g.itemSku}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {g.rows.length} {g.rows.length === 1 ? 'lot' : 'lots'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {binCount > 0 ? `${binCount} bin${binCount === 1 ? '' : 's'}` : (
+                              <span className="text-gray-400">Not Assigned</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 text-right font-semibold">
+                            {g.totalBalance.toLocaleString()} {g.unit}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-400">
+                            {g.rows.length > 1 ? 'Mixed' : g.rows[0].status.replace('_', ' ')}
+                          </td>
+                          <td className="px-6 py-4" />
+                        </tr>
+                        {isExpanded && g.rows.map((s, idx) => (
+                          <tr key={`${s.itemId}-${s.batchId}-${s.binId}-${idx}`} className="bg-gray-50/60 hover:bg-gray-100 transition-colors">
+                            <td className="pl-14 pr-6 py-3 whitespace-nowrap text-xs text-gray-400">
+                              {/* Item identity already shown on the parent row */}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">
+                              {s.batchCode}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap">
+                              {s.binId ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {s.binCode}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-dashed border-gray-300">
+                                  Not Assigned
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 text-right font-medium">
+                              {s.balance.toLocaleString()} {s.unit}
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap">
+                              <span className={clsx(
+                                "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+                                s.status === 'READY' || s.status === 'AVAILABLE' ? 'bg-emerald-100 text-emerald-800' :
+                                s.status === 'QC_HOLD' ? 'bg-amber-100 text-amber-800' :
+                                'bg-rose-100 text-rose-800'
+                              )}>
+                                {s.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
+                              {!s.binId && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setAssignBinItem(s); }}
+                                  className="text-blue-600 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1 rounded-md transition-colors"
+                                >
+                                  Assign Bin
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })
                 )}
               </tbody>
             </table>

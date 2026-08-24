@@ -353,6 +353,12 @@ export default function FinishedGoodsStockClient() {
   const hqAvailableByUnit = sumByUnit((i) => i.hqAvailableStock);
   const pendingByUnit = sumByUnit((i) => i.pendingDemandQuantity);
   const readySkuCount = demandItems.filter((i) => i.hqAvailableStock > 0).length;
+
+  // There are no branches yet — Stock Hub stays HQ-focused until a real
+  // branch/stock-transfer scenario actually produces branch stock. Keyed off
+  // real data (not a franchise count or a manual flag) so this self-reveals
+  // the moment a transfer lands, with no further code change needed.
+  const hasAnyBranchHoldings = demandItems.some((i) => i.totalFranchiseAvailableStock > 0);
   const stats = {
     totalProducts: demandItems.length,
     hqAvailableNode: renderByUnit(hqAvailableByUnit),
@@ -535,12 +541,14 @@ export default function FinishedGoodsStockClient() {
 
                       {/* Stock Summary Matrix */}
                       <div className="mt-5 space-y-2.5">
-                        <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50 dark:border-white/[0.03]">
-                          <span className="text-slate-400 font-bold">Current Branch Stock:</span>
-                          <span className="font-black text-slate-900 dark:text-white">
-                            {item.totalFranchiseAvailableStock} {item.unit}
-                          </span>
-                        </div>
+                        {hasAnyBranchHoldings && (
+                          <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50 dark:border-white/[0.03]">
+                            <span className="text-slate-400 font-bold">Current Branch Stock:</span>
+                            <span className="font-black text-slate-900 dark:text-white">
+                              {item.totalFranchiseAvailableStock} {item.unit}
+                            </span>
+                          </div>
+                        )}
 
                         <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                           <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
@@ -612,13 +620,15 @@ export default function FinishedGoodsStockClient() {
                           <Send size={14} /> Review Request ({item.demandRecords.length})
                         </button>
 
-                        <button
-                          onClick={() => setSelectedBranchProduct(item)}
-                          className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
-                          title="View Multi-Branch Stock Holdings"
-                        >
-                          <Building2 size={15} />
-                        </button>
+                        {hasAnyBranchHoldings && (
+                          <button
+                            onClick={() => setSelectedBranchProduct(item)}
+                            className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                            title="View Multi-Branch Stock Holdings"
+                          >
+                            <Building2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -636,12 +646,12 @@ export default function FinishedGoodsStockClient() {
             <table className="w-full text-left table-fixed">
               <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs font-semibold uppercase tracking-wider">
                 <tr>
-                  <th className="w-[26%] px-6 py-4">Finished Product Specification</th>
-                  <th className="w-[14%] px-6 py-4 text-center">HQ Available</th>
-                  <th className="w-[14%] px-6 py-4 text-center">HQ Reserved</th>
-                  <th className="w-[14%] px-6 py-4 text-center">In-Transit</th>
-                  <th className="w-[16%] px-6 py-4 text-center">Branch Holdings</th>
-                  <th className="w-[16%] px-6 py-4 text-right">Franchise Demand</th>
+                  <th className={clsx("px-6 py-4", hasAnyBranchHoldings ? "w-[26%]" : "w-[30%]")}>Finished Product Specification</th>
+                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>HQ Available</th>
+                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>HQ Reserved</th>
+                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>In-Transit</th>
+                  {hasAnyBranchHoldings && <th className="w-[16%] px-6 py-4 text-center">Branch Holdings</th>}
+                  <th className={clsx("px-6 py-4 text-right", hasAnyBranchHoldings ? "w-[16%]" : "w-[25%]")}>Franchise Demand</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -675,15 +685,17 @@ export default function FinishedGoodsStockClient() {
                       {item.inTransitStock} <span className="text-[10px] font-normal">{item.unit}</span>
                     </td>
 
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => setSelectedBranchProduct(item)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-55 dark:bg-white/5 hover:bg-slate-100 rounded-lg text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
-                      >
-                        <Building2 size={13} className="text-slate-400" />
-                        {item.totalFranchiseAvailableStock} {item.unit}
-                      </button>
-                    </td>
+                    {hasAnyBranchHoldings && (
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          onClick={() => setSelectedBranchProduct(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-55 dark:bg-white/5 hover:bg-slate-100 rounded-lg text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
+                        >
+                          <Building2 size={13} className="text-slate-400" />
+                          {item.totalFranchiseAvailableStock} {item.unit}
+                        </button>
+                      </td>
+                    )}
 
                     <td className="px-6 py-4 text-right">
                       {item.pendingDemandQuantity > 0 ? (

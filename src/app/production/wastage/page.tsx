@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { X,
   Trash2, Plus, RefreshCw, Calendar,
-  Search, ShieldAlert, FileText
+  Search, ShieldAlert, FileText, Pencil
 } from "lucide-react";
 import { clsx } from "clsx";
 import { wasteApi, inventoryApi, franchiseApi } from "@/lib/api";
@@ -37,9 +37,14 @@ const DEFAULT_REASON_STYLE = { color: "text-gray-600", bg: "bg-gray-50", border:
 
 export default function WastagePage() {
   const [wasteLogs, setWasteLogs] = useState<WasteEntry[]>([]);
-  const [franchises, setFranchises] = useState<any[]>([]);
-  const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
+  // Every selectable warehouse (SUPER_ADMIN sees all, FRANCHISE_ADMIN sees
+  // just their own) — Wastage's filter mirrors the Warehouse page's own
+  // warehouse-based selector, since "where did this waste happen" is a
+  // location question, not a franchise one. Each entry carries franchiseId
+  // so franchise-scoped calls (item picker, wasteApi.create) can still
+  // derive it without a separate franchise selector.
   const [warehouses, setWarehouses] = useState<any[]>([]);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [inventoryItems, setInventoryItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -55,6 +60,34 @@ export default function WastagePage() {
     note: ""
   });
 
+  // Edit Form State — reason/note only. Quantity already moved real stock
+  // (WASTE_OUT) at creation time, so it isn't editable from here.
+  const [editingLog, setEditingLog] = useState<WasteEntry | null>(null);
+  const [editReason, setEditReason] = useState("SPOILAGE");
+  const [editNote, setEditNote] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
+  const openEdit = (log: WasteEntry) => {
+    setEditingLog(log);
+    setEditReason(log.reason);
+    setEditNote(log.note || "");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingLog) return;
+    setEditSubmitting(true);
+    try {
+      await wasteApi.update(editingLog.id, { reason: editReason, note: editNote });
+      toast.success("Wastage log updated");
+      setEditingLog(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to update wastage log");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     async function initData() {
       try {
@@ -62,18 +95,17 @@ export default function WastagePage() {
           franchiseApi.getAll(),
           inventoryApi.getWarehouses()
         ]);
-        const franchiseList = fRes.data || [];
-        setFranchises(franchiseList);
-        setWarehouses(wRes.data || []);
-        if (franchiseList.length > 0) {
-          // Deterministic default: open at HQ if one is configured, rather
-          // than whichever franchise the DB happened to return first.
-          const hq = franchiseList.find((f: any) => f.isHQ);
-          const fallback = [...franchiseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
-          setSelectedFranchiseId((hq || fallback).id);
-        }
-        if (wRes.data?.length > 0) {
-          setFormData(prev => ({ ...prev, warehouseId: wRes.data[0].id }));
+        const warehouseList = wRes.data || [];
+        setWarehouses(warehouseList);
+        if (warehouseList.length > 0) {
+          // Deterministic default: HQ's warehouse if resolvable via
+          // Franchise.isHQ, otherwise alphabetically-first — same rule the
+          // Warehouse page uses, so both screens default consistently.
+          const franchiseList = fRes.data || [];
+          const hqFranchise = franchiseList.find((f: any) => f.isHQ);
+          const hqWarehouse = hqFranchise ? warehouseList.find((w: any) => w.franchiseId === hqFranchise.id) : undefined;
+          const fallback = [...warehouseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setSelectedWarehouseId((hqWarehouse || fallback).id);
         }
       } catch (err) {
         toast.error("Failed to load initial data");
@@ -82,8 +114,8 @@ export default function WastagePage() {
     initData();
   }, []);
 
-  const loadInventoryForWarehouse = async (warehouseId: string, franchiseId: string) => {
-    if (!warehouseId || !franchiseId) return;
+  const loadInventoryForWarehouse = async (warehouseId: string, franchiseId?: string) => {
+    if (!warehouseId) return;
     try {
       const res = await inventoryApi.getRawMaterialStockSummary(warehouseId, franchiseId, 'ALL');
       setInventoryItems(res.data || []);
@@ -98,20 +130,11 @@ export default function WastagePage() {
   };
 
   const loadData = async () => {
-    if (!selectedFranchiseId) return;
+    if (!selectedWarehouseId) return;
     setLoading(true);
     try {
-      const [wRes, iRes] = await Promise.all([
-        wasteApi.getAll({ franchiseId: selectedFranchiseId }),
-        formData.warehouseId 
-          ? inventoryApi.getRawMaterialStockSummary(formData.warehouseId, selectedFranchiseId, 'ALL')
-          : Promise.resolve({ data: [] })
-      ]);
+      const wRes = await wasteApi.getAll({ warehouseId: selectedWarehouseId });
       setWasteLogs(wRes.data || []);
-      setInventoryItems(iRes.data || []);
-      if (iRes.data?.length > 0 && !formData.itemId) {
-        setFormData(prev => ({ ...prev, itemId: iRes.data[0].id }));
-      }
     } catch (err) {
       toast.error("Failed to fetch wastage logs");
     } finally {
@@ -121,23 +144,20 @@ export default function WastagePage() {
 
   useEffect(() => {
     loadData();
-  }, [selectedFranchiseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWarehouseId]);
 
   // Keep the Log Spoilage warehouse/item picker in step with the selected
-  // location — previously it stayed frozen on whichever warehouse loaded
-  // first at mount (effectively always HQ's), so switching the top location
-  // filter to another branch never updated what Log Spoilage let you log
-  // against.
+  // warehouse — previously it stayed frozen on whichever warehouse loaded
+  // first at mount, so switching the top filter never updated what Log
+  // Spoilage let you log against.
   useEffect(() => {
-    if (!selectedFranchiseId || warehouses.length === 0) return;
-    const franchise = franchises.find((f: any) => f.id === selectedFranchiseId);
-    const targetWarehouseId = franchise?.primaryWarehouseId && warehouses.some((w: any) => w.id === franchise.primaryWarehouseId)
-      ? franchise.primaryWarehouseId
-      : warehouses[0].id;
-    setFormData(prev => ({ ...prev, warehouseId: targetWarehouseId, itemId: "" }));
-    loadInventoryForWarehouse(targetWarehouseId, selectedFranchiseId);
+    if (!selectedWarehouseId || warehouses.length === 0) return;
+    const wh = warehouses.find((w: any) => w.id === selectedWarehouseId);
+    setFormData(prev => ({ ...prev, warehouseId: selectedWarehouseId, itemId: "" }));
+    loadInventoryForWarehouse(selectedWarehouseId, wh?.franchiseId || undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedFranchiseId, warehouses, franchises]);
+  }, [selectedWarehouseId, warehouses]);
 
   const handleSubmitWaste = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,12 +183,13 @@ export default function WastagePage() {
 
     setSubmitting(true);
     try {
+      const wh = warehouses.find((w: any) => w.id === formData.warehouseId);
       await wasteApi.create({
         itemId: formData.itemId,
         quantity: Number(formData.quantity),
         reason: formData.reason,
         note: formData.note,
-        franchiseId: selectedFranchiseId,
+        franchiseId: wh?.franchiseId || undefined,
         warehouseId: formData.warehouseId
       });
       toast.success("Wastage logged successfully");
@@ -206,13 +227,13 @@ export default function WastagePage() {
 
         <div className="flex items-center gap-2">
           <select
-            value={selectedFranchiseId}
-            onChange={(e) => setSelectedFranchiseId(e.target.value)}
+            value={selectedWarehouseId}
+            onChange={(e) => setSelectedWarehouseId(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 outline-none focus:border-[#f58220]"
           >
-            {franchises.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
+            {warehouses.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}{w.franchiseName ? ` — ${w.franchiseName}` : ''}
               </option>
             ))}
           </select>
@@ -276,8 +297,9 @@ export default function WastagePage() {
                       value={formData.warehouseId}
                       onChange={(e) => {
                         const wId = e.target.value;
+                        const wh = warehouses.find((w: any) => w.id === wId);
                         setFormData(prev => ({ ...prev, warehouseId: wId, itemId: "" }));
-                        loadInventoryForWarehouse(wId, selectedFranchiseId);
+                        loadInventoryForWarehouse(wId, wh?.franchiseId || undefined);
                       }}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
                     >
@@ -402,6 +424,7 @@ export default function WastagePage() {
                         <th className="text-center px-4 py-3">Reason</th>
                         <th className="text-right px-4 py-3">Qty Loss</th>
                         <th className="text-left px-4 py-3">Notes / Date</th>
+                        <th className="text-center px-4 py-3">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -437,6 +460,15 @@ export default function WastagePage() {
                                 {format(new Date(log.createdAt), 'dd MMM yyyy HH:mm')}
                               </div>
                             </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => openEdit(log)}
+                                title="Edit reason / notes"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 hover:text-[#f58220] border border-gray-200 hover:border-orange-200 rounded-lg transition-colors"
+                              >
+                                <Pencil className="h-3 w-3" /> Edit
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -449,6 +481,63 @@ export default function WastagePage() {
 
         </div>
       </div>
+
+      {/* Edit Wastage Log Modal — reason/note only, see openEdit/handleSaveEdit */}
+      {editingLog && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 w-full max-w-sm space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Edit Wastage Log</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{editingLog.inventoryItem?.name}</p>
+              </div>
+              <button
+                onClick={() => setEditingLog(null)}
+                className="text-xs font-semibold text-gray-400 hover:text-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Wastage Reason</label>
+              <select
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+              >
+                <option value="SPOILAGE">Spoilage & Rotting</option>
+                <option value="DAMAGED">Damaged in House</option>
+                <option value="QC_FAIL">Failed QC Inspection</option>
+                <option value="EXPIRED">Expired Shelf Life</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1.5">Remarks / Notes</label>
+              <input
+                type="text"
+                value={editNote}
+                onChange={(e) => setEditNote(e.target.value)}
+                placeholder="Enter reason details..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+              />
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              Quantity can't be changed here — it already deducted real stock when this entry was logged.
+            </p>
+
+            <button
+              onClick={handleSaveEdit}
+              disabled={editSubmitting}
+              className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-60"
+            >
+              {editSubmitting ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

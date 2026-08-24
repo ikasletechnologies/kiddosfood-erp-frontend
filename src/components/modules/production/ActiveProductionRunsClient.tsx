@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText } from "lucide-react";
+import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText, CalendarClock } from "lucide-react";
 import { productionApi, inventoryApi } from "@/lib/api";
 import { formatERPNumber } from "@/lib/utils";
 import { toast } from "react-hot-toast";
@@ -59,6 +59,7 @@ export default function ActiveProductionRunsClient() {
   const [batchToApprove, setBatchToApprove] = useState<any | null>(null);
   const [actualYield, setActualYield] = useState<number>(0);
   const [remarks, setRemarks] = useState<string>("");
+  const [expiryDate, setExpiryDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   // Stock the shortage check compares against, scoped to whichever warehouse
   // each run actually launched against — keyed by warehouseId. Runs from
@@ -162,6 +163,10 @@ export default function ActiveProductionRunsClient() {
     const expected = (production.quantity || 0) * (production.recipe?.yieldQty || 1);
     setActualYield(expected);
     setRemarks(production.remarks || "");
+    // Pre-fill from the estimate computed when the run started (shelf life /
+    // ingredient batch expiry) — the operator confirms or corrects it here,
+    // same as GRN's expiry capture for raw material lots.
+    setExpiryDate(production.expiryDate ? new Date(production.expiryDate).toISOString().split("T")[0] : "");
     setShowApprovalModal(true);
   };
 
@@ -169,9 +174,10 @@ export default function ActiveProductionRunsClient() {
     if (!batchToApprove) return;
     setSubmitting(true);
     try {
-      await productionApi.approveBatch(batchToApprove.id, { 
+      await productionApi.approveBatch(batchToApprove.id, {
         actualYield: Number(actualYield),
-        remarks: remarks.trim() || undefined
+        remarks: remarks.trim() || undefined,
+        expiryDate: expiryDate || undefined
       });
       toast.success("Production completed & added to Batch Registry");
       setShowApprovalModal(false);
@@ -479,6 +485,21 @@ export default function ActiveProductionRunsClient() {
               placeholder={`Enter actual yield in ${yieldUnit}`}
               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+              <CalendarClock size={12} /> Expiry Date
+            </label>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold text-gray-800"
+            />
+            <p className="text-[11px] text-gray-400">
+              Pre-filled from the product&apos;s configured shelf life — confirm or correct before completing.
+            </p>
           </div>
 
           <div className="space-y-2">

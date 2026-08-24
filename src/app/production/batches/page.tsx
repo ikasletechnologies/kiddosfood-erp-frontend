@@ -108,7 +108,17 @@ function ProductBatchesRegistry() {
         }),
         productsFullApi.getAll(),
       ]);
-      setBatches(bRes.data ?? []);
+      // /api/production/batches also merges in GRN raw-material inventory
+      // lots that carry an expiry date (batchType: 'GRN_RAW_MATERIAL') —
+      // useful for Expiry Tracking, which shares this same endpoint, but
+      // Batch Manufacturing's registry is specifically about manufactured
+      // output, not raw materials. Also drop batches from a recipe whose
+      // user-assigned category is itself "Raw Material" (e.g. a recipe
+      // created by mistake to log a raw material's batches here).
+      const isRawMaterial = (b: any) =>
+        b.batchType === "GRN_RAW_MATERIAL" ||
+        (b.production?.recipe?.category || "").toLowerCase().includes("raw material");
+      setBatches((bRes.data ?? []).filter((b: any) => !isRawMaterial(b)));
       setProducts(pRes.data ?? []);
     } catch (e) {
       console.error(e);
@@ -162,7 +172,7 @@ function ProductBatchesRegistry() {
         </h1>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-screen-2xl mx-auto px-6 py-5 space-y-5">
 
         {/* ── Tab Bar ── */}
         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
@@ -284,17 +294,19 @@ function ProductBatchesRegistry() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <table className="w-full text-sm min-w-[980px]">
                 <thead>
                   <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
                     <th className="text-left px-4 py-3">Batch ID</th>
                     <th className="text-left px-4 py-3">Product</th>
                     <th className="text-left px-4 py-3">Qty Produced</th>
+                    <th className="text-left px-4 py-3">QC Approved</th>
+                    <th className="text-left px-4 py-3">QC Rejected</th>
                     <th className="text-left px-4 py-3">Unit Cost</th>
                     <th className="text-left px-4 py-3">Packed</th>
-                    <th className="text-left px-4 py-3">Bulk</th>
-                    <th className="text-left px-4 py-3">Available Packets</th>
+                    <th className="text-left px-4 py-3">Approved Bulk</th>
+                    <th className="text-left px-4 py-3">Available FG</th>
                     <th className="text-left px-4 py-3">Expiry</th>
                     <th className="text-center px-4 py-3">Status</th>
                     <th className="text-right px-4 py-3">Actions</th>
@@ -320,6 +332,16 @@ function ProductBatchesRegistry() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
                           {batch.quantity} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-emerald-700">
+                          {batch.qcStatus === "PENDING" ? "—" : (
+                            <>{batch.approvedQty || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-rose-700">
+                          {batch.qcStatus === "PENDING" ? "—" : (
+                            <>{batch.rejectionQty || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
                           {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}

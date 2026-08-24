@@ -21,6 +21,7 @@ interface PackagingTicket {
   goodQty?: number | null;
   damagedQty?: number | null;
   spoiledQty?: number | null;
+  confirmedAt?: string | null;
   batch: {
     batchCode: string;
     expiryDate: string;
@@ -28,6 +29,11 @@ interface PackagingTicket {
     product: { name: string; sku: string; unit: string };
   };
 }
+
+const HISTORY_STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  CONFIRMED: { label: "Confirmed", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+  CANCELLED: { label: "Cancelled", color: "text-gray-500", bg: "bg-gray-50", border: "border-gray-200" },
+};
 
 // Confirms the COMPLETE physical packaging run reported by the operator —
 // not individual stickers. Good + Damaged + Spoiled must equal the planned
@@ -39,6 +45,8 @@ export default function ConfirmPackagingPage() {
   const preselectId = searchParams.get("id");
 
   const [tickets, setTickets] = useState<PackagingTicket[]>([]);
+  const [historyTickets, setHistoryTickets] = useState<PackagingTicket[]>([]);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -76,6 +84,12 @@ export default function ConfirmPackagingPage() {
       const all: PackagingTicket[] = res.data || [];
       const pending = all.filter((t) => t.status === "AWAITING_CONFIRMATION");
       setTickets(pending);
+      // History: every run already confirmed or cancelled — this data was
+      // already being fetched and then discarded, just never surfaced.
+      const past = all
+        .filter((t) => t.status === "CONFIRMED" || t.status === "CANCELLED")
+        .sort((a, b) => new Date(b.confirmedAt || b.createdAt).getTime() - new Date(a.confirmedAt || a.createdAt).getTime());
+      setHistoryTickets(past);
       if (preselectId) {
         const match = pending.find((t) => t.id === preselectId);
         if (match) selectTicket(match);
@@ -102,6 +116,11 @@ export default function ConfirmPackagingPage() {
   const filteredTickets = tickets.filter((t) =>
     t.batch?.batchCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.batch?.product?.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredHistory = historyTickets.filter((t) =>
+    t.batch?.batchCode?.toLowerCase().includes(historyQuery.toLowerCase()) ||
+    t.batch?.product?.name.toLowerCase().includes(historyQuery.toLowerCase())
   );
 
   const total = goodQty + damagedQty + spoiledQty;
@@ -231,6 +250,89 @@ export default function ConfirmPackagingPage() {
                                   Confirm
                                 </button>
                               )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* History: past confirmed/cancelled packaging runs — read-only,
+                does not affect the Awaiting Confirmation flow above. */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mt-5">
+              <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                  <ClipboardCheck className="h-3.5 w-3.5 text-[#f58220]" />
+                  History
+                </h3>
+
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search history..."
+                    value={historyQuery}
+                    onChange={(e) => setHistoryQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+                  />
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="py-16 flex justify-center"><RefreshCw className="h-6 w-6 animate-spin text-orange-400 opacity-50" /></div>
+              ) : filteredHistory.length === 0 ? (
+                <div className="py-16 text-center text-sm text-gray-400">
+                  No confirmed or cancelled packaging runs yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                        <th className="text-left px-4 py-3">Product / Batch</th>
+                        <th className="text-center px-4 py-3">Pack Size</th>
+                        <th className="text-right px-4 py-3">Good / Damaged / Spoiled</th>
+                        <th className="text-center px-4 py-3">Confirmed</th>
+                        <th className="text-center px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {filteredHistory.map((ticket) => {
+                        const style = HISTORY_STATUS_STYLES[ticket.status] || HISTORY_STATUS_STYLES.CANCELLED;
+                        return (
+                          <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="font-medium text-gray-800">{ticket.batch?.product?.name}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">Batch: {ticket.batch?.batchCode}</div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-gray-600 bg-gray-50 border-gray-200">
+                                {ticket.packetSize}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right text-xs">
+                              {ticket.goodQty !== null && ticket.goodQty !== undefined ? (
+                                <span>
+                                  <span className="text-emerald-600 font-semibold">{ticket.goodQty}</span>
+                                  {" / "}
+                                  <span className="text-amber-600 font-semibold">{ticket.damagedQty ?? 0}</span>
+                                  {" / "}
+                                  <span className="text-rose-600 font-semibold">{ticket.spoiledQty ?? 0}</span>
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center text-xs text-gray-500">
+                              {ticket.confirmedAt ? format(new Date(ticket.confirmedAt), "dd MMM, HH:mm") : "—"}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
+                                {style.label}
+                              </span>
                             </td>
                           </tr>
                         );

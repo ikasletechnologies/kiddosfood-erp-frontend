@@ -78,7 +78,7 @@ export const productionApi = {
   getHistory: (franchiseId?: string) => api.get('/api/production/history', { params: { franchiseId } }),
   startBatch: (data: any) => api.post('/api/production/batch', data),
   stopBatch: (id: string) => api.post(`/api/production/${id}/stop`),
-  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string }) => api.post(`/api/production/${id}/approve`, data),
+  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (franchiseId?: string) => api.get('/api/production/batches-pending-qc', { params: { franchiseId } }),
   inspectBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/qc`, data),
@@ -132,6 +132,8 @@ export const wasteApi = {
     api.get('/api/waste', { params }),
   getSummary: (params: { franchiseId?: string; warehouseId?: string } = {}) =>
     api.get('/api/waste/summary', { params }),
-  create: (data: { itemId: string; quantity: number; reason: string; note?: string; franchiseId: string; warehouseId?: string }) =>
+  create: (data: { itemId: string; quantity: number; reason: string; note?: string; franchiseId?: string; warehouseId?: string }) =>
     api.post('/api/waste', data),
+  update: (id: string, data: { reason?: string; note?: string }) =>
+    api.patch(`/api/waste/${id}`, data),
 };
