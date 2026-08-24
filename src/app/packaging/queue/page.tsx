@@ -175,17 +175,20 @@ export default function PackagingQueuePage() {
 
     setSubmitting(true);
     try {
+      // This only creates an AWAITING_CONFIRMATION ticket — bulk stock and
+      // Finished Goods are untouched until the operator completes physical
+      // packaging/labeling and submits Confirm Packaging.
       await productionApi.packageBatch(selectedBatch.id, {
         packetSize,
         quantityPackets
       });
-      toast.success("Packaging conversion successful!");
+      toast.success("Packaging started — print stickers, then confirm once packing is complete.");
       setSelectedBatch(null);
       loadBatches();
       // Redirect to label view to print
       window.location.href = "/packaging/labels";
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || "Error executing packaging run. Verify bulk stock.");
+      toast.error(err?.response?.data?.error || "Error starting packaging run. Verify bulk stock.");
     } finally {
       setSubmitting(false);
     }
@@ -470,16 +473,18 @@ export default function PackagingQueuePage() {
                     </p>
                   </div>
 
-                  {/* Simulated conversions */}
+                  {/* Planned conversion — nothing here is applied yet. Bulk is only
+                      deducted and Finished Goods only created once this run is
+                      confirmed on the Confirm Packaging screen. */}
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
                     <div className="flex justify-between items-center text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
-                      <span>Audit Simulation</span>
+                      <span>Packaging Plan (Pending Confirmation)</span>
                       <Scale className="h-3.5 w-3.5 text-[#f58220]" />
                     </div>
 
                     <div className="space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Bulk Stock to Deduct</span>
+                        <span className="text-gray-500">Bulk Stock to Deduct on Confirm</span>
                         <span className="text-rose-600 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
@@ -487,8 +492,8 @@ export default function PackagingQueuePage() {
                         <span className="text-gray-700 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Total Retail Stock Added</span>
-                        <span className="text-emerald-600 font-semibold">+{quantityPackets} packets</span>
+                        <span className="text-gray-500">Planned Packets</span>
+                        <span className="text-emerald-600 font-semibold">{quantityPackets} packets</span>
                       </div>
                     </div>
                   </div>
@@ -499,7 +504,7 @@ export default function PackagingQueuePage() {
                     className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
-                    Package &amp; Generate Labels
+                    Start Packaging &amp; Print Stickers
                   </button>
 
                   {!packetSize && (

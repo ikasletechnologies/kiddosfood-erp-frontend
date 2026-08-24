@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { X,
-  Barcode, Printer, History, Search
+  Barcode, Printer, History, Search, ClipboardCheck
 } from "lucide-react";
 import { clsx } from "clsx";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { productionApi, franchiseApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
@@ -17,6 +19,7 @@ interface PackagingRecord {
   totalWeight: number;
   barcode: string;
   createdAt: string;
+  status?: string;
   batch: {
     batchCode: string;
     expiryDate: string;
@@ -34,6 +37,22 @@ export default function LabelsBarcodesPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<PackagingRecord | null>(null);
+
+  const [stickersPrinted, setStickersPrinted] = useState<number>(0);
+  const [physicalChecked, setPhysicalChecked] = useState(false);
+  const [goodQty, setGoodQty] = useState<number>(0);
+  const [damagedQty, setDamagedQty] = useState<number>(0);
+  const [spoiledQty, setSpoiledQty] = useState<number>(0);
+  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+
+  const resetForm = (plannedQty: number) => {
+    setStickersPrinted(0);
+    setPhysicalChecked(false);
+    setGoodQty(0);
+    setDamagedQty(0);
+    setSpoiledQty(0);
+  };
 
   useEffect(() => {
     async function initData() {
@@ -63,6 +82,7 @@ export default function LabelsBarcodesPage() {
       setPackagings(res.data || []);
       if (res.data?.length > 0) {
         setSelectedRecord(res.data[0]);
+        resetForm(res.data[0].quantityPackets);
       }
     } catch (err) {
       toast.error("Failed to load packaging history");
@@ -183,7 +203,10 @@ export default function LabelsBarcodesPage() {
                           <tr
                             key={rec.id}
                             className={clsx("cursor-pointer transition-colors", isSelected ? "bg-orange-50" : "hover:bg-gray-50")}
-                            onClick={() => setSelectedRecord(rec)}
+                            onClick={() => {
+                              setSelectedRecord(rec);
+                              resetForm(rec.quantityPackets);
+                            }}
                           >
                             <td className="px-4 py-3">
                               <div className="font-medium text-gray-800">{rec.batch?.product?.name}</div>
@@ -206,6 +229,7 @@ export default function LabelsBarcodesPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedRecord(rec);
+                                  resetForm(rec.quantityPackets);
                                   setTimeout(handlePrintLabel, 100);
                                 }}
                               >
@@ -296,6 +320,137 @@ export default function LabelsBarcodesPage() {
                   </p>
                 </div>
 
+                {selectedRecord.status === "AWAITING_CONFIRMATION" && (
+                  <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4 print:hidden">
+                    <h4 className="text-xs font-semibold text-[#f58220] uppercase tracking-wide">
+                      Physical Labeling & Packaging Check
+                    </h4>
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-600">Packaging Quantity</span>
+                        <span className="text-sm font-bold text-gray-900">{selectedRecord.quantityPackets} PACKS</span>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Stickers Printed</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={stickersPrinted || ""}
+                          onChange={(e) => setStickersPrinted(Number(e.target.value))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                          placeholder="e.g. 100"
+                        />
+                        {stickersPrinted > 0 && stickersPrinted === selectedRecord.quantityPackets ? (
+                          <div className="mt-1.5 text-xs text-emerald-600 font-medium flex items-center gap-1">
+                            ✓ {stickersPrinted} / {selectedRecord.quantityPackets} stickers accounted for
+                          </div>
+                        ) : stickersPrinted > 0 ? (
+                          <div className="mt-1.5 text-xs text-rose-600 font-medium">
+                            ⚠ Sticker count does not match the packaging quantity.
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="border-t border-gray-100 pt-4">
+                        <h5 className="text-xs font-semibold text-gray-700 uppercase mb-3">Physical Verification</h5>
+                        <label className="flex items-start gap-2 cursor-pointer group mb-4">
+                          <div className="relative flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={physicalChecked}
+                              onChange={(e) => setPhysicalChecked(e.target.checked)}
+                              className="peer h-4 w-4 shrink-0 rounded border border-gray-300 appearance-none checked:bg-[#f58220] checked:border-[#f58220] focus:ring-2 focus:ring-[#f58220]/20 transition-all cursor-pointer"
+                            />
+                            <div className="absolute inset-0 m-auto h-2.5 w-2.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none pb-0.5">
+                              <svg viewBox="0 0 14 14" fill="none"><path d="M3 8L6 11L11 3.5" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" stroke="currentColor"/></svg>
+                            </div>
+                          </div>
+                          <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors pt-px leading-snug font-medium select-none">
+                            I have physically checked the complete packaged batch
+                          </span>
+                        </label>
+                        
+                        <div className="space-y-3">
+                          <h6 className="text-xs font-semibold text-gray-500 mb-2">Actual Physical Result</h6>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-1">Good</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={goodQty === 0 && !physicalChecked ? "" : goodQty}
+                                onChange={(e) => setGoodQty(Number(e.target.value))}
+                                className="w-full border border-emerald-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-emerald-400 bg-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-amber-600 uppercase mb-1">Damaged</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={damagedQty === 0 && !physicalChecked ? "" : damagedQty}
+                                onChange={(e) => setDamagedQty(Number(e.target.value))}
+                                className="w-full border border-amber-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-amber-400 bg-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold text-rose-600 uppercase mb-1">Spoiled</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={spoiledQty === 0 && !physicalChecked ? "" : spoiledQty}
+                                onChange={(e) => setSpoiledQty(Number(e.target.value))}
+                                className="w-full border border-rose-200 rounded-lg px-2.5 py-1.5 text-sm text-gray-700 outline-none focus:border-rose-400 bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between border-t border-gray-100 pt-3 mt-2">
+                            <span className="text-xs font-medium text-gray-600">Total Verified</span>
+                            <span className={clsx(
+                              "text-sm font-bold",
+                              (goodQty + damagedQty + spoiledQty) === selectedRecord.quantityPackets ? "text-emerald-600" : "text-rose-600"
+                            )}>
+                              {goodQty + damagedQty + spoiledQty} / {selectedRecord.quantityPackets}
+                              {(goodQty + damagedQty + spoiledQty) === selectedRecord.quantityPackets && " ✓"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          setSaving(true);
+                          try {
+                            await productionApi.verifyPackaging(selectedRecord.id, {
+                              stickersPrinted,
+                              physicalChecked,
+                              goodQty,
+                              damagedQty,
+                              spoiledQty
+                            });
+                            router.push(`/packaging/confirm?id=${selectedRecord.id}`);
+                          } catch (err: any) {
+                            toast.error(err?.response?.data?.error || "Error saving verification");
+                            setSaving(false);
+                          }
+                        }}
+                        disabled={
+                          saving ||
+                          !physicalChecked ||
+                          stickersPrinted !== selectedRecord.quantityPackets ||
+                          (goodQty + damagedQty + spoiledQty) !== selectedRecord.quantityPackets
+                        }
+                        className="w-full py-2.5 border border-[#f58220] bg-orange-50 text-[#f58220] hover:bg-[#f58220] hover:text-white rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:bg-orange-50 disabled:hover:text-[#f58220]"
+                      >
+                        <ClipboardCheck className="h-4 w-4" />
+                        {saving ? "Saving..." : "Proceed to Confirm Packaging"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="hidden lg:flex flex-col items-center justify-center py-24 border border-dashed border-gray-200 rounded-lg text-center p-6 bg-white print:hidden">

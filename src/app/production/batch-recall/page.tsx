@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { recallApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { formatERPNumber } from "@/lib/utils";
 
 interface RecallBatch {
   id: string;
@@ -135,8 +136,16 @@ export default function BatchRecallPage() {
       const res = await api.get("/api/production/batches");
       const data: RecallBatch[] = (res.data || []).map((b: any) => ({
         id: b.id,
-        batchCode: b.batchCode || b.id?.slice(-6),
-        productName: b.product?.name || b.recipe?.name || "Unknown Product",
+        // Same canonical batch-code formatting as Production/QC/Batch
+        // Registry/Expiry Tracking (formatERPNumber) — recall previously
+        // showed the raw stored code (e.g. "BATCH-16661921") instead of the
+        // "PRD-2026-xxxx" number used everywhere else for the same batch.
+        batchCode: b.batchCode ? formatERPNumber("PRD", b.batchCode, b.createdAt) : b.id?.slice(-6),
+        // b.recipe doesn't exist on this batch shape — the recipe lives at
+        // b.production.recipe. That wrong path is why this always fell
+        // through to "Unknown Product" whenever the batch had no directly
+        // linked Product (the normal case for bulk-manufacturing recipes).
+        productName: b.product?.name || b.production?.recipe?.name || "Unknown Product",
         productionDate: b.production?.startTime || b.mfgDate || b.createdAt,
         expiryDate: b.expiryDate || "",
         producedQty: b.quantity || 0,

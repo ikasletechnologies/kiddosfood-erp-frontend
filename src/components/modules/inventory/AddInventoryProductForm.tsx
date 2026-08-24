@@ -391,7 +391,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
             } catch { /* ignore unavailable storage */ }
             router.push(returnTo);
           } else {
-            router.push("/inventory/stock");
+            // Route to the Stock Hub tab matching the item's actual saved
+            // category — never change the category itself just to steer
+            // navigation. Only FINISHED_GOOD has its own tab; every other
+            // category (raw materials, packaging, semi-finished, etc.)
+            // lives under Raw Materials & Assets.
+            const stockHubType = category === "FINISHED_GOOD" ? "FINISHED_GOOD" : "RAW_MATERIAL";
+            router.push(`/inventory/stock?type=${stockHubType}`);
           }
         }, 1500);
       }
