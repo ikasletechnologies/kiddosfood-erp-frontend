@@ -57,7 +57,7 @@ export const inventoryApi = {
   getMovements: (params?: any) => api.get('/api/inventory/movements', { params }),
   getAlerts: () => api.get('/api/inventory/alerts'),
   getWarehouses: () => api.get('/api/warehouses'),
-  createWarehouse: (data: { name: string, location?: string, type?: string }) => 
+  createWarehouse: (data: { name: string, location?: string, type?: string, code?: string, status?: string, franchiseId?: string }) => 
     api.post('/api/warehouses', data),
   updateWarehouse: (id: string, data: { name?: string, location?: string, type?: string }) => 
     api.patch(`/api/warehouses/${id}`, data),
@@ -78,7 +78,15 @@ export const productionApi = {
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (franchiseId?: string) => api.get('/api/production/batches-pending-qc', { params: { franchiseId } }),
   inspectBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/qc`, data),
+  // Phase 1 of two-phase packaging: creates an AWAITING_CONFIRMATION ticket
+  // only — bulk stock and Finished Goods are untouched until confirmPackaging.
   packageBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/package`, data),
+  // Phase 2: reports the good/damaged/spoiled split for the completed
+  // physical packaging run. Only now is bulk deducted and Finished Goods created.
+  verifyPackaging: (packagingId: string, data: { stickersPrinted: number; physicalChecked: boolean; goodQty: number; damagedQty: number; spoiledQty: number }) =>
+    api.put(`/api/production/packagings/${packagingId}/verify`, data),
+  confirmPackaging: (packagingId: string, data: { goodQty: number; damagedQty: number; spoiledQty: number }) =>
+    api.post(`/api/production/packagings/${packagingId}/confirm`, data),
   getPackagings: (franchiseId?: string) => api.get('/api/production/packagings', { params: { franchiseId } }),
   getAllBatches: (franchiseId?: string) => api.get('/api/production/batches-all', { params: { franchiseId } }),
   advanceStage: (id: string, stage: string) => api.patch(`/api/production/${id}/stage`, { stage }),

@@ -174,6 +174,23 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/packaging/labels",
         roles: SUPER_ONLY,
       },
+      {
+        icon: PackageCheck,
+        label: "Confirm Packaging",
+        href: "/packaging/confirm",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
+        roles: SUPER_ONLY,
+      },
     ],
   },
   {
@@ -460,6 +477,17 @@ export const franchiseMenuSections: MenuSection[] = [
         icon: FileText,
         label: "Settlement",
         href: "/pos/settlement",
+        roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
         roles: FRANCHISE_ONLY,
       },
     ],
