@@ -67,6 +67,13 @@ function ProductBatchesRegistry() {
   const [showBatchDetails, setShowBatchDetails] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
 
+  // Sync activeTab when URL requestedTab changes
+  useEffect(() => {
+    if (requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" || requestedTab === "ACTIVE_RUNS") {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedTab]);
+
   // Deep-link support: a batch opened from Expiry Tracking (or elsewhere)
   // via ?batchId= auto-opens straight to that same batch's detail drawer.
   useEffect(() => {
@@ -110,9 +117,12 @@ function ProductBatchesRegistry() {
     }
   }, []);
 
+  // Automatically re-fetch batches whenever the active tab is REGISTRY or filters change
   useEffect(() => { 
-    fetchBatches(productFilter || undefined, selectedFranchiseId || undefined); 
-  }, [fetchBatches, productFilter, selectedFranchiseId]);
+    if (activeTab === "REGISTRY") {
+      fetchBatches(productFilter || undefined, selectedFranchiseId || undefined); 
+    }
+  }, [fetchBatches, activeTab, productFilter, selectedFranchiseId]);
 
   const handleProductFilter = (pid: string) => {
     setProductFilter(pid);
@@ -163,9 +173,14 @@ function ProductBatchesRegistry() {
           ] as const).map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key === "REGISTRY") {
+                  fetchBatches(productFilter || undefined, selectedFranchiseId || undefined);
+                }
+              }}
               className={clsx(
-                "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
+                "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer",
                 activeTab === tab.key ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
               )}
             >
