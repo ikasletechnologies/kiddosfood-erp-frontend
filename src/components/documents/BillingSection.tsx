@@ -252,7 +252,19 @@ export default function BillingSection({
                         </div>
                       ))
                     ) : (
-                      <div className="p-6 text-xs text-slate-400 text-center">No vendors found</div>
+                      <div className="p-4 text-xs text-slate-400 text-center flex flex-col items-center gap-2">
+                        <span>No vendors found for &quot;{searchQuery}&quot;</span>
+                        <button 
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onAddTarget) onAddTarget();
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 rounded-lg border border-orange-200 transition-colors cursor-pointer"
+                        >
+                          <Plus size={12} /> Create Vendor
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>

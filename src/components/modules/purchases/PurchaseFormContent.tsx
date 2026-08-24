@@ -10,7 +10,6 @@ import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrder
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 
-import VendorFormModal from "@/components/modals/VendorFormModal";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 import { inventoryApi, purchaseOrdersApi, settingsApi } from "@/lib/api";
 import GSTInvoice from "@/components/documents/GSTInvoice";
@@ -56,7 +55,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<"items" | "notes">("items");
-  const [showVendorModal, setShowVendorModal] = useState(false);
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [warehouses, setWarehouses] = useState<{id: string, name: string}[]>([]);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
@@ -170,11 +168,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
 
   return (
     <div className="bg-gray-50 min-h-full">
-      <VendorFormModal
-        isOpen={showVendorModal}
-        onClose={() => setShowVendorModal(false)}
-        onSuccess={(vendor) => { setSelectedVendor(vendor); }}
-      />
       <WarehouseFormSidebar
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}
@@ -422,7 +415,13 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               toLabel="Billed By (Vendor)"
               toSubLabel="Vendor's Details"
               targetType="vendor"
-              onAddTarget={() => setShowVendorModal(true)}
+              onAddTarget={() => {
+                if (typeof window !== "undefined") {
+                  router.push(`/vendors?action=new&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+                } else {
+                  router.push(`/vendors?action=new&returnTo=/purchases/new`);
+                }
+              }}
             />
 
             {/* Section 3: Material Table & Accordions */}
