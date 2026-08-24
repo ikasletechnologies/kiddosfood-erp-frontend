@@ -340,35 +340,45 @@ function ProductBatchesRegistry() {
                               : batch.qcStatus === "REJECTED" ? "Rejected" : "Pending"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
                             {[
                               { label: "View", always: true },
                               { label: "QC", disabled: !!batch.qcStatus && batch.qcStatus !== "PENDING" },
                               { label: "Pack", disabled: !["APPROVED", "PARTIALLY_APPROVED"].includes(batch.qcStatus) || batch.packagingStatus === "PACKAGED" },
                               { label: "Dispatch", always: true },
                               { label: "Recall", always: true },
-                            ].map(({ label, disabled, always }) => (
-                              <button
-                                key={label}
-                                disabled={!!disabled}
-                                onClick={() => {
-                                  if (label === "Pack") { router.push("/packaging/queue"); }
-                                  else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
-                                  else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}`); }
-                                  else if (label === "Dispatch") { router.push("/delivery"); }
-                                  else if (label === "Recall") { router.push("/production/batch-recall"); }
-                                }}
-                                className={clsx(
-                                  "px-1.5 py-1 text-[11px] font-medium rounded transition-colors",
-                                  disabled
-                                    ? "text-gray-300 cursor-not-allowed"
-                                    : "text-gray-500 hover:text-[#f58220] hover:bg-orange-50"
-                                )}
-                              >
-                                {label}
-                              </button>
-                            ))}
+                            ].map(({ label, disabled }) => {
+                              const actionStyles: Record<string, string> = {
+                                View: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900",
+                                QC: "border-blue-200 bg-blue-50/80 text-blue-700 hover:bg-blue-100 hover:border-blue-300 hover:text-blue-800",
+                                Pack: "border-orange-200 bg-orange-50/80 text-[#f58220] hover:bg-orange-100 hover:border-orange-300 hover:text-[#e8740e]",
+                                Dispatch: "border-emerald-200 bg-emerald-50/80 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800",
+                                Recall: "border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-800",
+                              };
+
+                              return (
+                                <button
+                                  key={label}
+                                  disabled={!!disabled}
+                                  onClick={() => {
+                                    if (label === "Pack") { router.push("/packaging/queue"); }
+                                    else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
+                                    else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}`); }
+                                    else if (label === "Dispatch") { router.push("/delivery"); }
+                                    else if (label === "Recall") { router.push("/production/batch-recall"); }
+                                  }}
+                                  className={clsx(
+                                    "px-2 py-0.5 text-[11px] font-semibold rounded border shadow-2xs transition-all active:scale-95",
+                                    disabled
+                                      ? "border-gray-200/60 bg-gray-50 text-gray-300 cursor-not-allowed shadow-none"
+                                      : actionStyles[label] || "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                                  )}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>

@@ -101,22 +101,22 @@ export default function LineItemsTable() {
 
   return (
     <div className="w-full">
-      <div className="w-full">
-        <table className="w-full text-left border-collapse table-auto">
+      <div className="w-full overflow-x-auto">
+        <table className="w-full text-left border-collapse table-auto min-w-[760px]">
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200 dark:border-slate-800">
-              <th className="px-4 py-3 w-10 text-center">#</th>
-              <th className="px-4 py-3">Material / Item Detail</th>
-              <th className="px-4 py-3 w-32 hidden md:table-cell">SKU</th>
-              <th className="px-4 py-3 w-24">Qty</th>
-              <th className="px-4 py-3 w-20 hidden sm:table-cell">Unit</th>
-              <th className="px-4 py-3 w-32">Unit Price</th>
-              <th className="px-4 py-3 w-20 text-center hidden sm:table-cell">GST %</th>
-              <th className="px-4 py-3 w-28 text-right">Line Total</th>
-              <th className="px-4 py-3 w-12 text-center"></th>
+              <th className="px-3 py-3 w-12 text-center">#</th>
+              <th className="px-3 py-3 min-w-[220px]">Material / Item Detail</th>
+              <th className="px-3 py-3 w-32 text-center hidden md:table-cell">SKU</th>
+              <th className="px-3 py-3 w-24 text-center">Qty</th>
+              <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">Unit</th>
+              <th className="px-3 py-3 w-36 min-w-[130px] text-center">Unit Price</th>
+              <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">GST %</th>
+              <th className="px-3 py-3 w-36 text-right">Line Total</th>
+              <th className="px-2 py-3 w-10 text-center"></th>
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-50 dark:divide-slate-800">
+          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
             {items.map((item, index) => {
               const amount = item.quantity * item.price;
               const totalWithGst = amount + (amount * (item.gstRate / 100));
@@ -124,29 +124,30 @@ export default function LineItemsTable() {
 
               return (
                 <tr key={item.id} className={clsx(
-                  "group hover:bg-slate-50/30 dark:hover:bg-slate-800/30 transition-all relative",
+                  "group hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-all relative",
                   activeSearchId === item.id ? "z-50" : "z-0"
                 )}>
-                  <td className="px-6 py-4 align-middle text-[10px] font-black text-slate-400 dark:text-slate-500 group-hover:text-orange-500 transition-colors text-center">
+                  <td className="px-3 py-3.5 align-middle text-[11px] font-bold text-slate-400 dark:text-slate-500 group-hover:text-orange-500 transition-colors text-center">
                     {String(index + 1).padStart(2, '0')}
                   </td>
-                  <td className="px-4 py-4 align-top relative">
+                  <td className="px-3 py-3.5 align-middle relative">
                     <div
                       className={clsx(
-                        "material-selector-container flex items-center gap-3 p-2 rounded-xl border transition-all cursor-text relative",
+                        "material-selector-container flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
                         activeSearchId === item.id ? "z-[100]" : "z-10",
                         !item.materialId 
-                          ? "bg-slate-50/50 dark:bg-slate-950/50 border-transparent focus-within:border-orange-100" 
-                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 shadow-sm"
+                          ? "bg-slate-50/70 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-orange-300 focus-within:border-orange-400 focus-within:bg-white" 
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 shadow-2xs"
                       )}
                       onClick={() => setActiveSearchId(item.id)}
                     >
-                      <Package size={14} className={item.materialId ? "text-orange-500" : "text-slate-400 dark:text-slate-500"} />
-                        <div className="flex flex-col flex-1 relative">
+                      <Package size={15} className={clsx("shrink-0", item.materialId ? "text-[#f58220]" : "text-slate-400 dark:text-slate-500")} />
+                      <div className="flex flex-col flex-1 min-w-0 relative">
+                        <div className="relative flex items-center">
                           <input
                             type="text"
                             placeholder="Search Material..."
-                            className="w-full bg-transparent outline-none text-xs font-black text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-bold uppercase tracking-tight"
+                            className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-5"
                             value={activeSearchId === item.id ? searchQuery : item.name}
                             readOnly={false}
                             onChange={(e) => {
@@ -163,37 +164,45 @@ export default function LineItemsTable() {
                             }}
                             onKeyDown={(e) => handleKeyDown(e, item.id)}
                           />
-            {activeSearchId === item.id ? searchQuery : item.name && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
-                          {material && (
-                            <div className="flex items-center gap-2 mt-1">
-                               <div className={clsx(
-                                 "flex items-center gap-1 text-[8px] font-black uppercase px-1.5 py-0.5 rounded border",
-                                 material.currentStock <= (material.minimumStock || 10) 
-                                   ? "bg-red-50 text-red-500 border-red-100" 
-                                   : "bg-green-50 text-green-600 border-green-100"
-                               )}>
-                                 {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={8} /> : <CheckCircle2 size={8} />}
-                                 Stock: {material.currentStock} {item.unit}
-                               </div>
-                              <span className="text-[8px] font-bold text-slate-400">HSN: {material.hsnCode || "N/A"}</span>
-                            </div>
+                          {(activeSearchId === item.id ? searchQuery : item.name) && (
+                            <button
+                              type="button"
+                              className="absolute right-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSearchQuery("");
+                                updateItem(item.id, { materialId: "", name: "" });
+                                setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                              }}
+                            >
+                              <X size={13} />
+                            </button>
                           )}
                         </div>
-                        <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 mr-1" />
+                        {material && (
+                          <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                             <div className={clsx(
+                               "flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border whitespace-nowrap",
+                               material.currentStock <= (material.minimumStock || 10) 
+                                 ? "bg-rose-50 text-rose-600 border-rose-200" 
+                                 : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                             )}>
+                               {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
+                               Stock: {material.currentStock} {item.unit || "KG"}
+                             </div>
+                            <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap">HSN: {material.hsnCode || "N/A"}</span>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
 
-                        {activeSearchId === item.id && (
-                          <div className="absolute top-[calc(100%+8px)] left-0 w-[400px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[100] overflow-hidden" ref={searchRef}>
-                             <div className="max-h-60 overflow-y-auto">
-                            {filteredMaterials.length > 0 ? (
-                                <>
-                                  {filteredMaterials.map(m => {
-                                    const vendorPrice = getVendorPrice(m.id);
+                      {activeSearchId === item.id && (
+                        <div className="absolute top-[calc(100%+8px)] left-0 w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[100] overflow-hidden" ref={searchRef}>
+                           <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredMaterials.length > 0 ? (
+                              <>
+                                {filteredMaterials.map(m => {
+                                  const vendorPrice = getVendorPrice(m.id);
                                   const displayPrice = vendorPrice !== null ? vendorPrice : (m.price || 0);
                                   const isLow = m.currentStock <= (m.minimumStock || 10);
 
@@ -218,25 +227,25 @@ export default function LineItemsTable() {
                                       }}
                                       className="p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
                                     >
-                                       <div className="flex flex-col gap-0.5">
-                                          <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">{m.name}</span>
+                                       <div className="flex flex-col gap-0.5 min-w-0 pr-3">
+                                          <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">{m.name}</span>
                                           <div className="flex items-center gap-2">
-                                             <span className="text-[9px] font-bold text-slate-400">{m.sku}</span>
-                                             {isLow && <span className="text-[8px] font-black text-red-500 bg-red-50 px-1 py-0.5 rounded">CRITICAL STOCK</span>}
+                                             <span className="text-[10px] font-mono text-slate-400">{m.sku}</span>
+                                             {isLow && <span className="text-[8px] font-bold text-rose-600 bg-rose-50 px-1 py-0.5 rounded">CRITICAL STOCK</span>}
                                           </div>
                                        </div>
-                                       <div className="flex flex-col items-end gap-1">
-                                          <div className="flex items-center gap-2">
+                                       <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                          <div className="flex items-center gap-1.5">
                                             {vendorPrice !== null && (
-                                              <span className="text-[8px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-orange-100 uppercase tracking-tighter">
+                                              <span className="text-[8px] font-bold text-[#f58220] bg-orange-50 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-orange-200 uppercase tracking-tight">
                                                 <Zap size={8} /> Vendor Rate
                                               </span>
                                             )}
-                                            <span className={`text-[10px] font-black ${vendorPrice !== null ? "text-orange-500" : "text-slate-900"}`}>
+                                            <span className={`text-xs font-bold ${vendorPrice !== null ? "text-[#f58220]" : "text-slate-900 dark:text-white"}`}>
                                               ₹{displayPrice}
                                             </span>
                                           </div>
-                                          <span className="text-[9px] font-bold text-slate-400">Stock: {m.currentStock} {m.unit}</span>
+                                          <span className="text-[10px] text-slate-400">Stock: {m.currentStock} {m.unit}</span>
                                        </div>
                                     </div>
                                   );
@@ -247,7 +256,7 @@ export default function LineItemsTable() {
                                        e.stopPropagation();
                                        setShowAddMaterialDrawer(true);
                                      }} 
-                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm"
+                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
                                    >
                                       <Plus size={14} /> Add New Material
                                    </button>
@@ -255,8 +264,8 @@ export default function LineItemsTable() {
                                 </>
                             ) : (
                                 <div className="p-10 text-center space-y-4">
-                                   <Package size={32} className="mx-auto text-slate-100" />
-                                   <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                                   <Package size={32} className="mx-auto text-slate-300" />
+                                   <p className="text-xs text-slate-500 font-medium">
                                       {!selectedVendor ? "Please select a vendor first" : "No materials found"}
                                    </p>
                                    <button 
@@ -264,7 +273,7 @@ export default function LineItemsTable() {
                                        e.stopPropagation();
                                        setShowAddMaterialDrawer(true);
                                      }} 
-                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors shadow-sm mt-2"
+                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-sm mt-2"
                                    >
                                       <Plus size={14} /> Add New Material
                                    </button>
@@ -275,53 +284,61 @@ export default function LineItemsTable() {
                     )}
                     </div>
                   </td>
-                  <td className="px-4 py-4 align-top hidden md:table-cell">
-                     <span className="text-[10px] font-black text-slate-500 dark:text-slate-400 bg-slate-50 px-2 py-1 rounded dark:bg-slate-800 whitespace-nowrap">
+                  <td className="px-3 py-3.5 align-middle text-center hidden md:table-cell">
+                     <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap">
                         {material?.sku || "---"}
                      </span>
                   </td>
-                  <td className="px-4 py-4 align-top">
+                  <td className="px-3 py-3.5 align-middle">
                     <input
                       type="number"
-                      className="w-full p-2 bg-slate-50 dark:bg-slate-900 rounded-xl outline-none text-xs font-black text-center border border-slate-200 dark:border-slate-800 focus:border-orange-300 focus:bg-white transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      min="0"
+                      step="any"
+                      placeholder="0"
+                      className="w-full py-2 px-2 bg-slate-50 dark:bg-slate-900 rounded-xl outline-none text-xs font-bold text-center border border-slate-200 dark:border-slate-800 focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       value={item.quantity === 0 ? "" : item.quantity}
                       onChange={(e) => updateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}
                       onKeyDown={(e) => handleKeyDown(e, item.id)}
                     />
                   </td>
-                  <td className="px-4 py-4 align-top hidden sm:table-cell">
-                    <div className="p-2 text-[10px] font-black text-slate-500 dark:text-slate-400 text-center uppercase tracking-widest bg-slate-50/30 rounded-lg border border-slate-100 dark:border-slate-800">
-                       {item.unit}
-                    </div>
+                  <td className="px-2 py-3.5 align-middle text-center hidden sm:table-cell">
+                    <span className="inline-block px-2.5 py-1.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 rounded-lg">
+                       {item.unit || "KG"}
+                    </span>
                   </td>
-                  <td className="px-4 py-4 align-top">
-                    <div className="relative group/price">
-                      <IndianRupee size={10} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-                      <input
-                        type="number"
-                        className={clsx(
-                          "w-full pl-7 p-2 rounded-xl outline-none text-xs font-black border transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                          autoFilledIds.has(item.id)
-                            ? "bg-orange-50/50 border-orange-200 text-orange-500 focus:bg-white focus:border-orange-400"
-                            : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:border-orange-300 focus:bg-white"
-                        )}
-                        value={item.price === 0 ? "" : item.price}
-                        onChange={(e) => {
-                          updateItem(item.id, { price: parseFloat(e.target.value) || 0 });
-                          setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
-                        }}
-                        onKeyDown={(e) => handleKeyDown(e, item.id)}
-                      />
+                  <td className="px-3 py-3.5 align-middle">
+                    <div className="relative group/price min-w-[110px]">
+                      <div className={clsx(
+                        "flex items-center rounded-xl border transition-all overflow-hidden",
+                        autoFilledIds.has(item.id)
+                          ? "bg-orange-50/50 border-orange-300 text-[#f58220] focus-within:bg-white focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100"
+                          : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus-within:border-orange-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-orange-100"
+                      )}>
+                        <span className="pl-2.5 pr-1 text-xs font-bold text-slate-400 dark:text-slate-500 select-none">₹</span>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          placeholder="0.00"
+                          className="w-full py-2 pr-2.5 bg-transparent outline-none text-xs font-bold text-slate-800 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={item.price === 0 ? "" : item.price}
+                          onChange={(e) => {
+                            updateItem(item.id, { price: parseFloat(e.target.value) || 0 });
+                            setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                          }}
+                          onKeyDown={(e) => handleKeyDown(e, item.id)}
+                        />
+                      </div>
                       {autoFilledIds.has(item.id) && (
-                        <div className="absolute -top-3.5 left-0 flex items-center gap-1 text-[8px] font-black text-orange-500 uppercase tracking-tighter">
-                          <Zap size={8} /> Auto Vendor Rate
+                        <div className="absolute -top-3 left-1 flex items-center gap-0.5 text-[8px] font-bold text-orange-600 bg-orange-50 px-1 py-0.2 rounded border border-orange-200 uppercase tracking-tight whitespace-nowrap">
+                          <Zap size={7} /> Auto Rate
                         </div>
                       )}
                     </div>
                   </td>
-                  <td className="px-2 py-4 align-top text-center">
+                  <td className="px-2 py-3.5 align-middle text-center">
                     <select
-                      className="w-full p-2 bg-purple-50/50 dark:bg-purple-900/20 rounded-xl outline-none text-xs font-black text-purple-600 text-center border-2 border-transparent focus:border-purple-200 transition-all cursor-pointer appearance-none text-center-last"
+                      className="w-full py-2 px-1.5 bg-purple-50/80 dark:bg-purple-900/20 rounded-xl outline-none text-xs font-bold text-purple-700 dark:text-purple-300 text-center border border-purple-200 dark:border-purple-800/40 focus:border-purple-400 transition-all cursor-pointer appearance-none text-center-last"
                       style={{ textAlignLast: 'center' }}
                       value={item.gstRate}
                       onChange={(e) => updateItem(item.id, { gstRate: parseFloat(e.target.value) || 0 })}
@@ -333,22 +350,24 @@ export default function LineItemsTable() {
                       <option value="28">28%</option>
                     </select>
                   </td>
-                  <td className="px-4 py-4 align-top text-right">
+                  <td className="px-3 py-3.5 align-middle text-right whitespace-nowrap">
                     <div className="flex flex-col items-end">
-                       <span className="text-sm font-black text-slate-900 dark:text-white">
+                       <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
                          ₹{totalWithGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                        </span>
-                       <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-tighter">
-                         Tax: ₹{(totalWithGst - amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                       <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-tight">
+                         Tax: ₹{(totalWithGst - amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                        </span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 align-middle text-center">
+                  <td className="px-2 py-3.5 align-middle text-center">
                     <button
+                      type="button"
                       onClick={() => removeItem(item.id)}
-                      className="p-2 text-slate-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-colors"
+                      title="Remove line item"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={15} />
                     </button>
                   </td>
                 </tr>

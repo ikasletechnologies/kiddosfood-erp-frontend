@@ -68,8 +68,34 @@ export default function PackagingQueuePage() {
 
   // Form states
   const [packetSize, setPacketSize] = useState("");
+  const [sizeValue, setSizeValue] = useState("");
+  const [sizeUnit, setSizeUnit] = useState("g");
   const [quantityPackets, setQuantityPackets] = useState(10);
   const [submitting, setSubmitting] = useState(false);
+
+  const handleSizeValueChange = (val: string) => {
+    setSizeValue(val);
+    if (val && !isNaN(Number(val)) && Number(val) > 0) {
+      setPacketSize(`${val}${sizeUnit}`);
+    } else {
+      setPacketSize("");
+    }
+  };
+
+  const handleSizeUnitChange = (unit: string) => {
+    setSizeUnit(unit);
+    if (sizeValue && !isNaN(Number(sizeValue)) && Number(sizeValue) > 0) {
+      setPacketSize(`${sizeValue}${unit}`);
+    } else {
+      setPacketSize("");
+    }
+  };
+
+  const handleSelectPreset = (val: string, unit: string) => {
+    setSizeValue(val);
+    setSizeUnit(unit);
+    setPacketSize(`${val}${unit}`);
+  };
 
   useEffect(() => {
     async function initData() {
@@ -109,18 +135,28 @@ export default function PackagingQueuePage() {
   }, [selectedFranchiseId]);
 
   // Compute total bulk stock conversion needed
-  const parseWeight = (size: string): number => {
+  const parseWeight = (size: string, baseUnit?: string): number => {
     if (!size) return 0;
-    const match = size.match(/^(\d+(\.\d+)?)\s*(g|kg|l|ml|pcs|unit)$/i);
+    const match = size.trim().match(/^(\d+(\.\d+)?)\s*([a-zA-Z]+)?$/i);
     if (!match) return 1.0;
     const val = parseFloat(match[1]);
-    const unit = match[3].toLowerCase();
+    if (isNaN(val) || val <= 0) return 0;
+    const unit = (match[3] || '').toLowerCase();
+    const batchUnit = (baseUnit || '').toLowerCase();
 
-    if (unit === 'g' || unit === 'ml') return val / 1000;
+    // If batch base unit is g or ml
+    if (batchUnit === 'g' || batchUnit === 'ml') {
+      if (unit === 'kg' || unit === 'l') return val * 1000;
+      return val;
+    }
+
+    if (unit === 'g' || unit === 'ml' || unit === 'gm' || unit === 'gms' || unit === 'gram' || unit === 'grams') {
+      return val / 1000;
+    }
     return val;
   };
 
-  const unitMultiplier = parseWeight(packetSize);
+  const unitMultiplier = parseWeight(packetSize, selectedBatch?.product?.unit);
   const totalWeightNeeded = quantityPackets * unitMultiplier;
   // IMPORTANT: approvedQty is the ceiling for packaging — never total produced quantity.
   // This ensures rejected QC quantities never become packagable.
@@ -282,7 +318,10 @@ export default function PackagingQueuePage() {
                                   disabled={!canPackage}
                                   onClick={() => {
                                     setSelectedBatch(batch);
-                                    setPacketSize("");
+                                    const defaultUnit = (batch.product?.unit || "KG").toUpperCase() === "L" || (batch.product?.unit || "KG").toUpperCase() === "ML" ? "ml" : "g";
+                                    setSizeValue("500");
+                                    setSizeUnit(defaultUnit);
+                                    setPacketSize(`500${defaultUnit}`);
                                     setQuantityPackets(10);
                                   }}
                                   className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
@@ -320,7 +359,11 @@ export default function PackagingQueuePage() {
                     </h3>
                   </div>
                   <button
-                    onClick={() => setSelectedBatch(null)}
+                    onClick={() => {
+                      setSelectedBatch(null);
+                      setPacketSize("");
+                      setSizeValue("");
+                    }}
                     className="text-xs font-semibold text-gray-400 hover:text-gray-600"
                   >
                     Close
@@ -335,21 +378,73 @@ export default function PackagingQueuePage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Target Pack Size</label>
-                    <select
-                      value={packetSize}
-                      onChange={(e) => setPacketSize(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
-                    >
-                      <option value="" disabled>Select pack size...</option>
-                      <option value="250g">250 G Packet</option>
-                      <option value="500g">500 G Packet</option>
-                      <option value="1kg">1.0 KG Packet</option>
-                      <option value="200ml">200 ML Bottle</option>
-                      <option value="500ml">500 ML Bottle</option>
-                      <option value="1l">1.0 L Bottle</option>
-                      <option value="1unit">1 Unit Box</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-gray-500">Target Pack Size</label>
+                      {packetSize && (
+                        <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                          {sizeValue} {sizeUnit.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {[
+                        { label: "250g", val: "250", unit: "g" },
+                        { label: "500g", val: "500", unit: "g" },
+                        { label: "1kg", val: "1", unit: "kg" },
+                        { label: "2kg", val: "2", unit: "kg" },
+                        { label: "5kg", val: "5", unit: "kg" },
+                        { label: "200ml", val: "200", unit: "ml" },
+                        { label: "500ml", val: "500", unit: "ml" },
+                        { label: "1L", val: "1", unit: "l" },
+                        { label: "1 Unit", val: "1", unit: "unit" },
+                      ].map((preset) => {
+                        const isSelected = sizeValue === preset.val && sizeUnit.toLowerCase() === preset.unit.toLowerCase();
+                        return (
+                          <button
+                            key={`${preset.val}${preset.unit}`}
+                            type="button"
+                            onClick={() => handleSelectPreset(preset.val, preset.unit)}
+                            className={clsx(
+                              "px-2 py-1 text-[11px] font-semibold rounded border transition-all active:scale-95",
+                              isSelected
+                                ? "bg-[#f58220] text-white border-[#f58220] shadow-xs"
+                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                            )}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom Number Input + Unit Selector */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.001"
+                          placeholder="Enter size (e.g. 250)"
+                          value={sizeValue}
+                          onChange={(e) => handleSizeValueChange(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-medium"
+                        />
+                      </div>
+                      <select
+                        value={sizeUnit}
+                        onChange={(e) => handleSizeUnitChange(e.target.value)}
+                        className="w-32 border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-semibold cursor-pointer"
+                      >
+                        <option value="g">G (Grams)</option>
+                        <option value="kg">KG (Kilograms)</option>
+                        <option value="ml">ML (Milliliters)</option>
+                        <option value="l">L (Liters)</option>
+                        <option value="pcs">PCS (Pieces)</option>
+                        <option value="unit">Unit (Box/Pkt)</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div>

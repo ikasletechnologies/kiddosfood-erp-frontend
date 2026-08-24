@@ -1887,27 +1887,42 @@ export default function VendorsClient() {
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Material Name</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Item Code</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Unit</th>
+                        <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Purchased Qty</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Vendor Price</th>
+                        <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Total Amount</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Last Updated</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {selectedVendorDetail?.suppliedMaterials?.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="text-center py-10 text-slate-400 text-xs font-semibold">
+                          <td colSpan={7} className="text-center py-10 text-slate-400 text-xs font-semibold">
                             No materials linked to this vendor yet.
                           </td>
                         </tr>
                       ) : (
-                        selectedVendorDetail?.suppliedMaterials?.map((m: any) => (
-                          <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                            <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.sku || m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.unit ? m.material.unit.replace(/^1\s*/, "") : "Units"}</td>
-                            <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {m.price || m.material?.basePrice || 0}</td>
-                            <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
-                          </tr>
-                        ))
+                        selectedVendorDetail?.suppliedMaterials?.map((m: any) => {
+                          const unitStr = m.material?.unit ? m.material.unit.replace(/^1\s*/, "") : "Units";
+                          const qty = m.totalQuantity !== undefined ? m.totalQuantity : (m.quantity || 0);
+                          const price = Number(m.price || m.material?.costPrice || m.material?.basePrice || 0);
+                          const totalAmt = Number(m.totalAmount !== undefined ? m.totalAmount : (qty * price));
+
+                          return (
+                            <tr key={m.id || m.materialId} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                              <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
+                              <td className="px-6 py-4 text-xs text-slate-500">{m.material?.sku || m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
+                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">{unitStr}</td>
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-700 dark:text-slate-300 text-right">
+                                {qty > 0 ? `${qty} ${unitStr}` : `0 ${unitStr}`}
+                              </td>
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {price.toLocaleString()}</td>
+                              <td className="px-6 py-4 text-xs font-bold text-slate-900 dark:text-white text-right">
+                                ₹ {totalAmt.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
