@@ -15,7 +15,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { useRouter } from "next/navigation";
 import { productBatchesApi, productsFullApi, franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatERPNumber } from "@/lib/utils";
@@ -24,28 +23,28 @@ type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
 const EXPIRY_CONFIG: Record<
   ExpiryStatus,
-  { label: string; color: string; bg: string; border: string; dot: string }
+  { bg: string; color: string; border: string; dot: string; label: string }
 > = {
   EXPIRED: {
-    label: "Expired",
-    color: "text-rose-700 dark:text-rose-400",
     bg: "bg-rose-50 dark:bg-rose-500/10",
+    color: "text-rose-700 dark:text-rose-400",
     border: "border-rose-200 dark:border-rose-500/20",
     dot: "bg-rose-500",
+    label: "Expired",
   },
   EXPIRING_SOON: {
-    label: "Expiring Soon",
-    color: "text-amber-700 dark:text-amber-400",
     bg: "bg-amber-50 dark:bg-amber-500/10",
+    color: "text-amber-700 dark:text-amber-400",
     border: "border-amber-200 dark:border-amber-500/20",
     dot: "bg-amber-500",
+    label: "Expiring Soon",
   },
   VALID: {
-    label: "Valid",
-    color: "text-emerald-700 dark:text-emerald-400",
     bg: "bg-emerald-50 dark:bg-emerald-500/10",
+    color: "text-emerald-700 dark:text-emerald-400",
     border: "border-emerald-200 dark:border-emerald-500/20",
     dot: "bg-emerald-500",
+    label: "Valid",
   },
 };
 
@@ -58,7 +57,6 @@ const FILTER_TABS = ["ALL", "VALID", "EXPIRING_SOON", "EXPIRED"] as const;
 export default function ProductBatchesPage() {
   const { user } = useAuth();
   const isSuper = user?.role === "SUPER_ADMIN";
-  const router = useRouter();
 
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -428,12 +426,7 @@ export default function ProductBatchesPage() {
                   return (
                     <tr
                       key={batch.id}
-                      onClick={() =>
-                        router.push(
-                          `/production/batches?tab=REGISTRY&batchId=${batch.id}`
-                        )
-                      }
-                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer"
+                      className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors"
                     >
                       <td className="px-4 sm:px-5 py-3">
                         <span className="text-[13px] font-bold text-orange-600 dark:text-orange-400 font-mono">
