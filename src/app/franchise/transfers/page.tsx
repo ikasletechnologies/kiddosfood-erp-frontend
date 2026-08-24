@@ -27,7 +27,7 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
 type TransferItemRow = { id: string; inventoryItemId: string; itemSearch: string; quantity: number; availableStock: number; unit: string; baseUnit: string; };
 
 function makeItem(): TransferItemRow {
-  return { id: Math.random().toString(36).slice(2), inventoryItemId: "", itemSearch: "", quantity: 1, availableStock: 0, unit: "UNT", baseUnit: "Units" };
+  return { id: Math.random().toString(36).slice(2), inventoryItemId: "", itemSearch: "", quantity: 0, availableStock: 0, unit: "UNT", baseUnit: "Units" };
 }
 
 export default function FranchiseTransfersPage() {
@@ -175,7 +175,9 @@ export default function FranchiseTransfersPage() {
   const shippedCount = transfers.filter((t) => t.status === "SHIPPED").length;
 
   if (view === "create") {
-    const totalQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    const totalQty = items
+      .filter((i) => i.inventoryItemId && Number(i.quantity) > 0)
+      .reduce((s, i) => s + Number(i.quantity), 0);
 
     return (
       <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
@@ -382,7 +384,7 @@ export default function FranchiseTransfersPage() {
           </button>
           <button
             onClick={handleCreate}
-            disabled={creating || !sourceId || !destId || items.filter(i => i.inventoryItemId).length === 0}
+            disabled={creating || !sourceId || !destId || items.filter(i => i.inventoryItemId && Number(i.quantity) > 0).length === 0}
             className="px-6 py-2 text-sm font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-lg disabled:opacity-60 transition-colors shadow-sm"
           >
             {creating ? "Creating..." : "Create Transfer"}
@@ -498,6 +500,7 @@ export default function FranchiseTransfersPage() {
                   <th className="text-left px-4 py-3">Source</th>
                   <th className="text-left px-4 py-3">Destination</th>
                   <th className="text-center px-4 py-3">Items</th>
+                  <th className="text-center px-4 py-3">Total Quantity</th>
                   <th className="text-center px-4 py-3">Status</th>
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
@@ -521,6 +524,22 @@ export default function FranchiseTransfersPage() {
                       </td>
                       <td className="px-4 py-3 text-center text-xs text-gray-600 font-medium">
                         {t.items?.length || 0}
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs text-gray-600 font-medium">
+                        {(() => {
+                          // Different transferred items can carry different
+                          // units — sum per unit rather than producing a
+                          // single meaningless cross-unit total.
+                          const byUnit = new Map<string, number>();
+                          (t.items || []).forEach((it: any) => {
+                            const unit = it.inventoryItem?.unit || "UNT";
+                            byUnit.set(unit, (byUnit.get(unit) || 0) + Number(it.quantity || 0));
+                          });
+                          if (byUnit.size === 0) return "—";
+                          return Array.from(byUnit.entries())
+                            .map(([unit, qty]) => `${qty} ${unit}`)
+                            .join(", ");
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
@@ -546,6 +565,9 @@ export default function FranchiseTransfersPage() {
                             >
                               <CheckCircle2 size={12} /> {actioningId === t.id ? "..." : "Receive"}
                             </button>
+                          )}
+                          {t.status !== "PENDING" && t.status !== "SHIPPED" && (
+                            <span className="text-gray-300 text-xs">—</span>
                           )}
                         </div>
                       </td>

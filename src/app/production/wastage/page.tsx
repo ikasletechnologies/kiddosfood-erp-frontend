@@ -123,6 +123,22 @@ export default function WastagePage() {
     loadData();
   }, [selectedFranchiseId]);
 
+  // Keep the Log Spoilage warehouse/item picker in step with the selected
+  // location — previously it stayed frozen on whichever warehouse loaded
+  // first at mount (effectively always HQ's), so switching the top location
+  // filter to another branch never updated what Log Spoilage let you log
+  // against.
+  useEffect(() => {
+    if (!selectedFranchiseId || warehouses.length === 0) return;
+    const franchise = franchises.find((f: any) => f.id === selectedFranchiseId);
+    const targetWarehouseId = franchise?.primaryWarehouseId && warehouses.some((w: any) => w.id === franchise.primaryWarehouseId)
+      ? franchise.primaryWarehouseId
+      : warehouses[0].id;
+    setFormData(prev => ({ ...prev, warehouseId: targetWarehouseId, itemId: "" }));
+    loadInventoryForWarehouse(targetWarehouseId, selectedFranchiseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedFranchiseId, warehouses, franchises]);
+
   const handleSubmitWaste = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.warehouseId) {

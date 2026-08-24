@@ -19,8 +19,13 @@ import BranchStockDrawer from "./BranchStockDrawer";
 
 // HQ is now the explicit Franchise.isHQ field, not an id/name guess — a
 // franchise named anything (e.g. "Default") is HQ iff isHQ is true.
-const isHqFranchise = (franchiseId: string | undefined, franchises: any[]) =>
-  !!franchises.find((f) => f.id === franchiseId)?.isHQ;
+// A null/undefined franchiseId is the backend's own convention for an
+// HQ-scoped item (see InventoryService.createItem: "no franchiseId given
+// at all — historically treated as an HQ-scoped item"), so it must count
+// as HQ here too — otherwise HQ-scoped stock falls into the "branch" bucket
+// and shows up as Branch Holdings instead of HQ Available.
+const isHqFranchise = (franchiseId: string | undefined | null, franchises: any[]) =>
+  !franchiseId || !!franchises.find((f) => f.id === franchiseId)?.isHQ;
 
 // Product (the recipe/catalog master) and InventoryItem (the actual stock
 // ledger, credited by packaging/production) aren't linked by a foreign key.

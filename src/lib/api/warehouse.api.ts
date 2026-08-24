@@ -28,26 +28,26 @@ export interface WarehouseStockItem {
 
 export const WarehouseApi = {
   getPrimaryWarehouse: async (franchiseId: string) => {
-    return api.get<Warehouse>(`/warehouse/primary?franchiseId=${franchiseId}`);
+    return api.get<Warehouse>(`/warehouse/primary?franchiseId=${franchiseId}`).then(res => res.data);
   },
 
   getWarehouseStock: async (warehouseId: string) => {
-    return api.get<WarehouseStockItem[]>(`/warehouse/${warehouseId}/stock`);
+    return api.get<WarehouseStockItem[]>(`/warehouse/${warehouseId}/stock`).then(res => res.data);
   },
 
   createBin: async (warehouseId: string, data: { code: string; description?: string }) => {
-    return api.post<WarehouseBin>(`/warehouse/${warehouseId}/bins`, data);
+    return api.post<WarehouseBin>(`/warehouse/${warehouseId}/bins`, data).then(res => res.data);
   },
 
   updateBin: async (binId: string, data: { code: string; description?: string }) => {
-    return api.put<WarehouseBin>(`/warehouse/bins/${binId}`, data);
+    return api.put<WarehouseBin>(`/warehouse/bins/${binId}`, data).then(res => res.data);
   },
 
   deleteBin: async (binId: string) => {
-    return api.delete(`/warehouse/bins/${binId}`);
+    return api.delete(`/warehouse/bins/${binId}`).then(res => res.data);
   },
 
   assignBin: async (warehouseId: string, data: { itemId: string; batchId?: string; quantity: number; newBinId: string }) => {
-    return api.post(`/warehouse/${warehouseId}/assign-bin`, data);
+    return api.post(`/warehouse/${warehouseId}/assign-bin`, data).then(res => res.data);
   }
 };
