@@ -165,104 +165,133 @@ export default function RecipeMasterTab() {
   };
 
   const downloadRecipePDF = (recipe: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("Please allow pop-ups in your browser to print/download the recipe.");
+        return;
+      }
 
-    const instructions = (recipe.instructions || "")
-      .replace(/\[unitWeight:[\d.]+\]/, "")
-      .replace(/\[weightUnit:\w+\]/, "")
-      .trim();
+      const instructions = (recipe.instructions || "")
+        .replace(/\[unitWeight:[\d.]+\]/, "")
+        .replace(/\[weightUnit:\w+\]/, "")
+        .trim();
 
-    const html = `
-      <html>
-        <head>
-          <title>Recipe - ${recipe.name}</title>
-          <style>
-            body { font-family: 'Inter', system-ui, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-            .header { border-bottom: 4px solid #F97316; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-            .title-section h1 { font-size: 28px; font-weight: 900; margin: 0; color: #0f172a; text-transform: uppercase; letter-spacing: -0.02em; }
-            .product { color: #64748b; font-size: 14px; margin-top: 4px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; }
-            .date { font-size: 12px; color: #94a3b8; font-weight: bold; }
-            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
-            .stat-box { background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; }
-            .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.1em; }
-            .stat-value { font-size: 20px; font-weight: 900; color: #0f172a; }
-            .section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; color: #F97316; margin-bottom: 16px; letter-spacing: 0.15em; display: flex; align-items: center; gap: 8px; }
-            .section-title::after { content: ""; flex: 1; height: 1px; background: #fee2e2; }
-            table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; }
-            th { text-align: left; background: #f8fafc; padding: 14px 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
-            td { padding: 14px 20px; border-top: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; color: #334155; }
-            .instructions-box { background: #fffaf5; padding: 30px; border-radius: 24px; border: 1px solid #fed7aa; }
-            .instructions-content { white-space: pre-wrap; line-height: 1.8; font-size: 14px; color: #431407; font-weight: 500; }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="title-section">
-              <h1>${recipe.name}</h1>
-              <div class="product">Finished Product: ${recipe.product?.name || 'N/A'}</div>
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Recipe - ${recipe.name}</title>
+            <style>
+              @page { size: A4; margin: 15mm; }
+              body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 24px; color: #1e293b; line-height: 1.5; margin: 0; background: #fff; }
+              .action-bar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+              .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; }
+              .btn-primary { background: #f97316; color: white; }
+              .btn-primary:hover { background: #ea580c; }
+              .btn-secondary { background: #f1f5f9; color: #475569; }
+              .btn-secondary:hover { background: #e2e8f0; }
+              .header { border-bottom: 3px solid #f97316; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+              .title-section h1 { font-size: 24px; font-weight: 800; margin: 0; color: #0f172a; text-transform: uppercase; }
+              .product { color: #64748b; font-size: 13px; margin-top: 4px; font-weight: 600; }
+              .date { font-size: 12px; color: #94a3b8; font-weight: 600; }
+              .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+              .stat-box { background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
+              .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
+              .stat-value { font-size: 18px; font-weight: 800; color: #0f172a; }
+              .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #ea580c; margin-bottom: 12px; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+              .section-title::after { content: ""; flex: 1; height: 1px; background: #fed7aa; }
+              table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 28px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+              th { text-align: left; background: #f8fafc; padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
+              td { padding: 12px 16px; border-top: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #334155; }
+              .instructions-box { background: #fffaf5; padding: 20px; border-radius: 12px; border: 1px solid #fed7aa; }
+              .instructions-content { white-space: pre-wrap; line-height: 1.6; font-size: 13px; color: #431407; font-weight: 500; }
+              @media print {
+                .no-print { display: none !important; }
+                body { padding: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="action-bar no-print">
+              <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+              <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF</button>
             </div>
-            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
-          </div>
-          
-          <div class="stats">
-            <div class="stat-box">
-              <div class="stat-label">Yield Units</div>
-              <div class="stat-value">${recipe.yieldQty} Units</div>
+            <div class="header">
+              <div class="title-section">
+                <h1>${recipe.name}</h1>
+                <div class="product">Finished Product: ${recipe.product?.name || 'N/A'} ${recipe.recipeCode ? `(${recipe.recipeCode})` : ''}</div>
+              </div>
+              <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Batch Configuration</div>
-              <div class="stat-value">${recipe.batchSize || '1'} ${recipe.recipeItems?.[0]?.unit || 'KG'}</div>
+            
+            <div class="stats">
+              <div class="stat-box">
+                <div class="stat-label">Yield Output</div>
+                <div class="stat-value">${recipe.yieldQty} ${recipe.yieldUnit || 'Units'}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Batch Configuration</div>
+                <div class="stat-value">${recipe.batchSize || '1'} ${recipe.yieldUnit || recipe.recipeItems?.[0]?.unit || 'KG'}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Total Components</div>
+                <div class="stat-value">${recipe.recipeItems?.length || 0} Materials</div>
+              </div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Total Components</div>
-              <div class="stat-value">${recipe.recipeItems?.length || 0} Materials</div>
-            </div>
-          </div>
 
-          <div class="section-title">Bill of Materials</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Ingredient / Raw Material</th>
-                <th style="text-align: center;">Required Quantity</th>
-                <th style="text-align: right;">Unit of Measure</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recipe.recipeItems?.map((item: any) => `
+            <div class="section-title">Bill of Materials (Formula)</div>
+            <table>
+              <thead>
                 <tr>
-                  <td style="font-weight: 700; color: #1e293b;">${item.inventoryItem?.name || 'Unknown Material'}</td>
-                  <td style="text-align: center; font-weight: 700;">${item.quantityRequired}</td>
-                  <td style="text-align: right; color: #64748b; font-weight: 600;">${item.unit || 'KG'}</td>
+                  <th>#</th>
+                  <th>Ingredient / Raw Material</th>
+                  <th style="text-align: center;">Required Quantity</th>
+                  <th style="text-align: right;">Unit of Measure</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${recipe.recipeItems && recipe.recipeItems.length > 0
+                  ? recipe.recipeItems.map((item: any, idx: number) => `
+                    <tr>
+                      <td style="color: #94a3b8; font-weight: 600; width: 40px;">${idx + 1}</td>
+                      <td style="font-weight: 700; color: #1e293b;">${item.inventoryItem?.name || item.name || 'Material'}</td>
+                      <td style="text-align: center; font-weight: 700;">${item.quantityRequired}</td>
+                      <td style="text-align: right; color: #64748b; font-weight: 600;">${item.unit || 'KG'}</td>
+                    </tr>
+                  `).join('')
+                  : `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No ingredients added yet</td></tr>`
+                }
+              </tbody>
+            </table>
 
-          <div class="section-title">Production Methodology</div>
-          <div class="instructions-box">
-            <div class="instructions-content">${instructions || 'Standard production procedures apply.'}</div>
-          </div>
+            <div class="section-title">Production Methodology</div>
+            <div class="instructions-box">
+              <div class="instructions-content">${instructions || 'Standard production procedures apply.'}</div>
+            </div>
+          </body>
+        </html>
+      `;
 
-          <script>
-            window.onload = () => {
-              setTimeout(() => {
-                window.print();
-                window.onafterprint = () => window.close();
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+      toast.success("Opening printable recipe document...");
+
+      setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch (e) {
+          console.error("Auto print error", e);
+        }
+      }, 400);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate recipe document.");
+    }
   };
 
   const handleCreateCategory = async () => {
