@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Edit3, X, Plus, Search, User, Phone, Wallet, Package, MapPin, Hash, BarChart3, ArrowRight } from "lucide-react";
+import { Edit3, X, Plus, Search, User, Phone, MapPin, Building2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { usePurchaseOrder, Vendor } from "@/context/PurchaseOrderContext";
 import { useState, useEffect, useRef } from "react";
@@ -10,9 +10,9 @@ import { clsx } from "clsx";
 
 interface BillingSectionProps {
   fromLabel: string;
-  fromSubLabel: string;
+  fromSubLabel?: string;
   toLabel: string;
-  toSubLabel: string;
+  toSubLabel?: string;
   targetType: "client" | "vendor";
   onAddTarget?: () => void;
 }
@@ -30,7 +30,6 @@ export default function BillingSection({
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const placeholderText = targetType === "client" ? "Select a Client" : "Search Vendor Name / Code...";
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,87 +81,129 @@ export default function BillingSection({
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* From Section: Professional & Compact */}
-      <div className="space-y-3">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-          {fromLabel}
-        </h3>
-        
-        <div className="p-4 bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center gap-4 group">
-           <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-lg shadow-inner uppercase">
-              {user?.fullName?.charAt(0) || "U"}
-           </div>
-           <div className="flex-1">
-              <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">{user?.fullName || "System Admin"}</h4>
-              <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold mt-0.5">
-                 <span className="flex items-center gap-1 uppercase"><MapPin size={10} /> {user?.role?.replace('_', ' ') || "ADMIN"}</span>
-                 <Link href="/settings" className="flex items-center gap-1 text-[#7C3AED] hover:underline cursor-pointer"><Edit3 size={10} /> Edit profile</Link>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* ── Billed To (Entity) Section ── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <Building2 size={13} className="text-[#f58220]" />
+            {fromLabel}
+          </span>
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active Entity
+          </span>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex items-center justify-between min-h-[96px]">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
+              {user?.fullName?.charAt(0) || "S"}
+            </div>
+            <div className="min-w-0">
+              <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">
+                {user?.fullName || "SYSTEM SUPER ADMIN"}
+              </h4>
+              <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 uppercase text-[11px]">
+                  {user?.role?.replace('_', ' ') || "SUPER ADMIN"}
+                </span>
+                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                  <MapPin size={11} className="text-slate-400 shrink-0" />
+                  HQ - Main Facility
+                </span>
               </div>
-           </div>
+            </div>
+          </div>
+
+          <Link 
+            href="/profile/agency" 
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] hover:underline shrink-0 ml-3"
+          >
+            <Edit3 size={12} /> Edit Profile
+          </Link>
         </div>
       </div>
 
-      {/* To Section: Dynamic Vendor Card */}
-      <div className="space-y-3">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-          {toLabel}
-        </h3>
-        
+      {/* ── Billed By (Vendor) Section ── */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+            <User size={13} className="text-[#f58220]" />
+            {toLabel}
+          </span>
+          {selectedVendor ? (
+            <button
+              type="button"
+              onClick={() => setSelectedVendor(null)}
+              className="text-[11px] font-semibold text-slate-400 hover:text-[#f58220] transition-colors cursor-pointer"
+            >
+              Change Vendor
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onAddTarget}
+              className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e] flex items-center gap-0.5 cursor-pointer"
+            >
+              <Plus size={12} /> New Vendor
+            </button>
+          )}
+        </div>
+
         {selectedVendor ? (
-          <div className="p-4 bg-white dark:bg-[#0A0D14] border border-purple-200 dark:border-slate-800 rounded-2xl relative group">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-4">
-                 <div className="w-12 h-12 rounded-xl bg-purple-600 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-purple-100">
-                    {selectedVendor.name.charAt(0)}
-                 </div>
-                 <div className="flex-1">
-                    <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                       {selectedVendor.name}
-                       <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">{selectedVendor.vendorCode || "V-001"}</span>
-                    </h4>
-                    <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 font-bold mt-1">
-                       <span className="flex items-center gap-1"><Hash size={10} /> {selectedVendor.gstNumber || "GST UNREGISTERED"}</span>
-                       <span className="flex items-center gap-1"><Phone size={10} /> {selectedVendor.phone || "N/A"}</span>
-                       <span className="text-purple-500 font-black">● {selectedVendor.suppliedMaterials?.length || 0} Materials Available</span>
-                    </div>
-                 </div>
+          <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex items-center justify-between min-h-[96px] relative">
+            <div className="flex items-center gap-3.5 min-w-0 flex-1">
+              <div className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
+                {selectedVendor.name.charAt(0)}
               </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">
+                    {selectedVendor.name}
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
+                    {selectedVendor.vendorCode || "V-0001"}
+                  </span>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
+                  <span className="text-[11px] font-mono text-slate-500">
+                    GSTIN: {selectedVendor.gstNumber || "GST UNREGISTERED"}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600 hidden sm:inline">•</span>
+                  <span className="flex items-center gap-1 text-[11px] text-slate-500">
+                    <Phone size={10} className="text-slate-400 shrink-0" />
+                    {selectedVendor.phone || "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0 ml-3">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800/40 whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" />
+                {selectedVendor.suppliedMaterials?.length || 1} Material Available
+              </span>
               <button 
+                type="button"
                 onClick={() => setSelectedVendor(null)}
-                className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"
-                title="Remove Selected Vendor"
+                className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-colors cursor-pointer"
+                title="Remove Vendor"
               >
                 <X size={14} />
               </button>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-50 dark:border-slate-800">
-               <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1">
-                    <Wallet size={8} /> {(selectedVendor.advanceBalance || 0) > 0 ? "Advance" : "Balance Due"}
-                  </span>
-                  <span className={clsx(
-                    "text-xs font-black",
-                    (selectedVendor.balanceDue || 0) > 0 ? "text-red-500" : "text-green-600"
-                  )}>₹{((selectedVendor.advanceBalance || 0) > 0 ? selectedVendor.advanceBalance : (selectedVendor.balanceDue || 0)).toLocaleString()}</span>
-               </div>
-               <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-1"><BarChart3 size={8} /> Performance</span>
-                  <span className="text-xs font-black text-slate-900 dark:text-white">98% OTD</span>
-               </div>
-
-            </div>
           </div>
         ) : (
-          <div className="p-4 bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-2xl flex flex-col justify-center min-h-[88px] relative group shadow-sm">
+          <div className="p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl shadow-2xs flex flex-col justify-center min-h-[96px] relative group">
             <div className="w-full relative z-10" ref={searchContainerRef}>
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input 
                   type="text"
-                  placeholder="Search vendor..."
-                  className="w-full bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl py-2.5 pl-9 pr-4 text-xs font-bold outline-none focus:border-[#7C3AED] transition-all"
+                  placeholder="Search vendor name or code..."
+                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-9 pr-8 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100 transition-all"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -170,64 +211,53 @@ export default function BillingSection({
                   }}
                   onFocus={() => setShowSearch(true)}
                 />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
+                {searchQuery && (
+                  <button 
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
               {showSearch && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 overflow-hidden">
-                   <div className="max-h-48 overflow-y-auto">
-                      {loading ? (
-                        <div className="p-4 text-[10px] text-slate-400 font-black uppercase tracking-widest animate-pulse">Loading vendors...</div>
-                      ) : filteredVendors.length > 0 ? (
-                        filteredVendors.map(v => (
-                          <div 
-                            key={v.id}
-                            onClick={() => {
-                              setSelectedVendor(v);
-                              setShowSearch(false);
-                            }}
-                            className="p-3 hover:bg-purple-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
-                          >
-                             <div className="flex flex-col text-left">
-                                <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-tight">{v.name}</span>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                   <span className="text-[9px] font-bold text-slate-400">{v.vendorCode || "V-000"}</span>
-                                   <span className="text-[8px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded uppercase tracking-tighter">
-                                      {v.suppliedMaterials?.length || 0} Items
-                                   </span>
-                                </div>
-                             </div>
-                             <div className="text-right">
-                                <span className={clsx(
-                                  "text-[10px] font-black",
-                                  (v.balanceDue || 0) > 0 ? "text-red-500" : "text-green-600"
-                                )}>₹{((v.advanceBalance || 0) > 0 ? v.advanceBalance : (v.balanceDue || 0)).toLocaleString()}</span>
-                             </div>
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  <div className="max-h-52 overflow-y-auto">
+                    {loading ? (
+                      <div className="p-4 text-xs text-slate-400 font-medium text-center animate-pulse">Loading vendors...</div>
+                    ) : filteredVendors.length > 0 ? (
+                      filteredVendors.map(v => (
+                        <div 
+                          key={v.id}
+                          onClick={() => {
+                            setSelectedVendor(v);
+                            setShowSearch(false);
+                          }}
+                          className="p-3 hover:bg-orange-50/70 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
+                        >
+                          <div className="flex flex-col text-left">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight">{v.name}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-mono font-bold text-slate-400">{v.vendorCode || "V-000"}</span>
+                              <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                                {v.suppliedMaterials?.length || 0} Items
+                              </span>
+                            </div>
                           </div>
-                        ))
-                      ) : (
-                        <div className="p-6 text-[10px] text-slate-400 font-black uppercase tracking-widest text-center">No vendors found</div>
-                      )}
-                   </div>
+                          <div className="text-right">
+                            <span className="text-[11px] font-mono text-slate-500">{v.gstNumber || "GST UNREGISTERED"}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-xs text-slate-400 text-center">No vendors found</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-
-            <Link 
-              href={targetType === "client" ? "/customers" : "/vendors"}
-              className="text-[10px] font-black text-[#7C3AED] uppercase tracking-widest hover:underline flex items-center gap-2 mt-4"
-            >
-              <Plus size={14} /> Add New {targetType === "client" ? "Client" : "Vendor"}
-            </Link>
-            
-            {/* Background pattern */}
-            <div className="absolute inset-0 pointer-events-none opacity-[0.03] bg-[radial-gradient(#7C3AED_1px,transparent_1px)] [background-size:10px_10px]" />
           </div>
         )}
       </div>

@@ -185,83 +185,91 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       />
 
       {/* Top bar */}
-      <div className="sticky top-0 z-50 bg-white dark:bg-[#0B0D14] border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0D14]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => router.push("/purchases/orders")}
-            className="p-2 -ml-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
             title="Back to Purchase Orders"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={18} />
           </button>
-          <div className="p-2 bg-orange-100 rounded-lg">
-            <Package size={18} className="text-orange-600" />
+          <div className="p-2.5 bg-orange-50 dark:bg-orange-950/30 text-[#f58220] rounded-xl border border-orange-100 dark:border-orange-900/30">
+            <Package size={18} />
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">{editId ? "Edit Purchase Order" : "New Purchase Order"}</h1>
-            <p className="text-xs text-gray-400 font-mono">#{poNumber}</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+                {editId ? "Edit Purchase Order" : "New Purchase Order"}
+              </h1>
+              <span className={clsx(
+                "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border",
+                poStatus === "DRAFT" 
+                  ? "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" 
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/40"
+              )}>
+                {poStatus}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 font-mono">#{poNumber}</p>
           </div>
-          <span className={clsx(
-            "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border",
-            poStatus === "DRAFT" ? "bg-gray-50 text-gray-500 border-gray-200" : "bg-orange-50 text-orange-600 border-orange-100"
-          )}>
-            {poStatus}
-          </span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
+            type="button"
             onClick={() => setShowPreview(true)}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors flex items-center gap-1.5"
+            className="px-3.5 py-2 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs uppercase tracking-wider"
           >
             <FileText size={14} /> Preview
           </button>
           <button
+            type="button"
             onClick={handleCreatePO}
             disabled={!isValid || isSubmitting}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 text-xs font-bold uppercase tracking-wider bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <CheckCircle2 size={15} /> {isSubmitting ? (editId ? "Updating..." : "Creating...") : (editId ? "Update Purchase Order" : "Create Purchase Order")}
           </button>
         </div>
       </div>
 
-      <div className="p-5 space-y-4">
+      <div className="p-6 max-w-[1600px] mx-auto space-y-5">
         {contextMessage && (
-          <div className="bg-orange-50 border-l-4 border-orange-500 p-4 rounded-lg flex items-center justify-between shadow-sm">
+          <div className="bg-orange-50/80 border border-orange-200 p-4 rounded-xl flex items-center justify-between shadow-2xs">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 text-orange-600 rounded-lg">
-                <Package size={18} />
+              <div className="p-2 bg-[#f58220] text-white rounded-lg shadow-2xs">
+                <Package size={16} />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-orange-800">{contextMessage}</h3>
-                <p className="text-xs text-orange-600">The quantities have been pre-filled with the calculated shortage amount. Please select a vendor and confirm the price.</p>
+                <h3 className="text-xs font-bold text-orange-950 uppercase tracking-tight">{contextMessage}</h3>
+                <p className="text-xs text-orange-700 mt-0.5">The quantities have been pre-filled with the calculated shortage amount. Please select a vendor and confirm the price.</p>
               </div>
             </div>
             <button 
               onClick={() => setContextMessage(null)}
               className="text-orange-400 hover:text-orange-600 p-1 hover:bg-orange-100 rounded-lg transition-colors"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
           </div>
         )}
 
         <div className="grid grid-cols-12 gap-5">
           {/* Left Main Content */}
-          <div className="col-span-12 lg:col-span-9 space-y-4">
+          <div className="col-span-12 lg:col-span-9 space-y-5">
 
-            {/* Meta Information */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Meta Information Card */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Tag size={14} className="text-slate-400" /> Purchase Type
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Tag size={13} className="text-[#f58220]" /> Purchase Type
                   </label>
                   <select
                     value={purchaseType}
                     onChange={(e) => setPurchaseType(e.target.value)}
-                    className="w-full border border-slate-350 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer"
                   >
                     <option value="RAW_MATERIAL">Raw Material</option>
                     <option value="PACKAGING_MATERIAL">Packaging Material</option>
@@ -271,13 +279,13 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-gray-500 flex items-center gap-1">
-                    <Warehouse size={14} className="text-slate-400" /> Warehouse
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                      <Warehouse size={13} className="text-[#f58220]" /> Warehouse
                     </label>
                     <button
                       type="button"
                       onClick={() => setShowWarehouseModal(true)}
-                      className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
+                      className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-0.5 uppercase tracking-wide"
                     >
                       + Add New
                     </button>
@@ -292,7 +300,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                           setWarehouseId(e.target.value);
                         }
                       }}
-                      className="w-full border border-slate-355 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer truncate"
                     >
                       <option value="">Select Warehouse</option>
                       {warehouses.map(w => (
@@ -303,16 +311,16 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                     <button
                       type="button"
                       onClick={() => setShowWarehouseModal(true)}
-                      className="p-2 border border-slate-350 dark:border-slate-700 hover:border-orange-500 hover:bg-orange-50/50 text-slate-500 hover:text-orange-600 rounded-lg transition-all"
+                      className="p-2 border border-slate-200 dark:border-slate-700 hover:border-[#f58220] hover:bg-orange-50 text-slate-500 hover:text-[#f58220] rounded-lg transition-all shrink-0"
                       title="Add New Warehouse"
                     >
-                      +
+                      <Plus size={14} />
                     </button>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Calendar size={14} className="text-slate-400" /> Expected Delivery <span className="text-rose-500 font-bold">*</span>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#f58220]" /> Expected Delivery <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -320,12 +328,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={expectedDeliveryDate}
                       onChange={(e) => setExpectedDeliveryDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm outline-none focus:border-orange-500 transition-colors pl-3",
-                        expectedDeliveryDate ? "pr-16 text-transparent" : "pr-8 text-slate-700"
+                        "w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded-lg py-2 text-xs font-bold outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all pl-3",
+                        expectedDeliveryDate ? "pr-16 text-transparent" : "pr-8 text-slate-800 dark:text-white"
                       )}
                     />
                     {expectedDeliveryDate && (
-                      <span className="absolute left-3 pointer-events-none text-sm text-slate-700 dark:text-slate-200">
+                      <span className="absolute left-3 pointer-events-none text-xs font-bold text-slate-800 dark:text-slate-200">
                         {formatDateToDMY(expectedDeliveryDate)}
                       </span>
                     )}
@@ -334,23 +342,23 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                         <button
                           type="button"
                           onClick={() => setExpectedDeliveryDate("")}
-                          className="p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                          className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-colors"
                           title="Clear Date"
                         >
-                          <X size={14} />
+                          <X size={13} />
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <CreditCard size={14} className="text-slate-400" /> Payment Terms
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <CreditCard size={13} className="text-[#f58220]" /> Payment Terms
                   </label>
                   <select
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full border border-slate-350 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white dark:bg-slate-900 outline-none focus:border-orange-500 transition-colors"
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer"
                   >
                     <option value="">Select Terms</option>
                     <option value="IMMEDIATE">Immediate</option>
@@ -364,14 +372,16 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Purchase Order No.</label>
-                  <div className="text-sm font-bold text-gray-800 font-mono">{poNumber}</div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Purchase Order No.</label>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white font-mono bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg inline-block border border-slate-200 dark:border-slate-700">
+                    {poNumber}
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1">
-                    <Calendar size={14} className="text-slate-400" /> Purchase Date
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-[#f58220]" /> Purchase Date
                   </label>
                   <div className="relative flex items-center">
                     <input
@@ -379,12 +389,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                       value={purchaseDate}
                       onChange={(e) => setPurchaseDate(e.target.value)}
                       className={clsx(
-                        "w-full border border-slate-350 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg py-2 text-sm outline-none focus:border-orange-500 transition-colors pl-3",
-                        purchaseDate ? "pr-16 text-transparent" : "pr-8 text-slate-700"
+                        "w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded-lg py-2 text-xs font-bold outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all pl-3",
+                        purchaseDate ? "pr-16 text-transparent" : "pr-8 text-slate-800 dark:text-white"
                       )}
                     />
                     {purchaseDate && (
-                      <span className="absolute left-3 pointer-events-none text-sm text-slate-700 dark:text-slate-200">
+                      <span className="absolute left-3 pointer-events-none text-xs font-bold text-slate-800 dark:text-slate-200">
                         {formatDateToDMY(purchaseDate)}
                       </span>
                     )}
@@ -393,10 +403,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                         <button
                           type="button"
                           onClick={() => setPurchaseDate("")}
-                          className="p-0.5 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                          className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-colors"
                           title="Clear Date"
                         >
-                          <X size={14} />
+                          <X size={13} />
                         </button>
                       )}
                     </div>
@@ -405,7 +415,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               </div>
             </div>
 
-            {/* Vendor Selection */}
+            {/* Vendor & Entity Selection */}
             <BillingSection
               fromLabel="Billed To (Entity)"
               fromSubLabel="Your Details"
@@ -415,65 +425,77 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               onAddTarget={() => setShowVendorModal(true)}
             />
 
-          {/* Section 3: Material Table & Accordions */}
-          <div className="bg-white dark:bg-[#0A0D14] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
-             <div className="flex bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 rounded-t-2xl overflow-hidden">
+            {/* Section 3: Material Table & Accordions */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-visible">
+              <div className="flex bg-slate-50/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 rounded-t-xl overflow-hidden px-2">
                 <button 
+                  type="button"
                   onClick={() => setActiveTab("items")}
                   className={clsx(
-                    "px-6 py-3 text-xs font-semibold uppercase tracking-wide transition-all border-b-2",
-                    activeTab === "items" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"
+                    "px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer",
+                    activeTab === "items" 
+                      ? "border-[#f58220] text-[#f58220]" 
+                      : "border-transparent text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Material Items
+                  <Package size={14} /> Material Items
+                  <span className={clsx(
+                    "px-1.5 py-0.2 text-[10px] rounded font-bold",
+                    activeTab === "items" ? "bg-orange-100 text-[#f58220]" : "bg-slate-200 text-slate-500"
+                  )}>
+                    {items.filter(i => i.materialId).length}
+                  </span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveTab("notes")}
                   className={clsx(
-                    "px-6 py-3 text-xs font-semibold uppercase tracking-wide transition-all border-b-2",
-                    activeTab === "notes" ? "border-orange-500 text-orange-600" : "border-transparent text-gray-400 hover:text-gray-600"
+                    "px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer",
+                    activeTab === "notes" 
+                      ? "border-[#f58220] text-[#f58220]" 
+                      : "border-transparent text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Notes & Terms
+                  <FileText size={14} /> Notes & Terms
                 </button>
-             </div>
+              </div>
               <div className="p-0">
                 {activeTab === "items" && <LineItemsTable />}
                 {activeTab === "notes" && (
-                  <div className="p-6 space-y-6">
-                     <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-1.5">
-                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Internal Remarks</label>
-                           <textarea 
-                             value={internalNotes}
-                             onChange={(e) => setInternalNotes(e.target.value)}
-                             placeholder="Internal collaboration notes..."
-                             className="w-full min-h-[140px] p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm outline-none focus:border-orange-500 transition-colors resize-none"
-                           />
-                        </div>
-                        <div className="space-y-1.5">
-                           <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Supplier Instructions</label>
-                           <textarea 
-                             value={vendorNotes}
-                             onChange={(e) => setVendorNotes(e.target.value)}
-                             placeholder="Delivery instructions, terms, etc..."
-                             className="w-full min-h-[140px] p-3 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm outline-none focus:border-orange-500 transition-colors resize-none"
-                           />
-                        </div>
-                     </div>
+                  <div className="p-5 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Internal Remarks</label>
+                        <textarea 
+                          value={internalNotes}
+                          onChange={(e) => setInternalNotes(e.target.value)}
+                          placeholder="Internal collaboration notes for team..."
+                          className="w-full min-h-[140px] p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all resize-none"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Supplier Instructions</label>
+                        <textarea 
+                          value={vendorNotes}
+                          onChange={(e) => setVendorNotes(e.target.value)}
+                          placeholder="Delivery instructions, shipping terms, packaging requirements..."
+                          className="w-full min-h-[140px] p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all resize-none"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-        {/* Right Sticky Sidebar */}
-        <div className="col-span-12 lg:col-span-3">
-          <div className="sticky top-24 space-y-8">
-             <DocumentSummary />
-           </div>
+          {/* Right Sticky Sidebar */}
+          <div className="col-span-12 lg:col-span-3">
+            <div className="sticky top-20 space-y-4">
+              <DocumentSummary />
+            </div>
+          </div>
         </div>
-      </div>
       </div>
 
       {showPreview && (

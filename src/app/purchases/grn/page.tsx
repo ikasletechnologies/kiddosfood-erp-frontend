@@ -261,6 +261,15 @@ export default function GRNPage() {
       return;
     }
 
+    // Verify that lot numbers are entered for all accepted items
+    const missingLot = itemsToSubmit.some(
+      item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
+    );
+    if (missingLot) {
+      toast.error("Please enter or generate a Lot Number for all accepted materials before approving.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       // 1. Create and Approve GRN (Impacts Inventory)
@@ -605,37 +614,55 @@ export default function GRNPage() {
                             <div className="text-[11px] text-gray-500 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <button
-                                type="button"
-                                title="Generate a unique lot/batch number"
-                                disabled={generatingLotIdx === idx}
-                                onClick={() => handleAutoBatch(idx)}
-                                className="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors"
-                              >
-                                {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
-                              </button>
-                              <input
-                                type="text"
-                                placeholder="Lot Number"
-                                value={item.lotNumber || ""}
-                                onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
-                                className="w-28 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800"
-                              />
-                              <input
-                                type="date"
-                                title="Mfg Date"
-                                value={item.mfgDate || ""}
-                                onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
-                              />
-                              <input
-                                type="date"
-                                title="Exp Date"
-                                value={item.expDate || ""}
-                                onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
-                              />
+                            <div className="space-y-1.5 min-w-[280px]">
+                              {/* Row 1: Lot / Batch Number */}
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  title="Generate a unique lot/batch number"
+                                  disabled={generatingLotIdx === idx}
+                                  onClick={() => handleAutoBatch(idx)}
+                                  className="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors shrink-0"
+                                >
+                                  {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
+                                </button>
+                                <input
+                                  type="text"
+                                  placeholder="Lot Number *"
+                                  value={item.lotNumber || ""}
+                                  onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
+                                  className={clsx(
+                                    "w-36 px-2.5 py-1 bg-white border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800",
+                                    item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim())
+                                      ? "border-amber-300 bg-amber-50/20"
+                                      : "border-gray-200"
+                                  )}
+                                />
+                              </div>
+
+                              {/* Row 2: Starting & Ending Dates with clear labels */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
+                                  <input
+                                    type="date"
+                                    title="Manufacturing (Start) Date"
+                                    value={item.mfgDate || ""}
+                                    onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
+                                    className="bg-transparent text-xs outline-none text-gray-800 cursor-pointer"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
+                                  <input
+                                    type="date"
+                                    title="Expiry (End) Date"
+                                    value={item.expDate || ""}
+                                    onChange={e => updateItemStr(idx, "expDate", e.target.value)}
+                                    className="bg-transparent text-xs outline-none text-gray-800 cursor-pointer"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -712,36 +739,59 @@ export default function GRNPage() {
             </div>
 
             {/* ── Bottom Actions Footer Bar ── */}
-            <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="text-xs text-gray-500">
-                <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{grnItems.reduce((s, i) => s + i.acceptedQty, 0)}</span> units
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSubmitForReview}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-lg transition-colors"
-                >
-                  Submit
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrintGRN}
-                  className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-sm font-semibold rounded-lg transition-colors"
-                >
-                  Print GRN
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreateAndApprove}
-                  disabled={submitting}
-                  className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
-                  Approve & Sync
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const totalAccepted = grnItems.reduce((s, i) => s + (Number(i.acceptedQty) || 0), 0);
+              const isMissingLotNumber = grnItems.length === 0 || totalAccepted === 0 || grnItems.some(
+                item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
+              );
+              const isApproveDisabled = submitting || isMissingLotNumber;
+
+              return (
+                <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2">
+                    <span>
+                      <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{totalAccepted}</span> units
+                    </span>
+                    {isMissingLotNumber && totalAccepted > 0 && (
+                      <span className="text-[11px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded">
+                        ⚠ Lot Number required to approve
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSubmitForReview}
+                      className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Submit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintGRN}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Print GRN
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateAndApprove}
+                      disabled={isApproveDisabled}
+                      title={isMissingLotNumber ? "Please enter or generate a Lot Number for all accepted materials to enable Approve & Sync" : "Approve GRN and synchronize stock"}
+                      className={clsx(
+                        "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
+                        isApproveDisabled
+                          ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed shadow-none"
+                          : "bg-[#f58220] hover:bg-[#e8740e] text-white active:scale-95"
+                      )}
+                    >
+                      {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
+                      Approve & Sync
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
