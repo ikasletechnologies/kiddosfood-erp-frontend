@@ -40,6 +40,9 @@ export default function DealersClient() {
 
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
+  // HQ / Franchise scope — Super Admin only. Franchise Admin is always
+  // implicitly scoped to their own franchiseId (see effectiveFranchiseId below).
+  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
   const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,30 +56,40 @@ export default function DealersClient() {
     franchiseId: ""
   });
 
-  // Fetch franchises if SUPER_ADMIN
+  // Fetch franchises if SUPER_ADMIN — includes HQ, since HQ Dealers are a
+  // real, selectable scope now (resolved via franchise.isHQ, never by name/id).
   useEffect(() => {
     if (isSuper) {
       franchiseApi.getAll()
-        .then((res) => {
-          // Filter out main Headquarters/DC to focus on active franchise branches
-          const branches = (res.data ?? []).filter((f: any) => 
-            !f.name.includes("Headquarters (HQ)") && 
-            f.id !== "hq-001"
-          );
-          setFranchises(branches);
-        })
+        .then((res) => setFranchises(res.data ?? []))
         .catch((err) => console.error("Failed to load franchises list", err));
     }
   }, [isSuper]);
 
+  // HQ is resolved from the real Franchise row where isHQ === true — never a
+  // hardcoded id or name.
+  const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
+  const effectiveFranchiseId = isSuper
+    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
+    : (user as any)?.franchiseId;
+
   useEffect(() => {
     fetchDealers();
-  }, [user, selectedFranchiseId]);
+  }, [user, isSuper, scope, selectedFranchiseId, effectiveFranchiseId]);
 
   const fetchDealers = async () => {
+    // Super Admin: wait for the franchise list (and therefore HQ resolution)
+    // before fetching, and require an explicit franchise pick when scope is
+    // FRANCHISE — never silently fall back to "all".
+    if (isSuper && franchises.length === 0) return;
+    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+      setDealers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const fId = isSuper ? selectedFranchiseId : (user as any)?.franchiseId;
+      const fId = effectiveFranchiseId;
       const url = fId ? `/api/dealers?franchiseId=${fId}` : `/api/dealers`;
       const res = await api.get(url);
       setDealers(res.data);
@@ -89,10 +102,10 @@ export default function DealersClient() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const finalFranchiseId = isSuper ? formData.franchiseId : (user as any)?.franchiseId;
+    const finalFranchiseId = isSuper ? effectiveFranchiseId : (user as any)?.franchiseId;
 
     if (!finalFranchiseId) {
-      toast.error("Please select a franchise branch.");
+      toast.error(isSuper ? "Select HQ or a franchise branch first." : "Please select a franchise branch.");
       return;
     }
 
@@ -167,21 +180,39 @@ export default function DealersClient() {
             )}
         </div>
 
-        {/* Franchise Dropdown for Super Admin */}
+        {/* HQ / Franchise Scope Selector for Super Admin */}
         {isSuper && (
-          <div>
-            <select
-              value={selectedFranchiseId}
-              onChange={(e) => setSelectedFranchiseId(e.target.value)}
-              className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-sm font-bold text-slate-700 dark:text-slate-300"
-            >
-              <option value="">All Franchise Branches</option>
-              {franchises.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-2">
+            <div className="flex gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1">
+              <button
+                type="button"
+                onClick={() => setScope("HQ")}
+                className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${scope === "HQ" ? "bg-blue-600 text-white" : "text-slate-500"}`}
+              >
+                HQ
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("FRANCHISE")}
+                className={`flex-1 text-xs font-bold py-2 rounded-xl transition-colors ${scope === "FRANCHISE" ? "bg-blue-600 text-white" : "text-slate-500"}`}
+              >
+                Franchise
+              </button>
+            </div>
+            {scope === "FRANCHISE" && (
+              <select
+                value={selectedFranchiseId}
+                onChange={(e) => setSelectedFranchiseId(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-sm font-bold text-slate-700 dark:text-slate-300"
+              >
+                <option value="">Select Franchise Branch</option>
+                {franchises.filter((f: any) => !f.isHQ).map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
@@ -282,23 +313,17 @@ export default function DealersClient() {
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               
-              {/* Franchise Select Dropdown for Super Admin in Create Modal */}
+              {/* Target scope for Super Admin — driven by the HQ/Franchise selector
+                  above, not a separate pick, so the dealer is always created in
+                  whatever scope is currently being viewed. */}
               {isSuper && (
                 <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Franchise Branch *</label>
-                  <select
-                    required
-                    value={formData.franchiseId}
-                    onChange={(e) => setFormData({...formData, franchiseId: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-700 dark:text-slate-300"
-                  >
-                    <option value="">Select Target Branch...</option>
-                    {franchises.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Target Scope</label>
+                  <div className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
+                    {scope === "HQ"
+                      ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name || "Main Headquarters"}`
+                      : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name || "No franchise selected — pick one above")}
+                  </div>
                 </div>
               )}
 

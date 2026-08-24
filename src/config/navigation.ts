@@ -345,6 +345,23 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
+    title: "PARTNERS",
+    items: [
+      {
+        icon: Users,
+        label: "Customers",
+        href: "/customers",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Store,
+        label: "Dealers",
+        href: "/franchise/dealers",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
     title: "ACCOUNTS",
     items: [
       {

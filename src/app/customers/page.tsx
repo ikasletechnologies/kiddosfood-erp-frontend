@@ -10,9 +10,32 @@ import {
 import { Setting07Icon } from "hugeicons-react";
 import { toast } from "react-hot-toast";
 import AddPartyModal from "@/components/modals/AddPartyModal";
-import { customersApi } from "@/lib/api";
+import { customersApi, franchiseApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function PartiesPage() {
+  const { user } = useAuth();
+  const isSuper = user?.role === "SUPER_ADMIN";
+
+  // HQ / Franchise scope — Super Admin only. Franchise Admin is always
+  // implicitly scoped to their own franchiseId (see effectiveFranchiseId below).
+  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
+  const [franchises, setFranchises] = useState<any[]>([]);
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
+
+  useEffect(() => {
+    if (!isSuper) return;
+    franchiseApi.getAll()
+      .then((res) => setFranchises(res.data ?? []))
+      .catch((err) => console.error("Failed to load franchises list", err));
+  }, [isSuper]);
+
+  // HQ is resolved from the real Franchise row where isHQ === true — never a
+  // hardcoded id or name.
+  const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
+  const effectiveFranchiseId = isSuper
+    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
+    : (user as any)?.franchiseId;
   const [activeTab, setActiveTab] = useState("Transactions");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
@@ -98,10 +121,10 @@ export default function PartiesPage() {
     { type: "Sale Order", number: "1", date: "20/05/2026", total: "35.00", balance: "35.00" },
   ];
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
     try {
-      const res = await customersApi.getAll();
+      const res = await customersApi.getAll(franchiseId ? { franchiseId } : {});
       const data = res.data || [];
       setCustomers(data);
       if (!selectedCustomerId && data.length > 0) {
@@ -116,8 +139,17 @@ export default function PartiesPage() {
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    // Super Admin: wait for the franchise list (and therefore HQ resolution)
+    // before fetching, and require an explicit franchise pick when scope is
+    // FRANCHISE — never silently fall back to "all".
+    if (isSuper && franchises.length === 0) return;
+    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
+    fetchCustomers(effectiveFranchiseId);
+  }, [isSuper, scope, selectedFranchiseId, franchises.length, effectiveFranchiseId]);
 
   useEffect(() => {
     const fetchCustomerDetail = async () => {
@@ -170,6 +202,40 @@ export default function PartiesPage() {
             Parties <ChevronDown size={18} className="text-blue-500" />
           </button>
         </div>
+
+        {/* HQ / Franchise Scope Selector — Super Admin only */}
+        {isSuper && (
+          <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+            <div className="flex gap-1 bg-slate-100 rounded-full p-1">
+              <button
+                type="button"
+                onClick={() => setScope("HQ")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                HQ
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("FRANCHISE")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                Franchise
+              </button>
+            </div>
+            {scope === "FRANCHISE" && (
+              <select
+                value={selectedFranchiseId}
+                onChange={(e) => setSelectedFranchiseId(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
+              >
+                <option value="">Select Franchise</option>
+                {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
 
         {/* Search & List Headers */}
         <div className="px-3 py-2 border-b border-slate-200 space-y-2">
@@ -607,15 +673,22 @@ export default function PartiesPage() {
         onClose={() => setIsAddModalOpen(false)} 
         onSave={async (data) => {
           try {
-            await customersApi.create({ ...data, phone: data.contact });
+            if (isSuper && !effectiveFranchiseId) {
+              toast.error("Select HQ or a franchise before adding a party.");
+              return;
+            }
+            const payload = isSuper
+              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
+              : { ...data, phone: data.contact };
+            await customersApi.create(payload);
             toast.success("Party added successfully!");
             setIsAddModalOpen(false);
-            fetchCustomers();
+            fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
             toast.error(error.response?.data?.error || "Failed to add party");
             throw error;
           }
-        }} 
+        }}
         title="ADD PARTY"
         partyType="customer"
       />
@@ -630,7 +703,7 @@ export default function PartiesPage() {
             await customersApi.update(selectedCustomerId, { ...data, phone: data.contact });
             toast.success("Party updated successfully!");
             setIsEditModalOpen(false);
-            fetchCustomers();
+            fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
             toast.error(error.response?.data?.error || "Failed to update party");
             throw error;
