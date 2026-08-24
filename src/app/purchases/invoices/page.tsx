@@ -368,9 +368,8 @@ export default function PurchaseBillsPage() {
   const priceDropRef = useRef<HTMLDivElement>(null);
 
   // date filter
-  const now = new Date();
-  const [dateFrom, setDateFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
-  const [dateTo, setDateTo] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [showFromCal, setShowFromCal] = useState(false);
   const [showToCal, setShowToCal] = useState(false);
   const fromCalRef = useRef<HTMLDivElement>(null);

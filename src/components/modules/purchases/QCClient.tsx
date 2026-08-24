@@ -30,6 +30,25 @@ export default function QCClient() {
   // Search Filter
   const [searchQuery, setSearchQuery] = useState('');
 
+  // QC History Batch Details SlideOver / Drawer
+  const [selectedBatchDetails, setSelectedBatchDetails] = useState<any | null>(null);
+  const [showBatchDetails, setShowBatchDetails] = useState(false);
+
+  const STAGE_LABELS: Record<string, string> = {
+    QUEUED: 'Queued',
+    IN_PROGRESS: 'Cooking',
+    QUALITY_CHECK: 'Quality Check',
+    COMPLETED: 'Completed',
+    STOPPED: 'Stopped',
+  };
+
+  const formatDurationMinutes = (minutes: number): string => {
+    if (minutes < 60) return `${minutes}m`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  };
+
   const fetchPending = useCallback(async () => {
     try {
       setLoading(true);
@@ -119,10 +138,7 @@ export default function QCClient() {
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
-        {/* Production Batches — a plain table + an Inspect dialog. Not a
-            lab QMS screen: no moisture/color/texture parameters, no
-            multi-way disposition toggle — just accept/reject quantities
-            against what was actually produced. */}
+        {/* Production Batches */}
         <div className="space-y-4">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -189,10 +205,7 @@ export default function QCClient() {
             </div>
           )}
 
-          {/* QC History — batches already inspected. Without this, a batch
-              dropped out of view entirely the moment it was QC'd (the queue
-              only ever showed PENDING), leaving no record of past decisions
-              on this screen. */}
+          {/* QC History — batches already inspected. */}
           <div className="pt-2">
             <h2 className="text-sm font-bold text-gray-800 mb-3">QC History</h2>
             {loading && prodBatches.length === 0 ? null : filteredProdHistory.length === 0 ? (
@@ -232,8 +245,12 @@ export default function QCClient() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
-                              onClick={() => router.push(`/production/batches?tab=REGISTRY&batchId=${batch.id}`)}
-                              className="px-3 py-1.5 border border-gray-200 hover:border-gray-300 text-gray-600 rounded-lg text-xs font-semibold transition-colors"
+                              type="button"
+                              onClick={() => {
+                                setSelectedBatchDetails(batch);
+                                setShowBatchDetails(true);
+                              }}
+                              className="px-3 py-1.5 border border-gray-200 hover:border-gray-300 text-gray-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                             >
                               View
                             </button>
@@ -248,6 +265,237 @@ export default function QCClient() {
           </div>
         </div>
       </div>
+
+      {/* Batch Details Drawer / Side Panel */}
+      {showBatchDetails && selectedBatchDetails && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div
+            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowBatchDetails(false)}
+          />
+          <div className="relative w-full max-w-2xl bg-white shadow-2xl h-full flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300 z-10">
+            {/* Drawer Header */}
+            <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-sm font-mono font-semibold text-[#f58220]">
+                    {formatERPNumber("PRD", selectedBatchDetails.batchCode, selectedBatchDetails.createdAt)}
+                  </span>
+                  <span className={clsx(
+                    "px-2 py-0.5 rounded-full text-xs font-semibold",
+                    selectedBatchDetails.qcStatus === 'APPROVED' ? "bg-emerald-100 text-emerald-700" :
+                    selectedBatchDetails.qcStatus === 'PARTIALLY_APPROVED' ? "bg-amber-100 text-amber-700" :
+                    selectedBatchDetails.qcStatus === 'REJECTED' ? "bg-rose-100 text-rose-700" :
+                    "bg-emerald-100 text-emerald-700"
+                  )}>
+                    {qcStatusBadge[selectedBatchDetails.qcStatus]?.label || "Active"}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchDetails(false)}
+                className="p-2 hover:bg-gray-200/70 rounded-lg transition-colors font-semibold text-gray-500 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Product Header & Timeline */}
+              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-end mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Product</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{prodBatchName(selectedBatchDetails)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Recipe Version</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">
+                      {selectedBatchDetails.production?.recipe?.version ? `v${selectedBatchDetails.production.recipe.version}` : "v1.2 (Standard)"}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Production Timeline */}
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold text-gray-500 mb-4">Production Timeline</h4>
+                  {(() => {
+                    const production = selectedBatchDetails.production;
+                    const stageLogs = production?.stageLogs ?? [];
+                    const points: { key: string; label: string; time: string }[] = stageLogs.map((log: any) => ({
+                      key: log.id,
+                      label: STAGE_LABELS[log.stage] ?? log.stage,
+                      time: log.enteredAt,
+                    }));
+                    if (production?.status === 'COMPLETED' && production?.endTime) {
+                      points.push({ key: 'completed', label: 'Completed', time: production.endTime });
+                    } else if (production?.status === 'STOPPED' && production?.endTime) {
+                      points.push({ key: 'stopped', label: 'Paused', time: production.endTime });
+                    }
+
+                    if (points.length === 0) {
+                      const start = selectedBatchDetails.createdAt || selectedBatchDetails.production?.startTime;
+                      const end = selectedBatchDetails.production?.endTime || selectedBatchDetails.updatedAt;
+                      return (
+                        <div className="flex items-center gap-4 text-[11px] font-semibold text-gray-500">
+                          {start && <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                          {end && <span>End: <span className="text-gray-800">{new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                        </div>
+                      );
+                    }
+
+                    const start = points[0]?.time;
+                    const end = points.length > 1 ? points[points.length - 1].time : null;
+                    const durationMinutes = start && end
+                      ? Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
+                      : null;
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-gray-600 relative before:absolute before:top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-gray-200 overflow-x-auto pb-1">
+                          {points.map((p, idx) => (
+                            <div key={p.key ?? idx} className="relative flex flex-col items-center gap-2 group z-10 shrink-0">
+                              <div className="w-3 h-3 rounded-full bg-[#f58220] border-2 border-white shadow-sm" />
+                              <span className="w-16 text-center leading-tight bg-gray-50">
+                                {new Date(p.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                                <br />
+                                {p.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-4 mt-3 text-[11px] font-semibold text-gray-500">
+                          <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>
+                          <span>End: <span className="text-gray-800">{end ? new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "In Progress"}</span></span>
+                          {durationMinutes !== null && <span>Duration: <span className="text-gray-800">{formatDurationMinutes(durationMinutes)}</span></span>}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Yield & Cost */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Production Yield &amp; Cost</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500">Produced</p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
+                      {selectedBatchDetails.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatchDetails.production?.recipe?.yieldUnit || "KG"}</span>
+                    </p>
+                  </div>
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500">Approved / Rejected</p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
+                      {selectedBatchDetails.approvedQty ?? 0} <span className="text-xs text-rose-500">/ {selectedBatchDetails.rejectionQty ?? 0}</span>
+                    </p>
+                  </div>
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-[#f58220] font-semibold">Material Cost</p>
+                    <p className="text-base font-bold text-[#e8740e] mt-1 tabular-nums">
+                      ₹{(selectedBatchDetails.production?.materialCost ?? selectedBatchDetails.totalCost ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-emerald-600 font-semibold">Unit Cost</p>
+                    <p className="text-base font-bold text-emerald-700 mt-1 tabular-nums">
+                      ₹{(selectedBatchDetails.unitCost ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-rose-600 font-semibold">QC Wastage Cost</p>
+                    <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">
+                      ₹{((selectedBatchDetails.rejectionQty ?? 0) * (selectedBatchDetails.unitCost ?? 0)).toFixed(2)}
+                    </p>
+                    <p className="text-[11px] text-rose-400 mt-0.5">
+                      {selectedBatchDetails.rejectionQty ?? 0} {selectedBatchDetails.production?.recipe?.yieldUnit || "KG"} rejected
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Unit cost reflects the real price on whichever purchase bill(s) this run actually consumed (FIFO) — it can differ run-to-run of the same recipe as older, cheaper bills run out and newer purchase prices take over.
+                </p>
+              </div>
+
+              {/* QC Remarks / Details if available */}
+              {selectedBatchDetails.qcRemarks && (
+                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-lg">
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">QC Inspection Remarks</h4>
+                  <p className="text-xs text-amber-900 leading-relaxed">{selectedBatchDetails.qcRemarks}</p>
+                </div>
+              )}
+
+              {/* Ingredients Used */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Ingredients Consumption</h3>
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                      <tr>
+                        <th className="px-4 py-2">Ingredient</th>
+                        <th className="px-4 py-2">Purchase Bill</th>
+                        <th className="px-4 py-2 text-right">Qty</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 text-sm text-gray-700">
+                      {(selectedBatchDetails.production?.items ?? []).map((pi: any) => {
+                        const breakdown: any[] = Array.isArray(pi.batchBreakdown) ? pi.batchBreakdown : [];
+                        return (
+                          <React.Fragment key={pi.id}>
+                            <tr className="bg-gray-50/70 font-semibold">
+                              <td className="px-4 py-2.5">{pi.inventoryItem?.name ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-400 normal-case">
+                                {breakdown.length > 1 ? `Blended across ${breakdown.length} bills` : ""}
+                              </td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">{pi.usedQuantity} {pi.inventoryItem?.unit}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">₹{(pi.unitCost ?? 0).toFixed(2)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">₹{(pi.totalCost ?? 0).toFixed(2)}</td>
+                            </tr>
+                            {breakdown.length > 0 ? (
+                              breakdown.map((b: any, idx: number) => {
+                                const isFallback = !b.batchId;
+                                return (
+                                  <tr key={idx} className="text-xs text-gray-500">
+                                    <td className="px-4 py-2"></td>
+                                    <td className="px-4 py-2 normal-case">
+                                      <span className={isFallback ? "font-semibold text-amber-600" : "font-mono font-semibold text-gray-600"}>
+                                        {b.billNumber || "—"}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-right tabular-nums">{b.qty} {pi.inventoryItem?.unit}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">₹{(b.unitCost ?? 0).toFixed(2)}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">₹{(b.totalCost ?? 0).toFixed(2)}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr className="text-xs text-gray-400">
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2 normal-case" colSpan={4}>No purchase bill on record for this consumption</td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                      {(!selectedBatchDetails.production?.items || selectedBatchDetails.production.items.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-6 text-center text-gray-400">No ingredient data recorded for this run</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QC Inspection Dialog */}
       {qcModalBatch && (

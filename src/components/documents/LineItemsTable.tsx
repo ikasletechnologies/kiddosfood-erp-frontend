@@ -83,6 +83,20 @@ export default function LineItemsTable() {
     }
   };
 
+  // Auto-sync item name if material is present in inventory materials
+  useEffect(() => {
+    if (materials.length > 0) {
+      items.forEach(i => {
+        if (i.materialId && (!i.name || i.name === "Material" || i.name === "Unknown Material")) {
+          const m = materials.find(mat => mat.id === i.materialId);
+          if (m?.name) {
+            updateItem(i.id, { name: m.name, unit: i.unit || m.unit || "KG", gstRate: i.gstRate || m.gstRate || 5 });
+          }
+        }
+      });
+    }
+  }, [materials]);
+
   const openAddMaterialManually = (itemId: string, defaultName: string = "") => {
     setTargetDrawerItemId(itemId);
     setPrefilledMaterialName(defaultName);
@@ -102,146 +116,153 @@ export default function LineItemsTable() {
     }
   };
 
-  // Get all material IDs currently selected in the table to prevent duplicate selection
-  const selectedMaterialIds = new Set(
-    items.map(item => item.materialId).filter(Boolean)
+  // Get all material IDs selected in OTHER rows in the table to prevent duplicate selection
+  const otherSelectedMaterialIds = new Set(
+    items.filter(item => item.id !== activeSearchId).map(item => item.materialId).filter(Boolean)
   );
 
   const filteredMaterials = materials.filter(m => {
-    // Exclude materials already added to the table
-    if (selectedMaterialIds.has(m.id)) return false;
+    // Exclude materials already added to OTHER rows
+    if (otherSelectedMaterialIds.has(m.id)) return false;
     
+    if (!searchQuery.trim()) return true;
     return m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.sku?.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   return (
     <div className="w-full">
-      <div className="w-full overflow-x-auto">
+      <div className={clsx(
+        "w-full transition-all overflow-x-auto",
+        activeSearchId ? "min-h-[460px] pb-80" : ""
+      )}>
         <table className="w-full text-left border-collapse table-auto min-w-[760px]">
-          <thead>
-            <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200 dark:border-slate-800">
-              <th className="px-3 py-3 w-12 text-center">#</th>
-              <th className="px-3 py-3 min-w-[240px]">Material / Item Detail</th>
-              <th className="px-3 py-3 w-32 text-center hidden md:table-cell">SKU</th>
-              <th className="px-3 py-3 w-24 text-center">Qty</th>
-              <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">Unit</th>
-              <th className="px-3 py-3 w-36 min-w-[130px] text-center">Unit Price</th>
-              <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">GST %</th>
-              <th className="px-3 py-3 w-36 text-right">Line Total</th>
-              <th className="px-2 py-3 w-10 text-center"></th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-            {items.map((item, index) => {
-              const amount = item.quantity * item.price;
-              const totalWithGst = amount + (amount * (item.gstRate / 100));
-              const material = materials.find(m => m.id === item.materialId);
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200 dark:border-slate-800">
+                <th className="px-3 py-3 w-12 text-center">#</th>
+                <th className="px-3 py-3 min-w-[240px]">Material / Item Detail</th>
+                <th className="px-3 py-3 w-32 text-center hidden md:table-cell">SKU</th>
+                <th className="px-3 py-3 w-24 text-center">Qty</th>
+                <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">Unit</th>
+                <th className="px-3 py-3 w-36 min-w-[130px] text-center">Unit Price</th>
+                <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">GST %</th>
+                <th className="px-3 py-3 w-36 text-right">Line Total</th>
+                <th className="px-2 py-3 w-10 text-center"></th>
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+              {items.map((item, index) => {
+                const amount = item.quantity * item.price;
+                const totalWithGst = amount + (amount * (item.gstRate / 100));
+                const material = materials.find(m => m.id === item.materialId);
+                const resolvedName = item.name && item.name !== "Material" && item.name !== "Unknown Material"
+                  ? item.name
+                  : (material?.name || item.name || "");
 
-              return (
-                <tr key={item.id} className={clsx(
-                  "group hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-all relative",
-                  activeSearchId === item.id ? "z-50" : "z-0"
-                )}>
-                  <td className="px-3 py-3.5 align-middle text-[11px] font-bold text-slate-400 dark:text-slate-500 group-hover:text-orange-500 transition-colors text-center">
-                    {String(index + 1).padStart(2, '0')}
-                  </td>
-                  <td className="px-3 py-3.5 align-middle relative">
-                    <div
-                      className={clsx(
-                        "material-selector-container flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
-                        activeSearchId === item.id ? "z-[100]" : "z-10",
-                        !item.materialId 
-                          ? "bg-slate-50/70 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-orange-300 focus-within:border-orange-400 focus-within:bg-white" 
-                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 shadow-2xs"
-                      )}
-                      onClick={() => setActiveSearchId(item.id)}
-                    >
-                      <Package size={15} className={clsx("shrink-0", item.materialId ? "text-[#f58220]" : "text-slate-400 dark:text-slate-500")} />
-                      <div className="flex flex-col flex-1 min-w-0 relative">
-                        <div className="relative flex items-center">
-                          <input
-                            type="text"
-                            placeholder="Search Material..."
-                            className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
-                            value={activeSearchId === item.id ? searchQuery : item.name}
-                            readOnly={false}
-                            onChange={(e) => {
-                               setSearchQuery(e.target.value);
-                               if (item.materialId) {
+                return (
+                  <tr key={item.id} className={clsx(
+                    "group hover:bg-slate-50/40 dark:hover:bg-slate-800/30 transition-all relative",
+                    activeSearchId === item.id ? "z-50" : "z-0"
+                  )}>
+                    <td className="px-3 py-3.5 align-middle text-[11px] font-bold text-slate-400 dark:text-slate-500 group-hover:text-orange-500 transition-colors text-center">
+                      {String(index + 1).padStart(2, '0')}
+                    </td>
+                    <td className="px-3 py-3.5 align-middle relative">
+                      <div
+                        className={clsx(
+                          "material-selector-container flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
+                          activeSearchId === item.id ? "z-[100]" : "z-10",
+                          !item.materialId 
+                            ? "bg-slate-50/70 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-orange-300 focus-within:border-orange-400 focus-within:bg-white" 
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 shadow-2xs"
+                        )}
+                        onClick={() => setActiveSearchId(item.id)}
+                      >
+                        <Package size={15} className={clsx("shrink-0", item.materialId ? "text-[#f58220]" : "text-slate-400 dark:text-slate-500")} />
+                        <div className="flex flex-col flex-1 min-w-0 relative">
+                          <div className="relative flex items-center">
+                            <input
+                              type="text"
+                              placeholder="Search Material..."
+                              className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
+                              value={activeSearchId === item.id ? searchQuery : resolvedName}
+                              readOnly={false}
+                              onChange={(e) => {
+                                 setSearchQuery(e.target.value);
+                                 if (item.materialId) {
+                                    updateItem(item.id, { materialId: "", name: "" });
+                                    setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                                 }
+                                 if (activeSearchId !== item.id) setActiveSearchId(item.id);
+                              }}
+                              onFocus={() => {
+                                 setActiveSearchId(item.id);
+                                 setSearchQuery("");
+                              }}
+                              onKeyDown={(e) => handleKeyDown(e, item.id)}
+                            />
+                            {(activeSearchId === item.id ? searchQuery : resolvedName) && (
+                              <button
+                                type="button"
+                                className="absolute right-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSearchQuery("");
                                   updateItem(item.id, { materialId: "", name: "" });
                                   setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
-                               }
-                               if (activeSearchId !== item.id) setActiveSearchId(item.id);
-                            }}
-                            onFocus={() => {
-                               setActiveSearchId(item.id);
-                               setSearchQuery("");
-                            }}
-                            onKeyDown={(e) => handleKeyDown(e, item.id)}
-                          />
-                          {(activeSearchId === item.id ? searchQuery : item.name) && (
-                            <button
-                              type="button"
-                              className="absolute right-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSearchQuery("");
-                                updateItem(item.id, { materialId: "", name: "" });
-                                setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
-                              }}
-                            >
-                              <X size={13} />
-                            </button>
+                                }}
+                              >
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                          {material && (
+                            <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                               <div className={clsx(
+                                 "flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border whitespace-nowrap",
+                                 material.currentStock <= (material.minimumStock || 10) 
+                                   ? "bg-rose-50 text-rose-600 border-rose-200" 
+                                   : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                               )}>
+                                 {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
+                                 Stock: {material.currentStock} {item.unit || "KG"}
+                               </div>
+                              <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap">HSN: {material.hsnCode || "N/A"}</span>
+                            </div>
                           )}
                         </div>
-                        {material && (
-                          <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                             <div className={clsx(
-                               "flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border whitespace-nowrap",
-                               material.currentStock <= (material.minimumStock || 10) 
-                                 ? "bg-rose-50 text-rose-600 border-rose-200" 
-                                 : "bg-emerald-50 text-emerald-600 border-emerald-200"
-                             )}>
-                               {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
-                               Stock: {material.currentStock} {item.unit || "KG"}
-                             </div>
-                            <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap">HSN: {material.hsnCode || "N/A"}</span>
-                          </div>
+
+                        {!item.materialId && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAddMaterialManually(item.id, searchQuery || "");
+                            }}
+                            className="shrink-0 text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 border border-orange-200 dark:border-orange-800/40 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wide cursor-pointer"
+                            title="Add material manually"
+                          >
+                            <Plus size={11} /> Add
+                          </button>
                         )}
-                      </div>
 
-                      {!item.materialId && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAddMaterialManually(item.id, searchQuery || "");
-                          }}
-                          className="shrink-0 text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 border border-orange-200 dark:border-orange-800/40 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wide cursor-pointer"
-                          title="Add material manually"
-                        >
-                          <Plus size={11} /> Add
-                        </button>
-                      )}
+                        <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
 
-                      <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
-
-                      {activeSearchId === item.id && (
-                        <div className="absolute top-[calc(100%+8px)] left-0 w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[100] overflow-hidden" ref={searchRef}>
-                          {/* Dropdown Header */}
-                          <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openAddMaterialManually(item.id, searchQuery || "");
-                              }}
-                              className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-1 uppercase tracking-wider cursor-pointer"
-                            >
-                              <Plus size={12} /> Add Material Manually
-                            </button>
-                          </div>
+                        {activeSearchId === item.id && (
+                          <div className="absolute top-[calc(100%+8px)] left-0 w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
+                            {/* Dropdown Header */}
+                            <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openAddMaterialManually(item.id, searchQuery || "");
+                                }}
+                                className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-1 uppercase tracking-wider cursor-pointer"
+                              >
+                                <Plus size={12} /> Add Material Manually
+                              </button>
+                            </div>
 
                           {/* Quick Add row when user typed search query */}
                           {searchQuery.trim().length > 0 && (
