@@ -18,10 +18,11 @@ import { toast } from "react-hot-toast";
 interface AddMaterialDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (createdMaterial?: any) => void;
+  initialName?: string;
 }
 
-export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMaterialDrawerProps) {
+export default function AddMaterialDrawer({ isOpen, onClose, onSuccess, initialName = "" }: AddMaterialDrawerProps) {
   const { user } = useAuth();
   const [franchises, setFranchises] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
@@ -33,7 +34,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
   useEffect(() => { setMounted(true); }, []);
 
   const [form, setForm] = useState({
-    name: "",
+    name: initialName,
     sku: "",
     unit: "kg",
     minimumStock: 10,
@@ -61,6 +62,9 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
 
   useEffect(() => {
     if (isOpen) {
+      if (initialName) {
+        setForm(prev => ({ ...prev, name: initialName }));
+      }
       const fetchData = async () => {
         try {
           const [fRes, vRes] = await Promise.all([
@@ -72,7 +76,11 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
           setVendors(vRes.data || []);
 
           const defaultFranchise = user?.franchiseId || (fetchedFranchises.length > 0 ? fetchedFranchises[0].id : "hq-001");
-          setForm(prev => ({ ...prev, franchiseId: prev.franchiseId || defaultFranchise }));
+          setForm(prev => ({ 
+            ...prev, 
+            franchiseId: prev.franchiseId || defaultFranchise,
+            name: initialName || prev.name
+          }));
 
           // Fetch all materials for duplicate detection
           const mRes = await rawMaterialsApi.getAll().catch(() => ({ data: [] }));
@@ -83,7 +91,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
       };
       fetchData();
     }
-  }, [isOpen]);
+  }, [isOpen, initialName, user?.franchiseId]);
 
   useEffect(() => {
     const sku = generateEnterpriseSKU(form.category, form.name);
@@ -120,7 +128,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
     setSaving(true);
     setError(null);
     try {
-      await rawMaterialsApi.create({
+      const res = await rawMaterialsApi.create({
         ...form,
         franchiseId: form.franchiseId || user?.franchiseId || "hq-001",
         initialStock: Number(form.initialStock) || 0,
@@ -128,7 +136,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess }: AddMat
         requestedAt: new Date().toISOString(),
       });
       toast.success("Material request submitted successfully!");
-      onSuccess();
+      onSuccess(res?.data);
       onClose();
     } catch (e: any) {
       console.error(e);

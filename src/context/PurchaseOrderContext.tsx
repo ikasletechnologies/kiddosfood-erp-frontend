@@ -158,6 +158,39 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
           }
         }
       }
+
+      // Check if vendorId is in URL (e.g. redirected after creating vendor)
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const vendorIdParam = params.get("vendorId");
+        if (vendorIdParam) {
+          import('@/lib/api').then(({ vendorsApi }) => {
+            vendorsApi.getAll().then((res) => {
+              const list = res.data?.vendors || res.data || [];
+              const found = list.find((v: any) => v.id === vendorIdParam);
+              if (found) {
+                setSelectedVendor({
+                  id: found.id,
+                  name: found.name,
+                  phone: found.phone || found.mobile || found.contact,
+                  email: found.email,
+                  gstNumber: found.gstNumber,
+                  advanceBalance: found.advanceBalance || (found.balance < 0 ? Math.abs(found.balance) : 0),
+                  balanceDue: found.balanceDue || (found.balance > 0 ? found.balance : 0),
+                  creditLimit: found.creditLimit || 0,
+                  vendorCode: found.vendorCode,
+                  suppliedMaterials: found.suppliedMaterials?.map((sm: any) => ({
+                    materialId: sm.materialId,
+                    price: sm.price,
+                    name: sm.material?.name || "Material"
+                  })) || []
+                });
+              }
+            }).catch(err => console.error("Failed to auto-select vendor from URL", err));
+          });
+        }
+      }
+
       setIsLoaded(true);
     }
   }, [editId]);

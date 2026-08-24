@@ -17,6 +17,8 @@ export default function LineItemsTable() {
   const searchRef = useRef<HTMLDivElement>(null);
   const prevActiveSearchId = useRef<string | null>(null);
   const [showAddMaterialDrawer, setShowAddMaterialDrawer] = useState(false);
+  const [prefilledMaterialName, setPrefilledMaterialName] = useState("");
+  const [targetDrawerItemId, setTargetDrawerItemId] = useState<string | null>(null);
 
   // Reset search query when switching items
   useEffect(() => {
@@ -29,9 +31,6 @@ export default function LineItemsTable() {
   // Handle click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // If the click is on the input or its container, we don't want to close it here,
-      // because the input's own click/focus handlers will manage it.
-      // We check if the click target is within a .material-selector-container
       const target = event.target as Element;
       if (target.closest('.material-selector-container')) {
         return;
@@ -58,8 +57,7 @@ export default function LineItemsTable() {
       setLoadingMaterials(true);
       try {
         const response = await rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD');
-        console.log('Fetched raw materials (filtered):', response.data);
-        setMaterials(response.data);
+        setMaterials(response.data || []);
       } catch (error) {
         console.error('Failed to fetch materials', error);
       } finally {
@@ -69,10 +67,27 @@ export default function LineItemsTable() {
     fetchMaterials();
   }, [materialRefreshKey]);
 
-  // In Add Material Drawer success, trigger refresh
-  const handleAddMaterialSuccess = () => {
+  // In Add Material Drawer success, trigger refresh and auto-select
+  const handleAddMaterialSuccess = (createdMaterial?: any) => {
     setMaterialRefreshKey(prev => prev + 1);
     setShowAddMaterialDrawer(false);
+    if (createdMaterial && targetDrawerItemId) {
+      updateItem(targetDrawerItemId, {
+        materialId: createdMaterial.id,
+        name: createdMaterial.name,
+        unit: createdMaterial.unit || "KG",
+        price: createdMaterial.price || 0,
+        gstRate: createdMaterial.gstRate || 5
+      });
+      setActiveSearchId(null);
+    }
+  };
+
+  const openAddMaterialManually = (itemId: string, defaultName: string = "") => {
+    setTargetDrawerItemId(itemId);
+    setPrefilledMaterialName(defaultName);
+    setShowAddMaterialDrawer(true);
+    setActiveSearchId(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, itemId: string) => {
@@ -106,7 +121,7 @@ export default function LineItemsTable() {
           <thead>
             <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200 dark:border-slate-800">
               <th className="px-3 py-3 w-12 text-center">#</th>
-              <th className="px-3 py-3 min-w-[220px]">Material / Item Detail</th>
+              <th className="px-3 py-3 min-w-[240px]">Material / Item Detail</th>
               <th className="px-3 py-3 w-32 text-center hidden md:table-cell">SKU</th>
               <th className="px-3 py-3 w-24 text-center">Qty</th>
               <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">Unit</th>
@@ -133,7 +148,7 @@ export default function LineItemsTable() {
                   <td className="px-3 py-3.5 align-middle relative">
                     <div
                       className={clsx(
-                        "material-selector-container flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
+                        "material-selector-container flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
                         activeSearchId === item.id ? "z-[100]" : "z-10",
                         !item.materialId 
                           ? "bg-slate-50/70 dark:bg-slate-950/50 border-slate-200 dark:border-slate-800 hover:border-orange-300 focus-within:border-orange-400 focus-within:bg-white" 
@@ -147,7 +162,7 @@ export default function LineItemsTable() {
                           <input
                             type="text"
                             placeholder="Search Material..."
-                            className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-5"
+                            className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
                             value={activeSearchId === item.id ? searchQuery : item.name}
                             readOnly={false}
                             onChange={(e) => {
@@ -194,11 +209,67 @@ export default function LineItemsTable() {
                           </div>
                         )}
                       </div>
+
+                      {!item.materialId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddMaterialManually(item.id, searchQuery || "");
+                          }}
+                          className="shrink-0 text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/40 border border-orange-200 dark:border-orange-800/40 px-2 py-0.5 rounded-lg transition-colors flex items-center gap-1 uppercase tracking-wide cursor-pointer"
+                          title="Add material manually"
+                        >
+                          <Plus size={11} /> Add
+                        </button>
+                      )}
+
                       <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
 
                       {activeSearchId === item.id && (
-                        <div className="absolute top-[calc(100%+8px)] left-0 w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[100] overflow-hidden" ref={searchRef}>
-                           <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                        <div className="absolute top-[calc(100%+8px)] left-0 w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[100] overflow-hidden" ref={searchRef}>
+                          {/* Dropdown Header */}
+                          <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAddMaterialManually(item.id, searchQuery || "");
+                              }}
+                              className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-1 uppercase tracking-wider cursor-pointer"
+                            >
+                              <Plus size={12} /> Add Material Manually
+                            </button>
+                          </div>
+
+                          {/* Quick Add row when user typed search query */}
+                          {searchQuery.trim().length > 0 && (
+                            <div 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAddMaterialManually(item.id, searchQuery.trim());
+                              }}
+                              className="p-3 bg-orange-50/70 dark:bg-orange-950/20 border-b border-orange-100 dark:border-orange-900/30 hover:bg-orange-100/70 dark:hover:bg-orange-900/30 cursor-pointer flex items-center justify-between transition-colors group"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                <div className="p-1.5 bg-[#f58220] text-white rounded-lg shadow-2xs shrink-0">
+                                  <Plus size={13} />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate block">
+                                    Add &quot;<span className="text-[#f58220]">{searchQuery.trim()}</span>&quot; manually
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-medium">Create new item master</span>
+                                </div>
+                              </div>
+                              <span className="text-[10px] font-bold text-[#f58220] uppercase tracking-wider bg-white dark:bg-slate-900 px-2.5 py-1 rounded-lg border border-orange-200 shadow-2xs shrink-0">
+                                Add Now
+                              </span>
+                            </div>
+                          )}
+
+                          <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                           {filteredMaterials.length > 0 ? (
                               <>
                                 {filteredMaterials.map(m => {
@@ -250,35 +321,39 @@ export default function LineItemsTable() {
                                     </div>
                                   );
                                 })}
-                                <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 sticky bottom-0 flex justify-center">
-                                   <button 
-                                     onClick={(e) => {
-                                       e.stopPropagation();
-                                       setShowAddMaterialDrawer(true);
-                                     }} 
-                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
-                                   >
-                                      <Plus size={14} /> Add New Material
-                                   </button>
-                                </div>
                                 </>
                             ) : (
-                                <div className="p-10 text-center space-y-4">
-                                   <Package size={32} className="mx-auto text-slate-300" />
+                                <div className="p-8 text-center space-y-3">
+                                   <Package size={28} className="mx-auto text-slate-300" />
                                    <p className="text-xs text-slate-500 font-medium">
-                                      {!selectedVendor ? "Please select a vendor first" : "No materials found"}
+                                      {searchQuery ? `No materials found for "${searchQuery}"` : "No materials found in inventory"}
                                    </p>
                                    <button 
+                                     type="button"
                                      onClick={(e) => {
                                        e.stopPropagation();
-                                       setShowAddMaterialDrawer(true);
+                                       openAddMaterialManually(item.id, searchQuery || "");
                                      }} 
-                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-sm mt-2"
+                                     className="inline-flex items-center gap-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
                                    >
-                                      <Plus size={14} /> Add New Material
+                                      <Plus size={14} /> Add Material Manually
                                    </button>
                                 </div>
                             )}
+                         </div>
+
+                         {/* Dropdown Sticky Bottom Action */}
+                         <div className="p-2.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 flex justify-center">
+                            <button 
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAddMaterialManually(item.id, searchQuery || "");
+                              }} 
+                              className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 text-[#f58220] border border-orange-200 dark:border-orange-800/40 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                            >
+                               <Plus size={14} /> Add Material Manually
+                            </button>
                          </div>
                        </div>
                     )}
@@ -391,6 +466,7 @@ export default function LineItemsTable() {
         isOpen={showAddMaterialDrawer} 
         onClose={() => setShowAddMaterialDrawer(false)} 
         onSuccess={handleAddMaterialSuccess} 
+        initialName={prefilledMaterialName}
       />
     </div>
   );

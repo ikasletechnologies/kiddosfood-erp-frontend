@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   Plus, Search,
@@ -23,8 +23,6 @@ import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { Modal } from "@/components/ui/Modal";
 
-
-
 // Local YYYY-MM-DD — never use toISOString() for "today", it renders in UTC and
 // silently shifts the date by a day whenever the local timezone has a non-zero offset.
 function toLocalDateStr(d: Date): string {
@@ -39,6 +37,11 @@ const VENDOR_STATUS = [
 
 export default function VendorsClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const actionParam = searchParams.get("action");
+  const newParam = searchParams.get("new");
+  const returnToParam = searchParams.get("returnTo");
+
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -48,6 +51,13 @@ export default function VendorsClient() {
   const [search, setSearch] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ all: true, active: false, inactive: false, toReceive: false, toPay: false });
+
+  useEffect(() => {
+    if (actionParam === "new" || newParam === "true") {
+      setEditing(null);
+      setShowForm(true);
+    }
+  }, [actionParam, newParam]);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'OVERVIEW' | 'POS' | 'GRNS' | 'MATERIALS' | 'INVOICES' | 'LEDGER'>('OVERVIEW');
 
@@ -1956,14 +1966,34 @@ export default function VendorsClient() {
       {/* Modals */}
       <AddPartyModal
         isOpen={showForm}
-        onClose={() => setShowForm(false)}
+        onClose={() => {
+          setShowForm(false);
+          if (returnToParam && (actionParam === "new" || newParam === "true")) {
+            router.push(returnToParam);
+          }
+        }}
         onSave={async (data) => {
           try {
-            if (editing) await vendorsApi.update(editing.id, data);
-            else await vendorsApi.create(data);
+            let savedVendor: any;
+            if (editing) {
+              const res = await vendorsApi.update(editing.id, data);
+              savedVendor = res.data;
+            } else {
+              const res = await vendorsApi.create(data);
+              savedVendor = res.data;
+            }
             showToast(editing ? "Vendor identity synchronized" : "New vendor registered", "success");
             setShowForm(false);
-            fetchData();
+
+            if (returnToParam) {
+              const vendorId = savedVendor?.id || savedVendor?.vendor?.id;
+              const targetUrl = vendorId
+                ? `${returnToParam}${returnToParam.includes('?') ? '&' : '?'}vendorId=${vendorId}`
+                : returnToParam;
+              router.push(targetUrl);
+            } else {
+              fetchData();
+            }
           } catch (e: any) {
             const err = e.response?.data?.error || e.response?.data?.message || "";
             if (err.toLowerCase().includes("gst") && (err.toLowerCase().includes("exist") || err.toLowerCase().includes("duplicate") || err.toLowerCase().includes("unique"))) {
