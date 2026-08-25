@@ -45,6 +45,7 @@ interface EligibilityResponse {
     cartonedQty: number;
     availableQty: number;
     distributedQty: number;
+    wastedQty: number;
   };
   recall: RecallRow | null;
 }
@@ -510,8 +511,14 @@ export default function BatchRecallPage() {
                       { label: "Production Date", value: selectedBatch.productionDate ? new Date(selectedBatch.productionDate).toLocaleDateString("en-IN") : "—" },
                       { label: "Rejected Qty", value: `${eligibility?.batch.rejectedQty ?? selectedBatch.rejectedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       { label: "Packed Qty", value: `${eligibility?.batch.packagedQty ?? selectedBatch.packagedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      { label: "Available (Warehouse)", value: eligibility ? `${eligibility.batch.availableQty} ${eligibility.batch.unit}` : "—" },
+                      // Wasted (damage/spoilage write-off) is tracked separately from
+                      // Dispatched (a genuine sale/transfer) — a waste write-off is
+                      // destroyed, not something that can ever be "returned," so
+                      // showing it next to Dispatched/Returned makes that distinction
+                      // visible instead of folding it silently into one number.
+                      { label: "Wasted Qty", value: eligibility ? `${eligibility.batch.wastedQty} ${eligibility.batch.unit}` : "—" },
                       { label: "Dispatched Qty", value: eligibility ? `${eligibility.batch.distributedQty} ${eligibility.batch.unit}` : "—" },
+                      { label: "Available (Warehouse)", value: eligibility ? `${eligibility.batch.availableQty} ${eligibility.batch.unit}` : "—" },
                     ].map((item, i) => (
                       <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
                         <p className="text-xs text-gray-500">{item.label}</p>

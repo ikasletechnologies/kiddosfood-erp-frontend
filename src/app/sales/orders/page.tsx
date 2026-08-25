@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { FileText, Search, RefreshCw, Calendar, 
   ChevronRight, ArrowUpRight, Filter, ShoppingBag,
   Clock, CheckCircle2, XCircle, Printer, Plus,
@@ -59,11 +60,17 @@ const INDIAN_STATES = [
   "Jammu & Kashmir","Ladakh",
 ];
 
+// Matches the actual SalesOrderStatus enum (prisma/schema.prisma) — the
+// previous DRAFT/OPEN/OVERDUE/CLOSED vocabulary here didn't match what the
+// backend ever actually sends, so every non-DRAFT/CANCELLED order silently
+// fell back to the DRAFT style regardless of its real status.
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:          { label: "Draft",           color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  OPEN:           { label: "Open",            color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  OVERDUE:        { label: "Order Overdue",   color: "text-orange-600",  bg: "bg-orange-50",  border: "border-orange-200" },
-  CLOSED:         { label: "Closed",          color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+  PENDING:        { label: "Pending",         color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
+  CONFIRMED:      { label: "Confirmed",       color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
+  PROCESSING:     { label: "Processing",      color: "text-orange-600",  bg: "bg-orange-50",  border: "border-orange-200" },
+  SHIPPED:        { label: "Shipped",         color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200" },
+  DELIVERED:      { label: "Delivered",       color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
   CANCELLED:      { label: "Cancelled",       color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
 };
 
@@ -135,12 +142,14 @@ function taxOptionsFor(isSameState: boolean) {
 
 export default function SalesOrdersPage() {
   const { showToast } = useToast();
+  const router = useRouter();
 
   // Navigation state
   const [view, setView] = useState<"list" | "create" | "edit">("list");
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [convertingId, setConvertingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -148,13 +157,23 @@ export default function SalesOrdersPage() {
   // List view filters
   const [dateFilter, setDateFilter] = useState("THIS_MONTH");
   const [firmFilter, setFirmFilter] = useState("ALL");
+  // Local Y/M/D components, not .toISOString() — for a UTC+ locale,
+  // .toISOString() on a local midnight date shifts it back a day (e.g.
+  // "This Month" for August rendered as 31 Jul -> 30 Aug). Matches the
+  // fix already applied on the Estimate page.
+  const toLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const [dateFrom, setDateFrom] = useState(() => {
     const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+    return toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
   });
   const [dateTo, setDateTo] = useState(() => {
     const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+    return toLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   });
 
   // Active Sale Order Form State
@@ -197,7 +216,24 @@ export default function SalesOrdersPage() {
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
       ]);
 
-      let salesOrders = ordRes.status === "fulfilled" ? (ordRes.value as any).data || [] : [];
+      // The API returns the raw SalesOrder shape (orderNumber, totalAmount,
+      // createdAt, customer.name, ...) — the table below reads
+      // orderNo/finalAmount/balance/invoiceDate, which don't exist on that
+      // shape at all, so real API-backed orders rendered as blank/undefined
+      // everywhere except locally-cached drafts (which already used the
+      // display field names). Alias them here, once, keeping every original
+      // field via spread so status/id/proformaInvoiceId/quotationId etc.
+      // stay intact for the chain-action buttons below.
+      let salesOrders = ordRes.status === "fulfilled" ? ((ordRes.value as any).data || []).map((o: any) => ({
+        ...o,
+        orderNo: o.orderNumber || o.orderNo,
+        invoiceDate: o.invoiceDate || o.createdAt,
+        dueDate: o.dueDate || o.deliveryDate || o.createdAt,
+        finalAmount: o.finalAmount ?? o.totalAmount ?? 0,
+        balance: o.balance ?? (o.paymentStatus === "PAID" ? 0 : (o.totalAmount ?? 0)),
+        customerName: o.customerName || o.customer?.name || "Unknown Party",
+        customerPhone: o.customerPhone || o.customer?.phone || "",
+      })) : [];
 
       // LocalStorage Merge
       try {
@@ -224,6 +260,17 @@ export default function SalesOrdersPage() {
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
+
+  // Deep-link from Estimate's "View Sales Order" / post-Convert redirect
+  // (?id=<salesOrderId>) — filter the list down to just that order so it's
+  // immediately visible instead of buried in the full list.
+  useEffect(() => {
+    if (orders.length === 0) return;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    const match = orders.find((o) => o.id === id);
+    if (match) setSearch(match.orderNo || match.orderNumber || "");
+  }, [orders]);
 
   // Click outside logic
   useEffect(() => {
@@ -431,6 +478,36 @@ export default function SalesOrdersPage() {
     }
 
     setView("edit");
+  };
+
+  // DRAFT -> CONFIRMED. Only a CONFIRMED Sales Order can generate a
+  // Proforma Invoice (enforced server-side too, see
+  // SalesService.convertSalesOrderToProforma).
+  const handleConfirm = async (order: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.patch(`/api/sales/orders/${order.id}`, { status: "CONFIRMED" });
+      showToast("Sales Order confirmed", "success");
+      fetchAllData();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Failed to confirm Sales Order", "error");
+    }
+  };
+
+  // Sales Order -> Proforma Invoice.
+  const handleCreateProforma = async (order: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setConvertingId(order.id);
+    try {
+      const res = await api.post(`/api/sales/orders/${order.id}/convert`, {});
+      showToast("Proforma Invoice created", "success");
+      const proformaId = res?.data?.id;
+      router.push(proformaId ? `/sales/proforma-invoice?id=${proformaId}` : "/sales/proforma-invoice");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Failed to create Proforma Invoice", "error");
+    } finally {
+      setConvertingId(null);
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -1191,22 +1268,40 @@ export default function SalesOrdersPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {o.status === "DRAFT" && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(o)}
+                                className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              >
+                                Resume
+                              </button>
+                              <button
+                                onClick={(e) => handleConfirm(o, e)}
+                                className="px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                              >
+                                Confirm
+                              </button>
+                            </>
+                          )}
+                          {o.status === "CONFIRMED" && !o.proformaInvoiceId && (
                             <button
-                              onClick={() => handleEdit(o)}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              onClick={(e) => handleCreateProforma(o, e)}
+                              disabled={convertingId === o.id}
+                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
                             >
-                              Resume
+                              {convertingId === o.id ? "..." : "Create Proforma Invoice"}
                             </button>
                           )}
-                          {(o.status === "OPEN" || o.status === "OVERDUE") && (
-                            <button
-                              onClick={() => convertToSale(o)}
+                          {o.proformaInvoiceId && (
+                            <a
+                              href={`/sales/proforma-invoice?id=${o.proformaInvoiceId}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
                             >
-                              Convert
-                            </button>
+                              View Proforma Invoice
+                            </a>
                           )}
-                          {o.status === "CLOSED" && (
+                          {o.status === "DELIVERED" && (
                             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
                               <Check className="h-3 w-3" /> Done
                             </span>

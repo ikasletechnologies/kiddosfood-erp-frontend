@@ -237,10 +237,18 @@ export default function SalesInvoicesPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
 
-  // list date filters
+  // list date filters — local Y/M/D components, not .toISOString() (which
+  // shifts a local midnight date back a day in a UTC+ locale, e.g. "This
+  // Month" for August rendering as 31 Jul -> 30 Aug).
   const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const lastOfMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  const toLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const firstOfMonth = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const lastOfMonth  = toLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo,   setDateTo]   = useState(lastOfMonth);
   const [showFromCal, setShowFromCal] = useState(false);

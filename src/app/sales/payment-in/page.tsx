@@ -173,6 +173,7 @@ export default function PaymentInPage() {
   const [showPeriodDrop, setShowPeriodDrop] = useState(false);
   const [dateRange, setDateRange] = useState(getPeriodDates("this_month"));
   const [customers, setCustomers] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
 
   // form state
   const [view, setView] = useState<"list" | "create">("list");
@@ -180,6 +181,7 @@ export default function PaymentInPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0]);
   const [amount, setAmount] = useState<string>("");
   const [paymentMode, setPaymentMode] = useState("Cash");
@@ -230,7 +232,27 @@ export default function PaymentInPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchPayments(); fetchCustomers(); }, [fetchPayments, fetchCustomers]);
+  // Tax Invoices with an outstanding balance — a customer payment must be
+  // recorded against a specific invoice (see FinanceService.createPayment's
+  // invoiceId-driven paid/outstanding recompute); without this the page had
+  // no invoice concept at all.
+  const fetchInvoices = useCallback(async () => {
+    try {
+      const res = await api.get("/api/finance/invoices");
+      setInvoices((res as any).data || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchPayments(); fetchCustomers(); fetchInvoices(); }, [fetchPayments, fetchCustomers, fetchInvoices]);
+
+  const customerInvoices = selectedCustomer
+    ? invoices.filter((inv: any) => inv.order?.customerId === selectedCustomer.id && inv.status !== "PAID")
+    : [];
+  const selectedInvoice = customerInvoices.find((inv: any) => inv.id === selectedInvoiceId) || null;
+  const invoicePaidSoFar = selectedInvoice
+    ? (selectedInvoice.payments || []).filter((p: any) => p.status === "PAID" && !p.isCancelled).reduce((s: number, p: any) => s + (p.paidAmount || 0), 0)
+    : 0;
+  const invoiceOutstanding = selectedInvoice ? Math.max(0, selectedInvoice.finalAmount - invoicePaidSoFar) : 0;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -260,6 +282,13 @@ export default function PaymentInPage() {
   const handleSave = async (isDraft = false) => {
     if (!selectedCustomer && !isDraft) { showToast("Please select a party", "error"); return; }
     if ((!amount || Number(amount) <= 0) && !isDraft) { showToast("Enter a valid amount", "error"); return; }
+    if (!isDraft) {
+      if (!selectedInvoice) { showToast("Select the Tax Invoice this payment is against", "error"); return; }
+      if (Number(amount) > invoiceOutstanding + 0.01) {
+        showToast(`Amount exceeds the outstanding balance (₹${invoiceOutstanding.toFixed(2)}) on this invoice`, "error");
+        return;
+      }
+    }
 
     if (isDraft && !selectedCustomer && (!amount || Number(amount) <= 0)) {
       setView("list");
@@ -299,15 +328,36 @@ export default function PaymentInPage() {
 
     setSaving(true);
     try {
+      // FinanceService.createPayment's actual contract: `amount` (not
+      // paidAmount), `flow: 'IN'` (required — every submission errored on
+      // this alone before), `method` (not paymentMode — the mode string is
+      // resolved server-side via a fixed map), `invoiceId` so the payment
+      // is actually linked to a Tax Invoice and its paid/outstanding gets
+      // recomputed, and `linkedDocType: 'INVOICE'` (the only value the
+      // LinkedDocType enum actually has for this — 'CUSTOMER_RECEIPT' and
+      // 'CUSTOMER_PAYMENT' below are not valid enum values and would fail).
+      const methodMap: Record<string, string> = {
+        Cash: "CASH",
+        Cheque: "CHEQUE",
+        "Online Transfer": "BANK_TRANSFER",
+        UPI: "UPI",
+        Card: "CARD",
+        "Bank Transfer": "BANK_TRANSFER",
+      };
       await api.post("/api/accounting/payments", {
+        amount: Number(amount),
+        flow: "IN",
+        status: "PAID",
+        method: methodMap[paymentMode] || "CASH",
         entityId: selectedCustomer.id,
         entityType: "CUSTOMER",
-        paidAmount: Number(amount),
-        paymentMode: paymentMode.toUpperCase().replace(" ", "_"),
-        type: "CUSTOMER_PAYMENT",
+        entity: selectedCustomer.name,
+        invoiceId: selectedInvoice.id,
+        linkedDocType: "INVOICE",
+        linkedDocId: selectedInvoice.orderId,
+        type: "INVOICE_LINKED",
         sourceModule: "MANUAL",
-        linkedDocType: "CUSTOMER_RECEIPT",
-        transactionRef: chequeNo || undefined,
+        reference: chequeNo || description || undefined,
         createdBy: "SYSTEM",
       });
 
@@ -335,6 +385,7 @@ export default function PaymentInPage() {
     setDraftId(null);
     setSelectedCustomer(null);
     setCustomerSearch("");
+    setSelectedInvoiceId("");
     setAmount("");
     setPaymentMode("Cash");
     setDescription("");
@@ -455,7 +506,7 @@ export default function PaymentInPage() {
                     <button
                       key={c.id}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
-                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); }}
+                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); setSelectedInvoiceId(""); setAmount(""); }}
                     >
                       <div className="text-left">
                         <div className="text-sm font-medium text-gray-800">{c.name}</div>
@@ -496,6 +547,49 @@ export default function PaymentInPage() {
             </div>
           </div>
 
+          {/* Invoice selection — a customer payment must be recorded
+              against a specific Tax Invoice so paid/outstanding can be
+              recomputed for it. */}
+          {selectedCustomer && (
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-3">
+              <div className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Tax Invoice</div>
+              {customerInvoices.length === 0 ? (
+                <p className="text-xs text-gray-400">No outstanding Tax Invoices found for {selectedCustomer.name}.</p>
+              ) : (
+                <>
+                  <select
+                    value={selectedInvoiceId}
+                    onChange={e => { setSelectedInvoiceId(e.target.value); setAmount(""); }}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 outline-none bg-white focus:border-[#f58220]"
+                  >
+                    <option value="" disabled>Select invoice...</option>
+                    {customerInvoices.map((inv: any) => (
+                      <option key={inv.id} value={inv.id}>
+                        {inv.order?.invoiceNum} — ₹{inv.finalAmount} ({inv.status})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedInvoice && (
+                    <div className="grid grid-cols-3 gap-3 pt-1 text-center">
+                      <div className="p-2 bg-gray-50 rounded-lg">
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Invoice Total</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">₹{selectedInvoice.finalAmount.toFixed(2)}</p>
+                      </div>
+                      <div className="p-2 bg-emerald-50 rounded-lg">
+                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Already Paid</p>
+                        <p className="text-sm font-bold text-emerald-600 mt-0.5">₹{invoicePaidSoFar.toFixed(2)}</p>
+                      </div>
+                      <div className="p-2 bg-rose-50 rounded-lg">
+                        <p className="text-[10px] text-rose-600 uppercase font-semibold">Outstanding</p>
+                        <p className="text-sm font-bold text-rose-600 mt-0.5">₹{invoiceOutstanding.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* Amount + Mode */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
             <div className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Payment Details</div>
@@ -509,6 +603,7 @@ export default function PaymentInPage() {
                   <input
                     type="number"
                     min={0}
+                    max={selectedInvoice ? invoiceOutstanding : undefined}
                     placeholder="0.00"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Calculator, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
@@ -261,6 +262,7 @@ function MiniCalendar({ value, onChange, onClose }: {
 
 export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { documentType?: DocumentType } = {}) {
   const { showToast } = useToast();
+  const router = useRouter();
   const L = DOC_LABELS[documentType];
 
   // shared
@@ -608,15 +610,22 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     if (!selectedEstForConvert) return;
     setConverting(selectedEstForConvert.id);
     try {
-      await api.post(`/api/sales/quotations/${selectedEstForConvert.id}/convert`, {
+      // Estimate -> Sales Order (never straight to a Tax Invoice — Proforma
+      // and the actual Tax Invoice are separate later steps in the chain).
+      const res = await api.post(`/api/sales/quotations/${selectedEstForConvert.id}/convert`, {
         deliveryDate: deliveryDate || undefined,
         deliveryAddress: deliveryAddress || undefined,
         trackingNumber: trackingNumber || undefined,
         courierName: courierName || undefined
       });
-      showToast("Converted to Tax Invoice successfully", "success");
+      showToast("Converted to Sales Order successfully", "success");
       setShowConvertModal(false);
-      fetchData();
+      const salesOrderId = res?.data?.id;
+      if (salesOrderId) {
+        router.push(`/sales/orders?id=${salesOrderId}`);
+      } else {
+        fetchData();
+      }
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Conversion failed", "error");
     } finally {
@@ -1589,7 +1598,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                         <div>{est.quotationNumber}</div>
                         {est.status === "CONVERTED" && est.convertedOrderNumber && (
                           <div className="text-[10px] text-green-600 font-bold mt-1 bg-green-50 px-1.5 py-0.5 rounded inline-block">
-                            Invoice: {est.convertedOrderNumber}
+                            Sales Order: {est.convertedOrderNumber}
                           </div>
                         )}
                       </td>
@@ -1615,13 +1624,14 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                         <div className="flex items-center justify-end gap-1">
                           {est.status === "CONVERTED" && est.convertedOrderNumber && (
                              <a
-                               href="/sales/invoices"
+                               href={`/sales/orders?id=${est.convertedOrderId}`}
+                               onClick={(e) => e.stopPropagation()}
                                className="px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-2"
                              >
-                               View Invoice
+                               View Sales Order
                              </a>
                           )}
-                          {est.status !== "CONVERTED" && !isDraft && (
+                          {est.status === "SENT" && !isDraft && (
                              <button
                                onClick={(e) => { e.stopPropagation(); handleOpenConvertModal(est); }}
                                disabled={!!converting}
