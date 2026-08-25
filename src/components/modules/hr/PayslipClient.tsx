@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { ArrowLeft, Printer, Check, X } from "lucide-react";
 import api, { accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -87,7 +88,7 @@ export default function PayslipClient() {
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">Payment Details</h3>
               <p className="text-sm text-gray-600">Pay Period: {MONTHS[payslip.month - 1]} {payslip.year}</p>
-              {payslip.paidAt && <p className="text-sm text-gray-600">Paid on: {new Date(payslip.paidAt).toLocaleDateString()}</p>}
+              {payslip.paidAt && <p className="text-sm text-gray-600">Paid on: {formatDate(payslip.paidAt)}</p>}
               {payslip.otHours > 0 && <p className="text-sm text-gray-600">OT Hours: {payslip.otHours}h (₹{payslip.otAmount})</p>}
             </div>
           </div>

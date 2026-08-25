@@ -9,6 +9,7 @@ import {
 import { clsx } from "clsx";
 import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import AccountFormModal from "@/components/modals/AccountFormModal";
 
@@ -179,7 +180,7 @@ function buildPurchaseBillPdf(bill: any): string {
   const vendorName = (bill.vendor?.name || bill.vendorSearch || "Vendor").replace(/[()\\\r\n]/g, "");
   const vendorPhone = (bill.vendor?.phone || bill.vendor?.contact || bill.vendorPhone || "-").replace(/[()\\\r\n]/g, "");
   const billNum = (bill.invoiceNumber || bill.billNumber || "PB-001").replace(/[()\\\r\n]/g, "");
-  const bDate = bill.billDate ? new Date(bill.billDate).toLocaleDateString() : (bill.invoiceDate ? new Date(bill.invoiceDate).toLocaleDateString() : "—");
+  const bDate = formatDate(bill.billDate || bill.invoiceDate);
   const pType = bill.paymentType || "CASH";
 
   while (currentRow < items.length || pageNum === 1) {
@@ -375,7 +376,7 @@ export default function PurchaseBillsPage() {
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
 
-  const fmtD = (d: string) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  const fmtD = (d: string) => formatDate(d);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -765,7 +766,7 @@ export default function PurchaseBillsPage() {
                         onClick={() => setShowCalendar(v => !v)}
                         className="text-sm text-gray-700 text-left outline-none truncate"
                       >
-                        {billDate ? new Date(billDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Select Date"}
+                        {billDate ? formatDate(billDate) : "Select Date"}
                       </button>
                       <div className="flex items-center gap-1.5 ml-auto shrink-0">
                         <button
@@ -1280,7 +1281,7 @@ export default function PurchaseBillsPage() {
                   return (
                     <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {b.billDate ? new Date(b.billDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                        {formatDate(b.billDate)}
                       </td>
                       <td className="px-4 py-3 text-xs font-bold text-gray-800">
                         {b.invoiceNumber || "—"}

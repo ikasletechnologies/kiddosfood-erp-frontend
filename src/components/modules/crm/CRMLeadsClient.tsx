@@ -18,6 +18,7 @@ import Link from "next/link";
 import { clsx } from "clsx";
 import api from "@/lib/api";
 import { useSearchParams } from "next/navigation";
+import { formatDate } from "@/lib/utils";
 
 interface Lead {
   id: string;
@@ -103,8 +104,8 @@ export default function CRMLeadsClient() {
       l.contactName, l.orgName || "", l.email || "", l.phone || "",
       l.contactCountry || "", l.customerCity || "", l.leadSource || "",
       l.budget || "", l.status, l.pipeline?.name || "",
-      new Date(l.createdAt).toLocaleDateString(),
-      l.followUpDate ? new Date(l.followUpDate).toLocaleDateString() : ""
+      formatDate(l.createdAt),
+      l.followUpDate ? formatDate(l.followUpDate) : ""
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -261,7 +262,7 @@ export default function CRMLeadsClient() {
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.orgName || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.email || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.phone || "—"}</td>
-                      <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{new Date(lead.createdAt).toLocaleDateString()}</td>
+                      <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{formatDate(lead.createdAt)}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.leadSource || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.budget ? `₹${lead.budget.toLocaleString()}` : "—"}</td>
                       <td className="p-4">

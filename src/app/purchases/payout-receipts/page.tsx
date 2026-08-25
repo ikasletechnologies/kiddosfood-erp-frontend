@@ -9,6 +9,7 @@ import {
 import { clsx } from "clsx";
 import { vendorsApi, accountsApi, accountingApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export default function PaymentOutPage() {
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
 
-  const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmtD = (d: string) => formatDate(d);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -297,7 +298,7 @@ export default function PaymentOutPage() {
                       className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
                     >
                       <Calendar size={13} className="text-orange-500 shrink-0" />
-                      {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      {formatDate(date)}
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1 z-[200]">
@@ -475,7 +476,7 @@ export default function PaymentOutPage() {
                   return (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(p.date)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {p.receiptNo || `REC-${String(i + 1).padStart(4, "0")}`}

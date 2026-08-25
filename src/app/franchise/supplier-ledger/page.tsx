@@ -20,6 +20,7 @@ import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { clsx } from "clsx";
+import { formatDate } from "@/lib/utils";
 
 interface Transaction {
   id: string;
@@ -181,7 +182,7 @@ export default function SupplierLedgerPage() {
                 <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
                   <td className="px-8 py-6">
                     <div className="space-y-1">
-                      <p className="text-xs font-black text-slate-900 dark:text-white">{new Date(t.date).toLocaleDateString("en-IN")}</p>
+                      <p className="text-xs font-black text-slate-900 dark:text-white">{formatDate(t.date)}</p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t.reference || 'TRX-'+t.id.slice(0,5)}</p>
                     </div>
                   </td>

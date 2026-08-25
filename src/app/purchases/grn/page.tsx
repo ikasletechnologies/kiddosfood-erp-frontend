@@ -23,7 +23,7 @@ import { X,
 } from "lucide-react";
 import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi } from "@/lib/api";
 import { clsx } from "clsx";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 
 interface POItem {
@@ -426,7 +426,7 @@ export default function GRNPage() {
                       {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {new Date(grn.receivedAt || grn.createdAt).toLocaleDateString()}
+                      {formatDate(grn.receivedAt || grn.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -505,7 +505,7 @@ export default function GRNPage() {
                       <span className="px-2 py-0.5 bg-orange-50 text-[#f58220] text-xs font-semibold rounded border border-orange-200">
                         {po.poNumber || "PO-PENDING"}
                       </span>
-                      <span className="text-xs text-gray-500">{new Date(po.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">{formatDate(po.createdAt)}</span>
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#f58220] transition-colors truncate">
@@ -992,7 +992,7 @@ export default function GRNPage() {
                 <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received Date</p>
                   <p className="text-xs font-black text-gray-900 dark:text-white">
-                    {new Date(viewingGRNDetails.receivedAt || viewingGRNDetails.createdAt).toLocaleDateString()}
+                    {formatDate(viewingGRNDetails.receivedAt || viewingGRNDetails.createdAt)}
                   </p>
                 </div>
                 <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">

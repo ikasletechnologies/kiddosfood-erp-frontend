@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/Modal";
+import { formatDate } from "@/lib/utils";
 
 const formatCurrency = (n: number) => "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -343,7 +344,7 @@ export default function RecipesPage() {
               <h1>${recipe.name}</h1>
               <div class="product">Finished Product: ${recipe.product?.name || 'N/A'}</div>
             </div>
-            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
+            <div class="date">Generated: ${formatDate(new Date())}</div>
           </div>
           
           <div class="stats">

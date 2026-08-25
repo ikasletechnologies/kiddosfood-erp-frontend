@@ -14,6 +14,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { formatDate } from "@/lib/utils";
 
 const FALLBACK_COMPANY = {
   name: "Kiddos Food Headquarters",
@@ -700,7 +701,7 @@ export default function FranchiseOrdersPage() {
                       )}
                     </div>
                     <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      {order.franchise?.name} · Ordered: {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      {order.franchise?.name} · Ordered: {formatDate(order.createdAt)}
                     </p>
                   </div>
                   
@@ -710,7 +711,7 @@ export default function FranchiseOrdersPage() {
                     </p>
                     {order.expectedDispatchDate && (
                       <p className="text-xs font-semibold text-slate-500">
-                        Needed by: {new Date(order.expectedDispatchDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                        Needed by: {formatDate(order.expectedDispatchDate)}
                       </p>
                     )}
                   </div>

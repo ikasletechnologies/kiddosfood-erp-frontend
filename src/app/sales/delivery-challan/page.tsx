@@ -12,7 +12,7 @@ import {
 import { clsx } from "clsx";
 import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 
 // ── Constants (Unified with Invoice Page) ────────────────────────────────────
 
@@ -1300,7 +1300,7 @@ export default function DeliveryChallanPage() {
                   return (
                     <tr key={dc.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(dc.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(dc.invoiceDate)}
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800 text-sm">{dc.customerName}</div>
@@ -1310,7 +1310,7 @@ export default function DeliveryChallanPage() {
                         #{dc.challanNo}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(dc.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(dc.dueDate)}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
                         ₹{Number(dc.finalAmount).toFixed(2)}

@@ -7,6 +7,7 @@ import {
 import { clsx } from "clsx";
 import { franchiseApi, logisticsApi, inventoryApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "Pending",
@@ -511,7 +512,7 @@ export default function FranchiseTransfersPage() {
                   return (
                     <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(t.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(t.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         #{t.id?.slice(0, 8).toUpperCase()}

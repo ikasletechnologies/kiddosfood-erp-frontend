@@ -11,6 +11,32 @@ export function formatCurrency(amount: number, currency: string = "₹") {
   return `${isNegative ? '-' : ''}${currency}${absVal.toLocaleString("en-IN")}`;
 }
 
+// The single source of truth for how a date is displayed anywhere in the
+// UI: strict DD/MM/YYYY, always — built manually (not via toLocaleDateString)
+// so it can never drift with the browser's OS locale or Intl implementation.
+// Every screen previously picked its own format (bare toLocaleDateString(),
+// "en-IN" with no options, "en-US", "25 Aug 2026"-style options, ...) —
+// this replaces all of them.
+export function formatDate(date: string | number | Date | null | undefined): string {
+  if (date === null || date === undefined || date === "") return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "—";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+// Same DD/MM/YYYY date, plus a locale-formatted time — for the handful of
+// places that show both together (e.g. "Generated on 25/08/2026 at 02:30 PM").
+export function formatDateTime(date: string | number | Date | null | undefined): string {
+  if (date === null || date === undefined || date === "") return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "—";
+  const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return `${formatDate(d)} ${time}`;
+}
+
 export function formatERPNumber(
   prefix: "PO" | "GRN" | "BT" | "DC" | "INV" | "RCPT" | "PRD",
   idOrCode: string | number | undefined,

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, Search, FileText, CheckCircle2, XCircle, X } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
@@ -129,7 +130,7 @@ export default function PurchaseRequestsPage() {
                 <td className="px-4 py-3">
                    <div className="text-gray-900 font-medium">{r.items?.length || 0} items</div>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-gray-500">{formatDate(r.createdAt)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status] || ""}`}>{r.status.replace("_", " ")}</span>
                 </td>

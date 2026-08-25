@@ -16,6 +16,7 @@ import { X,
 import { clsx } from "clsx";
 import { franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 interface Franchise {
   id: string;
@@ -405,11 +406,7 @@ export default function BranchLedgerPage() {
                         <tr key={line.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <p className="font-bold text-slate-900 dark:text-white text-sm">
-                              {new Date(line.date).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })}
+                              {formatDate(line.date)}
                             </p>
                           </td>
                           <td className="px-6 py-4">

@@ -12,6 +12,7 @@ import { clsx } from "clsx";
 import { customersApi, productsFullApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
+import { formatDate } from "@/lib/utils";
 
 // ── Constants (Unified with Invoice Page) ────────────────────────────────────
 
@@ -1249,10 +1250,10 @@ export default function SalesOrdersPage() {
                         {o.orderNo}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(o.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(o.invoiceDate)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(o.dueDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(o.dueDate)}
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
                         ₹{Number(o.finalAmount).toFixed(2)}

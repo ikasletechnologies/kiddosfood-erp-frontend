@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, Search, FileText, FileDown, CheckCircle2, XCircle } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   OPEN: "bg-blue-100 text-blue-700",
@@ -113,7 +114,7 @@ export default function RequestForQuotationPage() {
                 <tr className="hover:bg-gray-50 bg-white">
                   <td className="px-4 py-3 font-mono text-xs text-blue-600 font-medium">{r.rfqNumber}</td>
                   <td className="px-4 py-3 text-gray-600 font-mono text-xs">{r.purchaseRequest?.prNumber || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500">{r.deadline ? new Date(r.deadline).toLocaleDateString() : '—'}</td>
+                  <td className="px-4 py-3 text-gray-500">{formatDate(r.deadline)}</td>
                   <td className="px-4 py-3 font-medium text-gray-800">{r.quotations?.length || 0}</td>
                   <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status]}`}>{r.status}</span></td>
                   <td className="px-4 py-3 text-right">
@@ -143,7 +144,7 @@ export default function RequestForQuotationPage() {
                                      <tr key={q.id}>
                                         <td className="px-3 py-2 font-medium text-gray-900">{q.vendor?.name}</td>
                                         <td className="px-3 py-2">₹{q.totalAmount.toLocaleString()}</td>
-                                        <td className="px-3 py-2 text-gray-500">{q.validUntil ? new Date(q.validUntil).toLocaleDateString() : '—'}</td>
+                                        <td className="px-3 py-2 text-gray-500">{formatDate(q.validUntil)}</td>
                                         <td className="px-3 py-2">
                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide
                                               ${q.status === 'ACCEPTED' ? 'bg-green-100 text-green-700' : 

@@ -17,6 +17,7 @@ import api from "../../../lib/api";
 import AddMaterialDrawer from "../inventory/AddMaterialDrawer";
 import RecordPaymentModal from "./RecordPaymentModal";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 interface POItem {
   inventoryItemId: string;
@@ -276,7 +277,7 @@ export default function PurchaseOrdersClient() {
     const vendorPhone = (po.vendor?.contact || po.vendor?.phone || "-").replace(/[()\\\r\n]/g, "");
     const companyName = (company?.name || "KIDDOS FOODS").replace(/[()\\\r\n]/g, "");
     const poNum = (po.poNumber || po.id || "PO-001").replace(/[()\\\r\n]/g, "");
-    const poDate = new Date(po.createdAt || Date.now()).toLocaleDateString();
+    const poDate = formatDate(po.createdAt || Date.now());
 
     while (currentRow < items.length || pageNum === 1) {
       let y = topMargin;
@@ -944,11 +945,11 @@ export default function PurchaseOrdersClient() {
                     </div>
                     <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">PO Date</p>
-                      <p className="text-xs font-black text-gray-900 dark:text-white">{new Date(viewingDetailsPO.createdAt).toLocaleDateString()}</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{formatDate(viewingDetailsPO.createdAt)}</p>
                     </div>
                     <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Expected Delivery</p>
-                      <p className="text-xs font-black text-gray-900 dark:text-white">{viewingDetailsPO.expectedDeliveryDate ? new Date(viewingDetailsPO.expectedDeliveryDate).toLocaleDateString() : "—"}</p>
+                      <p className="text-xs font-black text-gray-900 dark:text-white">{formatDate(viewingDetailsPO.expectedDeliveryDate)}</p>
                     </div>
                     <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Payment Terms</p>
@@ -1100,7 +1101,7 @@ export default function PurchaseOrdersClient() {
                           return (
                             <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                               <td className="px-4 py-3 text-xs font-mono text-slate-500">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
-                              <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{new Date(grn.createdAt).toLocaleDateString()}</td>
+                              <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{formatDate(grn.createdAt)}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{totalAccepted}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600">{totalRejected}</td>

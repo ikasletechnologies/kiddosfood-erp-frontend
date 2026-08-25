@@ -11,6 +11,7 @@ import { X,
 import Link from "next/link";
 import api from "@/lib/api";
 import { clsx } from "clsx";
+import { formatDate } from "@/lib/utils";
 
 interface Employee {
   id: string;
@@ -383,7 +384,7 @@ export default function EmployeesClient() {
               </div>
               <div className="bg-indigo-50/30 dark:bg-indigo-500/5 p-2 rounded-xl border border-indigo-100 dark:border-indigo-500/10 flex flex-col justify-center">
                 <p className="text-[8px] sm:text-[9px] font-bold text-indigo-600 uppercase tracking-tighter mb-0.5">Joined</p>
-                <p className="text-xs sm:text-sm font-bold truncate">{new Date(emp.dateOfJoining).toLocaleDateString()}</p>
+                <p className="text-xs sm:text-sm font-bold truncate">{formatDate(emp.dateOfJoining)}</p>
               </div>
               <div className="bg-emerald-50/30 dark:bg-emerald-500/5 p-2 rounded-xl border border-emerald-100 dark:border-emerald-500/10 flex flex-col justify-center">
                 <p className="text-[8px] sm:text-[9px] font-bold text-emerald-600 uppercase tracking-tighter mb-0.5">Salary</p>

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { customersApi, productsFullApi, draftsApi, franchiseApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
@@ -936,7 +936,7 @@ export default function SalesInvoicesPage() {
                       className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
                     >
                       <Calendar size={13} className="text-orange-500 shrink-0" />
-                      {invoiceDate ? new Date(invoiceDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Pick date"}
+                      {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1 z-[200]">
@@ -1416,7 +1416,7 @@ export default function SalesInvoicesPage() {
 }
   // LIST VIEW — Simplified Clean UI
   // ════════════════════════════════════════════════════════════════════════════
-  const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmt = (d: string) => formatDate(d + "T00:00:00");
 
   const nonDraft     = filtered.filter(i => i.status !== "DRAFT");
   const totalAmt     = nonDraft.reduce((s, i) => s + (i.finalAmount || 0), 0);
@@ -1574,7 +1574,7 @@ export default function SalesInvoicesPage() {
                       }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(inv.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {inv.order?.invoiceNum

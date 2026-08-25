@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import { reportsApi, accountingApi } from "@/lib/api/accounting.api";
 import {
   inventoryApi,
@@ -1074,11 +1074,7 @@ function fmtCurrency(val: any): string {
 function fmtDate(val: any): string {
   if (!val) return "—";
   try {
-    return new Date(val).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    return formatDate(val);
   } catch {
     return String(val);
   }

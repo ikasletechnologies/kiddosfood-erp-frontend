@@ -9,6 +9,7 @@ import {
 import { clsx } from "clsx";
 import { accountingApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -76,9 +77,7 @@ function MiniCalendar({ value, onChange, onClose }: { value: string; onChange: (
 function makeItem(): LineItem { return { id: Math.random().toString(36).slice(2), item: "", qty: 1, rate: 0 }; }
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function fmtDate(d: string) {
-  if (!d) return "—";
-  const datePart = d.split("T")[0];
-  return new Date(datePart + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

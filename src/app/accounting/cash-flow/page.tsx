@@ -5,6 +5,7 @@ import { ArrowUpRight, ArrowDownRight, RefreshCw, Wallet, Building2, Smartphone,
 import { clsx } from "clsx";
 import { accountingApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 interface CashFlowSummary {
   accounts: any[];
@@ -205,7 +206,7 @@ export default function CashFlowPage() {
                       <td className="px-6 py-4">
                         <p className="text-sm font-bold text-slate-900 dark:text-white uppercase">{payment.paymentNumber || "—"}</p>
                         <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
-                          {new Date(payment.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          {formatDate(payment.date)}
                         </p>
                       </td>
                       <td className="px-6 py-4">

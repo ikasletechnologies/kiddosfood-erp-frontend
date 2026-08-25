@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api/base";
 import { useToast } from "@/context/ToastContext";
+import { formatDate } from "@/lib/utils";
 
 // A genuinely distinct document from Estimate now (backed by
 // /api/sales/proforma-invoices -> the ProformaInvoice model), created only
@@ -169,7 +170,7 @@ export default function ProformaInvoicePage() {
                   return (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(p.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(p.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {p.proformaNumber}

@@ -18,6 +18,7 @@ import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import { workflowApprovalsApi } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 // ─── TYPES & STAGE CONFIG ───────────────────────────────────────────────────
 // Mirrors the server-side stage sequences in
@@ -313,7 +314,7 @@ export default function ApprovalsPage() {
 
                     <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between">
                       <span className="text-[9px] font-bold text-slate-400 flex items-center gap-1">
-                        <Calendar size={10} /> {new Date(item.dateInitiated).toLocaleDateString()}
+                        <Calendar size={10} /> {formatDate(item.dateInitiated)}
                       </span>
 
                       {!isFinished ? (
@@ -361,7 +362,7 @@ export default function ApprovalsPage() {
                   <h3 className="text-base font-black text-slate-800 dark:text-white uppercase leading-snug">
                     {selectedItem.title}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1 font-bold">Initiated on {new Date(selectedItem.dateInitiated).toLocaleDateString()} by {selectedItem.initiatedBy}</p>
+                  <p className="text-xs text-slate-400 mt-1 font-bold">Initiated on {formatDate(selectedItem.dateInitiated)} by {selectedItem.initiatedBy}</p>
                 </div>
 
                 <div className="h-[1px] bg-slate-100 dark:bg-white/5" />

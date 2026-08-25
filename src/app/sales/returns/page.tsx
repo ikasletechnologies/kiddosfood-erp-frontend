@@ -9,6 +9,7 @@ import { salesApi, franchiseApi, customersApi, franchiseOrdersApi } from "@/lib/
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
 import api from "@/lib/api/base";
+import { formatDate } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -410,7 +411,7 @@ export default function SalesReturnsPage() {
             <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Return No: <strong>${ret.returnNumber}</strong></div>
           </div>
           <div style="text-align: right; font-size: 13px;">
-            <div>Logged Date: <strong>${new Date(ret.createdAt).toLocaleDateString()}</strong></div>
+            <div>Logged Date: <strong>${formatDate(ret.createdAt)}</strong></div>
             <div>Order Reference: <strong>#${ret.orderRefNumber}</strong></div>
             <div style="margin-top: 5px;"><span style="background: #e2e8f0; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: bold;">${ret.status}</span></div>
           </div>
@@ -576,7 +577,7 @@ export default function SalesReturnsPage() {
                   <option value="">{selectedEntity ? "Choose original order..." : "Select entity first"}</option>
                   {ordersList.map(o => (
                     <option key={o.id} value={o.id}>
-                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {new Date(o.createdAt).toLocaleDateString()}
+                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
                     </option>
                   ))}
                 </select>
@@ -867,7 +868,7 @@ export default function SalesReturnsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(r.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">

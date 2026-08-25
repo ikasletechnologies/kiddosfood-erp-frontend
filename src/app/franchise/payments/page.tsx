@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { franchiseOrdersApi } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 const PAYMENT_STATUS_STYLE: Record<string, string> = {
   PAID:    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-700/30",
@@ -216,7 +217,7 @@ export default function FranchisePaymentsPage() {
                         </p>
                       </td>
                       <td className="px-4 py-4 hidden sm:table-cell text-xs font-medium text-slate-500 dark:text-slate-400">
-                        {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(order.createdAt)}
                       </td>
                       <td className="px-4 py-4 text-right">
                         <span className="font-bold text-slate-900 dark:text-white tabular-nums">{fmt(order.totalAmount ?? 0)}</span>

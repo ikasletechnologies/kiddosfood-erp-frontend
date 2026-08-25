@@ -8,6 +8,7 @@ import {
 import { clsx } from 'clsx';
 import { productionApi } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import { formatDate } from '@/lib/utils';
 
 export default function QCClient() {
   const searchParams = useSearchParams();
@@ -240,7 +241,7 @@ export default function QCClient() {
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500">
-                            {batch.createdAt ? new Date(batch.createdAt).toLocaleDateString() : '—'}
+                            {formatDate(batch.createdAt)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button

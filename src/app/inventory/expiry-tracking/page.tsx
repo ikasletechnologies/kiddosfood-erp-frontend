@@ -17,6 +17,7 @@ import {
 import { clsx } from "clsx";
 import { productBatchesApi, productsFullApi, franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
@@ -157,20 +158,8 @@ export default function ProductBatchesPage() {
           b.product?.name ?? "—",
           ...(isSuper ? [b.franchise?.name ?? "—"] : []),
           `${b.bulkQuantity ?? b.quantity} ${b.production?.recipe?.yieldUnit || "KG"}`,
-          b.createdAt
-            ? new Date(b.createdAt).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
-            : "—",
-          expiry
-            ? new Date(expiry).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              })
-            : "—",
+          formatDate(b.createdAt),
+          formatDate(expiry),
           EXPIRY_CONFIG[status].label,
         ];
         return base;
@@ -460,16 +449,7 @@ export default function ProductBatchesPage() {
                       </td>
                       <td className="px-4 sm:px-5 py-3">
                         <span className="text-[13px] font-semibold text-slate-600 dark:text-slate-400">
-                          {batch.createdAt
-                            ? new Date(batch.createdAt).toLocaleDateString(
-                                "en-IN",
-                                {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                }
-                              )
-                            : "—"}
+                          {formatDate(batch.createdAt)}
                         </span>
                       </td>
                       <td className="px-4 sm:px-5 py-3">
@@ -483,13 +463,7 @@ export default function ProductBatchesPage() {
                               : "text-slate-600 dark:text-slate-400"
                           )}
                         >
-                          {expiry
-                            ? new Date(expiry).toLocaleDateString("en-IN", {
-                                day: "2-digit",
-                                month: "short",
-                                year: "numeric",
-                              })
-                            : "—"}
+                          {formatDate(expiry)}
                         </span>
                       </td>
                       <td className="px-4 sm:px-5 py-3 text-center">

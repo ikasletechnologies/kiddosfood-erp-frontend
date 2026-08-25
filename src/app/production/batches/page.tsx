@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMaterialConsumptionClient";
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
+import { formatDate } from "@/lib/utils";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
@@ -143,7 +144,7 @@ function ProductBatchesRegistry() {
       b.batchCode?.toLowerCase().includes(q) ||
       b.product?.name?.toLowerCase().includes(q) ||
       b.production?.recipe?.name?.toLowerCase().includes(q) ||
-      (b.createdAt && new Date(b.createdAt).toLocaleDateString().includes(q));
+      (b.createdAt && formatDate(b.createdAt).includes(q));
     const matchExpiry = expiryFilter === "ALL" || (b.expiryStatus ?? "VALID") === expiryFilter;
     return matchSearch && matchExpiry;
   });
@@ -357,7 +358,7 @@ function ProductBatchesRegistry() {
                         <td className={clsx("px-4 py-3 text-xs whitespace-nowrap",
                           status === "EXPIRED" ? "text-rose-600 font-semibold" : status === "EXPIRING_SOON" ? "text-amber-600 font-semibold" : "text-gray-600"
                         )}>
-                          {getEffectiveExpiry(batch) ? new Date(getEffectiveExpiry(batch)!).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                          {formatDate(getEffectiveExpiry(batch))}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border",

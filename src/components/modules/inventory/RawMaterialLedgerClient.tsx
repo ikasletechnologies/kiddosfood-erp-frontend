@@ -8,6 +8,7 @@ import { X,
 import { clsx } from "clsx";
 import { inventoryApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 const CATEGORY_OPTIONS = [
   { value: "ALL", label: "All Items" },
@@ -66,7 +67,7 @@ export default function RawMaterialLedgerClient() {
   const downloadCSV = () => {
     const headers = ["Date", "Item Name", "SKU", "Category", "Transaction Type", "Inward Qty", "Outward Qty", "Unit", "Running Balance", "Operator", "Reference", "Batch ID", "Warehouse", "Unit Cost", "Description"];
     const rows = filteredEntries.map(entry => [
-      new Date(entry.date).toLocaleDateString(),
+      formatDate(entry.date),
       entry.itemName || "",
       entry.sku || "",
       entry.category || "",
@@ -263,7 +264,7 @@ export default function RawMaterialLedgerClient() {
               {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
                   <td className="px-8 py-4 text-xs font-bold text-slate-600 dark:text-slate-400">
-                    {new Date(entry.date).toLocaleDateString(undefined, { dateStyle: "medium" })}
+                    {formatDate(entry.date)}
                   </td>
                   {selectedItemId === "ALL" && (
                     <td className="px-6 py-4">

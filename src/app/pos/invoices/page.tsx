@@ -25,6 +25,7 @@ import { clsx } from "clsx";
 import { posApi, salesApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface Invoice {
   id: string;
@@ -231,7 +232,7 @@ export default function InvoicesPage() {
                            <span className="text-sm font-black text-slate-900 dark:text-white">₹{invoice.totalAmount.toLocaleString()}</span>
                         </td>
                         <td className="px-8 py-5 text-slate-500 font-bold text-[11px]">
-                           {new Date(invoice.createdAt).toLocaleDateString()}
+                           {formatDate(invoice.createdAt)}
                         </td>
                         <td className="px-8 py-5 text-right">
                            <button className="p-2 text-slate-300 hover:text-orange-500 transition-all">

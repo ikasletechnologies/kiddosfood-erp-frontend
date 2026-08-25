@@ -5,6 +5,7 @@ import { Truck, Search, CheckCircle, Clock } from "lucide-react";
 import { clsx } from "clsx";
 import { salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { formatDate } from "@/lib/utils";
 
 interface TransitItem {
   id: string;
@@ -152,7 +153,7 @@ export default function TransitStockPage() {
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3 text-sm font-medium text-orange-600">#{item.challanNumber}</td>
                       <td className="px-5 py-3 text-sm text-gray-600">
-                        {new Date(item.dispatchDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(item.dispatchDate)}
                       </td>
                       <td className="px-5 py-3 text-sm text-gray-700">{item.source}</td>
                       <td className="px-5 py-3 text-sm text-gray-700 font-medium">{item.destination}</td>

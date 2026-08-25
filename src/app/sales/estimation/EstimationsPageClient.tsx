@@ -13,6 +13,7 @@ import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
+import { formatDate } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -690,7 +691,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
         <body>
           <h2>${L.docWord} ${est.quotationNumber}</h2>
           <p>Party: ${partyName}${est.customerPhone ? ` · ${est.customerPhone}` : ""}</p>
-          <p>Date: ${new Date(est.createdAt).toLocaleDateString("en-IN")}${est.validUntil ? ` · Valid Until: ${new Date(est.validUntil).toLocaleDateString("en-IN")}` : ""}</p>
+          <p>Date: ${formatDate(est.createdAt)}${est.validUntil ? ` · Valid Until: ${formatDate(est.validUntil)}` : ""}</p>
           <table>
             <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Tax</th><th>Amount</th></tr></thead>
             <tbody>${itemsHtml}</tbody>
@@ -877,7 +878,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                       className="w-full flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white hover:border-orange-400 transition-colors"
                     >
                       <span className="font-medium text-gray-700">
-                        {invoiceDate ? new Date(invoiceDate + "T00:00:00").toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }) : "Pick date"}
+                        {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
                       </span>
                       <Calendar size={14} className="text-gray-400 shrink-0" />
                     </button>
@@ -1443,7 +1444,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   // ══════════════════════════════════════════════════════════════════════════
   // LIST VIEW — Simplified Clean UI
   // ══════════════════════════════════════════════════════════════════════════
-  const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmt = (d: string) => formatDate(d + "T00:00:00");
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
@@ -1592,7 +1593,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                       }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(est.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(est.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-semibold text-gray-800 text-xs">
                         <div>{est.quotationNumber}</div>

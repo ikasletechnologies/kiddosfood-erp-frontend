@@ -20,6 +20,7 @@ import {
 import { toast } from "react-hot-toast";
 import axios from "axios";
 import { userGovernanceApi, franchiseApi } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 interface User {
   id: string;
@@ -265,7 +266,7 @@ export default function UsersClient() {
                       </button>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {new Date(user.createdAt).toLocaleDateString()}
+                      {formatDate(user.createdAt)}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-2">

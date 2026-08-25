@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { recallApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { formatDate } from "@/lib/utils";
 
 interface RecallBatch {
   id: string;
@@ -422,7 +423,7 @@ export default function BatchRecallPage() {
                         <p className="text-xs font-mono font-semibold text-gray-800 truncate">{batch.batchCode}</p>
                         <p className="text-sm font-medium text-gray-700 truncate">{batch.productName}</p>
                         <p className="text-xs text-gray-400">
-                          Approved: {batch.approvedQty} {batch.unit} • {batch.productionDate ? new Date(batch.productionDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                          Approved: {batch.approvedQty} {batch.unit} • {formatDate(batch.productionDate)}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -508,7 +509,7 @@ export default function BatchRecallPage() {
                       { label: "Produced Qty", value: `${eligibility?.batch.producedQty ?? selectedBatch.producedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       { label: "Approved Qty", value: `${eligibility?.batch.approvedQty ?? selectedBatch.approvedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       { label: "QC Status", value: selectedBatch.qcStatus },
-                      { label: "Production Date", value: selectedBatch.productionDate ? new Date(selectedBatch.productionDate).toLocaleDateString("en-IN") : "—" },
+                      { label: "Production Date", value: formatDate(selectedBatch.productionDate) },
                       { label: "Rejected Qty", value: `${eligibility?.batch.rejectedQty ?? selectedBatch.rejectedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       { label: "Packed Qty", value: `${eligibility?.batch.packagedQty ?? selectedBatch.packagedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       // Wasted (damage/spoilage write-off) is tracked separately from

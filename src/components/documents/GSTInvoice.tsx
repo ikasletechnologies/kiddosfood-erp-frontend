@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, QrCode } from 'lucide-react';
+import { formatDate } from '@/lib/utils';
 
 interface GSTInvoiceProps {
   order: any;
@@ -98,7 +99,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
   const dueDate = new Date(invoiceDate);
   dueDate.setDate(dueDate.getDate() + 15); // 15 days due
 
-  const fmtDate = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase();
+  const fmtDate = (d: Date) => formatDate(d);
 
   if (!mounted) return null;
 

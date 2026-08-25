@@ -22,6 +22,7 @@ import api from "@/lib/api";
 import toast from "react-hot-toast";
 import { clsx } from "clsx";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 interface DispatchedOrder {
   id: string;
@@ -165,7 +166,7 @@ export default function IncomingStockPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-                        <span className="flex items-center gap-1.5"><CalendarIcon size={12} /> Dispatched: {new Date(order.actualDispatchDate || order.expectedDispatchDate || "").toLocaleDateString()}</span>
+                        <span className="flex items-center gap-1.5"><CalendarIcon size={12} /> Dispatched: {formatDate(order.actualDispatchDate || order.expectedDispatchDate)}</span>
                         <span className="flex items-center gap-1.5"><Building2Icon size={12} /> Destination: {order.franchise?.name || "Independent Branch"}</span>
                         <span className="flex items-center gap-1.5"><PackageIcon size={12} /> {order.items?.length || 0} Product Lines</span>
                       </div>
@@ -215,7 +216,7 @@ export default function IncomingStockPage() {
                     <div key={order.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                       <div>
                         <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase">{order.orderNumber}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{new Date(order.updatedAt).toLocaleDateString()}</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{formatDate(order.updatedAt)}</p>
                       </div>
                       <span className="text-[10px] font-black text-emerald-500">RECEIVED</span>
                     </div>

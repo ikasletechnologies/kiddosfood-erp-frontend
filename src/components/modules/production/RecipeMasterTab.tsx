@@ -21,6 +21,7 @@ import { clsx } from "clsx";
 import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { formatDate } from "@/lib/utils";
 
 interface RecipeItem {
   inventoryItemId: string;
@@ -223,7 +224,7 @@ export default function RecipeMasterTab() {
                 <h1>${recipe.name}</h1>
                 <div class="product">Finished Product: ${recipe.product?.name || 'N/A'} ${recipe.recipeCode ? `(${recipe.recipeCode})` : ''}</div>
               </div>
-              <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
+              <div class="date">Generated: ${formatDate(new Date())}</div>
             </div>
             
             <div class="stats">

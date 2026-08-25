@@ -26,6 +26,7 @@ import {
 import { clsx } from "clsx";
 import { chequesApi, franchiseApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 export default function ChequeRegistryPage() {
   const [cheques, setCheques] = useState<any[]>([]);
@@ -319,11 +320,11 @@ export default function ChequeRegistryPage() {
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
                             <Calendar size={12} className="text-slate-300" />
-                            Issued: {new Date(cheque.issueDate).toLocaleDateString()}
+                            Issued: {formatDate(cheque.issueDate)}
                           </div>
                           <div className="flex items-center gap-2 text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest">
                             <Clock size={12} />
-                            Due: {new Date(cheque.dueDate).toLocaleDateString()}
+                            Due: {formatDate(cheque.dueDate)}
                           </div>
                         </div>
                       </td>

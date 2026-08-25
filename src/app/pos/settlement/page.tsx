@@ -18,6 +18,7 @@ import { clsx } from "clsx";
 import { posApi, posSettlementApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface SettlementStats {
   cash: number;
@@ -158,11 +159,7 @@ export default function SettlementPage() {
                 Business Date
               </span>
               <span className="text-slate-700 dark:text-slate-200 pl-1">
-                {new Date().toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {formatDate(new Date())}
               </span>
             </div>
           </div>
@@ -373,10 +370,7 @@ export default function SettlementPage() {
                   </span>
                   <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                     {latestSettlement
-                      ? `${new Date(latestSettlement.businessDate).toLocaleDateString(
-                          "en-IN",
-                          { day: "2-digit", month: "short", year: "numeric" }
-                        )} · ${new Date(latestSettlement.createdAt).toLocaleTimeString(
+                      ? `${formatDate(latestSettlement.businessDate)} · ${new Date(latestSettlement.createdAt).toLocaleTimeString(
                           "en-IN",
                           { hour: "2-digit", minute: "2-digit" }
                         )}`

@@ -18,6 +18,7 @@ import { clsx } from "clsx";
 import { chequesApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface Cheque {
   id: string;
@@ -218,7 +219,7 @@ export default function ChequeSettlePage() {
                         <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400"><Calendar size={14} /></div>
                         <div>
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Due</p>
-                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{new Date(cheque.dueDate).toLocaleDateString()}</p>
+                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{formatDate(cheque.dueDate)}</p>
                         </div>
                       </div>
                     </div>

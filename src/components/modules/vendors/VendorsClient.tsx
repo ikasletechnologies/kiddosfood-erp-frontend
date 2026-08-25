@@ -22,6 +22,7 @@ import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { Modal } from "@/components/ui/Modal";
+import { formatDate } from "@/lib/utils";
 
 // Local YYYY-MM-DD — never use toISOString() for "today", it renders in UTC and
 // silently shifts the date by a day whenever the local timezone has a non-zero offset.
@@ -394,8 +395,8 @@ export default function VendorsClient() {
       return;
     }
 
-    const fromDateStr = ledgerFromDate && range === 'filtered' ? new Date(ledgerFromDate).toLocaleDateString() : 'All Dates';
-    const toDateStr = ledgerToDate && range === 'filtered' ? new Date(ledgerToDate).toLocaleDateString() : 'Present';
+    const fromDateStr = ledgerFromDate && range === 'filtered' ? formatDate(ledgerFromDate) : 'All Dates';
+    const toDateStr = ledgerToDate && range === 'filtered' ? formatDate(ledgerToDate) : 'Present';
 
     let printDebitTotal = 0;
     let printCreditTotal = 0;
@@ -409,7 +410,7 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       return `
         <tr>
-          <td>${new Date(e.createdAt).toLocaleDateString()}</td>
+          <td>${formatDate(e.createdAt)}</td>
           <td>${e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType}</td>
           <td>${e.referenceId || '—'}</td>
           <td>${e.note || '—'}</td>
@@ -551,7 +552,7 @@ export default function VendorsClient() {
 
       stream += `BT /F2 14 Tf ${leftMargin} ${y} Td (${title.replace(/[()\\\r\n]/g, "")}) Tj ET\n`;
       y -= 18;
-      stream += `BT /F1 9 Tf ${leftMargin} ${y} Td (Vendor: ${vendorName.replace(/[()\\\r\n]/g, "")} | Date: ${new Date().toLocaleDateString()}) Tj ET\n`;
+      stream += `BT /F1 9 Tf ${leftMargin} ${y} Td (Vendor: ${vendorName.replace(/[()\\\r\n]/g, "")} | Date: ${formatDate(new Date())}) Tj ET\n`;
       y -= 22;
 
       stream += `0.93 0.94 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
@@ -655,7 +656,7 @@ export default function VendorsClient() {
       runningCredit += creditVal;
       
       return [
-        new Date(e.createdAt).toLocaleDateString(),
+        formatDate(e.createdAt),
         e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
         e.referenceId || '',
         e.note || '',
@@ -682,7 +683,7 @@ export default function VendorsClient() {
     if (format === 'xlsx') {
       const ws = XLSX.utils.aoa_to_sheet([
         [`Vendor Transactions Ledger - ${selectedVendorDetail.name}`],
-        [`Vendor Code: ${selectedVendorDetail.vendorCode || '-'} | GSTIN: ${selectedVendorDetail.gstNumber || '-'} | Date: ${new Date().toLocaleDateString()}`],
+        [`Vendor Code: ${selectedVendorDetail.vendorCode || '-'} | GSTIN: ${selectedVendorDetail.gstNumber || '-'} | Date: ${formatDate(new Date())}`],
         [],
         headers,
         ...rows
@@ -739,7 +740,7 @@ export default function VendorsClient() {
       runningCredit += creditVal;
       
       return [
-        new Date(e.createdAt).toLocaleDateString(),
+        formatDate(e.createdAt),
         e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
         e.referenceId || '',
         e.note || '',
@@ -754,7 +755,7 @@ export default function VendorsClient() {
       [`Party Name: ${vendor.name}`, `Vendor Code: ${vendor.vendorCode || '-'}`],
       [`Contact: ${vendor.contact || vendor.phone || '-'}`, `Email: ${vendor.email || '-'}`],
       [`GSTIN: ${vendor.gstNumber || vendor.gstin || '-'}`, `Category: ${vendor.category || '-'}`],
-      [`Generated Date: ${new Date().toLocaleDateString()}`],
+      [`Generated Date: ${formatDate(new Date())}`],
       [],
       headers,
       ...rows,
@@ -831,7 +832,7 @@ export default function VendorsClient() {
 
       const aoa = [
         ['ALL PARTIES MASTER REPORT'],
-        [`Generated Date: ${new Date().toLocaleDateString()}`, `Total Parties Count: ${list.length}`],
+        [`Generated Date: ${formatDate(new Date())}`, `Total Parties Count: ${list.length}`],
         [],
         headers,
         ...rows,
@@ -1799,7 +1800,7 @@ export default function VendorsClient() {
                               <td className="px-6 py-4 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 {e.paymentNumber || e.referenceId || "—"}
                               </td>
-                              <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{new Date(e.createdAt).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(e.createdAt)}</td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 <div>{e.note || "—"}</div>
                                 {e.transactionRef && (
@@ -1929,7 +1930,7 @@ export default function VendorsClient() {
                               <td className="px-6 py-4 text-xs font-bold text-slate-900 dark:text-white text-right">
                                 ₹ {totalAmt.toLocaleString()}
                               </td>
-                              <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
+                              <td className="px-6 py-4 text-xs text-slate-400 text-right">{formatDate(m.lastUpdated)}</td>
                             </tr>
                           );
                         })

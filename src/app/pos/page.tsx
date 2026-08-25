@@ -10,6 +10,7 @@ import { clsx } from "clsx";
 import { customersApi, franchiseApi, accountsApi, posApi } from "@/lib/api";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -324,7 +325,7 @@ export default function POSPage() {
       <h1>HQ POS</h1>
       <div class="center" style="font-size:10px;margin-bottom:8px">
         Bill #${receipt.orderId.slice(-8).toUpperCase()} &nbsp;·&nbsp;
-        ${new Date(receipt.timestamp).toLocaleDateString("en-IN")} ${new Date(receipt.timestamp).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}
+        ${formatDate(receipt.timestamp)} ${new Date(receipt.timestamp).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}
       </div>
       <div class="center" style="font-size:11px;margin-bottom:8px">
         ${receipt.partyType}: ${receipt.party?.name || "Walk-in"}

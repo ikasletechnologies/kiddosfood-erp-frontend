@@ -11,6 +11,7 @@ import { X,
 import toast from "react-hot-toast";
 import { reportsApi } from "@/lib/api/accounting.api";
 import * as XLSX from "xlsx";
+import { formatDate } from "@/lib/utils";
 
 interface PartyRow {
   id: string;
@@ -95,7 +96,7 @@ export default function CentralAllPartiesReport({
 
       const aoa: any[][] = [];
       aoa.push(["ALL PARTIES REPORT"]);
-      aoa.push(["Generated Date:", new Date().toLocaleDateString()]);
+      aoa.push(["Generated Date:", formatDate(new Date())]);
       if (filterType) aoa.push(["Filter Type:", filterType.toUpperCase()]);
       if (selectedIds.length > 0) aoa.push(["Selected Parties Count:", selectedIds.length]);
       aoa.push([]);

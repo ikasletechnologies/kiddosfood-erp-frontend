@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Plus, Clock } from "lucide-react";
 import api from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 export default function ShiftsPage() {
   const [shifts, setShifts] = useState<any[]>([]);
@@ -85,7 +86,7 @@ export default function ShiftsPage() {
                 <div className="text-xs text-gray-500 mb-2">Recent Assignments</div>
                 {shift.employees.slice(0, 3).map((es: any) => (
                   <div key={es.id} className="text-xs text-gray-600 py-0.5">
-                    {es.employee?.user?.fullName} — {new Date(es.date).toLocaleDateString()}
+                    {es.employee?.user?.fullName} — {formatDate(es.date)}
                   </div>
                 ))}
               </div>

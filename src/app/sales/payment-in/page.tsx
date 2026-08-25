@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { customersApi, draftsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -23,12 +23,6 @@ const PERIOD_OPTIONS = [
   { label: "This Year", value: "this_year" },
   { label: "Custom", value: "custom" },
 ];
-
-function formatDate(dateStr: string) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr + "T00:00:00");
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
 
 function getPeriodDates(period: string): { start: string; end: string } {
   const now = new Date();
@@ -715,7 +709,7 @@ export default function PaymentInPage() {
   }
 
   // ── LIST VIEW ──────────────────────────────────────────────────────────────
-  const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmt = (d: string) => formatDate(d);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
@@ -863,7 +857,7 @@ export default function PaymentInPage() {
                       }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                        {formatDate(p.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {p.paymentNumber ? formatERPNumber("RCPT", p.paymentNumber, p.createdAt) : "—"}

@@ -23,6 +23,7 @@ import {
 import { clsx } from "clsx";
 import { accountingApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 type FlowType = "ALL" | "IN" | "OUT";
 type PaymentMethod = "CASH" | "UPI" | "BANK_TRANSFER" | "CHEQUE" | "CARD" | "NEFT";
@@ -447,7 +448,7 @@ export default function PaymentsPage() {
                         {payment.paymentNumber || "N/A"}
                       </p>
                       <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                        {new Date(payment.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })} • {new Date(payment.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        {formatDate(payment.date)} • {new Date(payment.date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </td>
                     <td className="px-6 py-4">

@@ -18,6 +18,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 type ReqStatus =
   | "PENDING"
@@ -775,13 +776,7 @@ function FranchiseRequestsContent() {
                       </div>
                       <p className="text-xs text-gray-400 mt-1 flex items-center gap-2 font-medium">
                         <Clock size={12} />
-                        Requested: {new Date(req.createdAt).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
+                        Requested: {formatDateTime(req.createdAt)}
                         {req.requestedBy && <span>· by {req.requestedBy}</span>}
                       </p>
                     </div>
@@ -882,7 +877,7 @@ function FranchiseRequestsContent() {
                       </span>
                       {req.dispatchedAt && (
                         <span className="text-[11px] text-gray-500 font-medium">
-                          Dispatched: {new Date(req.dispatchedAt).toLocaleDateString("en-IN")}
+                          Dispatched: {formatDate(req.dispatchedAt)}
                         </span>
                       )}
                     </div>
