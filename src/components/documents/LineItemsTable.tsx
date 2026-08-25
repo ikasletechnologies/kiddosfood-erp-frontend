@@ -8,9 +8,43 @@ import { clsx } from "clsx";
 import Link from "next/link";
 import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer";
 
+// Paired units a line item's quantity can be entered in — kg/g and l/ml
+// convert into each other; anything else (pcs, unit, ...) has no smaller/
+// larger pair and is shown as-is. item.quantity is always stored in the
+// material's own base unit (item.unit) — these only affect how the operator
+// enters/reads the quantity; the stored value, price-per-base-unit, and the
+// line total math are untouched by which entry unit is currently selected.
+function getUnitOptions(baseUnit: string): string[] {
+  const u = (baseUnit || "").trim().toLowerCase();
+  if (u === "kg" || u === "g") return ["KG", "G"];
+  if (u === "l" || u === "ml") return ["L", "ML"];
+  return [baseUnit ? baseUnit.toUpperCase() : "UNIT"];
+}
+
+function convertQty(qty: number, fromUnit: string, toUnit: string): number {
+  const f = (fromUnit || "").trim().toLowerCase();
+  const t = (toUnit || "").trim().toLowerCase();
+  if (!qty || f === t) return qty;
+  if (f === "kg" && t === "g") return qty * 1000;
+  if (f === "g" && t === "kg") return qty / 1000;
+  if (f === "l" && t === "ml") return qty * 1000;
+  if (f === "ml" && t === "l") return qty / 1000;
+  return qty;
+}
+
+// Trims float noise from a conversion (e.g. 0.1 + 0.2 back-conversions)
+// without rounding away real precision a user typed.
+function roundForDisplay(n: number): number {
+  return Math.round(n * 1e6) / 1e6;
+}
+
 export default function LineItemsTable() {
   const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, autoFilledIds, setAutoFilledIds } = usePurchaseOrder();
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
+  // Per-line "which unit is the operator currently entering/reading the
+  // quantity in" — defaults to the material's base unit (item.unit) and is
+  // reset whenever a row's material changes.
+  const [entryUnits, setEntryUnits] = useState<Record<string, string>>({});
   const [materials, setMaterials] = useState<any[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,6 +113,7 @@ export default function LineItemsTable() {
         price: createdMaterial.price || 0,
         gstRate: createdMaterial.gstRate || 5
       });
+      setEntryUnits(prev => ({ ...prev, [targetDrawerItemId]: createdMaterial.unit || "KG" }));
       setActiveSearchId(null);
     }
   };
@@ -310,6 +345,7 @@ export default function LineItemsTable() {
                                           price: displayPrice,
                                           gstRate: m.gstRate || 5
                                         });
+                                        setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
                                         if (vendorPrice !== null) {
                                           setAutoFilledIds(prev => new Set(prev).add(item.id));
                                         } else {
@@ -392,15 +428,39 @@ export default function LineItemsTable() {
                       step="any"
                       placeholder="0"
                       className="w-full py-2 px-2 bg-slate-50 dark:bg-slate-900 rounded-xl outline-none text-xs font-bold text-center border border-slate-200 dark:border-slate-800 focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      value={item.quantity === 0 ? "" : item.quantity}
-                      onChange={(e) => updateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })}
+                      value={(() => {
+                        const baseUnit = item.unit || "KG";
+                        const entryUnit = entryUnits[item.id] || baseUnit;
+                        const displayQty = roundForDisplay(convertQty(item.quantity, baseUnit, entryUnit));
+                        return displayQty === 0 ? "" : displayQty;
+                      })()}
+                      onChange={(e) => {
+                        const baseUnit = item.unit || "KG";
+                        const entryUnit = entryUnits[item.id] || baseUnit;
+                        const entered = parseFloat(e.target.value) || 0;
+                        updateItem(item.id, { quantity: convertQty(entered, entryUnit, baseUnit) });
+                      }}
                       onKeyDown={(e) => handleKeyDown(e, item.id)}
                     />
                   </td>
                   <td className="px-2 py-3.5 align-middle text-center hidden sm:table-cell">
-                    <span className="inline-block px-2.5 py-1.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 rounded-lg">
-                       {item.unit || "KG"}
-                    </span>
+                    {(() => {
+                      const baseUnit = item.unit || "KG";
+                      const options = getUnitOptions(baseUnit);
+                      const entryUnit = entryUnits[item.id] || baseUnit;
+                      return (
+                        <select
+                          className="w-full py-1.5 px-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg outline-none text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-center border border-transparent focus:border-orange-400 transition-all cursor-pointer appearance-none disabled:cursor-not-allowed"
+                          style={{ textAlignLast: 'center' }}
+                          value={entryUnit}
+                          disabled={options.length < 2}
+                          title={options.length < 2 ? "This item has no alternate unit to convert to" : "Change the unit this quantity is entered in"}
+                          onChange={(e) => setEntryUnits(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        >
+                          {options.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-3.5 align-middle">
                     <div className="relative group/price min-w-[110px]">
