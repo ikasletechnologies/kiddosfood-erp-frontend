@@ -62,6 +62,15 @@ export const customersApi = {
   getLedgerSummary: (params: any = {}) => api.get('/api/customers/ledger-summary', { params }),
 };
 
+// External B2B reseller master — distinct from Customer, franchise-scoped
+// server-side (SUPER_ADMIN may pass franchiseId to target a specific
+// franchise's dealers; FRANCHISE_ADMIN is always forced to their own).
+export const dealersApi = {
+  getAll: (params: { franchiseId?: string } = {}) => api.get('/api/dealers', { params }),
+  create: (data: any) => api.post('/api/dealers', data),
+  delete: (id: string) => api.delete(`/api/dealers/${id}`),
+};
+
 // --- Logistics & Transfers (Internal) ---
 export const logisticsApi = {
   getRequests: (params: any = {}) => api.get('/api/logistics/requests', { params }),

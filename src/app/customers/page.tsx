@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  Search, Filter, ChevronDown, Plus, Settings, MoreVertical, 
-  Edit3, MessageSquare, Phone as PhoneIcon, Clock, 
+import {
+  Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
+  Edit3, MessageSquare, Phone as PhoneIcon, Clock,
   Printer, FileText as ExcelIcon, MoreHorizontal, BookOpen,
   X, Info, SlidersHorizontal
 } from "lucide-react";
-import { Setting07Icon } from "hugeicons-react";
 import { toast } from "react-hot-toast";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { customersApi, franchiseApi } from "@/lib/api";
@@ -36,6 +35,14 @@ export default function PartiesPage() {
   const effectiveFranchiseId = isSuper
     ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
     : (user as any)?.franchiseId;
+
+  // Read-only label shown inside the Add/Edit Customer modal — no independent
+  // scope picker there, it only ever reflects this page's own selector.
+  const scopeLabel = isSuper
+    ? (scope === "HQ"
+        ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name || "Main Headquarters"}`
+        : `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name || "Select a franchise"}`)
+    : undefined;
   const [activeTab, setActiveTab] = useState("Transactions");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
@@ -364,7 +371,7 @@ export default function PartiesPage() {
         {/* Top Header Actions */}
         <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200">
           <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-full text-xs font-bold transition-colors">
-            <Plus size={14} /> Add Party
+            <Plus size={14} /> Add Customer
           </button>
         </div>
 
@@ -380,7 +387,7 @@ export default function PartiesPage() {
                   </button>
                 </div>
                 <div className="flex items-center gap-4 text-slate-400">
-                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 transition-colors"><Setting07Icon size={18} /></button>
+                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 transition-colors"><Settings size={18} /></button>
                   <div className="relative filter-popover-container">
                     <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 transition-colors"><MoreVertical size={18} /></button>
                     {/* More Options Menu */}
@@ -659,7 +666,7 @@ export default function PartiesPage() {
             {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-2 text-slate-600">
-                <Setting07Icon size={16} />
+                <Settings size={16} />
                 <span className="text-sm font-semibold">More Settings</span>
               </div>
             </div>
@@ -674,43 +681,45 @@ export default function PartiesPage() {
         onSave={async (data) => {
           try {
             if (isSuper && !effectiveFranchiseId) {
-              toast.error("Select HQ or a franchise before adding a party.");
+              toast.error("Select HQ or a franchise before adding a customer.");
               return;
             }
             const payload = isSuper
               ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
               : { ...data, phone: data.contact };
             await customersApi.create(payload);
-            toast.success("Party added successfully!");
+            toast.success("Customer added successfully!");
             setIsAddModalOpen(false);
             fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
-            toast.error(error.response?.data?.error || "Failed to add party");
+            toast.error(error.response?.data?.error || "Failed to add customer");
             throw error;
           }
         }}
-        title="ADD PARTY"
+        title="ADD CUSTOMER"
         partyType="customer"
+        scopeLabel={scopeLabel}
       />
 
-      <AddPartyModal 
-        isOpen={isEditModalOpen} 
-        onClose={() => setIsEditModalOpen(false)} 
+      <AddPartyModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
         initialData={selectedCustomerDetail}
         onSave={async (data) => {
           try {
             if (!selectedCustomerId) return;
             await customersApi.update(selectedCustomerId, { ...data, phone: data.contact });
-            toast.success("Party updated successfully!");
+            toast.success("Customer updated successfully!");
             setIsEditModalOpen(false);
             fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
-            toast.error(error.response?.data?.error || "Failed to update party");
+            toast.error(error.response?.data?.error || "Failed to update customer");
             throw error;
           }
-        }} 
-        title="EDIT PARTY"
+        }}
+        title="EDIT CUSTOMER"
         partyType="customer"
+        scopeLabel={scopeLabel}
       />
 
     </div>

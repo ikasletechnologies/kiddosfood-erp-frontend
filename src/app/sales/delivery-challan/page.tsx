@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Truck, Plus, Search, RefreshCw, X, FileText,
   User, Check, Package, Calendar,
@@ -9,7 +10,7 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi, franchiseApi, salesApi, productBatchesApi } from "@/lib/api";
+import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber } from "@/lib/utils";
 
@@ -125,6 +126,7 @@ const isValidPhone = (v: string) => v === "" || /^\d{10}$/.test(v);
 
 export default function DeliveryChallanPage() {
   const { showToast } = useToast();
+  const router = useRouter();
 
   // Navigation State
   const [view, setView] = useState<"list" | "create" | "edit">("list");
@@ -133,7 +135,9 @@ export default function DeliveryChallanPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [warehouses, setWarehouses] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [batches, setBatches] = useState<any[]>([]);
 
@@ -150,8 +154,9 @@ export default function DeliveryChallanPage() {
   });
 
   // Active Challan Form State
-  const [destType, setDestType] = useState<"CUSTOMER" | "FRANCHISE">("CUSTOMER");
+  const [destType, setDestType] = useState<"CUSTOMER" | "DEALER" | "FRANCHISE">("CUSTOMER");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [selectedDealer, setSelectedDealer] = useState<any>(null);
   const [selectedFranchise, setSelectedFranchise] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
@@ -193,10 +198,12 @@ export default function DeliveryChallanPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [cRes, pRes, fRes, dcRes] = await Promise.allSettled([
+      const [cRes, dlRes, pRes, fRes, wRes, dcRes] = await Promise.allSettled([
         customersApi.getAll(),
+        dealersApi.getAll(),
         productsFullApi.getAll(),
         franchiseApi.getAll(),
+        inventoryApi.getWarehouses(),
         salesApi.getDeliveryChallans(),
       ]);
 
@@ -218,6 +225,7 @@ export default function DeliveryChallanPage() {
 
       // Resolve lists
       const customerList = cRes.status === "fulfilled" ? (cRes.value as any).data || [] : [];
+      const dealerList = dlRes.status === "fulfilled" ? (dlRes.value as any).data || [] : [];
       const franchiseList = fRes.status === "fulfilled" ? (fRes.value as any).data || [] : [];
 
       // Map to frontend structure
@@ -232,6 +240,15 @@ export default function DeliveryChallanPage() {
           } else if (dc.customer) {
             name = dc.customer.name;
             phone = dc.customer.phone || phone;
+          }
+        } else if (dc.dealerId) {
+          const dl = dealerList.find((x: any) => x.id === dc.dealerId);
+          if (dl) {
+            name = dl.name;
+            phone = dl.phone || phone;
+          } else if (dc.dealer) {
+            name = dc.dealer.name;
+            phone = dc.dealer.phone || phone;
           }
         } else if (dc.franchiseId) {
           const f = franchiseList.find((x: any) => x.id === dc.franchiseId);
@@ -257,6 +274,10 @@ export default function DeliveryChallanPage() {
         const d = (cRes.value as any).data;
         setCustomers(Array.isArray(d) ? d : d?.data || []);
       }
+      if (dlRes.status === "fulfilled") {
+        const d = (dlRes.value as any).data;
+        setDealers(Array.isArray(d) ? d : d?.data || []);
+      }
       if (pRes.status === "fulfilled") {
         const d = (pRes.value as any).data;
         setProducts(Array.isArray(d) ? d : d?.data || []);
@@ -264,6 +285,10 @@ export default function DeliveryChallanPage() {
       if (fRes.status === "fulfilled") {
         const d = (fRes.value as any).data;
         setFranchises(Array.isArray(d) ? d : d?.data || []);
+      }
+      if (wRes.status === "fulfilled") {
+        const d = (wRes.value as any).data;
+        setWarehouses(Array.isArray(d) ? d : d?.data || []);
       }
     } finally {
       setLoading(false);
@@ -273,6 +298,88 @@ export default function DeliveryChallanPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Resume an in-progress challan after a round trip to /customers/add,
+  // /franchise/dealers/add, or /franchise/add (see openQuickAdd below) —
+  // those are real, separately-navigable pages (not inline modals), so
+  // without this the in-progress draft would simply be lost on navigation.
+  const restoredQuickAddRef = useRef(false);
+  useEffect(() => {
+    if (loading || restoredQuickAddRef.current) return;
+    restoredQuickAddRef.current = true;
+    try {
+      const draftRaw = sessionStorage.getItem("dc_draft_before_quickadd");
+      if (!draftRaw) return;
+
+      const readFresh = (key: string) => {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return Date.now() - parsed.at < 5 * 60 * 1000 ? parsed : null;
+      };
+      const newCustomer = readFresh("lastCreatedCustomer");
+      const newDealer = readFresh("lastCreatedDealer");
+      const newFranchise = readFresh("lastCreatedFranchise");
+      if (!newCustomer && !newDealer && !newFranchise) return;
+
+      const draft = JSON.parse(draftRaw);
+      setDraftId(draft.draftId ?? null);
+      setChallanNo(draft.challanNo ?? "1");
+      setDestType(draft.destType ?? "CUSTOMER");
+      setCustomerPhone(draft.customerPhone ?? "");
+      setSourceFranchiseId(draft.sourceFranchiseId ?? "hq-001");
+      setVehicleNo(draft.vehicleNo ?? "");
+      setDriverName(draft.driverName ?? "");
+      setInvoiceDate(draft.invoiceDate ?? new Date().toISOString().split("T")[0]);
+      setDueDate(draft.dueDate ?? new Date().toISOString().split("T")[0]);
+      setStateOfSupply(draft.stateOfSupply ?? "");
+      setItems(draft.items ?? [makeItem(), makeItem()]);
+      setPriceMode(draft.priceMode ?? "without_tax");
+      setTermsText(draft.termsText ?? "");
+      setShowTerms(draft.showTerms ?? false);
+      setDescription(draft.description ?? "");
+      setShowDesc(draft.showDesc ?? false);
+      setRoundOffEnabled(draft.roundOffEnabled ?? true);
+
+      if (newCustomer) {
+        setSelectedCustomer({ id: newCustomer.id, name: newCustomer.name });
+        setCustomerSearch(newCustomer.name);
+      } else if (newDealer) {
+        setSelectedDealer({ id: newDealer.id, name: newDealer.name });
+        setCustomerSearch(newDealer.name);
+      } else if (newFranchise) {
+        setSelectedFranchise({ id: newFranchise.id, name: newFranchise.name });
+        setCustomerSearch(newFranchise.name);
+      } else {
+        setCustomerSearch(draft.customerSearch ?? "");
+      }
+
+      setView("create");
+    } catch (e) {
+      console.error("Failed to restore delivery challan draft after quick-add", e);
+    } finally {
+      sessionStorage.removeItem("dc_draft_before_quickadd");
+      sessionStorage.removeItem("lastCreatedCustomer");
+      sessionStorage.removeItem("lastCreatedDealer");
+      sessionStorage.removeItem("lastCreatedFranchise");
+    }
+  }, [loading]);
+
+  // Stash the in-progress draft, then navigate to the relevant master's
+  // quick-add page (which redirects back here via ?returnTo=).
+  const openQuickAdd = (type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    try {
+      sessionStorage.setItem("dc_draft_before_quickadd", JSON.stringify({
+        draftId, challanNo, destType, customerSearch, customerPhone, sourceFranchiseId,
+        vehicleNo, driverName, invoiceDate, dueDate, stateOfSupply, items, priceMode,
+        termsText, showTerms, description, showDesc, roundOffEnabled,
+      }));
+    } catch { /* ignore unavailable storage */ }
+    const returnTo = encodeURIComponent("/sales/delivery-challan");
+    if (type === "CUSTOMER") router.push(`/customers/add?returnTo=${returnTo}`);
+    else if (type === "DEALER") router.push(`/franchise/dealers/add?returnTo=${returnTo}&franchiseId=${encodeURIComponent(sourceFranchiseId)}`);
+    else router.push(`/franchise/add?returnTo=${returnTo}`);
+  };
 
   // Click outside handlers
   useEffect(() => {
@@ -359,13 +466,13 @@ export default function DeliveryChallanPage() {
   const selectCustomer = (c: any) => {
     if (destType === "CUSTOMER") {
       setSelectedCustomer(c);
-      setCustomerSearch(c.name);
-      setCustomerPhone(c.phone || "");
+    } else if (destType === "DEALER") {
+      setSelectedDealer(c);
     } else {
       setSelectedFranchise(c);
-      setCustomerSearch(c.name);
-      setCustomerPhone(c.phone || "");
     }
+    setCustomerSearch(c.name);
+    setCustomerPhone(c.phone || "");
     setShowCustomerDrop(false);
   };
 
@@ -404,6 +511,7 @@ export default function DeliveryChallanPage() {
   const resetForm = () => {
     setDraftId(null);
     setSelectedCustomer(null);
+    setSelectedDealer(null);
     setSelectedFranchise(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -431,6 +539,10 @@ export default function DeliveryChallanPage() {
     }
     if (destType === "CUSTOMER" && !selectedCustomer && status === "IN_TRANSIT") {
       showToast("Please select a customer", "error");
+      return;
+    }
+    if (destType === "DEALER" && !selectedDealer && status === "IN_TRANSIT") {
+      showToast("Please select a dealer", "error");
       return;
     }
     if (destType === "FRANCHISE" && !selectedFranchise && status === "IN_TRANSIT") {
@@ -469,8 +581,14 @@ export default function DeliveryChallanPage() {
 
     setSaving(true);
     const apiPayload = {
-      customerId: destType === "CUSTOMER" ? (selectedCustomer?.id || undefined) : undefined,
-      franchiseId: destType === "FRANCHISE" ? (selectedFranchise?.id || undefined) : undefined,
+      // Explicit null (not undefined) for the two inactive destination
+      // fields — undefined gets dropped by JSON serialization entirely,
+      // which on an update would leave a stale customerId/dealerId/
+      // franchiseId in place from before a destination-type switch instead
+      // of actually clearing it.
+      customerId: destType === "CUSTOMER" ? (selectedCustomer?.id || null) : null,
+      dealerId: destType === "DEALER" ? (selectedDealer?.id || null) : null,
+      franchiseId: destType === "FRANCHISE" ? (selectedFranchise?.id || null) : null,
       sourceFranchiseId,
       vehicleNo: vehicleNo || undefined,
       driverName: driverName || undefined,
@@ -520,10 +638,18 @@ export default function DeliveryChallanPage() {
       const f = franchises.find(x => x.id === dc.franchiseId);
       setSelectedFranchise(f || null);
       setSelectedCustomer(null);
+      setSelectedDealer(null);
+    } else if (dc.dealerId) {
+      setDestType("DEALER");
+      const dl = dealers.find(x => x.id === dc.dealerId);
+      setSelectedDealer(dl || null);
+      setSelectedCustomer(null);
+      setSelectedFranchise(null);
     } else {
       setDestType("CUSTOMER");
       const c = customers.find(x => x.id === dc.customerId);
       setSelectedCustomer(c || null);
+      setSelectedDealer(null);
       setSelectedFranchise(null);
     }
 
@@ -729,6 +855,22 @@ export default function DeliveryChallanPage() {
     c.phone?.includes(customerSearch)
   );
 
+  const filteredDealers = dealers.filter(d =>
+    !customerSearch ||
+    d.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+    d.phone?.includes(customerSearch)
+  );
+
+  const filteredFranchisesForDest = franchises.filter(f =>
+    !customerSearch || f.name.toLowerCase().includes(customerSearch.toLowerCase())
+  );
+
+  // Which destination-master list backs the picker dropdown for the
+  // currently selected destination type.
+  const destinationOptions = destType === "CUSTOMER" ? filteredCustomers
+    : destType === "DEALER" ? filteredDealers
+    : filteredFranchisesForDest;
+
   const stats = {
     total: challans.length,
     inTransit: challans.filter(d => d.status === "IN_TRANSIT").length,
@@ -773,53 +915,66 @@ export default function DeliveryChallanPage() {
                     <label className="text-xs font-medium text-gray-500">Destination *</label>
                     <div className="flex items-center gap-3 text-xs">
                       <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); }} className="accent-orange-500" /> Customer
+                        <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Customer
                       </label>
                       <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "FRANCHISE"} onChange={() => { setDestType("FRANCHISE"); setCustomerSearch(""); setSelectedFranchise(null); }} className="accent-orange-500" /> Franchise
+                        <input type="radio" checked={destType === "DEALER"} onChange={() => { setDestType("DEALER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Dealer
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input type="radio" checked={destType === "FRANCHISE"} onChange={() => { setDestType("FRANCHISE"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Franchise
                       </label>
                     </div>
                   </div>
-                  <div className="relative" ref={customerDropRef}>
-                    <div
-                      className={clsx(
-                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-colors",
-                        showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 hover:border-gray-400"
-                      )}
-                      onClick={() => setShowCustomerDrop(v => !v)}
-                    >
-                      <input
-                        className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
-                        placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : "Franchise"}`}
-                        value={customerSearch}
-                        onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                        onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                      />
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1" ref={customerDropRef}>
+                      <div
+                        className={clsx(
+                          "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-colors",
+                          showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 hover:border-gray-400"
+                        )}
+                        onClick={() => setShowCustomerDrop(v => !v)}
+                      >
+                        <input
+                          className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                          placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
+                          value={customerSearch}
+                          onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
+                          onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
+                        />
             {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                onClick={() => setCustomerSearch("")}
               />
             )}
-                      <ChevronDown size={13} className="text-gray-400 shrink-0" />
-                    </div>
-                    {showCustomerDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                        <div className="max-h-56 overflow-y-auto">
-                          {(destType === "CUSTOMER" ? filteredCustomers : franchises.filter(f => !customerSearch || f.name.toLowerCase().includes(customerSearch.toLowerCase()))).length === 0 ? (
-                            <div className="px-4 py-4 text-xs text-gray-400 text-center">No results found</div>
-                          ) : (destType === "CUSTOMER" ? filteredCustomers : franchises.filter(f => !customerSearch || f.name.toLowerCase().includes(customerSearch.toLowerCase()))).map(c => (
-                            <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
-                              <div className="text-left">
-                                <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                                <div className="text-xs text-gray-400">{c.phone || c.email || "—"}</div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
+                        <ChevronDown size={13} className="text-gray-400 shrink-0" />
                       </div>
-                    )}
+                      {showCustomerDrop && (
+                        <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                          <div className="max-h-56 overflow-y-auto">
+                            {destinationOptions.length === 0 ? (
+                              <div className="px-4 py-4 text-xs text-gray-400 text-center">No results found</div>
+                            ) : destinationOptions.map(c => (
+                              <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
+                                <div className="text-left">
+                                  <div className="text-sm font-medium text-gray-800">{c.name}</div>
+                                  <div className="text-xs text-gray-400">{c.phone || c.email || "—"}</div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openQuickAdd(destType)}
+                      title={`Create new ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
+                      className="shrink-0 p-2 border border-gray-300 hover:border-orange-400 rounded-lg text-gray-500 hover:text-orange-500 transition-colors"
+                    >
+                      <Plus size={16} />
+                    </button>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -839,10 +994,20 @@ export default function DeliveryChallanPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Source Branch</label>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Source Warehouse</label>
+                    {/* Options come from the Warehouse master (same data as
+                        Wastage/Reconciliation/Inventory), but the value
+                        submitted is still each warehouse's franchiseId —
+                        dispatchChallanStock/receiveChallanStock key stock
+                        off sourceFranchiseId, not a warehouse id, and that
+                        accounting is unchanged here. */}
                     <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white">
-                      <option value="hq-001">HQ / Main Warehouse</option>
-                      {franchises.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      {warehouses.length === 0 && <option value="hq-001">HQ / Main Warehouse</option>}
+                      {warehouses.filter(w => w.franchiseId).map(w => (
+                        <option key={w.id} value={w.franchiseId}>
+                          {w.name}{w.franchiseName ? ` — ${w.franchiseName}` : ''}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

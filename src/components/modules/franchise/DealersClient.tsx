@@ -19,6 +19,8 @@ import { toast } from "react-hot-toast";
 import api, { franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
+const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3 pb-2 border-b border-gray-100";
+
 interface Dealer {
   id: string;
   name: string;
@@ -100,8 +102,14 @@ export default function DealersClient() {
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.SyntheticEvent) => {
     e.preventDefault();
+
+    if (!formData.name.trim()) {
+      toast.error("Dealer Name is required.");
+      return;
+    }
+
     const finalFranchiseId = isSuper ? effectiveFranchiseId : (user as any)?.franchiseId;
 
     if (!finalFranchiseId) {
@@ -301,94 +309,110 @@ export default function DealersClient() {
         </div>
       </div>
 
-      {/* Add Dealer Modal */}
+      {/* Add Dealer Modal — same visual language as the Vendor/Customer Add
+          modal (AddPartyModal): black/50 overlay, rounded-[2rem] panel,
+          uppercase section labels, orange Save button. Kept as its own
+          component since Dealer's field set is much smaller and shouldn't be
+          forced through AddPartyModal's vendor/customer-specific logic. */}
       {showAddModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">Add New B2B Dealer</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-800">ADD DEALER</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
                 <XCircle size={20} />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 space-y-4">
-              
-              {/* Target scope for Super Admin — driven by the HQ/Franchise selector
-                  above, not a separate pick, so the dealer is always created in
-                  whatever scope is currently being viewed. */}
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+              {/* Target scope — driven entirely by the HQ/Franchise selector
+                  above, read only, not a second independent picker. */}
               {isSuper && (
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Target Scope</label>
-                  <div className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm font-bold text-slate-700 dark:text-slate-300">
+                <div>
+                  <label className={dealerSectionLabelClass}>Target Scope</label>
+                  <div className="w-full border border-orange-200 bg-orange-50 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700">
                     {scope === "HQ"
                       ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name || "Main Headquarters"}`
-                      : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name || "No franchise selected — pick one above")}
+                      : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected — pick one above")}
                   </div>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Dealer Name</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Acme Distribution"
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Email</label>
-                  <input
-                    type="email"
-                    placeholder="dealer@example.com"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                    value={formData.email}
-                    onChange={e => setFormData({...formData, email: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Phone</label>
-                  <input
-                    type="tel"
-                    placeholder="Contact Number"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                    value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
-                  />
+              {/* SECTION: Business Information */}
+              <div>
+                <label className={dealerSectionLabelClass}>Business Information</label>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Dealer Name *</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Acme Distribution"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                      value={formData.name}
+                      onChange={e => setFormData({...formData, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        placeholder="dealer@example.com"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        value={formData.email}
+                        onChange={e => setFormData({...formData, email: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                      <input
+                        type="tel"
+                        placeholder="Contact Number"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        value={formData.phone}
+                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Full Address</label>
+              {/* SECTION: Address — the Dealer model only has a single free-text
+                  address field today (no shippingAddress/GST/commercial fields),
+                  so those sections from the Customer modal are intentionally
+                  omitted here rather than inventing new fields. */}
+              <div>
+                <label className={dealerSectionLabelClass}>Address</label>
                 <textarea
                   rows={3}
                   placeholder="Enter shop/office address..."
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm font-semibold"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors resize-none"
                   value={formData.address}
                   onChange={e => setFormData({...formData, address: e.target.value})}
                 />
               </div>
+            </div>
 
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95"
-                >
-                  Save Dealer
-                </button>
-              </div>
-            </form>
+            {/* Footer Actions */}
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                Save Dealer
+              </button>
+            </div>
           </div>
         </div>
       )}
