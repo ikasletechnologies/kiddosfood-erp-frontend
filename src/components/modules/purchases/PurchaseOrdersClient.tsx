@@ -331,15 +331,8 @@ export default function PurchaseOrdersClient() {
 
   return (
     <div className={clsx("min-h-screen bg-gray-50 text-gray-800", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="h-5 w-5 text-[#f58220]" />
-          <div>
-            <h1 className="text-base font-bold text-gray-800">Purchase Orders</h1>
-            <p className="text-xs text-gray-500">Buy raw materials from vendors</p>
-          </div>
-        </div>
+      {/* ── Page Header Toolbar ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <div className="flex items-center gap-2">
           <button
             type="button"

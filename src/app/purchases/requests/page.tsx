@@ -71,12 +71,8 @@ export default function PurchaseRequestsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Purchase Requests</h1>
-          <p className="text-sm text-gray-500 mt-1">Internal departmental requests for materials</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+      <div className="flex items-center justify-end">
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
           <Plus className="w-4 h-4" /> New PR
         </button>
       </div>

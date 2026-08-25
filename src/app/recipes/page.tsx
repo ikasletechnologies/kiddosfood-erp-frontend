@@ -431,16 +431,8 @@ export default function RecipesPage() {
   return (
     <>
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-              Recipe Management
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 font-medium">
-              Manage your formulas, ingredient ratios, and production standards
-            </p>
-          </div>
+        {/* Action Toolbar */}
+        <div className="flex items-center justify-end gap-2 pb-2 border-b border-slate-200 dark:border-white/10">
           <div className="flex gap-2">
             <button onClick={fetchAll} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
               <RefreshCw size={18} className="text-gray-400" />

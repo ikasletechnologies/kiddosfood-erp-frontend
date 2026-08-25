@@ -68,13 +68,7 @@ export default function AttendancePage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Clock className="w-6 h-6 text-blue-600" /> Attendance
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Clock employees in and out for today.</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="relative w-64">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
           <input

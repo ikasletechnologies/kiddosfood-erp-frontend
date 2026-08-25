@@ -43,16 +43,7 @@ export default function ProductsPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-12 py-4 animate-in fade-in duration-700">
       {/* Refined Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-gray-100 pb-10">
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-orange-500 rounded-full" />
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Products</h1>
-          </div>
-          <p className="text-sm font-medium text-slate-400 max-w-md leading-relaxed">
-            Manage your digital product universe. From raw ingredients to final consumer goods.
-          </p>
-        </div>
+      <div className="flex items-center justify-end gap-4 border-b border-gray-100 pb-4">
 
         <div className="flex items-center gap-4">
           <button

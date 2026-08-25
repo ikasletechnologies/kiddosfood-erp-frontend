@@ -148,13 +148,9 @@ export default function RawMaterialStockDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-6">
-          <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-            <Layers className="h-5 w-5 text-[#f58220]" />
-            {activeCategory === "FINISHED_GOOD" ? "Finished Goods Stock" : "Raw Material Stock"}
-          </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
           <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
             <button
               onClick={() => setActiveCategory("RAW_MATERIAL")}

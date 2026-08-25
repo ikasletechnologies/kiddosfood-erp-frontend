@@ -125,27 +125,16 @@ export default function SettlementPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/pos"
-              className="p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 transition-all text-slate-500"
-            >
-              <ArrowLeftIcon size={16} />
-            </Link>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-2">
-              <ShieldCheckIcon size={22} className="text-orange-500" />
-              End of Day Settlement
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
-              <Sparkles size={12} className="animate-pulse" /> Closing
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400 ml-[3.25rem]">
-            Finalize your terminal collection and reconcile with business accounts
-          </p>
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/pos"
+            className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 transition-all text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+          >
+            <ArrowLeftIcon size={14} />
+            <span>Back to POS</span>
+          </Link>
         </div>
 
         {/* Actions / Info */}

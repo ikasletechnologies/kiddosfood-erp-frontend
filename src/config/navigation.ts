@@ -155,7 +155,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         label: "Batch Recall",
         href: "/production/batch-recall",
         roles: SUPER_ONLY,
-        isNew: true,
       },
     ],
   },
@@ -426,7 +425,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       {
         icon: BarChart3,
         label: "Franchise",
-        href: "/reports?report=Party Statement",
+        href: "/reports?parent=franchise",
         roles: SUPER_ONLY,
       },
     ],

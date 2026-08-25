@@ -205,12 +205,7 @@ export default function PartiesPage() {
       {/* Left Sidebar - Party List */}
       <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
         
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200">
-          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 hover:text-blue-600 transition-colors">
-            Parties <ChevronDown size={18} className="text-blue-500" />
-          </button>
-        </div>
+
 
         {/* HQ / Franchise Scope Selector — Super Admin only */}
         {isSuper && (

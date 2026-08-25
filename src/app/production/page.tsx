@@ -233,21 +233,9 @@ export default function ProductionPlanningPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-6 space-y-6">
 
-      {/* ── Page Header ── */}
-      <header className="bg-white p-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <ChefHat className="h-5 w-5 text-[#f58220]" />
-            Production Planning & Scaling
-          </h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Select a recipe, scale batch yields dynamically, audit warehouse stock, and start production runs
-          </p>
-        </div>
-        
-        {/* Header Action Buttons */}
-        {recipe && (
-          <div className="flex items-center gap-2 print:hidden">
+      {/* ── Page Actions ── */}
+      {recipe && (
+        <div className="bg-white p-4 rounded-lg border border-gray-200 flex items-center justify-end gap-4 print:hidden">
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 bg-white text-gray-700 rounded-xl font-bold text-xs uppercase tracking-wider hover:border-gray-300 transition-all active:scale-[0.98]"
@@ -280,9 +268,8 @@ export default function ProductionPlanningPage() {
                 </>
               )}
             </button>
-          </div>
-        )}
-      </header>
+        </div>
+      )}
 
       {/* Controls Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">

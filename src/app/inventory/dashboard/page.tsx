@@ -107,14 +107,7 @@ export default function InventoryDashboardPage() {
           <ArrowLeft size={16} /> Back
         </button>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 sm:mb-10">
-          <div>
-            <div className="w-10 h-10 bg-[#7C3AED]/10 rounded-xl flex items-center justify-center mb-3">
-              <BarChart3 className="text-[#7C3AED]" size={20} />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-[#1A1A1A] tracking-tight">Inventory Dashboard</h1>
-            <p className="text-sm text-[#666] font-medium mt-1">Real-time stock levels, movements & alerts</p>
-          </div>
+        <div className="flex items-center justify-end gap-4 mb-6">
           <div className="flex gap-3 w-full sm:w-auto">
             <button
               onClick={fetchData}

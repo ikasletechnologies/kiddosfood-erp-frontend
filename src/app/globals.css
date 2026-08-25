@@ -159,9 +159,45 @@ body {
   @apply text-sm text-muted-foreground mt-0.5;
 }
 
-/* ─── Food KPI Cards ──────────────────────────────────────── */
+/* ─── Food KPI Cards & Enterprise Dashboard Tokens ──────────── */
 .kpi-card {
-  @apply bg-white dark:bg-card rounded-2xl border border-orange-100 dark:border-white/5 p-5 shadow-sm hover:shadow-md transition-all duration-200;
+  @apply bg-white dark:bg-card rounded-2xl border border-slate-200/70 dark:border-white/5 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_24px_-8px_rgba(0,0,0,0.08)] transition-all duration-300;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Skeleton Shimmer ─────────────────────────────────────── */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.5) 0%,
+    rgba(241, 245, 249, 0.9) 50%,
+    rgba(226, 232, 240, 0.5) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite linear;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 41, 59, 0.6) 0%,
+    rgba(51, 65, 85, 0.8) 50%,
+    rgba(30, 41, 59, 0.6) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite linear;
 }
 
 /* ─── Badge pill ─────────────────────────────────────────── */

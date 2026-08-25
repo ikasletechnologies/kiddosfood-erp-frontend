@@ -66,17 +66,8 @@ export default function SupplierLedgerPage() {
 
   return (
     <div className="space-y-6 max-w-[1400px] mx-auto p-4 md:p-6 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3 tracking-tight">
-            <LandmarkIcon className="text-orange-500" size={32} />
-            Supplier <span className="text-slate-400 font-medium">Ledger</span>
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Financial relationship and outstanding dues with Headquarters (HQ)
-          </p>
-        </div>
+      {/* Header Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center gap-3">
           <button 
             onClick={fetchLedger}

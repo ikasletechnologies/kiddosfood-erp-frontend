@@ -142,18 +142,7 @@ export default function BankingDashboard({
     <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8 font-sans">
       <div className="p-8 space-y-6">
         {/* Breadcrumbs & Header */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest transition-all">
-              <Link href="/" className="hover:text-[#7C3AED]">Azeez</Link>
-              <ChevronRight size={10} />
-              <span className="hover:text-[#7C3AED]">Payment Accounts</span>
-              <ChevronRight size={10} />
-            </div>
-            <h1 className="text-2xl font-black text-[#1A1A1A] dark:text-white flex items-center gap-2">
-               Payment Accounts 
-            </h1>
-          </div>
+        <div className="flex items-center justify-end">
           <div className="flex">
              <button className="px-6 py-2.5 bg-[#D81159] hover:bg-[#B00E4A] text-white rounded-l-lg font-bold text-[13px] flex items-center gap-2 transition-all active:scale-95 shadow-lg">
                 <Plus size={18} /> New Payments Account
