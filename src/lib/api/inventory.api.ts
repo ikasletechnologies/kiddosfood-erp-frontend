@@ -39,7 +39,7 @@ export const rawMaterialsApi = {
 
 // --- Inventory & Stock ---
 export const inventoryApi = {
-  getInventory: (franchiseId?: string, category?: string) => api.get('/api/inventory', { params: { franchiseId, category } }),
+  getInventory: (franchiseId?: string, category?: string, asOfDate?: string) => api.get('/api/inventory', { params: { franchiseId, category, asOfDate } }),
   getRawMaterialStockSummary: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/summary', { params: { warehouseId, franchiseId, category } }),
   getRawMaterialConsumption: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/consumption', { params: { warehouseId, franchiseId, category } }),
   // category omitted = ledger spans every item category (Raw Material,

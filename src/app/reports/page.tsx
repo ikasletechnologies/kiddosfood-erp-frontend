@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
+import { formatERPNumber } from "@/lib/utils";
 import { reportsApi, accountingApi } from "@/lib/api/accounting.api";
 import {
   inventoryApi,
@@ -128,7 +129,7 @@ const PARENT_REPORTS: ParentReportDef[] = [
       { id: "Material Consumption Report", label: "Material Consumption", description: "Raw materials consumed across batches." },
       { id: "Wastage & Scrap Report", label: "Wastage & Scrap", description: "Scrap quantities and damage reasons." },
       { id: "Formulation & Recipe Costing", label: "Recipe Costing", description: "Recipe ingredients and estimated unit cost." },
-      { id: "Packaging & Cartons", label: "Packaging & Cartons", description: "Packaged cartons log and dispatch records." },
+      { id: "Packaging", label: "Packaging", description: "Packaged goods log and batch records." },
     ],
   },
   {
@@ -1052,6 +1053,13 @@ function getDateRange(
   return { from: iso(start), to: iso(end) };
 }
 
+function formatCategory(cat: any): string {
+  if (!cat) return "—";
+  const name = typeof cat === "object" ? (cat.name || cat.label || "") : String(cat);
+  if (!name || name === "null" || name === "undefined") return "—";
+  return name.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+}
+
 function fmtDisplayDate(iso: string): string {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
@@ -1373,7 +1381,7 @@ function transformStockSummary(data: any): ReportData {
     kpiSubText: `Items: ${rows.length} • Total Units: ${rows.reduce((s: number, r: any) => s + (Number(r.quantity || r.currentStock) || 0), 0)}`,
     rows: rows.map((r: any) => ({
       itemName: r.name || r.itemName || "—",
-      category: r.category?.name || r.categoryName || r.group || "—",
+      category: formatCategory(r.category || r.categoryName || r.group),
       unit: r.unit || r.unitOfMeasure || "—",
       inStock: String(Number(r.quantity || r.currentStock || 0)),
       minStock: String(Number(r.minQuantity || r.reorderPoint || 0)),
@@ -1390,7 +1398,7 @@ function transformLowStock(data: any): ReportData {
     kpiSubText: rows.length > 0 ? "Requires reorder" : "Stock healthy",
     rows: rows.map((r: any) => ({
       itemName: r.item?.name || r.name || r.itemName || "—",
-      category: r.item?.category || r.category || "—",
+      category: formatCategory(r.item?.category || r.category),
       unit: r.unit || r.item?.unit || "—",
       currentStock: String(Number(r.currentStock || r.quantity || r.stock || 0)),
       minStock: String(Number(r.minQuantity || r.reorderPoint || r.threshold || 0)),
@@ -2015,50 +2023,38 @@ function ReportsContent() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
-      {/* ── Page Header (Matching Invoices Page) ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3.5 flex items-center justify-between shrink-0">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Receipt className="h-5 w-5 text-[#f58220]" />
-          <span>{activeParent.label} – {activeChild?.label}</span>
-        </h1>
+      {/* ── Top Header / Breadcrumb Bar ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-50 text-[#f58220] rounded-lg">
+            <Receipt className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+              <span>Reports</span>
+              <span>/</span>
+              <span className="text-gray-900 font-semibold">{activeParent.label}</span>
+            </div>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight">
+              {activeParent.label} — {activeChild?.label || "Report"}
+            </h1>
+          </div>
+        </div>
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push("/sales/invoices")}
-            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-3.5 py-1.5 rounded-lg shadow-sm transition-colors"
+            onClick={() => router.push("/sales/invoices/new")}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10"
           >
-            <Plus className="h-4 w-4" /> New Invoice
+            <Plus className="h-4 w-4" />
+            <span>New Invoice</span>
           </button>
         </div>
       </div>
 
-      {/* ── Subcategories & Child Reports Segmented Switcher ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 space-y-2.5 shrink-0">
-        {/* Financial Subcategory Pills */}
-        {activeParent.id === "financial" && activeParent.subcategories && (
-          <div className="flex items-center gap-1 overflow-x-auto pb-1">
-            <span className="text-xs font-semibold text-gray-500 mr-2 uppercase tracking-wide">
-              Category:
-            </span>
-            {["All", ...activeParent.subcategories].map((subcat) => (
-              <button
-                key={subcat}
-                onClick={() => setSelectedFinancialCategory(subcat)}
-                className={clsx(
-                  "px-3 py-1 rounded-lg text-xs font-medium transition-colors whitespace-nowrap",
-                  selectedFinancialCategory === subcat
-                    ? "bg-gray-800 text-white"
-                    : "text-gray-600 hover:bg-gray-100"
-                )}
-              >
-                {subcat}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Child Reports Segmented Tabs (Matching Invoices Status Switcher) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto">
+      <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+        {/* ── Horizontal Navigation Tabs (Pill style) ── */}
+        <div className="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           {filteredChildren.map((child) => {
             const isActive = selectedChildId === child.id;
             return (
@@ -2066,62 +2062,68 @@ function ReportsContent() {
                 key={child.id}
                 onClick={() => handleSelectChild(child.id)}
                 className={clsx(
-                  "px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap",
+                  "px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2",
                   isActive
-                    ? "bg-[#f58220] text-white font-semibold shadow-xs"
-                    : "text-gray-600 hover:bg-gray-100 border border-gray-200 bg-white"
+                    ? "bg-[#f58220] text-white shadow-sm"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/80"
                 )}
               >
-                {child.label}
+                <span>{child.label}</span>
               </button>
             );
           })}
         </div>
-      </div>
 
-      {/* ── Scrollable Report Body ── */}
-      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-        {/* ── Summary Strip (Matching Invoices Page Summary Cards) ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-[#f58220]" />
+        {/* ── Top Summary / KPI Cards ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50" />
             <div>
-              <p className="text-xs text-gray-500">{currentMeta.kpiLabel}</p>
-              <p className="text-lg font-bold text-gray-800">
-                {loading ? "..." : reportData?.kpiValue ?? "—"}
-              </p>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                {currentMeta.kpiLabel}
+              </div>
+              <div className="text-xl font-bold text-gray-900 mt-0.5">
+                {loading ? "..." : reportData?.kpiValue || "0"}
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
             <div>
-              <p className="text-xs text-gray-500">Summary Details</p>
-              <p className="text-sm font-semibold text-emerald-600 truncate">
-                {loading ? "Loading..." : reportData?.kpiSubText || "All records active"}
-              </p>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Summary Details
+              </div>
+              <div className="text-sm font-semibold text-emerald-700 mt-0.5">
+                {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50" />
             <div>
-              <p className="text-xs text-gray-500">Current Period</p>
-              <p className="text-sm font-semibold text-gray-700">{displayRange}</p>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Current Period
+              </div>
+              <div className="text-sm font-semibold text-gray-700 mt-0.5">
+                {displayRange}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Filters Row (Matching Invoices Page Filter Row) ── */}
+        {/* ── Filters Row ── */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
+              type="text"
+              placeholder="Search in table..."
               value={tableSearchTerm}
               onChange={(e) => setTableSearchTerm(e.target.value)}
-              placeholder="Search in table..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-[#f58220]"
             />
           </div>
 
@@ -2142,7 +2144,7 @@ function ReportsContent() {
             <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
           </div>
 
-          {/* Custom Date Inputs */}
+          {/* Custom Date Pickers */}
           {dateFilter === "Custom" && (
             <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">
               <input
@@ -2160,14 +2162,6 @@ function ReportsContent() {
               />
             </div>
           )}
-
-          {/* Firm / Branch */}
-          <div className="relative">
-            <select className="appearance-none pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 outline-none cursor-pointer focus:border-[#f58220]">
-              <option>All Firms</option>
-            </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          </div>
 
           <div className="flex-1" />
 
@@ -2207,169 +2201,99 @@ function ReportsContent() {
           </button>
         </div>
 
-        {/* ── Dedicated Child Component Switcher / Clean Data Table ── */}
-        {activeChild?.id === "Profit And Loss" ? (
-          <CentralProfitLossReport
-            reportData={reportData}
-            loading={loading}
-            viewType={plViewType}
-            setViewType={setPlViewType}
-            expanded={plExpanded}
-            setExpanded={setPlExpanded}
-          />
-        ) : activeChild?.id === "Bill Wise Profit" ? (
-          <CentralBillWiseProfitReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Cash flow" ? (
-          <CentralCashFlowReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Trial Balance Report" ? (
-          <CentralTrialBalanceReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Balance Sheet" ? (
-          <CentralBalanceSheetReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Party Statement" ? (
-          <CentralPartyStatementReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Party wise Profit & Loss" ? (
-          <CentralPartyProfitLossReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "All parties" ? (
-          <CentralAllPartiesReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Party Report By Item" ? (
-          <CentralPartyReportByItem reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Sale Purchase By Party" ? (
-          <CentralSalePurchaseByParty reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Sale Purchase By Party Group" ? (
-          <CentralSalePurchaseByPartyGroup reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Loan Statement" ? (
-          <CentralLoanStatementReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Sale Orders" ? (
-          <CentralSaleOrdersReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Sale Order Item" ? (
-          <CentralSaleOrderItemReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Expense" ? (
-          <CentralExpenseReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Expense Category Report" ? (
-          <CentralExpenseCategoryReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Expense Item Report" ? (
-          <CentralExpenseItemReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "GSTR 1" ? (
-          <CentralGSTR1Report />
-        ) : activeChild?.id === "GSTR 2" ? (
-          <CentralGSTR2Report />
-        ) : activeChild?.id === "GSTR 3 B" ? (
-          <CentralGSTR3BReport />
-        ) : activeChild?.id === "GSTR 9" ? (
-          <CentralGSTR9Report />
-        ) : activeChild?.id === "Sale Summary By HSN" ? (
-          <CentralSaleSummaryByHSNReport />
-        ) : activeChild?.id === "SAC Report" ? (
-          <CentralSACReport />
-        ) : activeChild?.id === "GST Report" ? (
-          <CentralGSTReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "GST Rate Report" ? (
-          <CentralGSTRateReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "TCS Receivable" ? (
-          <CentralTCSReceivableReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Form No. 27EQ" ? (
-          <CentralForm27eqReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "TDS Payable" ? (
-          <CentralTDSPayableReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "TDS Receivable" ? (
-          <CentralTDSReceivableReport reportData={reportData} loading={loading} />
-        ) : activeChild?.id === "Bank Statement" ? (
-          <CentralBankStatementReport />
-        ) : activeChild?.id === "Discount Report" ? (
-          <CentralDiscountReport />
-        ) : activeChild?.id === "Stock summary" ? (
-          <CentralStockSummaryReport />
-        ) : activeChild?.id === "Item Report By Party" ? (
-          <CentralItemReportByParty />
-        ) : activeChild?.id === "Item Wise Profit And Loss" ? (
-          <CentralItemWiseProfitLossReport />
-        ) : activeChild?.id === "Item Category Wise Profit And Loss" ? (
-          <CentralItemCategoryWiseProfitLossReport />
-        ) : activeChild?.id === "Low Stock Summary" ? (
-          <CentralLowStockSummaryReport />
-        ) : activeChild?.id === "Stock Detail" ? (
-          <CentralStockDetailReport />
-        ) : activeChild?.id === "Item Detail" ? (
-          <CentralItemDetailReport />
-        ) : activeChild?.id === "Sale/ Purchase Report By Item Category" ? (
-          <CentralSalePurchaseByCategoryReport />
-        ) : activeChild?.id === "Stock Summary Report By Item Category" ? (
-          <CentralStockSummaryByCategoryReport />
-        ) : activeChild?.id === "Item Wise Discount" ? (
-          <CentralItemWiseDiscountReport />
-        ) : (
-          /* ── Table (Matching Invoice Page Clean Table) ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                {currentMeta.tableTitle}
-              </span>
-              <span className="text-xs text-gray-400">
-                {filteredRows.length} entries
-              </span>
-            </div>
+        {/* ── Unified Clean Data Table ── */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+              {currentMeta.tableTitle}
+            </span>
+            <span className="text-xs font-medium text-gray-400">
+              {filteredRows.length} entries
+            </span>
+          </div>
 
-            <div className="overflow-x-auto">
-              {loading ? (
-                <div className="py-16 flex justify-center items-center">
-                  <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
-                </div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
-                      {currentMeta.columns.map((col, idx) => (
-                        <th key={idx} className="text-left px-4 py-3">
-                          {col.label}
-                        </th>
-                      ))}
-                      <th className="text-right px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {filteredRows.length > 0 ? (
-                      filteredRows.map((row, rowIdx) => (
-                        <tr
-                          key={rowIdx}
-                          className="hover:bg-gray-50 transition-colors"
-                        >
-                          {currentMeta.columns.map((col, colIdx) => (
-                            <td
-                              key={colIdx}
-                              className="px-4 py-3 text-xs text-gray-700"
-                            >
-                              {row[col.key] ?? "—"}
-                            </td>
-                          ))}
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={handlePrint}
-                              className="p-1 text-gray-400 hover:text-gray-700 rounded transition-colors"
-                              title="Print"
-                            >
-                              <Printer className="h-4 w-4" />
-                            </button>
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="py-16 flex justify-center items-center">
+                <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
+              </div>
+            ) : (
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50/80 text-gray-500 text-[11px] font-bold border-b border-gray-200 uppercase tracking-wider">
+                    {currentMeta.columns.map((col, idx) => (
+                      <th
+                        key={idx}
+                        className="px-5 py-3.5 font-bold text-gray-500"
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                    <th className="px-5 py-3.5 text-right font-bold text-gray-500">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-xs font-medium">
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row, rowIdx) => (
+                      <tr
+                        key={rowIdx}
+                        className="hover:bg-orange-50/20 transition-colors"
+                      >
+                        {currentMeta.columns.map((col, colIdx) => (
+                          <td
+                            key={colIdx}
+                            className="px-5 py-3.5 text-gray-700"
+                          >
+                            {col.key === "status" || col.key === "result" ? (
+                              <span
+                                className={clsx(
+                                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
+                                  String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : String(row[col.key]).toUpperCase().includes("PROGRESS")
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                    : String(row[col.key]).toUpperCase().includes("REJECT")
+                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                )}
+                              >
+                                {row[col.key]}
+                              </span>
+                            ) : (
+                              row[col.key] ?? "—"
+                            )}
                           </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={currentMeta.columns.length + 1}
-                          className="px-4 py-16 text-center text-gray-400 text-xs"
-                        >
-                          {tableSearchTerm
-                            ? "No entries match your search query."
-                            : "No data records found for the selected period."}
+                        ))}
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={() => handlePrintRow(row)}
+                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors inline-flex items-center"
+                            title="Print Single Record"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={currentMeta.columns.length + 1}
+                        className="px-5 py-16 text-center text-gray-400 text-xs"
+                      >
+                        {tableSearchTerm
+                          ? `No entries match "${tableSearchTerm}".`
+                          : "No data records found for the selected period."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
