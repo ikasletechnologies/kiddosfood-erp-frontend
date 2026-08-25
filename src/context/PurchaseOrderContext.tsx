@@ -112,7 +112,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             })));
           }
           if (po.purchaseType) setPurchaseType(po.purchaseType);
-          if (po.warehouseId) setWarehouseId(po.warehouseId);
+          if (po.warehouseId) {
+            setWarehouseId(po.warehouseId);
+          } else if (po.franchise?.primaryWarehouseId) {
+            setWarehouseId(po.franchise.primaryWarehouseId);
+          }
           if (po.expectedDeliveryDate) setExpectedDeliveryDate(po.expectedDeliveryDate.split('T')[0]);
           if (po.paymentTerms) setPaymentTerms(po.paymentTerms);
           if (po.internalNotes) setInternalNotes(po.internalNotes);

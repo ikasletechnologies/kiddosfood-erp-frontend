@@ -72,7 +72,7 @@ export default function WarehouseFormModal({ isOpen, onClose, onSuccess }: Wareh
               autoFocus
               type="text"
               required
-              placeholder="e.g. Central Warehouse"
+              placeholder="e.g. Main Warehouse"
               className="w-full text-sm font-bold bg-slate-50 dark:bg-slate-900 border-none rounded-2xl p-4 outline-none focus:ring-2 ring-purple-500/20 transition-all"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}

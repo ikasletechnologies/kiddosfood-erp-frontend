@@ -4,16 +4,26 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Calculator, Plus, Search, RefreshCw, X, User,
-  Printer, ChevronDown, Trash2, Check, Share2, Calendar,
+  Printer, ChevronDown, Trash2, Check, Share2, Download, Calendar,
   AlignLeft, FileText, ArrowLeft, ArrowRight, FileClock, Pencil, Truck
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, rawMaterialsApi } from "@/lib/api";
+import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
+import GSTInvoice from "@/components/documents/GSTInvoice";
 import { formatDate } from "@/lib/utils";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -118,6 +128,53 @@ const DOC_LABELS: Record<DocumentType, {
     noColumn: "PI No",
   },
 };
+
+const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "DEALER", label: "Dealer" },
+  { value: "FRANCHISE", label: "Franchise" },
+];
+
+// Normalizes Customer / Dealer / Franchise master rows (different shapes)
+// into the one shape the party dropdown + auto-fill logic needs. Dealer has
+// no `state`/GSTIN field at all; Franchise has neither — those just come
+// back undefined, and the caller only auto-fills whatever is present.
+function normalizeParty(partyType: "CUSTOMER" | "DEALER" | "FRANCHISE", raw: any) {
+  if (partyType === "FRANCHISE") {
+    return {
+      id: raw.id,
+      name: raw.name,
+      phone: raw.contactNum || "",
+      state: undefined as string | undefined,
+      gstin: undefined as string | undefined,
+      billingAddress: raw.location || "",
+      shippingAddress: raw.location || "",
+      raw,
+    };
+  }
+  if (partyType === "DEALER") {
+    return {
+      id: raw.id,
+      name: raw.name,
+      phone: raw.phone || "",
+      state: undefined as string | undefined,
+      gstin: undefined as string | undefined,
+      billingAddress: raw.address || "",
+      shippingAddress: raw.address || "",
+      raw,
+    };
+  }
+  return {
+    id: raw.id,
+    name: raw.name,
+    phone: raw.contact || raw.phone || "",
+    state: raw.state || undefined,
+    gstin: raw.gstNumber || raw.gstin || undefined,
+    billingAddress: raw.billingAddress || raw.address || "",
+    shippingAddress: raw.shippingAddress || raw.billingAddress || raw.address || "",
+    raw,
+  };
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -273,6 +330,8 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [franchises, setFranchises] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
 
   // list date filters
@@ -303,6 +362,9 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   }, []);
 
   // create form
+  const [partyType, setPartyType] = useState<"CUSTOMER" | "DEALER" | "FRANCHISE">("CUSTOMER");
+  // Holds the normalized party (see normalizeParty) — id/name/phone plus
+  // whatever GSTIN/state/address the selected master record has.
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
@@ -326,6 +388,11 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const [converting, setConverting] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
 
+  // GSTInvoice preview/print/download/share modal
+  const [previewEstimate, setPreviewEstimate] = useState<any>(null);
+  const [previewAutoAction, setPreviewAutoAction] = useState<"download" | "share" | undefined>(undefined);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
   // Convert to Sales Order & Tracking Modals
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [selectedEstForConvert, setSelectedEstForConvert] = useState<any>(null);
@@ -333,11 +400,6 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [courierName, setCourierName] = useState("");
-
-  const [showEditTrackingModal, setShowEditTrackingModal] = useState(false);
-  const [selectedEstForTracking, setSelectedEstForTracking] = useState<any>(null);
-  const [editTrackingNumber, setEditTrackingNumber] = useState("");
-  const [editCourierName, setEditCourierName] = useState("");
 
   // Add Party inline form
   const [showAddParty, setShowAddParty] = useState(false);
@@ -362,7 +424,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [eRes, cRes, pRes] = await Promise.allSettled([
+      const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
         api.get("/api/sales/quotations").catch(() => ({ data: [] })),
         customersApi.getAll(),
         // Estimates sell finished goods, not raw materials/semi-finished/packaging —
@@ -370,8 +432,10 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
         // (real InventoryItem rows, with a real `unit`, unlike the old Product
         // source this used to read from).
         rawMaterialsApi.getAll(false, undefined, "RAW_MATERIAL,SEMI_FINISHED,PACKAGING"),
+        dealersApi.getAll(),
+        franchiseApi.getAll(),
       ]);
-      
+
       let apiEstimations = eRes.status === "fulfilled" ? (eRes.value as any).data || [] : [];
 
       // Drafts are already real Quotation rows (status: "DRAFT") saved through the
@@ -379,12 +443,20 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
       setEstimations(apiEstimations);
       if (cRes.status === "fulfilled") setCustomers((cRes.value as any).data || []);
       if (pRes.status === "fulfilled") setProducts((pRes.value as any).data || []);
+      if (dRes.status === "fulfilled") setDealers((dRes.value as any).data || []);
+      if (fRes.status === "fulfilled") setFranchises((fRes.value as any).data || []);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -427,6 +499,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     setDraftId(null);
+    setPartyType("CUSTOMER");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -457,6 +530,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     setDraftId(draft.id);
     const raw = draft._rawState || {};
     if (draft._rawState) {
+      setPartyType(raw.partyType || "CUSTOMER");
       setSelectedCustomer(raw.selectedCustomer || null);
       setCustomerSearch(raw.customerSearch || "");
       setCustomerPhone(raw.customerPhone || "");
@@ -471,14 +545,24 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
       setShowDesc(raw.showDesc || !!raw.description);
       setRoundOffEnabled(raw.roundOffEnabled ?? true);
     } else {
-      // Prefer the customer relation the backend already includes over the
-      // (frequently null on older rows) denormalized customerName string.
-      const customer = draft.customer || customers.find((c: any) => c.id === draft.customerId) || null;
-      setSelectedCustomer(customer);
-      setCustomerSearch((customer ? customer.name : "") || draft.customerName || "");
-      setCustomerPhone(draft.customerPhone || (customer ? customer.contact || customer.phone : ""));
+      // Legacy rows saved before partyType/partyId existed are always a
+      // real Customer (that used to be the only option) — everything else
+      // trusts the stored value.
+      const draftPartyType: "CUSTOMER" | "DEALER" | "FRANCHISE" = draft.partyType || "CUSTOMER";
+      const draftPartyId = draft.partyId || (draftPartyType === "CUSTOMER" ? draft.customerId : undefined);
+      setPartyType(draftPartyType);
+
+      const list = draftPartyType === "DEALER" ? dealers : draftPartyType === "FRANCHISE" ? franchises : customers;
+      const rawParty = draft.customer || list.find((p: any) => p.id === draftPartyId) || null;
+      const party = rawParty
+        ? normalizeParty(draftPartyType, rawParty)
+        : (draftPartyId ? { id: draftPartyId, name: draft.customerName || "", phone: draft.customerPhone || "", state: undefined as string | undefined } : null);
+
+      setSelectedCustomer(party);
+      setCustomerSearch((party ? party.name : "") || draft.customerName || "");
+      setCustomerPhone(draft.customerPhone || party?.phone || "");
       setInvoiceDate(draft.validUntil ? new Date(draft.validUntil).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
-      setStateOfSupply(customer?.state || "");
+      setStateOfSupply(party?.state || "");
       setRefNo(draft.quotationNumber || "");
       
       const mappedItems = draft.items && draft.items.length > 0
@@ -505,13 +589,30 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     setView("create");
   };
 
+  // `c` here is already the raw master row (Customer/Dealer/Franchise) —
+  // normalize it before storing so downstream reads (save payload, print,
+  // draft reopen) don't need to know which master table it came from.
   const selectCustomer = (c: any) => {
-    setSelectedCustomer(c);
-    setCustomerSearch(c.name);
-    setCustomerPhone(c.contact || c.phone || "");
-    if (c.state) {
-      setStateOfSupply(c.state);
+    const party = normalizeParty(partyType, c);
+    setSelectedCustomer(party);
+    setCustomerSearch(party.name);
+    setCustomerPhone(party.phone || "");
+    if (party.state) {
+      setStateOfSupply(party.state);
     }
+    setShowCustomerDrop(false);
+  };
+
+  // Switching Party Type must never leave a Dealer/Franchise selection
+  // showing while the field label still says the old type — clear the
+  // whole party selection so the next pick is unambiguous.
+  const handlePartyTypeChange = (next: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (next === partyType) return;
+    setPartyType(next);
+    setSelectedCustomer(null);
+    setCustomerSearch("");
+    setCustomerPhone("");
+    setStateOfSupply("");
     setShowCustomerDrop(false);
   };
 
@@ -542,30 +643,43 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   };
 
   const handleSave = async (isDraft = false) => {
-    if (!selectedCustomer && !isDraft) { showToast("Please select a party", "error"); return; }
-    const validItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
-    if (validItems.length === 0 && !isDraft) { showToast("Add at least one item with price", "error"); return; }
-    
-    if (isDraft && !selectedCustomer && validItems.length === 0) {
-       setView("list");
-       return;
+    // A draft's whole point is to hold whatever's been typed so far, even
+    // an item with no price yet — the strict qty/rate>0 filter below is
+    // only for the real SENT path. Applying it to drafts too used to
+    // silently drop every incomplete row (and skip the save outright if
+    // that left nothing "valid"), so "Save Draft" would appear to just do
+    // nothing whenever the party wasn't picked from the dropdown yet or an
+    // item had no rate typed in.
+    const hasAnyData = !!selectedCustomer || !!customerSearch.trim() || items.some(i => i.productId || i.itemSearch.trim());
+    if (isDraft && !hasAnyData) {
+      setView("list");
+      return;
     }
+    if (!isDraft && !selectedCustomer) { showToast("Please select a party", "error"); return; }
+
+    const strictValidItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
+    if (!isDraft && strictValidItems.length === 0) { showToast("Add at least one item with price", "error"); return; }
+
+    const draftItems = items.filter(i => i.productId || i.itemSearch.trim());
+    const itemsToSave = isDraft ? draftItems : strictValidItems;
 
     setSaving(true);
     try {
       const payload: any = {
         quotationNumber: refNo.trim() || undefined,
-        customerId: selectedCustomer?.id,
-        customerName: selectedCustomer ? undefined : customerSearch,
+        partyType,
+        partyId: selectedCustomer?.id,
+        customerId: partyType === "CUSTOMER" ? selectedCustomer?.id : undefined,
+        customerName: selectedCustomer ? selectedCustomer.name : (customerSearch || undefined),
         customerPhone,
         validUntil: invoiceDate,
         status: isDraft ? "DRAFT" : "SENT",
-        items: validItems.map(i => ({
+        items: itemsToSave.map(i => ({
           productId: i.productId || undefined,
           productName: i.itemSearch,
-          quantity: i.qty,
+          quantity: i.qty || 0,
           unit: i.unit,
-          rate: i.rate,
+          rate: i.rate || 0,
           taxPercent: i.taxPct,
         })),
         discountAmount: totalDisc,
@@ -576,7 +690,10 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
       if (draftId) {
         await api.patch(`/api/sales/quotations/${draftId}`, payload);
       } else {
-        await api.post("/api/sales/quotations", payload);
+        const res = await api.post("/api/sales/quotations", payload);
+        // Keep saving into the SAME record on repeat "Save Draft" clicks —
+        // without this, every click created a brand-new Quotation.
+        if (isDraft && res?.data?.id) setDraftId(res.data.id);
       }
 
       showToast(isDraft ? "Draft saved successfully" : L.savedToast, "success");
@@ -634,126 +751,67 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     }
   };
 
-  const handleOpenEditTracking = (est: any) => {
-    setSelectedEstForTracking(est);
-    setEditTrackingNumber(est.trackingNumber || "");
-    setEditCourierName(est.courierName || "");
-    setShowEditTrackingModal(true);
-  };
-
-  const submitEditTracking = async () => {
-    if (!selectedEstForTracking) return;
-    try {
-      await api.patch(`/api/sales/quotations/${selectedEstForTracking.id}`, {
-        trackingNumber: editTrackingNumber,
-        courierName: editCourierName
-      });
-      showToast("Tracking details updated successfully", "success");
-      setShowEditTrackingModal(false);
-      fetchData();
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Update failed", "error");
-    }
-  };
-
-  // Isolates just the clicked estimate into a printable document instead of
-  // printing the whole list page, and never touches any other record.
+  // Isolates just the clicked estimate into the shared GSTInvoice preview
+  // modal instead of printing the whole list page, and never touches any
+  // other record. If the estimate's real validUntil date differs from a
+  // flat 15-day offset, derive dueDateDays from the actual gap so the
+  // "Valid Until" shown on the document matches the stored value.
   const handlePrintEstimate = (est: any) => {
-    const partyName = est.customer?.name || est.customerName || "—";
-    const itemsHtml = (est.items || []).map((it: any, idx: number) => `
-      <tr>
-        <td>${idx + 1}</td>
-        <td>${it.productName || "—"}</td>
-        <td style="text-align:center">${it.quantity}</td>
-        <td style="text-align:center">${it.unit || "—"}</td>
-        <td style="text-align:right">₹${(it.rate || 0).toFixed(2)}</td>
-        <td style="text-align:right">${it.taxPercent || 0}%</td>
-        <td style="text-align:right">₹${(it.totalAmount || 0).toFixed(2)}</td>
-      </tr>
-    `).join("");
-    const win = window.open("", "_blank", "width=800,height=900");
-    if (!win) { showToast("Please allow pop-ups to print", "error"); return; }
-    win.document.write(`
-      <html>
-        <head>
-          <title>${L.docWord} ${est.quotationNumber}</title>
-          <style>
-            body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #111827; }
-            h2 { margin: 0 0 4px; font-size: 18px; }
-            p { margin: 2px 0; font-size: 13px; color: #4b5563; }
-            table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-            th, td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; font-size: 13px; }
-            th { text-align: left; background: #f9fafb; }
-            .totals { width: 260px; margin-left: auto; margin-top: 12px; }
-            .totals td { border: none; font-weight: 600; }
-          </style>
-        </head>
-        <body>
-          <h2>${L.docWord} ${est.quotationNumber}</h2>
-          <p>Party: ${partyName}${est.customerPhone ? ` · ${est.customerPhone}` : ""}</p>
-          <p>Date: ${formatDate(est.createdAt)}${est.validUntil ? ` · Valid Until: ${formatDate(est.validUntil)}` : ""}</p>
-          <table>
-            <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Tax</th><th>Amount</th></tr></thead>
-            <tbody>${itemsHtml}</tbody>
-          </table>
-          <table class="totals">
-            <tr><td>Subtotal</td><td style="text-align:right">₹${(est.subTotal || 0).toFixed(2)}</td></tr>
-            <tr><td>Tax</td><td style="text-align:right">₹${(est.taxAmount || 0).toFixed(2)}</td></tr>
-            <tr><td>Total</td><td style="text-align:right">₹${(est.totalAmount || 0).toFixed(2)}</td></tr>
-          </table>
-        </body>
-      </html>
-    `);
-    win.document.close();
-    win.focus();
-    win.print();
+    setPreviewAutoAction(undefined);
+    setPreviewEstimate(est);
   };
 
-  const handleShareEstimate = async (est: any) => {
-    const partyName = est.customer?.name || est.customerName || "—";
-    const lines = [
-      `${L.docWord} ${est.quotationNumber}`,
-      `Party: ${partyName}`,
-      ...(est.items || []).map((it: any) => `${it.productName} x${it.quantity} ${it.unit || ""} — ₹${(it.totalAmount || 0).toFixed(2)}`),
-      `Total: ₹${(est.totalAmount || 0).toFixed(2)}`,
-    ];
-    const text = lines.join("\n");
-    if (typeof navigator !== "undefined" && (navigator as any).share) {
-      try {
-        await (navigator as any).share({ title: `${L.docWord} ${est.quotationNumber}`, text });
-      } catch {
-        // user cancelled the share sheet — no-op
-      }
-      return;
-    }
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-      showToast(`${L.docWord} details copied to clipboard`, "success");
-      return;
-    }
-    showToast("Sharing is not supported in this browser", "error");
+  // Download reuses the exact same preview modal/document, just auto-fires
+  // the Download action once it's painted — one PDF source for Print,
+  // Download, and Share (see GSTInvoice), never a second layout.
+  const handleDownloadEstimate = (est: any) => {
+    setPreviewAutoAction("download");
+    setPreviewEstimate(est);
+  };
+
+  const estimateDueDateDays = (est: any): number => {
+    if (!est?.validUntil || !est?.createdAt) return 15;
+    const created = new Date(est.createdAt).getTime();
+    const validUntil = new Date(est.validUntil).getTime();
+    if (Number.isNaN(created) || Number.isNaN(validUntil)) return 15;
+    const days = Math.round((validUntil - created) / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 15;
   };
 
   // ── Filtered list ──────────────────────────────────────────────────────────
+  // Local Y/M/D (not toISOString) so a UTC+ browser doesn't shift the
+  // estimate's created date back a day against the selected range.
+  const toLocalYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const filtered = estimations.filter(est => {
     const partyName = est.customer?.name || est.customerName;
     const matchSearch = !search ||
       est.quotationNumber?.toLowerCase().includes(search.toLowerCase()) ||
       partyName?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || est.status === statusFilter;
-    // Add date filtering logic if required here
-    return matchSearch && matchStatus;
+    let matchDate = true;
+    if (est.createdAt && (dateFrom || dateTo)) {
+      const ymd = toLocalYMD(new Date(est.createdAt));
+      matchDate = (!dateFrom || ymd >= dateFrom) && (!dateTo || ymd <= dateTo);
+    }
+    return matchSearch && matchStatus && matchDate;
   });
 
   const totalQuotations = filtered.reduce((s, i) => s + (i.totalAmount || 0), 0);
   const totalConverted = filtered.filter(i => i.status === "CONVERTED").reduce((s, i) => s + (i.totalAmount || 0), 0);
   const totalOpen = filtered.filter(i => i.status === "SENT").reduce((s, i) => s + (i.totalAmount || 0), 0);
 
-  const filteredCustomers = customers.filter(c =>
+  const partySourceList = partyType === "DEALER" ? dealers : partyType === "FRANCHISE" ? franchises : customers;
+  const filteredCustomers = partySourceList.filter((c: any) =>
     !customerSearch ||
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     (c.contact && c.contact.includes(customerSearch)) ||
-    (c.phone && c.phone.includes(customerSearch))
+    (c.phone && c.phone.includes(customerSearch)) ||
+    (c.contactNum && c.contactNum.includes(customerSearch))
   );
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -781,6 +839,24 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
             <div className="grid grid-cols-2 gap-8">
               {/* Left: Party + Phone */}
               <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Party Type</label>
+                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
+                    {PARTY_TYPES.map(pt => (
+                      <button
+                        key={pt.value}
+                        type="button"
+                        onClick={() => handlePartyTypeChange(pt.value)}
+                        className={clsx(
+                          "px-3 py-1.5 text-xs font-semibold transition-colors",
+                          partyType === pt.value ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                        )}
+                      >
+                        {pt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="relative" ref={customerDropRef}>
                   <label className="block text-xs font-semibold text-gray-500 mb-1.5">Party *</label>
                   <div
@@ -809,27 +885,31 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
 
                   {showCustomerDrop && (
                     <div className="absolute top-full left-0 z-50 mt-1 w-[400px] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                      <button
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-medium"
-                        onClick={() => {
-                          const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
-                          setNewParty(prev => ({
-                            ...prev,
-                            name: isPhone ? "" : customerSearch.trim(),
-                            phone: isPhone ? customerSearch.trim() : "",
-                          }));
-                          setShowAddParty(true);
-                          setShowCustomerDrop(false);
-                        }}
-                      >
-                        <span className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
-                        Add New Party
-                      </button>
+                      {partyType === "CUSTOMER" && (
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-medium"
+                          onClick={() => {
+                            const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
+                            setNewParty(prev => ({
+                              ...prev,
+                              name: isPhone ? "" : customerSearch.trim(),
+                              phone: isPhone ? customerSearch.trim() : "",
+                            }));
+                            setShowAddParty(true);
+                            setShowCustomerDrop(false);
+                          }}
+                        >
+                          <span className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
+                          Add New Party
+                        </button>
+                      )}
                       <div className="max-h-48 overflow-y-auto">
                         {filteredCustomers.length === 0 ? (
-                          <div className="px-3 py-4 text-sm text-gray-400 text-center">No customers found</div>
+                          <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                            No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
+                          </div>
                         ) : (
-                          filteredCustomers.map(c => (
+                          filteredCustomers.map((c: any) => (
                             <button
                               key={c.id}
                               className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
@@ -837,7 +917,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                             >
                               <div className="text-left">
                                 <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                                <div className="text-xs text-gray-400">{c.contact || c.phone || "—"}</div>
+                                <div className="text-xs text-gray-400">{c.contact || c.phone || c.contactNum || "—"}</div>
                               </div>
                             </button>
                           ))
@@ -1265,178 +1345,6 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
           </div>
         )}
 
-        {/* Convert to Sales Order Modal */}
-        {showConvertModal && selectedEstForConvert && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-150 w-full max-w-lg mx-4 overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5">
-              {/* Header */}
-              <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-6 py-4 flex items-center justify-between text-white">
-                <div>
-                  <h3 className="font-bold text-lg">Convert to Sales Order</h3>
-                  <p className="text-white/80 text-xs mt-0.5">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customer?.name || selectedEstForConvert.customerName || "No Customer Name"}</p>
-                </div>
-                <button
-                  onClick={() => setShowConvertModal(false)}
-                  className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="p-6 space-y-4 text-sm text-gray-700">
-                <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs text-orange-600 font-semibold uppercase tracking-wider">Total Payable</div>
-                    <div className="text-2xl font-bold text-gray-800 mt-0.5">₹ {(selectedEstForConvert.totalAmount || 0).toLocaleString("en-IN")}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-gray-400">Items</div>
-                    <div className="text-sm font-semibold text-gray-700 mt-0.5">{selectedEstForConvert.items?.length || 0} line items</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                      <Calendar size={12} /> Delivery Date
-                    </label>
-                    <input
-                      type="date"
-                      value={deliveryDate}
-                      onChange={e => setDeliveryDate(e.target.value)}
-                      className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                    />
-                  </div>
-
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                      <Truck size={12} /> Courier Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Delhivery, BlueDart"
-                      value={courierName}
-                      onChange={e => setCourierName(e.target.value)}
-                      className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    <AlignLeft size={12} /> Tracking / Waybill Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter Tracking ID / AWB Number"
-                    value={trackingNumber}
-                    onChange={e => setTrackingNumber(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                  />
-                </div>
-
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    <FileText size={12} /> Delivery Address
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Enter the shipping/delivery address..."
-                    value={deliveryAddress}
-                    onChange={e => setDeliveryAddress(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none"
-                  />
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="bg-gray-50 border-t border-gray-150 px-6 py-4 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => setShowConvertModal(false)}
-                  className="px-4 py-2.5 text-xs font-black text-gray-500 uppercase tracking-widest hover:bg-white rounded-xl border border-gray-200 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={submitConvert}
-                  disabled={!!converting}
-                  className="px-5 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 disabled:opacity-50"
-                >
-                  {converting ? "Converting..." : "Convert to SO"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit Tracking Modal */}
-        {showEditTrackingModal && selectedEstForTracking && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl shadow-2xl border border-gray-150 w-full max-w-md mx-4 overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200">
-              {/* Header */}
-              <div className="bg-[#f58220] px-6 py-4 flex items-center justify-between text-white">
-                <div>
-                  <h3 className="font-bold text-lg flex items-center gap-2">
-                    <Truck size={20} /> Update Tracking Info
-                  </h3>
-                  <p className="text-white/80 text-xs mt-0.5">{selectedEstForTracking.quotationNumber} • Converted</p>
-                </div>
-                <button
-                  onClick={() => setShowEditTrackingModal(false)}
-                  className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Body */}
-              <div className="p-6 space-y-4 text-sm text-gray-700">
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    Courier Partner Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Delhivery, BlueDart, Professional Courier"
-                    value={editCourierName}
-                    onChange={e => setEditCourierName(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                  />
-                </div>
-
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    Tracking / Waybill Number
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Enter Tracking ID / AWB Number"
-                    value={editTrackingNumber}
-                    onChange={e => setEditTrackingNumber(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="bg-gray-50 border-t border-gray-150 px-6 py-4 flex items-center justify-end gap-3">
-                <button
-                  onClick={() => setShowEditTrackingModal(false)}
-                  className="px-4 py-2.5 text-xs font-black text-gray-500 uppercase tracking-widest hover:bg-white rounded-xl border border-gray-200 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={submitEditTracking}
-                  className="px-5 py-2.5 bg-[#f58220] text-white text-xs font-black rounded-xl shadow-lg shadow-orange-100 hover:bg-[#e8740e] transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -1660,15 +1568,6 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                             </div>
                           ) : (
                             <>
-                              {est.status === "CONVERTED" && (
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleOpenEditTracking(est); }}
-                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 rounded transition-colors mr-1"
-                                  title="Edit Tracking"
-                                >
-                                  <Truck className="h-4 w-4" />
-                                </button>
-                              )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
@@ -1677,11 +1576,11 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleShareEstimate(est); }}
+                                onClick={(e) => { e.stopPropagation(); handleDownloadEstimate(est); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-                                title="Share"
+                                title="Download"
                               >
-                                <Share2 className="h-4 w-4" />
+                                <Download className="h-4 w-4" />
                               </button>
                             </>
                           )}
@@ -1695,6 +1594,143 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
           </div>
         )}
       </div>
+
+      {previewEstimate && (
+        <GSTInvoice
+          order={{
+            poNumber: previewEstimate.quotationNumber,
+            createdAt: previewEstimate.createdAt,
+            discount: previewEstimate.discountAmount || 0,
+            items: (previewEstimate.items || []).map((it: any, idx: number) => ({
+              itemName: it.productName || `Item #${idx + 1}`,
+              quantity: it.quantity || 0,
+              unit: it.unit,
+              price: it.rate || 0,
+              gstRate: it.taxPercent || 0,
+            })),
+          }}
+          vendor={{
+            name: previewEstimate.customer?.name || previewEstimate.customerName || "Customer",
+            phone: previewEstimate.customerPhone || previewEstimate.customer?.contact || previewEstimate.customer?.phone || "",
+            address: previewEstimate.customer?.billingAddress || previewEstimate.customer?.address || "",
+            state: previewEstimate.customer?.state || "",
+            gstin: previewEstimate.customer?.gstNumber || "",
+          }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType={documentType === "PROFORMA" ? "PROFORMA_INVOICE" : "QUOTATION"}
+          dueDateDays={estimateDueDateDays(previewEstimate)}
+          terms={previewEstimate.termsConditions ? previewEstimate.termsConditions.split("\n").filter((l: string) => l.trim()) : undefined}
+          notes={previewEstimate.notes || undefined}
+          autoAction={previewAutoAction}
+          onClose={() => { setPreviewEstimate(null); setPreviewAutoAction(undefined); }}
+        />
+      )}
+
+      {/* Convert to Sales Order Modal */}
+      {showConvertModal && selectedEstForConvert && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-150 w-full max-w-lg mx-4 overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-6 py-4 flex items-center justify-between text-white">
+              <div>
+                <h3 className="font-bold text-lg">Convert to Sales Order</h3>
+                <p className="text-white/80 text-xs mt-0.5">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customer?.name || selectedEstForConvert.customerName || "No Customer Name"}</p>
+              </div>
+              <button
+                onClick={() => setShowConvertModal(false)}
+                className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 text-sm text-gray-700">
+              <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-orange-600 font-semibold uppercase tracking-wider">Total Payable</div>
+                  <div className="text-2xl font-bold text-gray-800 mt-0.5">₹ {(selectedEstForConvert.totalAmount || 0).toLocaleString("en-IN")}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-gray-400">Items</div>
+                  <div className="text-sm font-semibold text-gray-700 mt-0.5">{selectedEstForConvert.items?.length || 0} line items</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col">
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                    <Calendar size={12} /> Delivery Date
+                  </label>
+                  <input
+                    type="date"
+                    value={deliveryDate}
+                    onChange={e => setDeliveryDate(e.target.value)}
+                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                  />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                    <Truck size={12} /> Courier Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Delhivery, BlueDart"
+                    value={courierName}
+                    onChange={e => setCourierName(e.target.value)}
+                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <AlignLeft size={12} /> Tracking / Waybill Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter Tracking ID / AWB Number"
+                  value={trackingNumber}
+                  onChange={e => setTrackingNumber(e.target.value)}
+                  className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                />
+              </div>
+
+              <div className="flex flex-col">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <FileText size={12} /> Delivery Address
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Enter the shipping/delivery address..."
+                  value={deliveryAddress}
+                  onChange={e => setDeliveryAddress(e.target.value)}
+                  className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-50 border-t border-gray-150 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowConvertModal(false)}
+                className="px-4 py-2.5 text-xs font-black text-gray-500 uppercase tracking-widest hover:bg-white rounded-xl border border-gray-200 transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitConvert}
+                disabled={!!converting}
+                className="px-5 py-2.5 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 disabled:opacity-50"
+              >
+                {converting ? "Converting..." : "Convert to SO"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

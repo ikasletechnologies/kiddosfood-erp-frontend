@@ -35,7 +35,7 @@ export default function StockInventoryPage() {
               <Package size={22} />
             </span>
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-              Central Warehouse & Franchise Fulfillment
+              Main Warehouse & Fulfillment
             </span>
           </div>
           <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">

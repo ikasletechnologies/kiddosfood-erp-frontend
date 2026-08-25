@@ -1287,6 +1287,7 @@ export default function FranchiseOrdersPage() {
           order={invoiceModalData.order}
           vendor={invoiceModalData.vendor}
           companyDetails={companyDetails || FALLBACK_COMPANY}
+          documentType="FRANCHISE_ORDER"
           onClose={() => setInvoiceModalData(null)}
         />
       )}

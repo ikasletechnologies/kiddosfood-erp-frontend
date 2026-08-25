@@ -1,9 +1,43 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X, QrCode } from 'lucide-react';
+import { Printer, X, QrCode, Download, Share2, Loader2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
+
+// The one shared visual template for every billing/order document in the
+// app — a document TYPE only changes its heading, "#" field label, and
+// whether/what a "due date" means; the layout, GST math, bank details,
+// terms, and footer stay identical everywhere so every PDF in the system
+// looks like it came from the same system.
+export type GSTDocumentType =
+  | "TAX_INVOICE"
+  | "PURCHASE_ORDER"
+  | "DELIVERY_CHALLAN"
+  | "QUOTATION"
+  | "PROFORMA_INVOICE"
+  | "SALES_ORDER"
+  | "SALES_RETURN"
+  | "PURCHASE_INVOICE"
+  | "DEBIT_NOTE"
+  | "GRN"
+  | "PAYOUT_RECEIPT"
+  | "FRANCHISE_ORDER";
+
+const DOCUMENT_LABELS: Record<GSTDocumentType, { title: string; numberLabel: string; dueDateLabel: string | null }> = {
+  TAX_INVOICE: { title: "Invoice", numberLabel: "Invoice#", dueDateLabel: "Due Date" },
+  PURCHASE_ORDER: { title: "Purchase Order", numberLabel: "PO#", dueDateLabel: "Expected Delivery" },
+  DELIVERY_CHALLAN: { title: "Delivery Challan", numberLabel: "DC#", dueDateLabel: "Delivery Date" },
+  QUOTATION: { title: "Quotation", numberLabel: "Quotation#", dueDateLabel: "Valid Until" },
+  PROFORMA_INVOICE: { title: "Proforma Invoice", numberLabel: "Proforma#", dueDateLabel: "Valid Until" },
+  SALES_ORDER: { title: "Sales Order", numberLabel: "SO#", dueDateLabel: "Due Date" },
+  SALES_RETURN: { title: "Sales Return", numberLabel: "Return#", dueDateLabel: null },
+  PURCHASE_INVOICE: { title: "Purchase Bill", numberLabel: "Bill#", dueDateLabel: "Due Date" },
+  DEBIT_NOTE: { title: "Debit Note", numberLabel: "DN#", dueDateLabel: null },
+  GRN: { title: "Goods Receipt Note", numberLabel: "GRN#", dueDateLabel: null },
+  PAYOUT_RECEIPT: { title: "Payout Receipt", numberLabel: "Receipt#", dueDateLabel: null },
+  FRANCHISE_ORDER: { title: "Franchise Order", numberLabel: "Order#", dueDateLabel: "Expected Dispatch" },
+};
 
 interface GSTInvoiceProps {
   order: any;
@@ -17,6 +51,23 @@ interface GSTInvoiceProps {
     phone: string;
   };
   onClose: () => void;
+  // Defaults to TAX_INVOICE (the original, pre-existing behavior) so every
+  // call site that predates this prop keeps rendering exactly as before.
+  documentType?: GSTDocumentType;
+  // Overrides the derived due date's number of days out (default 15,
+  // matching the original hardcoded behavior) — irrelevant when the
+  // document type has no due-date concept (dueDateLabel is null).
+  dueDateDays?: number;
+  // Optional overrides — default to the original hardcoded copy below so
+  // every pre-existing call site renders byte-identical unless it opts in.
+  terms?: string[];
+  notes?: string;
+  // Auto-fires Download or Share once the document has painted, for a row
+  // action that wants "download/share this document" without a second
+  // click inside the modal. The modal still stays open afterward so the
+  // buttons remain available (and so a failed auto-share has a visible
+  // retry point) — Print never auto-fires, only Download/Share do.
+  autoAction?: 'download' | 'share';
 }
 
 // Basic number to words converter for INR
@@ -39,9 +90,13 @@ function numberToWords(num: number): string {
   return str.trim();
 }
 
-export default function GSTInvoice({ order, vendor, companyDetails, onClose }: GSTInvoiceProps) {
+export default function GSTInvoice({ order, vendor, companyDetails, onClose, documentType = "TAX_INVOICE", dueDateDays = 15, terms, notes, autoAction }: GSTInvoiceProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  const docRef = useRef<HTMLDivElement>(null);
+  const [generating, setGenerating] = useState<'download' | 'share' | null>(null);
+
+  const { title: docTitle, numberLabel, dueDateLabel } = DOCUMENT_LABELS[documentType];
 
   const safe = (val: any) => Number(val) || 0;
   const items = (order.poItems || order.items || []) as any[];
@@ -97,9 +152,103 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
     
   const invoiceDate = new Date(order.createdAt || Date.now());
   const dueDate = new Date(invoiceDate);
-  dueDate.setDate(dueDate.getDate() + 15); // 15 days due
+  dueDate.setDate(dueDate.getDate() + dueDateDays);
 
   const fmtDate = (d: Date) => formatDate(d);
+
+  const hasUnitData = items.some((it: any) => it.unit);
+  const defaultTerms = [
+    "Please pay within 15 days from the date of invoice. Overdue interest @ 14% will be charged on delayed payments.",
+    "Please quote invoice number when remitting funds.",
+  ];
+  const termsToShow = terms && terms.length > 0 ? terms : defaultTerms;
+  const defaultNotes = "Goods once sold will not be taken back. This is a computer generated invoice and does not require physical signature. All disputes are subject to the local jurisdiction only. E. & O.E.";
+  const notesToShow = notes && notes.trim() ? notes : defaultNotes;
+
+  // One shared PDF source for Print (browser print dialog), Download (file
+  // save), and Share (native share sheet) — all three snapshot the exact
+  // same rendered A4 document node, so the content can never drift between
+  // the three actions.
+  const buildPdfBlob = async (): Promise<Blob | null> => {
+    if (!docRef.current) return null;
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ]);
+    const canvas = await html2canvas(docRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    let heightLeft = imgHeight;
+    let position = 0;
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+    while (heightLeft > 0) {
+      position = heightLeft - imgHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+    }
+    return pdf.output('blob');
+  };
+
+  const triggerDownload = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${invoiceNo}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownload = async () => {
+    setGenerating('download');
+    try {
+      const blob = await buildPdfBlob();
+      if (blob) triggerDownload(blob);
+    } catch (e) {
+      console.error('PDF download failed', e);
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const handleShare = async () => {
+    setGenerating('share');
+    try {
+      const blob = await buildPdfBlob();
+      if (!blob) return;
+      const file = new File([blob], `${invoiceNo}.pdf`, { type: 'application/pdf' });
+      const nav = navigator as any;
+      if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+        await nav.share({ files: [file], title: `${docTitle} ${invoiceNo}` });
+      } else {
+        // No native file-share support on this browser/device — fall back
+        // to a plain download rather than breaking the page.
+        triggerDownload(blob);
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') console.error('PDF share failed', e);
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!mounted || !autoAction) return;
+    // Let the DOM (and the logo image) finish painting before snapshotting.
+    const t = setTimeout(() => {
+      if (autoAction === 'download') handleDownload();
+      else handleShare();
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, autoAction]);
 
   if (!mounted) return null;
 
@@ -111,7 +260,21 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
           onClick={() => window.print()}
           className="flex items-center gap-2 bg-[#F97316] text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-orange-600 transition-colors"
         >
-          <Printer size={16} /> Print Invoice
+          <Printer size={16} /> Print {docTitle}
+        </button>
+        <button
+          onClick={handleDownload}
+          disabled={generating !== null}
+          className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
+        >
+          {generating === 'download' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Download
+        </button>
+        <button
+          onClick={handleShare}
+          disabled={generating !== null}
+          className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
+        >
+          {generating === 'share' ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />} Share
         </button>
         <button
           onClick={onClose}
@@ -122,26 +285,28 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
       </div>
 
       {/* Invoice Document (A4 format) */}
-      <div className="w-full max-w-[210mm] min-h-[297mm] bg-white text-gray-800 shadow-2xl my-10 print:my-0 print:shadow-none p-10 md:p-14 relative">
+      <div ref={docRef} className="w-full max-w-[210mm] min-h-[297mm] bg-white text-gray-800 shadow-2xl my-10 print:my-0 print:shadow-none p-10 md:p-14 relative">
         
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-[#F97316] mb-8">Invoice</h1>
+            <h1 className="text-4xl font-bold text-[#F97316] mb-8">{docTitle}</h1>
             <table className="text-xs border-separate border-spacing-y-2">
               <tbody>
                 <tr>
-                  <td className="text-gray-500 w-24">Invoice#</td>
+                  <td className="text-gray-500 w-24">{numberLabel}</td>
                   <td className="font-semibold text-gray-900">{invoiceNo}</td>
                 </tr>
                 <tr>
-                  <td className="text-gray-500">Invoice Date</td>
+                  <td className="text-gray-500">{docTitle} Date</td>
                   <td className="font-semibold text-gray-900">{fmtDate(invoiceDate)}</td>
                 </tr>
-                <tr>
-                  <td className="text-gray-500">Due Date</td>
-                  <td className="font-semibold text-gray-900">{fmtDate(dueDate)}</td>
-                </tr>
+                {dueDateLabel && (
+                  <tr>
+                    <td className="text-gray-500">{dueDateLabel}</td>
+                    <td className="font-semibold text-gray-900">{fmtDate(dueDate)}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -183,6 +348,12 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
               <span className="font-bold text-gray-900">PAN</span>
               <span className="text-gray-600 font-mono">{vendor?.pan || '-'}</span>
             </div>
+            {vendor?.phone && (
+              <div className="flex items-center gap-2 text-xs mt-1">
+                <span className="font-bold text-gray-900">Phone</span>
+                <span className="text-gray-600 font-mono">{vendor.phone}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -203,6 +374,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
               <th className="py-3 px-4 text-left font-medium rounded-tl-lg w-1/3">Item #/Item description</th>
               <th className="py-3 px-2 text-center font-medium">HSN</th>
               <th className="py-3 px-2 text-right font-medium">Qty.</th>
+              {hasUnitData && <th className="py-3 px-2 text-center font-medium">UOM</th>}
               <th className="py-3 px-2 text-right font-medium">GST</th>
               <th className="py-3 px-4 text-right font-medium">Taxable Amount</th>
               <th className="py-3 px-4 text-right font-medium">
@@ -226,6 +398,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
                   </td>
                   <td className="py-3 px-2 text-center text-gray-600 font-mono text-[11px] truncate max-w-[70px]" title={item.hsnCode || '—'}>{item.hsnCode || '—'}</td>
                   <td className="py-3 px-2 text-right text-gray-600">{qty}</td>
+                  {hasUnitData && <td className="py-3 px-2 text-center text-gray-600">{item.unit || '—'}</td>}
                   <td className="py-3 px-2 text-right text-gray-600">{safe(item.gstRate)}%</td>
                   <td className="py-3 px-4 text-right text-gray-600">₹ {fmt(taxable)}</td>
                   <td className="py-3 px-4 text-right text-gray-600">₹ {fmt(tax)}</td>
@@ -266,16 +439,14 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
             <div>
               <h3 className="text-[#F97316] font-semibold text-base mb-2">Terms and Conditions</h3>
               <ol className="list-decimal list-inside text-xs text-gray-600 space-y-1.5 leading-relaxed">
-                <li>Please pay within 15 days from the date of invoice. Overdue interest @ 14% will be charged on delayed payments.</li>
-                <li>Please quote invoice number when remitting funds.</li>
+                {termsToShow.map((t, i) => <li key={i}>{t}</li>)}
               </ol>
             </div>
 
             <div className="mt-6">
               <h3 className="text-[#F97316] font-semibold text-base mb-2">Additional Notes</h3>
               <p className="text-[10px] text-gray-500 leading-relaxed">
-                Goods once sold will not be taken back. This is a computer generated invoice and does not require physical signature. 
-                All disputes are subject to the local jurisdiction only. E. & O.E.
+                {notesToShow}
               </p>
             </div>
           </div>
@@ -320,7 +491,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose }: G
             </div>
 
             <div className="py-4 border-b border-gray-100">
-              <p className="text-[10px] text-gray-400 mb-1">Invoice Total (in words)</p>
+              <p className="text-[10px] text-gray-400 mb-1">{docTitle} Total (in words)</p>
               <p className="font-semibold text-gray-800 text-sm leading-snug">
                 {numberToWords(grandTotal)} Rupees Only
               </p>

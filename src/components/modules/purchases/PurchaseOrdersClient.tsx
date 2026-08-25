@@ -257,181 +257,6 @@ export default function PurchaseOrdersClient() {
     });
   };
 
-  function buildPurchaseOrderPdf(po: any, company: any): string {
-    const contentObjects: string[] = [];
-    const rowHeight = 20;
-    const topMargin = 790;
-    const bottomMargin = 50;
-    const pageHeight = 842;
-    const pageWidth = 595;
-    const leftMargin = 40;
-    const colWidths = [25, 190, 45, 45, 65, 55, 90];
-    const headers = ["#", "Item Description", "Qty", "Unit", "Rate (Rs)", "Tax", "Amount (Rs)"];
-
-    const items = po.poItems || po.items || [];
-    let currentRow = 0;
-    let pageNum = 1;
-
-    const vendorName = (po.vendor?.name || "Unknown Vendor").replace(/[()\\\r\n]/g, "");
-    const vendorGstin = (po.vendor?.gstNumber || po.vendor?.gstin || "-").replace(/[()\\\r\n]/g, "");
-    const vendorPhone = (po.vendor?.contact || po.vendor?.phone || "-").replace(/[()\\\r\n]/g, "");
-    const companyName = (company?.name || "KIDDOS FOODS").replace(/[()\\\r\n]/g, "");
-    const poNum = (po.poNumber || po.id || "PO-001").replace(/[()\\\r\n]/g, "");
-    const poDate = formatDate(po.createdAt || Date.now());
-
-    while (currentRow < items.length || pageNum === 1) {
-      let y = topMargin;
-      let stream = "";
-
-      // Document Header
-      stream += `BT /F2 16 Tf 0.96 0.51 0.13 rg ${leftMargin} ${y} Td (PURCHASE ORDER) Tj ET\n`;
-      stream += `BT /F2 10 Tf 0.2 0.2 0.2 rg 400 ${y} Td (PO #: ${poNum}) Tj ET\n`;
-      y -= 16;
-      stream += `BT /F1 9 Tf 0.4 0.4 0.4 rg 400 ${y} Td (Date: ${poDate}) Tj ET\n`;
-      stream += `BT /F2 11 Tf 0.1 0.1 0.1 rg ${leftMargin} ${y} Td (${companyName}) Tj ET\n`;
-      y -= 22;
-
-      // Line divider
-      stream += `0.85 0.85 0.85 RG 1 w ${leftMargin} ${y} m ${leftMargin + 515} ${y} l S\n`;
-      y -= 18;
-
-      // Vendor Info Box
-      stream += `0.97 0.97 0.98 rg ${leftMargin} ${y - 35} 515 45 re f\n`;
-      stream += `0.88 0.88 0.90 RG 0.5 w ${leftMargin} ${y - 35} 515 45 re S\n`;
-
-      stream += `BT /F2 9 Tf 0.3 0.3 0.3 rg ${leftMargin + 8} ${y - 2} Td (VENDOR DETAILS:) Tj ET\n`;
-      stream += `BT /F2 10 Tf 0.1 0.1 0.1 rg ${leftMargin + 8} ${y - 16} Td (${vendorName}) Tj ET\n`;
-      stream += `BT /F1 8.5 Tf 0.4 0.4 0.4 rg ${leftMargin + 8} ${y - 28} Td (GSTIN: ${vendorGstin}  |  Phone: ${vendorPhone}) Tj ET\n`;
-
-      y -= 50;
-
-      // Table Header
-      stream += `0.94 0.95 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
-      stream += `0.7 0.7 0.7 RG 0.5 w ${leftMargin} ${y - 4} 515 18 re S\n`;
-
-      let x = leftMargin + 4;
-      headers.forEach((h, i) => {
-        stream += `BT /F2 8.5 Tf 0.2 0.2 0.2 rg ${x} ${y} Td (${h}) Tj ET\n`;
-        x += colWidths[i];
-      });
-      y -= rowHeight;
-
-      // Table Items
-      let subtotal = 0;
-      while (currentRow < items.length && y > bottomMargin + 80) {
-        const it = items[currentRow];
-        const name = (it.inventoryItem?.name || it.name || "Item " + (currentRow + 1)).replace(/[()\\\r\n]/g, "").slice(0, 32);
-        const qty = Number(it.quantity) || 0;
-        const unit = (it.inventoryItem?.unit || it.unit || "Units").replace(/[()\\\r\n]/g, "");
-        const price = Number(it.price) || 0;
-        const gst = Number(it.gstRate ?? it.tax ?? 5);
-        const amount = qty * price;
-        subtotal += amount;
-
-        stream += `0.9 0.9 0.9 RG 0.3 w ${leftMargin} ${y - 4} m ${leftMargin + 515} ${y - 4} l S\n`;
-
-        const rowVals = [
-          String(currentRow + 1),
-          name,
-          String(qty),
-          unit,
-          price.toLocaleString("en-IN"),
-          gst + "%",
-          amount.toLocaleString("en-IN")
-        ];
-
-        let rx = leftMargin + 4;
-        rowVals.forEach((val, ci) => {
-          stream += `BT /F1 8 Tf 0.15 0.15 0.15 rg ${rx} ${y} Td (${val}) Tj ET\n`;
-          rx += colWidths[ci];
-        });
-
-        y -= rowHeight;
-        currentRow++;
-      }
-
-      // Totals Box if last page
-      if (currentRow >= items.length) {
-        const grandTotal = Number(po.totalAmount) || subtotal;
-        y -= 10;
-        stream += `0.96 0.96 0.97 rg 350 ${y - 35} 205 45 re f\n`;
-        stream += `0.8 0.8 0.8 RG 0.5 w 350 ${y - 35} 205 45 re S\n`;
-
-        stream += `BT /F1 9 Tf 0.4 0.4 0.4 rg 360 ${y - 8} Td (Subtotal:) Tj ET\n`;
-        stream += `BT /F1 9 Tf 0.2 0.2 0.2 rg 470 ${y - 8} Td (Rs ${subtotal.toLocaleString("en-IN")}) Tj ET\n`;
-
-        stream += `BT /F2 11 Tf 0.96 0.51 0.13 rg 360 ${y - 26} Td (Grand Total:) Tj ET\n`;
-        stream += `BT /F2 11 Tf 0.1 0.1 0.1 rg 470 ${y - 26} Td (Rs ${grandTotal.toLocaleString("en-IN")}) Tj ET\n`;
-      }
-
-      stream += `BT /F1 8 Tf 0.5 0.5 0.5 rg ${pageWidth / 2 - 20} 25 Td (Page ${pageNum}) Tj ET\n`;
-
-      contentObjects.push(stream);
-      pageNum++;
-      if (currentRow >= items.length) break;
-    }
-
-    const numPages = contentObjects.length;
-    const allObjs: string[] = [];
-    allObjs.push("<< /Type /Catalog /Pages 2 0 R >>");
-
-    const pageObjIds: string[] = [];
-    for (let i = 0; i < numPages; i++) {
-      pageObjIds.push(`${5 + i * 2} 0 R`);
-    }
-    allObjs.push(`<< /Type /Pages /Kids [${pageObjIds.join(" ")}] /Count ${numPages} >>`);
-    allObjs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
-    allObjs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
-
-    for (let i = 0; i < numPages; i++) {
-      const pageObjId = 5 + i * 2;
-      const contentObjId = 6 + i * 2;
-      const contentStream = contentObjects[i];
-      const streamLen = new TextEncoder().encode(contentStream).length;
-
-      allObjs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjId} 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> >>`);
-      allObjs.push(`<< /Length ${streamLen} >>\nstream\n${contentStream}\nendstream`);
-    }
-
-    let pdf = "%PDF-1.4\n";
-    const offsets: number[] = [];
-    const encoder = new TextEncoder();
-    allObjs.forEach((obj, i) => {
-      offsets.push(encoder.encode(pdf).length);
-      pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`;
-    });
-
-    const xrefStart = encoder.encode(pdf).length;
-    pdf += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
-    offsets.forEach(offset => {
-      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-    });
-
-    pdf += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-    return pdf;
-  }
-
-  const handleDownloadPdf = (po: any) => {
-    try {
-      const company = currentCompany || { name: "KIDDOS FOODS" };
-      const pdfString = buildPurchaseOrderPdf(po, company);
-      const blob = new Blob([pdfString], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const poNumClean = (po.poNumber || po.id || "PO").replace(/[^a-zA-Z0-9_-]/g, "_");
-      link.href = url;
-      link.download = `Purchase_Order_${poNumClean}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success("Purchase Order PDF downloaded successfully!");
-    } catch (err) {
-      console.error("Failed to download PO PDF:", err);
-      toast.error("Failed to download PDF. Please try again.");
-    }
-  };
-
   const filtered = orders.filter((o) => {
     const matchesSearch = !search || o.vendor?.name?.toLowerCase().includes(search.toLowerCase()) || o.id?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = filterStatus === "ALL" || o.status === filterStatus;
@@ -728,7 +553,7 @@ export default function PurchaseOrdersClient() {
 
                           <button
                             type="button"
-                            onClick={() => handleDownloadPdf(po)}
+                            onClick={() => setViewingPO(po)}
                             className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
                             title="Download PDF"
                           >
@@ -755,7 +580,7 @@ export default function PurchaseOrdersClient() {
         defaultAccountId={selectedAccountId}
       />
 
-      {viewingPO && <GSTInvoice order={viewingPO} vendor={viewingPO.vendor} companyDetails={currentCompany} onClose={() => setViewingPO(null)} />}
+      {viewingPO && <GSTInvoice order={viewingPO} vendor={viewingPO.vendor} companyDetails={currentCompany} documentType="PURCHASE_ORDER" onClose={() => setViewingPO(null)} />}
 
       {showSettings && mounted && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
@@ -981,7 +806,9 @@ export default function PurchaseOrdersClient() {
                     <div>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Delivery Destination</h3>
                       <p className="text-sm font-bold text-slate-800 dark:text-white mb-1">
-                        {viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || "Central Warehouse"}
+                        {viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
+                          <span className="text-rose-500 italic">Update Warehouse</span>
+                        )}
                       </p>
                       {(viewingDetailsPO.warehouse?.address || viewingDetailsPO.franchise?.address) && (
                         <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
@@ -1139,7 +966,9 @@ export default function PurchaseOrdersClient() {
                               <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{totalAccepted}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600">{totalRejected}</td>
-                              <td className="px-4 py-3 text-xs text-slate-500">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || "Central Warehouse"}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
+                                <span className="text-rose-500 italic font-medium">Update Warehouse</span>
+                              )}</td>
                               <td className="px-4 py-3 text-xs">
                                 <span className={clsx("inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider", 
                                   grn.status === 'COMPLETED' ? "bg-emerald-50 text-emerald-600 border-emerald-200" : 
@@ -1176,9 +1005,9 @@ export default function PurchaseOrdersClient() {
 
             {/* Actions */}
             <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
-              <button 
+              <button
                 type="button"
-                onClick={() => handleDownloadPdf(viewingDetailsPO)} 
+                onClick={() => setViewingPO(viewingDetailsPO)}
                 className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Download PDF

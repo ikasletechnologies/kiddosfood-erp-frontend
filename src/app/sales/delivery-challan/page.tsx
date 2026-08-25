@@ -10,9 +10,19 @@ import {
   ArrowLeft
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi } from "@/lib/api";
+import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // ── Constants (Unified with Invoice Page) ────────────────────────────────────
 
@@ -187,6 +197,9 @@ export default function DeliveryChallanPage() {
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
+  const [previewingChallan, setPreviewingChallan] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const currentCompany = companyProfile || FALLBACK_COMPANY;
 
   // Refs for closing dropdowns
   const customerDropRef = useRef<HTMLDivElement>(null);
@@ -198,13 +211,14 @@ export default function DeliveryChallanPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [cRes, dlRes, pRes, fRes, wRes, dcRes] = await Promise.allSettled([
+      const [cRes, dlRes, pRes, fRes, wRes, dcRes, cpRes] = await Promise.allSettled([
         customersApi.getAll(),
         dealersApi.getAll(),
         productsFullApi.getAll(),
         franchiseApi.getAll(),
         inventoryApi.getWarehouses(),
         salesApi.getDeliveryChallans(),
+        settingsApi.getCompanyProfile(),
       ]);
 
       let apiChallans = dcRes.status === "fulfilled" ? (dcRes.value as any).data || [] : [];
@@ -289,6 +303,9 @@ export default function DeliveryChallanPage() {
       if (wRes.status === "fulfilled") {
         const d = (wRes.value as any).data;
         setWarehouses(Array.isArray(d) ? d : d?.data || []);
+      }
+      if (cpRes.status === "fulfilled" && (cpRes.value as any).data) {
+        setCompanyProfile((cpRes.value as any).data);
       }
     } finally {
       setLoading(false);
@@ -723,102 +740,6 @@ export default function DeliveryChallanPage() {
     } catch (e) {
       showToast("Conversion failed", "error");
     }
-  };
-
-  const handlePrint = (dc: any) => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`
-      <html>
-      <head>
-        <title>Delivery Challan #${dc.challanNo}</title>
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #334155; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-          .title { font-size: 24px; font-weight: bold; color: #1e293b; text-transform: uppercase; }
-          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
-          .box { border: 1px solid #e2e8f0; padding: 15px; rounded: 8px; background: #f8fafc; }
-          .box-title { font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f1f5f9; padding: 10px; font-size: 12px; font-weight: bold; text-align: left; border-bottom: 2px solid #cbd5e1; }
-          td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-          .totals { text-align: right; margin-top: 30px; font-size: 14px; font-weight: 500; }
-          .footer { display: flex; justify-content: space-between; margin-top: 60px; font-size: 12px; }
-          .sig { border-top: 1px solid #cbd5e1; width: 180px; text-align: center; padding-top: 5px; }
-          @media print { button { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="title">Delivery Challan</div>
-            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">No: <strong>#${dc.challanNo}</strong></div>
-          </div>
-          <div style="text-align: right; font-size: 13px;">
-            <div>Challan Date: <strong>${dc.invoiceDate}</strong></div>
-            <div>Due Date: <strong>${dc.dueDate}</strong></div>
-            <div style="margin-top: 5px;"><span style="background: #dbeafe; color: #1d4ed8; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: bold;">${dc.status}</span></div>
-          </div>
-        </div>
-        <div class="meta">
-          <div class="box">
-            <div class="box-title">Deliver To (Target)</div>
-            <strong>${dc.customerName}</strong><br/>
-            ${dc.customerPhone ? `Phone: ${dc.customerPhone}<br/>` : ""}
-            ${dc.stateOfSupply ? `State of Supply: ${dc.stateOfSupply}` : ""}
-          </div>
-          <div class="box">
-            <div class="box-title">Dispatch Details</div>
-            Source: <strong>${dc.sourceFranchiseId === 'hq-001' ? 'HQ / Main Warehouse' : dc.sourceFranchiseId || 'HQ / Main Warehouse'}</strong><br/>
-            Vehicle No: <strong>${dc.vehicleNo || 'N/A'}</strong><br/>
-            Driver Name: <strong>${dc.driverName || 'N/A'}</strong>
-          </div>
-        </div>
-        <div class="meta" style="margin-top: 10px;">
-          <div class="box" style="grid-column: span 2;">
-            <div class="box-title">Terms & Notes</div>
-            ${dc._rawState?.description || dc.remarks || "No custom details provided."}
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit</th>
-              <th>Rate</th>
-              <th>Tax Rate</th>
-              <th>Total Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(dc.items || []).map((it: any, i: number) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${it.description}</td>
-                <td>${it.qty}</td>
-                <td>${it.unit}</td>
-                <td>₹${Number(it.rate).toFixed(2)}</td>
-                <td>${it.taxPct}%</td>
-                <td>₹${Number(it.rate * it.qty + (it.taxAmount || 0)).toFixed(2)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="totals">
-          Total Quantity: <strong>${dc.totalQty} items</strong><br/>
-          Grand Total: <span style="font-size: 18px; color: #1e3a8a; font-weight: bold; margin-left: 10px;">₹${Number(dc.finalAmount).toFixed(2)}</span>
-        </div>
-        <div class="footer">
-          <div class="sig">Received By</div>
-          <div class="sig">Authorized Signatory</div>
-        </div>
-        <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
-      </body>
-      </html>
-    `);
-    win.document.close();
   };
 
   // ── Filters & Formatting ─────────────────────────────────────────────────────
@@ -1369,7 +1290,7 @@ export default function DeliveryChallanPage() {
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => { handlePrint(dc); setShowRowMenu(null); }}
+                                  onClick={() => { setPreviewingChallan(dc); setShowRowMenu(null); }}
                                   className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
                                 >
                                   Print
@@ -1393,6 +1314,30 @@ export default function DeliveryChallanPage() {
           </div>
         )}
       </div>
+
+      {previewingChallan && (
+        <GSTInvoice
+          order={{
+            poNumber: previewingChallan.challanNo,
+            createdAt: previewingChallan.invoiceDate,
+            items: (previewingChallan.items || []).map((it: any) => ({
+              itemName: it.description || it.productName || "Item",
+              quantity: it.qty ?? it.quantity ?? 0,
+              price: it.rate ?? it.unitPrice ?? 0,
+              gstRate: it.taxPct ?? it.taxPercent ?? 0,
+            })),
+          }}
+          vendor={{
+            name: previewingChallan.customerName,
+            address: previewingChallan.stateOfSupply,
+            state: previewingChallan.stateOfSupply,
+            phone: previewingChallan.customerPhone,
+          }}
+          companyDetails={currentCompany}
+          documentType="DELIVERY_CHALLAN"
+          onClose={() => setPreviewingChallan(null)}
+        />
+      )}
     </div>
   );
 }

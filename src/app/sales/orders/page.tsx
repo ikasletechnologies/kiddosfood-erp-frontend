@@ -13,6 +13,16 @@ import { customersApi, productsFullApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // ── Constants (Unified with Invoice Page) ────────────────────────────────────
 
@@ -200,6 +210,9 @@ export default function SalesOrdersPage() {
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
+  const [previewingOrder, setPreviewingOrder] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const currentCompany = companyProfile || FALLBACK_COMPANY;
 
   // Read-only "view" mode — reuses the edit form's layout (via a disabled
   // fieldset) instead of a separate component, since it needs to show
@@ -261,7 +274,10 @@ export default function SalesOrdersPage() {
       setOrders(salesOrders);
       if (custRes.status === "fulfilled") setCustomers((custRes.value as any).data || []);
       if (prodRes.status === "fulfilled") setProducts((prodRes.value as any).data || []);
-      if (companyRes.status === "fulfilled") setCompanyState((companyRes.value as any).data?.state || "");
+      if (companyRes.status === "fulfilled") {
+        setCompanyState((companyRes.value as any).data?.state || "");
+        if ((companyRes.value as any).data) setCompanyProfile((companyRes.value as any).data);
+      }
     } finally {
       setLoading(false);
     }
@@ -575,96 +591,6 @@ export default function SalesOrdersPage() {
     } catch (e) {
       showToast("Conversion failed", "error");
     }
-  };
-
-  const handlePrint = (order: any) => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`
-      <html>
-      <head>
-        <title>Sales Order #${order.orderNo}</title>
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #334155; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-          .title { font-size: 24px; font-weight: bold; color: #1e293b; text-transform: uppercase; }
-          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
-          .box { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; background: #f8fafc; }
-          .box-title { font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f1f5f9; padding: 10px; font-size: 12px; font-weight: bold; text-align: left; border-bottom: 2px solid #cbd5e1; }
-          td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-          .totals { text-align: right; margin-top: 30px; font-size: 14px; font-weight: 500; }
-          .footer { display: flex; justify-content: space-between; margin-top: 60px; font-size: 12px; }
-          .sig { border-top: 1px solid #cbd5e1; width: 180px; text-align: center; padding-top: 5px; }
-          @media print { button { display: none; } }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="title">Sales Order</div>
-            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Order No: <strong>#${order.orderNo}</strong></div>
-          </div>
-          <div style="text-align: right; font-size: 13px;">
-            <div>Order Date: <strong>${order.invoiceDate}</strong></div>
-            <div>Due Date: <strong>${order.dueDate}</strong></div>
-            <div>Payment: <strong>${order.paymentType}</strong></div>
-            <div style="margin-top: 5px;"><span style="background: #ffe8cc; color: #e67e22; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: bold;">${order.status}</span></div>
-          </div>
-        </div>
-        <div class="meta">
-          <div class="box">
-            <div class="box-title">Bill To</div>
-            <strong>${order.customerName}</strong><br/>
-            ${order.customerPhone ? `Phone: ${order.customerPhone}<br/>` : ""}
-            ${order.stateOfSupply ? `State of Supply: ${order.stateOfSupply}` : ""}
-          </div>
-          <div class="box">
-            <div class="box-title">Terms & notes</div>
-            ${order._rawState?.description || order.remarks || "No custom terms provided."}
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit</th>
-              <th>Price/Unit</th>
-              <th>Tax Rate</th>
-              <th>Total Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(order.items || []).map((it: any, i: number) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${it.description}</td>
-                <td>${it.qty}</td>
-                <td>${it.unit}</td>
-                <td>₹${Number(it.rate).toFixed(2)}</td>
-                <td>${it.taxPct}%</td>
-                <td>₹${Number(it.rate * it.qty + (it.taxAmount || 0)).toFixed(2)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="totals">
-          Total Quantity: <strong>${order.totalQty} items</strong><br/>
-          Grand Total: <span style="font-size: 18px; color: #1e3a8a; font-weight: bold; margin-left: 10px;">₹${Number(order.finalAmount).toFixed(2)}</span><br/>
-          Balance Due: <span style="font-size: 15px; color: #b91c1c; font-weight: bold; margin-left: 10px;">₹${Number(order.balance).toFixed(2)}</span>
-        </div>
-        <div class="footer">
-          <div class="sig">Received By</div>
-          <div class="sig">Authorized Signatory</div>
-        </div>
-        <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
-      </body>
-      </html>
-    `);
-    win.document.close();
   };
 
   // ── Filter Computations ──────────────────────────────────────────────────────
@@ -1414,7 +1340,7 @@ export default function SalesOrdersPage() {
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => { handlePrint(o); setShowRowMenu(null); }}
+                                  onClick={() => { setPreviewingOrder(o); setShowRowMenu(null); }}
                                   className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
                                 >
                                   Print
@@ -1438,6 +1364,37 @@ export default function SalesOrdersPage() {
           </div>
         )}
       </div>
+
+      {previewingOrder && (
+        <GSTInvoice
+          order={{
+            poNumber: previewingOrder.orderNo,
+            createdAt: previewingOrder.invoiceDate,
+            items: (previewingOrder.items || []).map((it: any) => ({
+              itemName: it.description || it.productName || "Item",
+              quantity: it.qty ?? it.quantity ?? 0,
+              price: it.rate ?? it.unitPrice ?? 0,
+              gstRate: it.taxPct ?? it.taxPercent ?? 0,
+            })),
+          }}
+          vendor={{
+            name: previewingOrder.customerName,
+            address: previewingOrder.stateOfSupply,
+            state: previewingOrder.stateOfSupply,
+            phone: previewingOrder.customerPhone,
+          }}
+          companyDetails={currentCompany}
+          documentType="SALES_ORDER"
+          dueDateDays={(() => {
+            const from = previewingOrder.invoiceDate ? new Date(previewingOrder.invoiceDate).getTime() : NaN;
+            const to = previewingOrder.dueDate ? new Date(previewingOrder.dueDate).getTime() : NaN;
+            if (isNaN(from) || isNaN(to)) return 15;
+            const days = Math.round((to - from) / 86400000);
+            return days >= 0 ? days : 15;
+          })()}
+          onClose={() => setPreviewingOrder(null)}
+        />
+      )}
     </div>
   );
 }

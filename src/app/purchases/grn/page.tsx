@@ -21,16 +21,28 @@ import { X,
   Plus as PlusIcon,
   Scan as ScanIcon
 } from "lucide-react";
-import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi } from "@/lib/api";
+import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi, settingsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 interface POItem {
   id: string;
   inventoryItem: { id: string; name: string; unit: string };
   quantity: number;
   price: number;
+  gstRate?: number;
+  hsnCode?: string;
 }
 
 interface PO {
@@ -76,6 +88,21 @@ export default function GRNPage() {
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<string>("");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [previewGRN, setPreviewGRN] = useState(false);
+
+  const formatDisplayDate = (dateStr: string | undefined | null) => {
+    if (!dateStr) return "DD/MM/YYYY";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dateStr;
+  };
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => { /* fall back to FALLBACK_COMPANY */ });
+  }, []);
 
   const handleSaveDraft = () => {
     toast.success("GRN Draft saved successfully (reference kept local).");
@@ -86,8 +113,7 @@ export default function GRNPage() {
   };
 
   const handlePrintGRN = () => {
-    toast.success("Preparing printable GRN layout...");
-    window.print();
+    setPreviewGRN(true);
   };
 
   // Fetch Warehouses on mount
@@ -642,24 +668,32 @@ export default function GRNPage() {
 
                               {/* Row 2: Starting & Ending Dates with clear labels */}
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
                                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
+                                  <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
+                                    {formatDisplayDate(item.mfgDate)}
+                                    <CalendarIcon size={12} className="text-gray-400 ml-1" />
+                                  </span>
                                   <input
                                     type="date"
                                     title="Manufacturing (Start) Date"
                                     value={item.mfgDate || ""}
                                     onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                    className="bg-transparent text-xs outline-none text-gray-800 cursor-pointer"
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
                                 </div>
-                                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg">
+                                <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
                                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
+                                  <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
+                                    {formatDisplayDate(item.expDate)}
+                                    <CalendarIcon size={12} className="text-gray-400 ml-1" />
+                                  </span>
                                   <input
                                     type="date"
                                     title="Expiry (End) Date"
                                     value={item.expDate || ""}
                                     onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                                    className="bg-transparent text-xs outline-none text-gray-800 cursor-pointer"
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
                                 </div>
                               </div>
@@ -759,13 +793,7 @@ export default function GRNPage() {
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={handleSubmitForReview}
-                      className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-lg transition-colors"
-                    >
-                      Submit
-                    </button>
+
                     <button
                       type="button"
                       onClick={handlePrintGRN}
@@ -1032,7 +1060,9 @@ export default function GRNPage() {
                           <td className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300">{item.receivedQty}</td>
                           <td className="px-4 py-3 text-right font-semibold text-emerald-600">{item.acceptedQty}</td>
                           <td className="px-4 py-3 text-right font-semibold text-rose-600">{item.rejectedQty}</td>
-                          <td className="px-4 py-3 text-slate-500">{item.warehouse?.name || "Central Warehouse"}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.warehouse?.name || (
+                            <span className="text-rose-500 italic font-medium">Update Warehouse</span>
+                          )}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1061,6 +1091,29 @@ export default function GRNPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {previewGRN && selectedPO && (
+        <GSTInvoice
+          order={{
+            poNumber: `GRN-${selectedPO.poNumber || selectedPO.id.slice(-6).toUpperCase()}`,
+            createdAt: new Date().toISOString(),
+            items: grnItems.map((item, idx) => {
+              const poItem: any = selectedPO.poItems?.[idx];
+              return {
+                itemName: item.inventoryItem?.name || poItem?.inventoryItem?.name || `Material #${idx + 1}`,
+                quantity: Number(item.receivedQty) || 0,
+                price: Number(item.price) || 0,
+                gstRate: Number(poItem?.gstRate) || 0,
+                hsnCode: poItem?.hsnCode,
+              };
+            }),
+          }}
+          vendor={selectedPO.vendor || { name: "Vendor" }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="GRN"
+          onClose={() => setPreviewGRN(false)}
+        />
       )}
     </div>
   );

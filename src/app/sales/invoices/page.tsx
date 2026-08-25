@@ -1668,6 +1668,7 @@ export default function SalesInvoicesPage() {
               email: 'hello@kiddosfood.com',
               phone: '+91 98765 43210'
             }}
+            documentType="TAX_INVOICE"
             onClose={() => setPrintingInvoice(null)}
           />
         )}

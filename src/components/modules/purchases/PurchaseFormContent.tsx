@@ -101,6 +101,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         notes: notes || internalNotes,
         warehouseId: warehouseId || undefined,
         franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
+        paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
         items: items.map(item => ({
@@ -144,6 +145,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         advancePaid: totals.appliedAdvance || 0,
         notes: notes || internalNotes || "",
         warehouseId: warehouseId || undefined,
+        franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
+        paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
         status: "DRAFT",
@@ -522,6 +525,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             phone: ""
           }}
           companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="PURCHASE_ORDER"
           onClose={() => setShowPreview(false)}
         />
       )}

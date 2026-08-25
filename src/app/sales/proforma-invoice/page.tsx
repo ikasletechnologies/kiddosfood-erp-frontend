@@ -1,12 +1,23 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { FileText, Search, RefreshCw, Check } from "lucide-react";
+import { FileText, Search, RefreshCw, Check, Printer } from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter } from "next/navigation";
 import api from "@/lib/api/base";
+import { settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // A genuinely distinct document from Estimate now (backed by
 // /api/sales/proforma-invoices -> the ProformaInvoice model), created only
@@ -30,6 +41,10 @@ export default function ProformaInvoicePage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [convertingId, setConvertingId] = useState<string | null>(null);
 
+  // GSTInvoice preview/print modal
+  const [previewProforma, setPreviewProforma] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -43,6 +58,12 @@ export default function ProformaInvoicePage() {
   }, [showToast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => {});
+  }, []);
 
   // Deep-link from Sales Order's "View Proforma Invoice" (?id=<id>).
   useEffect(() => {
@@ -188,6 +209,13 @@ export default function ProformaInvoicePage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setPreviewProforma(p)}
+                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            title="Print"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
                           {(p.status === "DRAFT" || p.status === "SENT") && (
                             <button
                               onClick={() => handleConvert(p)}
@@ -215,6 +243,35 @@ export default function ProformaInvoicePage() {
           </div>
         )}
       </div>
+
+      {previewProforma && (
+        <GSTInvoice
+          order={{
+            poNumber: previewProforma.proformaNumber,
+            createdAt: previewProforma.createdAt,
+            discount: previewProforma.discountAmount || previewProforma.discount || 0,
+            items: (previewProforma.items || []).map((it: any, idx: number) => ({
+              itemName: it.productName || it.description || it.itemName || it.name || `Item #${idx + 1}`,
+              quantity: it.quantity ?? it.qty ?? 0,
+              price: it.rate ?? it.price ?? it.unitPrice ?? 0,
+              gstRate: it.taxPercent ?? it.taxPct ?? it.gstRate ?? 0,
+              hsnCode: it.hsnCode,
+            })),
+          }}
+          vendor={previewProforma.customer || { name: previewProforma.customerName || "Customer" }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="PROFORMA_INVOICE"
+          dueDateDays={(() => {
+            if (!previewProforma.validUntil || !previewProforma.createdAt) return 15;
+            const created = new Date(previewProforma.createdAt).getTime();
+            const validUntil = new Date(previewProforma.validUntil).getTime();
+            if (Number.isNaN(created) || Number.isNaN(validUntil)) return 15;
+            const days = Math.round((validUntil - created) / (1000 * 60 * 60 * 24));
+            return days > 0 ? days : 15;
+          })()}
+          onClose={() => setPreviewProforma(null)}
+        />
+      )}
     </div>
   );
 }

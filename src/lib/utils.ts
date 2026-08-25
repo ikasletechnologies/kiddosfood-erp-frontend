@@ -7,8 +7,11 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatCurrency(amount: number, currency: string = "₹") {
   const isNegative = amount < 0;
-  const absVal = Math.abs(Math.round(amount));
-  return `${isNegative ? '-' : ''}${currency}${absVal.toLocaleString("en-IN")}`;
+  const absVal = Math.abs(amount);
+  return `${isNegative ? '-' : ''}${currency}${absVal.toLocaleString("en-IN", {
+    minimumFractionDigits: Number.isInteger(absVal) ? 0 : 2,
+    maximumFractionDigits: 2
+  })}`;
 }
 
 // The single source of truth for how a date is displayed anywhere in the
