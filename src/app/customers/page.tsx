@@ -372,8 +372,8 @@ export default function PartiesPage() {
           <button 
             onClick={() => {
               if (isSuper && franchisesLoading) return;
-              if (isSuper && !effectiveFranchiseId) {
-                toast.error("Select HQ or a franchise before adding a customer.");
+              if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
+                toast.error("Select a franchise before adding a customer.");
                 return;
               }
               setIsAddModalOpen(true);
@@ -427,7 +427,7 @@ export default function PartiesPage() {
               <div className="grid grid-cols-3 gap-6 max-w-3xl">
                 <div>
                   <p className="text-[11px] text-slate-400 mb-0.5">Phone Number</p>
-                  <p className="text-[13px] font-medium text-slate-700">{selectedCustomerDetail?.contact || selectedCustomer.contact || "—"}</p>
+                  <p className="text-[13px] font-medium text-slate-700">{selectedCustomerDetail?.phone || selectedCustomer.phone || "—"}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-0.5">Email</p>
@@ -702,12 +702,12 @@ export default function PartiesPage() {
         onClose={() => setIsAddModalOpen(false)} 
         onSave={async (data) => {
           try {
-            if (isSuper && !effectiveFranchiseId) {
-              toast.error("Select HQ or a franchise before adding a customer.");
+            if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
+              toast.error("Select a franchise before adding a customer.");
               return;
             }
             const payload = isSuper
-              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
+              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId || null }
               : { ...data, phone: data.contact };
             await customersApi.create(payload);
             toast.success("Customer added successfully!");
