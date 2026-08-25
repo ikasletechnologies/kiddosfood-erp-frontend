@@ -1050,35 +1050,35 @@ export default function VendorsClient() {
       {/* Sidebar */}
       <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
         
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <span className="text-lg font-bold text-slate-800">Vendors</span>
-          <button
-            onClick={() => { setEditing(null); setShowForm(true); }}
-            className="p-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-all shadow-sm active:scale-95"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-
-        {/* Search & List Headers */}
-        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
-          <div className="relative">
+        {/* Search & Action Header */}
+        <div className="p-3 border-b border-slate-200 flex items-center gap-2">
+          <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search Vendor Name"
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-700"
+              className="w-full pl-9 pr-7 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#F58220] text-slate-700"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
+          <button
+            onClick={() => { setEditing(null); setShowForm(true); }}
+            className="p-2 bg-[#F58220] hover:bg-[#e0751a] text-white rounded-xl transition-all shadow-sm shrink-0"
+            title="Add New Vendor"
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+
+        {/* List Filter Header */}
+        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
 
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
             <div 

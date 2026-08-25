@@ -58,38 +58,38 @@ export default function FranchiseDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-4 py-4 px-4 pb-16 animate-in fade-in duration-300">
       
-      {/* ── Top Header ── */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-indigo-500/10 rounded-lg shrink-0">
-              <BarChart3 size={18} className="text-indigo-500" />
-            </div>
-            <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
-              Franchise Distribution ERP
-            </h1>
-            {loading && <RefreshCw size={12} className="text-slate-400 animate-spin ml-2" />}
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 font-medium text-xs mt-0.5">
-            {monitorId ? "Monitoring Franchise Node" : `Welcome back, ${user?.fullName ?? "Partner"}`}
-          </p>
+      {/* ── Top Action Toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchAll}
+            className="p-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5 text-xs font-bold"
+            title="Refresh dashboard"
+          >
+            <RefreshCw
+              size={13}
+              className={clsx("transition-transform", loading && "animate-spin text-[#F58220]")}
+            />
+            <span>Sync</span>
+          </button>
         </div>
 
         {/* ── High-Velocity Quick Actions ── */}
-        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
-          <Link href={monitorId ? `/franchise/analytics?id=${monitorId}` : "/franchise/analytics"} className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 border border-slate-200 dark:border-white/10 whitespace-nowrap">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <Link href={monitorId ? `/franchise/analytics?id=${monitorId}` : "/franchise/analytics"} className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-white/10 whitespace-nowrap">
             <BarChart3 size={13} /> View Analytics
           </Link>
-          <Link href="/pos" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 shadow-indigo-500/10 whitespace-nowrap">
+          <Link href="/pos" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
             <Plus size={13} /> New Invoice
           </Link>
-          <Link href="/purchases/inward" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 shadow-purple-500/10 whitespace-nowrap">
+          <Link href="/purchases/inward" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
             <Plus size={13} /> Receive Stock
           </Link>
-          <Link href="/accounting/ledgers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 shadow-blue-500/10 whitespace-nowrap">
+          <Link href="/accounting/ledgers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
             <Plus size={13} /> Record Payment
           </Link>
-          <Link href="/franchise/dealers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-xs font-bold shadow-sm transition-all active:scale-95 shadow-emerald-500/10 whitespace-nowrap">
+          <Link href="/franchise/dealers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
             <Plus size={13} /> Create Dealer
           </Link>
         </div>

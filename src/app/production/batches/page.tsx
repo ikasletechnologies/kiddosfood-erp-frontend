@@ -163,13 +163,7 @@ function ProductBatchesRegistry() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <PackageCheck className="h-5 w-5 text-[#f58220]" />
-          Batch Manufacturing
-        </h1>
-      </div>
+      {/* ── Main Content ── */}
 
       <div className="max-w-screen-2xl mx-auto px-6 py-5 space-y-5">
 

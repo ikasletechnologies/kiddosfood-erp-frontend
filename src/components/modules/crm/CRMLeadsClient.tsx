@@ -118,25 +118,14 @@ export default function CRMLeadsClient() {
   return (
     <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8 font-sans">
       <div className="p-8 space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest">
-            <Link href="/" className="hover:text-[#7C3AED]">Dashboard</Link>
-            <ChevronRight size={10} />
-            <span className="text-[#666]">All Leads</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-black text-[#1A1A1A] dark:text-white">
-              Lead Management
-            </h1>
-            <Link
-              href="/crm/leads/new"
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#D81159] hover:bg-[#B00E4A] text-white rounded-lg font-bold text-[13px] transition-all active:scale-95 shadow-lg shadow-pink-200/50"
-            >
-              <Plus size={18} strokeWidth={3} />
-              Add Lead
-            </Link>
-          </div>
+        <div className="flex items-center justify-end">
+          <Link
+            href="/crm/leads/new"
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#D81159] hover:bg-[#B00E4A] text-white rounded-lg font-bold text-[13px] transition-all active:scale-95 shadow-lg shadow-pink-200/50"
+          >
+            <Plus size={18} strokeWidth={3} />
+            Add Lead
+          </Link>
         </div>
 
         <div className="flex items-center gap-8 border-b border-[#F0EAF0] dark:border-slate-800">

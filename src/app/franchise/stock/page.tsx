@@ -174,23 +174,8 @@ export default function FranchiseStockPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 py-8 px-4">
-      {/* ── Header ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2.5 bg-orange-500/10 rounded-2xl text-orange-500">
-              <Package size={26} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">
-                Branch Stock & Finished Goods Catalog
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 font-medium text-sm mt-0.5">
-                Monitor your branch physical stock, view pending requests, and order finished goods replenishment from Central HQ.
-              </p>
-            </div>
-          </div>
-        </div>
+      {/* ── Header Toolbar ── */}
+      <div className="flex items-center justify-end gap-6 pb-2 border-b border-slate-200 dark:border-white/10">
 
         <div className="flex items-center gap-2.5 shrink-0">
           <button

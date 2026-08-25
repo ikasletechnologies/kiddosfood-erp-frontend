@@ -200,24 +200,8 @@ export default function ProductBatchesPage() {
 
   return (
     <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-2">
-              <PackageCheck size={22} className="text-orange-500" />
-              Expiry Tracking
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
-              <Sparkles size={12} className="animate-pulse" /> Shelf-Life
-            </span>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isSuper
-              ? "Global batch registry and shelf-life monitoring across all branches"
-              : "Branch batch registry & shelf-life tracking"}
-          </p>
-        </div>
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4">
 
         {/* Filters & Actions */}
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">

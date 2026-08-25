@@ -49,27 +49,25 @@ export default function FranchiseAnalyticsPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 py-6 px-4 pb-16 animate-in fade-in duration-300">
       
-      {/* ── Top Header ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <Link href={monitorId ? `/franchise/dashboard?id=${monitorId}` : "/franchise/dashboard"} className="p-3 bg-white dark:bg-card border border-slate-200 dark:border-white/5 rounded-2xl hover:bg-slate-50 transition-all shadow-sm">
-            <ArrowLeft size={16} className="text-slate-600 dark:text-slate-300" />
+      {/* ── Top Action Toolbar ── */}
+      <div className="flex items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-center gap-3">
+          <Link
+            href={monitorId ? `/franchise/dashboard?id=${monitorId}` : "/franchise/dashboard"}
+            className="p-2 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300"
+          >
+            <ArrowLeft size={14} />
+            <span>Back</span>
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                Distribution Intelligence Engine
-              </h1>
-              {loading && <RefreshCw size={12} className="text-slate-400 animate-spin ml-2" />}
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 font-medium text-xs mt-0.5">
-              {monitorId ? "Historical Intelligence Monitor" : "Analyze margins, trends, and network performance."}
-            </p>
-          </div>
+          {loading && <RefreshCw size={13} className="text-[#F58220] animate-spin" />}
         </div>
 
-        <button onClick={fetchAll} className="flex items-center gap-2 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white px-4 py-2.5 rounded-2xl text-xs font-bold shadow-sm hover:bg-slate-50 transition-all">
-          <RefreshCw size={13} /> Sync Analytics
+        <button
+          onClick={fetchAll}
+          className="flex items-center gap-1.5 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-50 transition-all"
+        >
+          <RefreshCw size={13} />
+          <span>Sync Analytics</span>
         </button>
       </div>
 
@@ -78,11 +76,9 @@ export default function FranchiseAnalyticsPage() {
         <KPICard 
           title="Period Sales" 
           value={fmt(summary?.stats?.totalSales ?? 0)} 
-          trend={summary?.stats?.revenueChangePct ?? "0.0"} 
-          trendType={parseFloat(summary?.stats?.revenueChangePct ?? "0") >= 0 ? "up" : "down"}
           icon={TrendingUp} 
           colorClass="emerald"
-          subtext="Total revenue generated"
+          supportingText="Total revenue generated"
           insight="Gross Receipts"
         />
         <KPICard 
@@ -90,7 +86,7 @@ export default function FranchiseAnalyticsPage() {
           value={fmt(summary?.stats?.inventoryValue ?? 0)} 
           icon={Layers} 
           colorClass="amber"
-          subtext="Value of finished stock"
+          supportingText="Value of finished stock"
           insight={`${summary?.stats?.inventoryItemCount ?? 0} active lines`}
         />
         <KPICard 
@@ -98,7 +94,7 @@ export default function FranchiseAnalyticsPage() {
           value={fmt(summary?.stats?.outstandingAmount ?? 0)} 
           icon={IndianRupee} 
           colorClass="rose"
-          subtext="Dealer outstanding credits"
+          supportingText="Dealer outstanding credits"
           insight={`${summary?.stats?.overdueDealersCount ?? 0} overdue dealers`}
         />
         <KPICard 
@@ -106,7 +102,7 @@ export default function FranchiseAnalyticsPage() {
           value={fmt(summary?.stats?.expensesToday ?? 0)} 
           icon={Building2} 
           colorClass="indigo"
-          subtext="Recorded branch costs"
+          supportingText="Recorded branch costs"
           insight="Operational spend"
         />
       </div>

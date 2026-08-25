@@ -154,12 +154,8 @@ export default function ConfirmPackagingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <ClipboardCheck className="h-5 w-5 text-[#f58220]" />
-          Confirm Packaging
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
 
         <select
           value={selectedFranchiseId}

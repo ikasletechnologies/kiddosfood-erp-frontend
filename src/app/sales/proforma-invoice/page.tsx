@@ -83,12 +83,7 @@ export default function ProformaInvoicePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <FileText className="h-5 w-5 text-[#f58220]" />
-          Proforma Invoice
-        </h1>
-      </div>
+      {/* ── Page Content ── */}
 
       <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
         <div className="grid grid-cols-4 gap-4">

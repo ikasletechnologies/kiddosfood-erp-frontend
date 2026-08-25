@@ -126,12 +126,8 @@ export default function LabelsBarcodesPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 print:bg-white">
 
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 print:hidden">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Barcode className="h-5 w-5 text-[#f58220]" />
-          Labels & Barcodes
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3 print:hidden">
 
         <select
           value={selectedFranchiseId}

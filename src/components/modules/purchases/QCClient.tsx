@@ -125,12 +125,8 @@ export default function QCClient() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-[#f58220]" />
-          Quality Control
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
           <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
         </button>

@@ -85,16 +85,7 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Briefcase className="text-purple-500" size={24} />
-            Business Partners
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Manage your retailers and distributors
-          </p>
-        </div>
+      <div className="flex items-center justify-end pb-2 border-b border-slate-200 dark:border-white/10">
         <button
           onClick={() => setShowAddModal(true)}
           className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/20 active:scale-95"

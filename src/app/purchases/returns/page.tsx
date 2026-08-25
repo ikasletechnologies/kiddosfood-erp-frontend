@@ -85,19 +85,7 @@ export default function PurchaseReturnsPage() {
     <div className="min-h-screen bg-white dark:bg-slate-950 p-6 space-y-8 animate-in fade-in duration-500">
       <div className="max-w-[1500px] mx-auto space-y-8">
         
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-             <div className="w-14 h-14 rounded-2xl bg-orange-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20">
-                <HistoryIcon size={28} />
-             </div>
-             <div>
-                <h1 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Purchase Returns</h1>
-                <p className="text-sm text-gray-500 mt-0.5 font-medium flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                  Monitor rejected goods and manage vendor refund claims
-                </p>
-             </div>
-          </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-end gap-6">
           <div className="flex gap-2">
             <a href="/purchases/rfq" className="px-6 py-2.5 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-500 hover:bg-gray-100 transition-all flex items-center gap-2">RFQ</a>
             <button
@@ -107,7 +95,7 @@ export default function PurchaseReturnsPage() {
               <PlusIcon size={16} /> New Return
             </button>
           </div>
-        </header>
+        </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
           {[

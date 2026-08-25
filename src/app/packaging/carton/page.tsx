@@ -127,19 +127,7 @@ export default function CartonPackingPage() {
     <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-white/5 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-[#F97316] rounded-2xl shadow-lg shadow-[#F97316]/20 text-white">
-            <Package size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter uppercase">
-              Carton <span className="text-[#F97316]">Packing</span>
-            </h1>
-            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-              Consolidate Approved Batches & Assign Lot Numbers
-            </p>
-          </div>
-        </div>
+        {/* Search Toolbar */}
         <div className="relative w-full md:w-80">
           <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
           <input

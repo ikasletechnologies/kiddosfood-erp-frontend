@@ -50,14 +50,10 @@ export default function ShiftsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Shift Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Create shifts and assign employees</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           <button onClick={() => setShowAssignForm(true)} className="border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Assign Shift</button>
-          <button onClick={() => setShowShiftForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+          <button onClick={() => setShowShiftForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" /> New Shift
           </button>
         </div>

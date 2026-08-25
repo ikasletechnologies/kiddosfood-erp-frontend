@@ -348,13 +348,6 @@ export default function GRNPage() {
           >
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <PackageIcon className="h-5 w-5 text-[#f58220]" />
-            <div>
-              <h1 className="text-base font-bold text-gray-800">Goods Receipt (GRN)</h1>
-              <p className="text-xs text-gray-500">Manage vendor shipment verification and stock reconciliation</p>
-            </div>
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex p-1 bg-gray-100 rounded-lg border border-gray-200">

@@ -90,17 +90,7 @@ export default function TransitStockPage() {
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50/50">
       <div className="px-6 py-5 border-b border-gray-200 bg-white shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
-              <Truck size={20} />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Transit Stock</h1>
-              <p className="text-sm text-gray-500">Track dispatched items currently in transit.</p>
-            </div>
-          </div>
-        </div>
+
 
         <div className="flex items-center gap-4">
           <div className="relative w-72">

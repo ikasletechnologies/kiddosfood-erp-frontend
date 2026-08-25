@@ -19,10 +19,14 @@ import {
   Sun,
   Moon,
   ExternalLink,
+  Sparkles,
+  Command,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { clsx } from "clsx";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
 import { SUPER_ADMIN_SIDEBAR, menuItems } from "@/config/navigation";
@@ -30,16 +34,18 @@ import { useTheme } from "@/context/ThemeContext";
 import { useNotification, Notification } from "@/context/NotificationContext";
 import Link from "next/link";
 
-
 function NIcon({ type }: { type: Notification["type"] }) {
   if (type === "success") return <CheckCircle size={14} className="text-emerald-500 shrink-0" />;
-  if (type === "alert")   return <AlertTriangle size={14} className="text-red-500 shrink-0" />;
+  if (type === "alert") return <AlertTriangle size={14} className="text-rose-500 shrink-0" />;
   if (type === "warning") return <AlertCircle size={14} className="text-amber-500 shrink-0" />;
   return <Info size={14} className="text-blue-500 shrink-0" />;
 }
 
 function HBtn({
-  children, title, onClick, badge,
+  children,
+  title,
+  onClick,
+  badge,
 }: {
   children: React.ReactNode;
   title?: string;
@@ -50,11 +56,11 @@ function HBtn({
     <button
       title={title}
       onClick={onClick}
-      className="relative p-2 rounded-xl text-gray-500 dark:text-slate-400 hover:bg-primary/5 dark:hover:bg-white/5 hover:text-primary transition-all duration-150"
+      className="relative p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition-all duration-150"
     >
       {children}
       {badge !== undefined && (
-        <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-[#0f1117] leading-none">
+        <span className="absolute -top-0.5 -right-0.5 min-w-[17px] h-4 px-1 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white dark:border-[#0f1117] leading-none">
           {badge}
         </span>
       )}
@@ -72,19 +78,24 @@ function SearchModal({ onClose }: { onClose: () => void }) {
     ? menuItems.filter((s) => s.label.toLowerCase().includes(q.toLowerCase()))
     : menuItems;
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { setSelectedIndex(0); }, [q]);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { 
-      if (e.key === "Escape") onClose(); 
+    setSelectedIndex(0);
+  }, [q]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex(prev => (prev < filtered.length - 1 ? prev + 1 : prev));
+        setSelectedIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : prev));
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex(prev => (prev > 0 ? prev - 1 : 0));
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
       }
       if (e.key === "Enter" && filtered[selectedIndex]) {
         e.preventDefault();
@@ -97,34 +108,42 @@ function SearchModal({ onClose }: { onClose: () => void }) {
   }, [onClose, filtered, selectedIndex, router]);
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-start justify-center pt-20 bg-black/30 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[200] flex items-start justify-center pt-20 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-xl bg-white dark:bg-[#0f1117] rounded-2xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden"
+        className="w-full max-w-xl bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-white/5">
-          <Search size={16} className="text-primary shrink-0" />
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-white/5">
+          <Search size={18} className="text-[#F58220] shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search menus, pos, orders, settings…"
-            className="flex-1 text-sm text-gray-900 dark:text-white bg-transparent outline-none placeholder:text-gray-400"
+            placeholder="Search modules, purchase orders, recipes, inventory..."
+            className="flex-1 text-sm font-semibold text-slate-900 dark:text-white bg-transparent outline-none placeholder:text-slate-400"
           />
           {q && (
-            <button onClick={() => setQ("")} className="text-gray-400 hover:text-gray-600 transition-colors">
-              <X size={15} />
+            <button
+              onClick={() => setQ("")}
+              className="text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X size={16} />
             </button>
           )}
-          <kbd className="hidden sm:flex items-center gap-1 text-[10px] font-medium text-gray-400 border border-gray-200 dark:border-white/10 rounded px-1.5 py-0.5">
+          <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-0.5">
             ESC
           </kbd>
         </div>
-        <div className="max-h-64 overflow-y-auto hide-scrollbar py-1">
+
+        <div className="max-h-80 overflow-y-auto custom-scrollbar py-2 px-2">
           {filtered.length > 0 ? (
             filtered.map((item, index) => {
               const Icon = item.icon || Search;
+              const isSelected = index === selectedIndex;
               return (
                 <button
                   key={item.label + item.href}
@@ -134,21 +153,32 @@ function SearchModal({ onClose }: { onClose: () => void }) {
                   }}
                   onMouseEnter={() => setSelectedIndex(index)}
                   className={clsx(
-                    "w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left",
-                    index === selectedIndex 
-                      ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-foreground" 
-                      : "text-gray-700 dark:text-slate-300 hover:bg-primary/5 dark:hover:bg-white/5"
+                    "w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all text-left",
+                    isSelected
+                      ? "bg-orange-50 dark:bg-orange-950/30 text-[#F58220] dark:text-orange-400"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
                   )}
                 >
-                  <Icon size={13} className={clsx("shrink-0", index === selectedIndex ? "text-primary dark:text-primary-foreground" : "text-gray-300 dark:text-slate-600")} />
-                  {item.label}
+                  <div className="flex items-center gap-3">
+                    <Icon
+                      size={15}
+                      className={clsx(
+                        "shrink-0",
+                        isSelected ? "text-[#F58220]" : "text-slate-400"
+                      )}
+                    />
+                    <span>{item.label}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-400 opacity-60">
+                    Jump →
+                  </span>
                 </button>
               );
             })
           ) : (
-            <p className="px-4 py-6 text-center text-sm text-gray-400 dark:text-slate-500">
-              No results for &quot;{q}&quot;
-            </p>
+            <div className="px-4 py-8 text-center text-xs text-slate-400">
+              No matching modules for &quot;{q}&quot;
+            </div>
           )}
         </div>
       </div>
@@ -163,30 +193,47 @@ export default function RefrensHeader() {
   const { toggleCollapsed, toggleMobileOpen } = useSidebar();
   const { theme, toggleTheme } = useTheme();
 
-  const [showSearch,        setShowSearch]        = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfile,       setShowProfile]       = useState(false);
-  
-  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } = useNotification();
+  const [showProfile, setShowProfile] = useState(false);
 
-  const notifRef   = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } =
+    useNotification();
+
+  const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   const initials =
-    user?.fullName?.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "NX";
+    user?.fullName
+      ?.split(" ")
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "KF";
+
+  const searchParams = useSearchParams();
 
   const getPageTitle = () => {
+    const parentParam = searchParams?.get("parent");
+    const fullPath = parentParam ? `${pathname}?parent=${parentParam}` : pathname;
+
     for (const section of SUPER_ADMIN_SIDEBAR) {
       for (const item of section.items) {
-        if (item.href === pathname) return item.label;
+        if (item.href === fullPath) return item.label;
         if (item.children) {
-          const child = item.children.find((c) => c.href === pathname);
+          const child = item.children.find((c) => c.href === fullPath || c.href === pathname);
           if (child) return child.label;
         }
       }
     }
-    // Fallback for special cases or home
-    if (pathname === "/") return "Overview";
+
+    for (const section of SUPER_ADMIN_SIDEBAR) {
+      for (const item of section.items) {
+        if (item.href === pathname) return item.label;
+      }
+    }
+
+    if (pathname === "/") return "Executive Dashboard";
     return "";
   };
 
@@ -194,8 +241,10 @@ export default function RefrensHeader() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (notifRef.current   && !notifRef.current.contains(e.target as Node))   setShowNotifications(false);
-      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setShowProfile(false);
+      if (notifRef.current && !notifRef.current.contains(e.target as Node))
+        setShowNotifications(false);
+      if (profileRef.current && !profileRef.current.contains(e.target as Node))
+        setShowProfile(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -203,13 +252,13 @@ export default function RefrensHeader() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
         setShowSearch(true);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   if (pathname === "/login") return null;
@@ -218,74 +267,98 @@ export default function RefrensHeader() {
     <>
       {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
 
-      <header className="w-full h-14 bg-white dark:bg-[#0f1117] border-b border-slate-100 dark:border-white/5 flex items-center px-4 gap-3 sticky top-0 z-40 shadow-sm">
-
-        {/* ── Left: Hamburger + Logo ──────────────────── */}
+      <header className="w-full h-16 bg-white/95 dark:bg-[#0b0c10]/95 backdrop-blur-md border-b border-slate-200/70 dark:border-white/5 flex items-center px-4 sm:px-6 gap-3 sticky top-0 z-40">
+        {/* ── Left: Hamburger toggles ──────────────────── */}
         <button
           onClick={toggleMobileOpen}
-          className="lg:hidden p-2 -ml-2 rounded-xl text-gray-500 hover:bg-primary/10 hover:text-primary transition-colors"
-          aria-label="Toggle Menu"
+          className="lg:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+          aria-label="Toggle Navigation"
         >
-          <MenuIcon size={20} />
+          <MenuIcon size={19} />
         </button>
 
         <button
           onClick={toggleCollapsed}
-          className="hidden lg:flex p-2 -ml-2 rounded-xl text-gray-500 hover:bg-primary/10 hover:text-primary transition-colors"
+          className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
           title="Toggle Sidebar"
         >
-          <MenuIcon size={20} />
+          <MenuIcon size={19} />
         </button>
 
         {/* Dynamic Page Title */}
         {pageTitle && (
-          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
+          <div className="flex items-center gap-3 pl-1 animate-in fade-in duration-200">
             <div className="w-px h-5 bg-slate-200 dark:bg-white/10" />
-            <h1 className="text-[15px] font-black text-gray-900 dark:text-white tracking-tight uppercase">
+            <h1 className="text-[14px] font-black text-slate-900 dark:text-white tracking-tight uppercase">
               {pageTitle}
             </h1>
           </div>
         )}
 
-
         <div className="flex-1" />
 
-        {/* ── Right Actions ──────────────────────────── */}
-        <div className="flex items-center gap-1">
+        {/* ── Right Navigation & User Controls ──────────── */}
+        <div className="flex items-center gap-1 sm:gap-2">
+          {/* Spotlight Search Trigger */}
+          <button
+            type="button"
+            onClick={() => setShowSearch(true)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/80 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white hover:border-slate-300 transition-all group"
+          >
+            <Search size={14} className="text-slate-400 group-hover:text-[#F58220] transition-colors" />
+            <span className="hidden sm:inline font-medium">Quick search...</span>
+            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded px-1.5 py-0.5 shadow-sm">
+              <Command size={10} /> K
+            </kbd>
+          </button>
 
-          {/* Search */}
-          <HBtn title="Omni Search (Ctrl+K)" onClick={() => setShowSearch(true)}>
-            <Search size={18} strokeWidth={1.8} />
-          </HBtn>
+          {/* Theme Switcher */}
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white transition-colors"
+            title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
 
-          {/* Notifications */}
+          {/* Notifications Center */}
           <div className="relative" ref={notifRef}>
             <HBtn
-              title="System Alerts"
+              title="Notifications"
               badge={unreadCount > 0 ? unreadCount : undefined}
-              onClick={() => { setShowNotifications((v) => !v); setShowProfile(false); }}
+              onClick={() => {
+                setShowNotifications((v) => !v);
+                setShowProfile(false);
+              }}
             >
-              <Bell size={18} strokeWidth={1.8} />
+              <Bell size={18} />
             </HBtn>
 
             {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-[#0f1117] rounded-2xl border border-slate-100 dark:border-white/10 shadow-2xl shadow-black/10 overflow-hidden z-50">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-50 dark:border-white/5">
-                  <h3 className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">
-                    Telemetry
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/5">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      Live Telemetry Alerts
+                    </h3>
                     {unreadCount > 0 && (
-                      <span className="ml-2 px-1.5 py-0.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 text-[10px] font-bold rounded-full">
-                        {unreadCount}
+                      <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-950 text-orange-600 dark:text-orange-400 text-[10px] font-bold rounded-full">
+                        {unreadCount} new
                       </span>
                     )}
-                  </h3>
+                  </div>
                   {unreadCount > 0 && (
-                    <button onClick={markAllAsRead} className="text-[10px] font-black uppercase text-indigo-500 hover:underline">
+                    <button
+                      onClick={markAllAsRead}
+                      className="text-[10px] font-black uppercase text-[#F58220] hover:underline tracking-wider"
+                    >
                       Acknowledge All
                     </button>
                   )}
                 </div>
-                <div className="max-h-72 overflow-y-auto hide-scrollbar divide-y divide-slate-50 dark:divide-white/5">
+
+                <div className="max-h-80 overflow-y-auto custom-scrollbar divide-y divide-slate-50 dark:divide-white/[0.02]">
                   {notifications.map((n) => (
                     <div
                       key={n.id}
@@ -297,118 +370,127 @@ export default function RefrensHeader() {
                         }
                       }}
                       className={clsx(
-                        "group w-full flex items-start gap-4 px-4 py-4 text-left cursor-pointer hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors",
-                        !n.read && "bg-slate-50/40 dark:bg-indigo-900/5"
+                        "group flex items-start gap-3.5 px-5 py-3.5 text-left cursor-pointer hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors",
+                        !n.read && "bg-orange-50/30 dark:bg-orange-950/10"
                       )}
                     >
-                      <div className="mt-0.5"><NIcon type={n.type} /></div>
+                      <div className="mt-0.5">
+                        <NIcon type={n.type} />
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-bold text-gray-900 dark:text-white leading-tight uppercase tracking-tight flex items-center justify-between">
-                          {n.title}
-                          {n.link && <ExternalLink size={10} className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />}
-                        </p>
-                        <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1 italic leading-snug">{n.message}</p>
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-2 font-black uppercase tracking-tighter flex items-center gap-1.5">
-                          {n.time}
-                          {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />}
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                            {n.title}
+                          </p>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            {n.time}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                          {n.message}
                         </p>
                       </div>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); removeNotification(n.id); }}
-                        className="p-1 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeNotification(n.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-1"
                         title="Dismiss"
                       >
-                        <X size={14} />
+                        <X size={13} />
                       </button>
                     </div>
                   ))}
+
                   {notifications.length === 0 && (
                     <div className="px-4 py-8 text-center">
-                      <Bell size={24} className="mx-auto text-gray-300 dark:text-white/10 mb-2" />
-                      <p className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">No Notifications</p>
+                      <Bell size={24} className="mx-auto text-slate-300 dark:text-white/10 mb-2" />
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">
+                        All Systems Normal
+                      </p>
                     </div>
                   )}
                 </div>
-                <div className="px-4 py-2.5 border-t border-slate-50 dark:border-white/5">
-                  <a href="/alerts" className="w-full text-[10px] text-indigo-500 font-black uppercase hover:underline text-center block tracking-widest">
-                    All System Logs →
-                  </a>
+
+                <div className="px-4 py-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.01]">
+                  <Link
+                    href="/alerts"
+                    onClick={() => setShowNotifications(false)}
+                    className="text-[11px] text-[#F58220] font-black uppercase text-center block tracking-wider hover:underline"
+                  >
+                    View Full System Audit Logs →
+                  </Link>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Profile Avatar */}
+          {/* User Profile Avatar & Menu */}
           <div className="relative ml-1" ref={profileRef}>
             <button
-              onClick={() => { setShowProfile((v) => !v); setShowNotifications(false); }}
-              className="flex items-center gap-1.5 pl-2 border-l border-slate-100 dark:border-white/5 group"
-              aria-label="Account Settings"
+              onClick={() => {
+                setShowProfile((v) => !v);
+                setShowNotifications(false);
+              }}
+              className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10 group"
+              aria-label="User profile options"
             >
-              <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 font-black text-sm group-hover:scale-105 transition-all ring-2 ring-white dark:ring-[#0f1117] shadow-md uppercase">
+              <div className="w-8 h-8 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 font-black text-xs group-hover:scale-105 transition-all shadow-sm uppercase">
                 {initials}
+              </div>
+              <div className="hidden xl:block text-left">
+                <p className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                  {user?.fullName || "HQ Admin"}
+                </p>
+                <p className="text-[10px] text-slate-400 font-medium leading-tight uppercase">
+                  {user?.role || "Super Admin"}
+                </p>
               </div>
               <ChevronDown
                 size={13}
-                strokeWidth={2.5}
                 className={clsx(
-                  "text-gray-400 dark:text-slate-500 transition-transform duration-200",
+                  "text-slate-400 transition-transform duration-200",
                   showProfile && "rotate-180"
                 )}
               />
             </button>
 
             {showProfile && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#0f1117] rounded-2xl border border-slate-100 dark:border-white/10 shadow-2xl shadow-black/10 overflow-hidden z-50">
-                <div className="flex items-center gap-3 px-4 py-4">
-                  <div className="relative">
-                    <div className="w-12 h-12 rounded-full bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 font-black text-base shrink-0 shadow-lg border-2 border-white dark:border-[#0f1117] uppercase">
-                      {initials}
-                    </div>
-                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white dark:border-[#0f1117] shadow-sm" />
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
+                <div className="px-5 py-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-sm flex items-center justify-center uppercase shadow-md">
+                    {initials}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-gray-900 dark:text-white truncate uppercase tracking-tighter">
-                      {user?.fullName || "Kiddos Admin"}
+                    <p className="text-xs font-black text-slate-900 dark:text-white truncate">
+                      {user?.fullName || "HQ Executive"}
                     </p>
-                    <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate mt-0.5">
-                      {user?.email || "admin@kiddosfood.com"}
+                    <p className="text-[10px] text-slate-400 truncate font-medium">
+                      {user?.email || "hq@kiddosfoods.com"}
                     </p>
                   </div>
                 </div>
 
-                <div className="mx-4 border-t border-slate-100 dark:border-white/5" />
-
-                <div className="py-1.5">
+                <div className="p-2 space-y-0.5">
                   <Link
                     href="/settings/user/profile"
-                    className="flex items-center gap-3 px-4 py-2.5 text-[11px] font-black uppercase text-gray-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-950 transition-colors tracking-widest"
+                    onClick={() => setShowProfile(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
                   >
-                    <Settings size={15} className="text-gray-400 shrink-0" />
-                    User Settings
+                    <Settings size={15} className="text-slate-400" />
+                    Account Settings
                   </Link>
+
                   <button
-                    onClick={toggleTheme}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[11px] font-black uppercase text-gray-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 hover:text-slate-950 transition-colors tracking-widest"
+                    onClick={() => {
+                      setShowProfile(false);
+                      logout();
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors text-left"
                   >
-                    {theme === "dark" ? (
-                      <>
-                        <Sun size={15} className="text-gray-400 shrink-0" />
-                        Bright Aspect
-                      </>
-                    ) : (
-                      <>
-                        <Moon size={15} className="text-gray-400 shrink-0" />
-                        Dim Aspect
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={logout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-[11px] font-black uppercase text-gray-700 dark:text-slate-300 hover:bg-red-50 dark:hover:bg-red-900/10 hover:text-red-600 transition-colors tracking-widest"
-                  >
-                    <LogOut size={15} className="text-gray-400 shrink-0" />
-                    Log Out
+                    <LogOut size={15} className="text-rose-500" />
+                    Sign Out
                   </button>
                 </div>
               </div>

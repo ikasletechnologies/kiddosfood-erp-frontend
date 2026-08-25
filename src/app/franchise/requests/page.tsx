@@ -547,22 +547,7 @@ function FranchiseRequestsContent() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       {/* ── Page Header ────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-card p-6 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-orange-500/10 dark:bg-orange-500/20 flex items-center justify-center text-orange-500">
-            <Send size={24} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-              {isAdmin ? "Franchise Product Requests" : "Request Finished Goods"}
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-              {isAdmin
-                ? "Manage franchise demand, stock reservation, dispatch logistics, and delivery confirmation"
-                : "Submit demand to Central HQ and track production, dispatch, and goods receipt"}
-            </p>
-          </div>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 bg-white dark:bg-card p-4 rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm">
 
         <div className="flex items-center gap-2.5">
           <button
