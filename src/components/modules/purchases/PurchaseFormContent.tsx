@@ -44,6 +44,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     purchaseType, setPurchaseType,
     paymentTerms, setPaymentTerms,
     poStatus,
+    discountAmount, setDiscountAmount,
+    freightCost, setFreightCost,
     internalNotes, setInternalNotes,
     vendorNotes, setVendorNotes,
     setSelectedVendor,
