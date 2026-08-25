@@ -99,7 +99,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         vendorId: selectedVendor!.id,
         advancePaid: totals.appliedAdvance,
         notes: notes || internalNotes,
-        warehouseId: warehouseId,
+        warehouseId: warehouseId || undefined,
+        franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
         purchaseType: purchaseType,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
         items: items.map(item => ({

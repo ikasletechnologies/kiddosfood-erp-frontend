@@ -201,6 +201,15 @@ export default function SalesOrdersPage() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
 
+  // Read-only "view" mode — reuses the edit form's layout (via a disabled
+  // fieldset) instead of a separate component, since it needs to show
+  // exactly the same fields. viewOrderRef carries the loaded order's
+  // status/id so the footer can offer Confirm / Create Proforma without
+  // re-fetching, and gets patched in-place after those actions succeed.
+  const [readOnly, setReadOnly] = useState(false);
+  const [viewOrderRef, setViewOrderRef] = useState<any>(null);
+  const autoOpenedIdRef = useRef<string | null>(null);
+
   // Dropdown floating close triggers
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
   const customerDropRef = useRef<HTMLDivElement>(null);
@@ -263,14 +272,19 @@ export default function SalesOrdersPage() {
   }, [fetchAllData]);
 
   // Deep-link from Estimate's "View Sales Order" / post-Convert redirect
-  // (?id=<salesOrderId>) — filter the list down to just that order so it's
-  // immediately visible instead of buried in the full list.
+  // (?id=<salesOrderId>) — open that order directly (read-only) instead of
+  // landing on a blank "New Order" form or just filtering the list.
+  // autoOpenedIdRef guards against re-opening on every later orders
+  // refresh (e.g. after Confirm) once the user has navigated away.
   useEffect(() => {
     if (orders.length === 0) return;
     const id = new URLSearchParams(window.location.search).get("id");
-    if (!id) return;
+    if (!id || autoOpenedIdRef.current === id) return;
     const match = orders.find((o) => o.id === id);
-    if (match) setSearch(match.orderNo || match.orderNumber || "");
+    if (match) {
+      autoOpenedIdRef.current = id;
+      openOrderView(match);
+    }
   }, [orders]);
 
   // Click outside logic
@@ -368,6 +382,8 @@ export default function SalesOrdersPage() {
 
   const resetForm = () => {
     setDraftId(null);
+    setReadOnly(false);
+    setViewOrderRef(null);
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -416,6 +432,7 @@ export default function SalesOrdersPage() {
     const apiPayload = {
       customerId: selectedCustomer?.id || undefined,
       customerName: selectedCustomer?.name || customerSearch || undefined,
+      customerPhone: customerPhone || undefined,
       deliveryDate: dueDate || undefined,
       notes: description || undefined,
       discountAmount: undefined,
@@ -443,6 +460,8 @@ export default function SalesOrdersPage() {
   };
 
   const handleEdit = (order: any) => {
+    setReadOnly(false);
+    setViewOrderRef(null);
     setDraftId(order.id);
     setOrderNo(order.orderNo);
     const raw = order._rawState || {};
@@ -463,15 +482,19 @@ export default function SalesOrdersPage() {
     if (raw.items && raw.items.length > 0) {
       setItems(raw.items);
     } else if (order.items && order.items.length > 0) {
+      // API SalesOrderItem shape is productName/quantity/taxPercent, not the
+      // description/qty/taxPct fields this used to read (those only ever
+      // existed on locally-cached draft items) — real orders rendered every
+      // item row blank until this matched the actual field names.
       setItems(order.items.map((it: any) => ({
         id: it.id || Math.random().toString(36).slice(2),
         productId: it.productId || "",
-        itemSearch: it.description,
-        qty: it.qty,
+        itemSearch: it.productName ?? it.description ?? "",
+        qty: it.quantity ?? it.qty ?? 0,
         unit: it.unit || "NONE",
         rate: it.rate || 0,
-        taxPct: it.taxPct || 0,
-        taxLabel: TAX_OPTIONS.find(o => o.value === (it.taxPct || 0))?.label || "NONE",
+        taxPct: it.taxPercent ?? it.taxPct ?? 0,
+        taxLabel: TAX_OPTIONS.find(o => o.value === (it.taxPercent ?? it.taxPct ?? 0))?.label || "NONE",
         remarks: it.remarks || "",
       })));
     } else {
@@ -479,6 +502,17 @@ export default function SalesOrdersPage() {
     }
 
     setView("edit");
+  };
+
+  // Read-only view for a specific Sales Order (deep-linked via ?id=, e.g.
+  // right after converting an Estimate). Reuses handleEdit's field
+  // population — same layout, same data — then locks it down: the form's
+  // inputs go inside a disabled <fieldset> and the footer swaps Save
+  // buttons for Confirm / Create Proforma Invoice.
+  const openOrderView = (order: any) => {
+    handleEdit(order);
+    setReadOnly(true);
+    setViewOrderRef(order);
   };
 
   // DRAFT -> CONFIRMED. Only a CONFIRMED Sales Order can generate a
@@ -490,6 +524,7 @@ export default function SalesOrdersPage() {
       await api.patch(`/api/sales/orders/${order.id}`, { status: "CONFIRMED" });
       showToast("Sales Order confirmed", "success");
       fetchAllData();
+      setViewOrderRef((prev: any) => (prev && prev.id === order.id ? { ...prev, status: "CONFIRMED" } : prev));
     } catch (err: any) {
       showToast(err?.response?.data?.error || "Failed to confirm Sales Order", "error");
     }
@@ -683,6 +718,12 @@ export default function SalesOrdersPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
+                if (readOnly) {
+                  setView("list");
+                  resetForm();
+                  window.history.replaceState({}, "", window.location.pathname);
+                  return;
+                }
                 const hasInput = selectedCustomer || items.some(it => it.itemSearch !== "");
                 if (hasInput) {
                   handleSave("DRAFT");
@@ -697,12 +738,16 @@ export default function SalesOrdersPage() {
             </button>
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-[#f58220]" />
-              {view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
+              {readOnly ? `Sales Order ${orderNo}` : view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
             </h2>
           </div>
         </div>
 
         {/* Scrollable Form Body */}
+        <fieldset
+          disabled={readOnly}
+          style={{ border: 0, margin: 0, padding: 0, display: "contents" }}
+        >
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {/* Customer + Order Details */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -1086,39 +1131,85 @@ export default function SalesOrdersPage() {
             </div>
           </div>
         </div>
+        </fieldset>
 
         {/* Action Bar */}
         <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={() => { setView("list"); resetForm(); }}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSave("DRAFT")}
-            disabled={saving}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 transition-colors disabled:opacity-50"
-          >
-            Save as Draft
-          </button>
-          <button
-            type="button"
-            onClick={() => showToast("Share links generated! Ready for PDF dispatch.", "success")}
-            className="px-4 py-2 text-sm font-semibold border border-orange-200 hover:bg-orange-50 rounded-lg text-[#f58220] transition-colors"
-          >
-            Share
-          </button>
-          <button
-            type="button"
-            onClick={() => handleSave("OPEN")}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
-          </button>
+          {readOnly ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setView("list");
+                  resetForm();
+                  window.history.replaceState({}, "", window.location.pathname);
+                }}
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
+              >
+                Back to List
+              </button>
+              {viewOrderRef?.status === "DRAFT" && (
+                <button
+                  type="button"
+                  onClick={(e) => handleConfirm(viewOrderRef, e)}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                >
+                  <Check className="h-4 w-4" /> Confirm Order
+                </button>
+              )}
+              {viewOrderRef?.status === "CONFIRMED" && !viewOrderRef?.proformaInvoiceId && (
+                <button
+                  type="button"
+                  onClick={(e) => handleCreateProforma(viewOrderRef, e)}
+                  disabled={convertingId === viewOrderRef?.id}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {convertingId === viewOrderRef?.id ? "Creating..." : "Create Proforma Invoice"}
+                </button>
+              )}
+              {viewOrderRef?.proformaInvoiceId && (
+                <a
+                  href={`/sales/proforma-invoice?id=${viewOrderRef.proformaInvoiceId}`}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  View Proforma Invoice
+                </a>
+              )}
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => { setView("list"); resetForm(); }}
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave("DRAFT")}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 transition-colors disabled:opacity-50"
+              >
+                Save as Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => showToast("Share links generated! Ready for PDF dispatch.", "success")}
+                className="px-4 py-2 text-sm font-semibold border border-orange-200 hover:bg-orange-50 rounded-lg text-[#f58220] transition-colors"
+              >
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSave("OPEN")}
+                disabled={saving}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
