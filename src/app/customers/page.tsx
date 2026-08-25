@@ -191,7 +191,7 @@ export default function PartiesPage() {
       balanceMatch = (filters.toReceive && bal > 0) || (filters.toPay && bal < 0);
     }
 
-    if (!checkStatus && !checkBalance) return false;
+    if (!checkStatus && !checkBalance) return true;
 
     return statusMatch && balanceMatch;
   });
