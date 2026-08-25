@@ -117,6 +117,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
           if (po.paymentTerms) setPaymentTerms(po.paymentTerms);
           if (po.internalNotes) setInternalNotes(po.internalNotes);
           if (po.vendorNotes) setVendorNotes(po.vendorNotes);
+          if (po.discountAmount !== undefined) setDiscountAmount(Number(po.discountAmount) || 0);
+          if (po.freightCost !== undefined) setFreightCost(Number(po.freightCost) || 0);
           if (po.status) setPoStatus(po.status);
           setIsLoaded(true);
         }).catch(err => {

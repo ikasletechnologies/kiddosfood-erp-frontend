@@ -6,6 +6,7 @@ import { productionApi, inventoryApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
+import { convertUnit } from "@/lib/unitConversion";
 
 const STAGES = ["QUEUED", "MIXING", "COOKING", "COOLING", "READY_FOR_QC"] as const;
 
@@ -103,17 +104,26 @@ export default function ActiveProductionRunsClient() {
   }, [fetchHistory]);
 
   // Resolves available stock for one recipe ingredient, scoped to the run's
-  // warehouse when known.
+  // warehouse when known. Stock is reported in the inventory item's own unit
+  // (e.g. KG) while `required` below is computed in the recipe item's unit
+  // (item.unit, e.g. g) — those are independent fields with no guarantee
+  // they match, so the raw figure is converted into item.unit here before
+  // it's ever compared against `required`.
   const getAvailableFor = (run: any, item: any): number => {
     const stockList = run.warehouseId ? warehouseStockByWarehouse[run.warehouseId] : undefined;
+    let raw = item.inventoryItem?.currentStock || 0;
+    let rawUnit = item.inventoryItem?.unit;
     if (stockList) {
       const match = stockList.find((s: any) =>
         s.id === item.inventoryItemId ||
         (s.sku && item.inventoryItem?.sku && s.sku.trim().toLowerCase() === item.inventoryItem.sku.trim().toLowerCase())
       );
-      if (match) return match.availableStock || 0;
+      if (match) {
+        raw = match.availableStock || 0;
+        rawUnit = match.unit || rawUnit;
+      }
     }
-    return item.inventoryItem?.currentStock || 0;
+    return convertUnit(raw, rawUnit, item.unit);
   };
 
   const handleAdvanceStage = async (id: string, stage: string) => {
@@ -315,9 +325,9 @@ export default function ActiveProductionRunsClient() {
                             return (
                               <tr key={idx} className="text-rose-900 font-bold">
                                 <td className="py-2">{item.inventoryItem?.name || "Ingredient"}</td>
-                                <td className="py-2">{required.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2">{available.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2">{required.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2">{available.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
                               </tr>
                             );
                           })}
