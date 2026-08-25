@@ -376,9 +376,9 @@ export default function DeliveryChallanPage() {
       }));
     } catch { /* ignore unavailable storage */ }
     const returnTo = encodeURIComponent("/sales/delivery-challan");
-    if (type === "CUSTOMER") router.push(`/customers/add?returnTo=${returnTo}`);
-    else if (type === "DEALER") router.push(`/franchise/dealers/add?returnTo=${returnTo}&franchiseId=${encodeURIComponent(sourceFranchiseId)}`);
-    else router.push(`/franchise/add?returnTo=${returnTo}`);
+    if (type === "CUSTOMER") router.push(`/customers`);
+    else if (type === "DEALER") router.push(`/franchise/dealers`);
+    else router.push(`/franchise`);
   };
 
   // Click outside handlers

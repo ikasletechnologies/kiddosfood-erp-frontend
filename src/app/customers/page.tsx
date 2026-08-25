@@ -20,13 +20,19 @@ export default function PartiesPage() {
   // implicitly scoped to their own franchiseId (see effectiveFranchiseId below).
   const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [franchisesLoading, setFranchisesLoading] = useState(true);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
 
   useEffect(() => {
-    if (!isSuper) return;
+    if (!isSuper) {
+      setFranchisesLoading(false);
+      return;
+    }
+    setFranchisesLoading(true);
     franchiseApi.getAll()
       .then((res) => setFranchises(res.data ?? []))
-      .catch((err) => console.error("Failed to load franchises list", err));
+      .catch((err) => console.error("Failed to load franchises list", err))
+      .finally(() => setFranchisesLoading(false));
   }, [isSuper]);
 
   // HQ is resolved from the real Franchise row where isHQ === true — never a
@@ -121,12 +127,7 @@ export default function PartiesPage() {
     field3Print: false,
   });
 
-  const transactions = [
-    { type: "Purchase", number: "", date: "22/05/2026", total: "0.00", balance: "0.00" },
-    { type: "Lite Sale", number: "1", date: "20/05/2026", total: "350.00", balance: "350.00" },
-    { type: "Delivery Challan", number: "1", date: "20/05/2026", total: "35.00", balance: "" },
-    { type: "Sale Order", number: "1", date: "20/05/2026", total: "35.00", balance: "35.00" },
-  ];
+  const transactions: any[] = [];
 
   const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
@@ -146,17 +147,15 @@ export default function PartiesPage() {
   };
 
   useEffect(() => {
-    // Super Admin: wait for the franchise list (and therefore HQ resolution)
-    // before fetching, and require an explicit franchise pick when scope is
-    // FRANCHISE — never silently fall back to "all".
-    if (isSuper && franchises.length === 0) return;
+    if (isSuper && franchisesLoading) return;
+    
     if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
       setCustomers([]);
       setLoading(false);
       return;
     }
     fetchCustomers(effectiveFranchiseId);
-  }, [isSuper, scope, selectedFranchiseId, franchises.length, effectiveFranchiseId]);
+  }, [isSuper, scope, selectedFranchiseId, franchisesLoading, effectiveFranchiseId]);
 
   useEffect(() => {
     const fetchCustomerDetail = async () => {
@@ -370,8 +369,23 @@ export default function PartiesPage() {
         
         {/* Top Header Actions */}
         <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200">
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-full text-xs font-bold transition-colors">
-            <Plus size={14} /> Add Customer
+          <button 
+            onClick={() => {
+              if (isSuper && franchisesLoading) return;
+              if (isSuper && !effectiveFranchiseId) {
+                toast.error("Select HQ or a franchise before adding a customer.");
+                return;
+              }
+              setIsAddModalOpen(true);
+            }} 
+            disabled={isSuper && franchisesLoading}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
+              isSuper && franchisesLoading 
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 text-white"
+            }`}
+          >
+            <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Customer"}
           </button>
         </div>
 
@@ -535,20 +549,28 @@ export default function PartiesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map((t, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
-                    <td className="px-2 py-4 text-center">
-                      <button className="text-slate-300 hover:text-slate-500">
-                        <MoreVertical size={14} />
-                      </button>
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
+                      No transactions yet
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  transactions.map((t, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
+                      <td className="px-2 py-4 text-center">
+                        <button className="text-slate-300 hover:text-slate-500">
+                          <MoreVertical size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
