@@ -140,7 +140,7 @@ export default function DealersClient() {
       return;
     }
 
-    if ((isSuper && scope === "FRANCHISE" && !finalFranchiseId) || (!isSuper && !finalFranchiseId)) {
+    if ((isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) || (!isSuper && !effectiveFranchiseId)) {
       toast.error(isSuper ? "Select a franchise branch first." : "Please select a franchise branch.");
       return;
     }
@@ -148,7 +148,7 @@ export default function DealersClient() {
     try {
       await api.post(`/api/dealers`, {
         ...formData,
-        franchiseId: finalFranchiseId
+        franchiseId: effectiveFranchiseId
       });
       toast.success("Dealer added successfully");
       setShowAddModal(false);
