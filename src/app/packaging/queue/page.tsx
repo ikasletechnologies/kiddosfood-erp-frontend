@@ -9,6 +9,7 @@ import { clsx } from "clsx";
 import { productionApi, franchiseApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
+import { convertUnit } from "@/lib/unitConversion";
 
 interface ProductBatch {
   id: string;
@@ -134,26 +135,19 @@ export default function PackagingQueuePage() {
     loadBatches();
   }, [selectedFranchiseId]);
 
-  // Compute total bulk stock conversion needed
+  // Compute total bulk stock conversion needed — delegates the actual
+  // unit-conversion arithmetic to the canonical shared engine
+  // (@businessgroupikasle/erp-units via the unitConversion shim) instead of
+  // a local kg/g/l/ml table, so this preview always agrees with what the
+  // server actually deducts (see production.service.ts's own parseWeight).
   const parseWeight = (size: string, baseUnit?: string): number => {
     if (!size) return 0;
     const match = size.trim().match(/^(\d+(\.\d+)?)\s*([a-zA-Z]+)?$/i);
     if (!match) return 1.0;
     const val = parseFloat(match[1]);
     if (isNaN(val) || val <= 0) return 0;
-    const unit = (match[3] || '').toLowerCase();
-    const batchUnit = (baseUnit || '').toLowerCase();
-
-    // If batch base unit is g or ml
-    if (batchUnit === 'g' || batchUnit === 'ml') {
-      if (unit === 'kg' || unit === 'l') return val * 1000;
-      return val;
-    }
-
-    if (unit === 'g' || unit === 'ml' || unit === 'gm' || unit === 'gms' || unit === 'gram' || unit === 'grams') {
-      return val / 1000;
-    }
-    return val;
+    const unit = match[3] || baseUnit || 'KG';
+    return convertUnit(val, unit, baseUnit || 'KG');
   };
 
   const unitMultiplier = parseWeight(packetSize, selectedBatch?.product?.unit);

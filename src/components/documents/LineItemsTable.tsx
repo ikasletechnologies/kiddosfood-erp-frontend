@@ -8,6 +8,8 @@ import { clsx } from "clsx";
 import Link from "next/link";
 import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer";
 
+import { convertMeasurement, ValidUnit } from "@businessgroupikasle/erp-units";
+
 // Paired units a line item's quantity can be entered in — kg/g and l/ml
 // convert into each other; anything else (pcs, unit, ...) has no smaller/
 // larger pair and is shown as-is. item.quantity is always stored in the
@@ -15,21 +17,19 @@ import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer"
 // enters/reads the quantity; the stored value, price-per-base-unit, and the
 // line total math are untouched by which entry unit is currently selected.
 function getUnitOptions(baseUnit: string): string[] {
-  const u = (baseUnit || "").trim().toLowerCase();
-  if (u === "kg" || u === "g") return ["KG", "G"];
-  if (u === "l" || u === "ml") return ["L", "ML"];
-  return [baseUnit ? baseUnit.toUpperCase() : "UNIT"];
+  const u = (baseUnit || "").trim().toUpperCase();
+  if (u === "KG" || u === "G" || u === "MG") return ["KG", "G", "MG"];
+  if (u === "L" || u === "ML") return ["L", "ML"];
+  return [u || "UNIT"];
 }
 
 function convertQty(qty: number, fromUnit: string, toUnit: string): number {
-  const f = (fromUnit || "").trim().toLowerCase();
-  const t = (toUnit || "").trim().toLowerCase();
-  if (!qty || f === t) return qty;
-  if (f === "kg" && t === "g") return qty * 1000;
-  if (f === "g" && t === "kg") return qty / 1000;
-  if (f === "l" && t === "ml") return qty * 1000;
-  if (f === "ml" && t === "l") return qty / 1000;
-  return qty;
+  if (!qty || fromUnit === toUnit) return qty;
+  try {
+    return convertMeasurement(qty, fromUnit as ValidUnit, toUnit as ValidUnit).toNumber();
+  } catch (e) {
+    return qty;
+  }
 }
 
 // Trims float noise from a conversion (e.g. 0.1 + 0.2 back-conversions)
@@ -428,17 +428,10 @@ export default function LineItemsTable() {
                       step="any"
                       placeholder="0"
                       className="w-full py-2 px-2 bg-slate-50 dark:bg-slate-900 rounded-xl outline-none text-xs font-bold text-center border border-slate-200 dark:border-slate-800 focus:border-orange-400 focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      value={(() => {
-                        const baseUnit = item.unit || "KG";
-                        const entryUnit = entryUnits[item.id] || baseUnit;
-                        const displayQty = roundForDisplay(convertQty(item.quantity, baseUnit, entryUnit));
-                        return displayQty === 0 ? "" : displayQty;
-                      })()}
+                      value={item.quantity === 0 ? "" : item.quantity}
                       onChange={(e) => {
-                        const baseUnit = item.unit || "KG";
-                        const entryUnit = entryUnits[item.id] || baseUnit;
                         const entered = parseFloat(e.target.value) || 0;
-                        updateItem(item.id, { quantity: convertQty(entered, entryUnit, baseUnit) });
+                        updateItem(item.id, { quantity: entered });
                       }}
                       onKeyDown={(e) => handleKeyDown(e, item.id)}
                     />
@@ -447,15 +440,19 @@ export default function LineItemsTable() {
                     {(() => {
                       const baseUnit = item.unit || "KG";
                       const options = getUnitOptions(baseUnit);
-                      const entryUnit = entryUnits[item.id] || baseUnit;
                       return (
                         <select
                           className="w-full py-1.5 px-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg outline-none text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-center border border-transparent focus:border-orange-400 transition-all cursor-pointer appearance-none disabled:cursor-not-allowed"
                           style={{ textAlignLast: 'center' }}
-                          value={entryUnit}
+                          value={item.unit}
                           disabled={options.length < 2}
                           title={options.length < 2 ? "This item has no alternate unit to convert to" : "Change the unit this quantity is entered in"}
-                          onChange={(e) => setEntryUnits(prev => ({ ...prev, [item.id]: e.target.value }))}
+                          onChange={(e) => {
+                            const newUnit = e.target.value;
+                            // Optionally auto-convert quantity when unit is switched so value is retained
+                            const newQty = convertQty(item.quantity, item.unit, newUnit);
+                            updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty) });
+                          }}
                         >
                           {options.map(u => <option key={u} value={u}>{u}</option>)}
                         </select>

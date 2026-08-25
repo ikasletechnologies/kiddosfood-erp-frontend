@@ -1,55 +1,38 @@
-// Centralized unit normalization for mass/volume quantities — mirrors
-// src/lib/conversion.ts on the backend. RecipeItem.unit (e.g. "g") and
-// InventoryItem.unit (e.g. "KG") are independent free-text fields with no
-// guarantee they match, so any screen comparing a recipe quantity against a
-// stock quantity must convert through here first instead of comparing the
-// raw numbers directly.
+// This module previously contained a local copy of the unit conversion logic.
+// It is now a thin re-export from the canonical shared package so the frontend
+// and backend always use the identical conversion factors and rules.
+//
+// Use convertMeasurement directly from the package for new code.
+// The convertUnit shim below maintains backward compatibility with existing
+// callers (production/page.tsx, FormulaScalingTab.tsx, ActiveProductionRunsClient.tsx).
 
-const MASS_TO_GRAMS: Record<string, number> = {
-  g: 1,
-  gram: 1,
-  grams: 1,
-  kg: 1000,
-  kgs: 1000,
-  kilogram: 1000,
-  kilograms: 1000,
-};
 
-const VOLUME_TO_ML: Record<string, number> = {
-  ml: 1,
-  milliliter: 1,
-  milliliters: 1,
-  l: 1000,
-  ltr: 1000,
-  litre: 1000,
-  litres: 1000,
-  liter: 1000,
-  liters: 1000,
-};
-
-function key(unit?: string | null): string {
-  return (unit || "").trim().toLowerCase();
-}
-
+import { convertMeasurement, ValidUnit } from '@businessgroupikasle/erp-units';
 /**
- * Converts `quantity` from `fromUnit` to the equivalent amount in `toUnit`.
- * Only mass<->mass (g/kg) and volume<->volume (ml/l) pairs are converted,
- * canonicalizing through grams / milliliters respectively. Anything else
- * (identical units, or a pair with no known physical conversion — "pcs",
- * "packet", cross-dimension pairs) returns `quantity` unchanged rather than
- * guessing.
+ * Backward-compatible shim. Converts `quantity` from `fromUnit` to `toUnit`.
+ * Delegates to @businessgroupikasle/erp-units which is the single source of truth.
+ * Returns `quantity` unchanged if units are the same or the conversion is not
+ * supported (e.g. count vs. weight — avoids breaking existing callers that
+ * rely on the identity fallback for PCS/packet/etc.).
  */
-export function convertUnit(quantity: number, fromUnit?: string | null, toUnit?: string | null): number {
-  const from = key(fromUnit);
-  const to = key(toUnit);
-  if (from === to) return quantity;
+export function convertUnit(
+  quantity: number,
+  fromUnit?: string | null,
+  toUnit?: string | null
+): number {
+  const from = (fromUnit || '').trim().toUpperCase();
+  const to = (toUnit || '').trim().toUpperCase();
+  if (!from || !to || from === to) return quantity;
 
-  if (from in MASS_TO_GRAMS && to in MASS_TO_GRAMS) {
-    return (quantity * MASS_TO_GRAMS[from]) / MASS_TO_GRAMS[to];
+  try {
+    return convertMeasurement(quantity, from as ValidUnit, to as ValidUnit).toNumber();
+  } catch {
+    // Units are incompatible (cross-dimension) or unrecognized.
+    // Return unchanged so existing UI comparisons degrade gracefully rather
+    // than crashing — callers that need hard rejection should use
+    // convertMeasurement directly and handle the error.
+    return quantity;
   }
-  if (from in VOLUME_TO_ML && to in VOLUME_TO_ML) {
-    return (quantity * VOLUME_TO_ML[from]) / VOLUME_TO_ML[to];
-  }
-
-  return quantity;
 }
+
+export { convertMeasurement };
