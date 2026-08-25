@@ -17,7 +17,6 @@ import {
 import { clsx } from "clsx";
 import { productBatchesApi, productsFullApi, franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
-import { formatERPNumber } from "@/lib/utils";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
@@ -154,7 +153,7 @@ export default function ProductBatchesPage() {
         const status: ExpiryStatus = b.expiryStatus ?? "VALID";
         const expiry = getEffectiveExpiry(b);
         const base = [
-          b.batchCode ? formatERPNumber("PRD", b.batchCode, b.createdAt) : "—",
+          b.batchCode || "—",
           b.product?.name ?? "—",
           ...(isSuper ? [b.franchise?.name ?? "—"] : []),
           `${b.bulkQuantity ?? b.quantity} ${b.production?.recipe?.yieldUnit || "KG"}`,
@@ -430,13 +429,7 @@ export default function ProductBatchesPage() {
                     >
                       <td className="px-4 sm:px-5 py-3">
                         <span className="text-[13px] font-bold text-orange-600 dark:text-orange-400 font-mono">
-                          {batch.batchCode
-                            ? formatERPNumber(
-                                "PRD",
-                                batch.batchCode,
-                                batch.createdAt
-                              )
-                            : "—"}
+                          {batch.batchCode || "—"}
                         </span>
                       </td>
                       <td className="px-4 sm:px-5 py-3">

@@ -10,7 +10,6 @@ import { clsx } from "clsx";
 import { productBatchesApi, productsFullApi, franchiseApi, productionApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
-import { formatERPNumber } from "@/lib/utils";
 import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMaterialConsumptionClient";
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
 
@@ -322,7 +321,7 @@ function ProductBatchesRegistry() {
                             onClick={() => { setSelectedBatch(batch); setShowBatchDetails(true); }}
                             className="font-mono font-semibold text-[#f58220] hover:text-[#e8740e] text-xs transition-colors"
                           >
-                            {batch.batchCode ? formatERPNumber("PRD", batch.batchCode, batch.createdAt) : "—"}
+                            {batch.batchCode || "—"}
                           </button>
                         </td>
                         <td className="px-4 py-3 text-sm">
@@ -439,7 +438,7 @@ function ProductBatchesRegistry() {
                 <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-sm font-mono font-semibold text-[#f58220]">
-                    {formatERPNumber("PRD", selectedBatch.batchCode, selectedBatch.createdAt)}
+                    {selectedBatch.batchCode || "—"}
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">Active</span>
                 </div>

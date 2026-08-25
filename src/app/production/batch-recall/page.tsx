@@ -10,7 +10,6 @@ import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { recallApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber } from "@/lib/utils";
 
 interface RecallBatch {
   id: string;
@@ -136,11 +135,9 @@ export default function BatchRecallPage() {
       const res = await api.get("/api/production/batches");
       const data: RecallBatch[] = (res.data || []).map((b: any) => ({
         id: b.id,
-        // Same canonical batch-code formatting as Production/QC/Batch
-        // Registry/Expiry Tracking (formatERPNumber) — recall previously
-        // showed the raw stored code (e.g. "BATCH-16661921") instead of the
-        // "PRD-2026-xxxx" number used everywhere else for the same batch.
-        batchCode: b.batchCode ? formatERPNumber("PRD", b.batchCode, b.createdAt) : b.id?.slice(-6),
+        // batchCode is the server-owned canonical business identifier. Never
+        // derive a second display code from a UUID or legacy batch string.
+        batchCode: b.batchCode || "—",
         // b.recipe doesn't exist on this batch shape — the recipe lives at
         // b.production.recipe. That wrong path is why this always fell
         // through to "Unknown Product" whenever the batch had no directly

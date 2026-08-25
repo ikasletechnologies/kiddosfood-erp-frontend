@@ -42,12 +42,10 @@ export default function PartiesPage() {
     ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
     : (user as any)?.franchiseId;
 
-  // Read-only label shown inside the Add/Edit Customer modal — no independent
-  // scope picker there, it only ever reflects this page's own selector.
   const scopeLabel = isSuper
     ? (scope === "HQ"
-        ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name || "Main Headquarters"}`
-        : `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name || "Select a franchise"}`)
+        ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
+        : (selectedFranchiseId ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected"))
     : undefined;
   const [activeTab, setActiveTab] = useState("Transactions");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -154,8 +152,13 @@ export default function PartiesPage() {
       setLoading(false);
       return;
     }
+    if (isSuper && scope === "HQ" && !hqFranchiseId) {
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
     fetchCustomers(effectiveFranchiseId);
-  }, [isSuper, scope, selectedFranchiseId, franchisesLoading, effectiveFranchiseId]);
+  }, [isSuper, scope, selectedFranchiseId, hqFranchiseId, franchisesLoading, effectiveFranchiseId]);
 
   useEffect(() => {
     const fetchCustomerDetail = async () => {
@@ -233,12 +236,24 @@ export default function PartiesPage() {
                 value={selectedFranchiseId}
                 onChange={(e) => setSelectedFranchiseId(e.target.value)}
                 className="w-full text-xs border border-slate-200 rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
+                disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
               >
-                <option value="">Select Franchise</option>
-                {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
-                ))}
+                {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
+                  <option value="">No franchises available</option>
+                ) : (
+                  <>
+                    <option value="">Select Franchise</option>
+                    {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </>
+                )}
               </select>
+            )}
+            {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
+              <div className="w-full text-xs border border-rose-200 bg-rose-50 text-rose-600 rounded-full px-3 py-1.5 text-center font-medium">
+                HQ is not configured
+              </div>
             )}
           </div>
         )}
@@ -350,18 +365,7 @@ export default function PartiesPage() {
           )}
         </div>
 
-        {/* Bottom Promo Banner */}
-        <div className="p-3 bg-emerald-50 m-2 rounded-xl flex items-center justify-between border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-white rounded-lg border border-emerald-200 text-emerald-500">
-              <BookOpen size={16} />
-            </div>
-            <div className="text-[10px] text-slate-600 leading-tight">
-              Use contacts from your Phone or <br/> Gmail to <span className="font-bold">quickly create parties.</span>
-            </div>
-          </div>
-          <ChevronDown size={14} className="text-emerald-500 -rotate-90" />
-        </div>
+
       </div>
 
       {/* Right Main Content */}
@@ -376,11 +380,15 @@ export default function PartiesPage() {
                 toast.error("Select a franchise before adding a customer.");
                 return;
               }
+              if (isSuper && scope === "HQ" && !hqFranchiseId) {
+                toast.error("HQ is not configured.");
+                return;
+              }
               setIsAddModalOpen(true);
             }} 
-            disabled={isSuper && franchisesLoading}
+            disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-              isSuper && franchisesLoading 
+              (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
                 ? "bg-slate-300 text-slate-500 cursor-not-allowed"
                 : "bg-orange-500 hover:bg-orange-600 text-white"
             }`}
@@ -706,8 +714,12 @@ export default function PartiesPage() {
               toast.error("Select a franchise before adding a customer.");
               return;
             }
+            if (isSuper && scope === "HQ" && !hqFranchiseId) {
+              toast.error("HQ is not configured.");
+              return;
+            }
             const payload = isSuper
-              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId || null }
+              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
               : { ...data, phone: data.contact };
             await customersApi.create(payload);
             toast.success("Customer added successfully!");

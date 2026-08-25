@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText, CalendarClock } from "lucide-react";
 import { productionApi, inventoryApi } from "@/lib/api";
-import { formatERPNumber } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
@@ -252,7 +251,7 @@ export default function ActiveProductionRunsClient() {
                     <div>
                       <span className="text-xs font-semibold text-gray-500 block uppercase">Batch</span>
                       <span className="text-sm font-semibold text-gray-800 font-mono mt-0.5 block">
-                        {formatERPNumber("PRD", run.id, run.producedAt)}
+                        {run.productionBatchCode || "Batch code pending"}
                       </span>
                     </div>
                     <div>
@@ -418,7 +417,7 @@ export default function ActiveProductionRunsClient() {
               <div className="text-right">
                 <p className="text-xs text-gray-500">Batch</p>
                 <p className="text-xs font-semibold text-[#f58220] font-mono mt-0.5">
-                  {formatERPNumber("PRD", batchToApprove.id, batchToApprove.producedAt)}
+                  {batchToApprove.productionBatchCode || "Batch code pending"}
                 </p>
               </div>
             </div>

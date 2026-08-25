@@ -274,8 +274,14 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
 
   // list date filters
   const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const lastOfMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  const getLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const firstOfMonth = getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const lastOfMonth  = getLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo,   setDateTo]   = useState(lastOfMonth);
   const [showFromCal, setShowFromCal] = useState(false);
@@ -608,7 +614,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
         trackingNumber: trackingNumber || undefined,
         courierName: courierName || undefined
       });
-      showToast("Converted to Sales Order successfully", "success");
+      showToast("Converted to Tax Invoice successfully", "success");
       setShowConvertModal(false);
       fetchData();
     } catch (e: any) {
@@ -731,7 +737,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
 
   const totalQuotations = filtered.reduce((s, i) => s + (i.totalAmount || 0), 0);
   const totalConverted = filtered.filter(i => i.status === "CONVERTED").reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const totalOpen = filtered.filter(i => i.status === "SENT" || i.status === "DRAFT").reduce((s, i) => s + (i.totalAmount || 0), 0);
+  const totalOpen = filtered.filter(i => i.status === "SENT").reduce((s, i) => s + (i.totalAmount || 0), 0);
 
   const filteredCustomers = customers.filter(c =>
     !customerSearch ||
@@ -1583,7 +1589,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                         <div>{est.quotationNumber}</div>
                         {est.status === "CONVERTED" && est.convertedOrderNumber && (
                           <div className="text-[10px] text-green-600 font-bold mt-1 bg-green-50 px-1.5 py-0.5 rounded inline-block">
-                            Order: {est.convertedOrderNumber}
+                            Invoice: {est.convertedOrderNumber}
                           </div>
                         )}
                       </td>
@@ -1607,11 +1613,19 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {est.status === "CONVERTED" && est.convertedOrderNumber && (
+                             <a
+                               href="/sales/invoices"
+                               className="px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-2"
+                             >
+                               View Invoice
+                             </a>
+                          )}
                           {est.status !== "CONVERTED" && !isDraft && (
                              <button
                                onClick={(e) => { e.stopPropagation(); handleOpenConvertModal(est); }}
                                disabled={!!converting}
-                               className="px-2 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-xs font-bold hover:bg-green-100 transition-colors mr-2"
+                               className="px-2 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-[10px] font-bold hover:bg-green-100 transition-colors mr-2"
                              >
                                {converting === est.id ? "..." : "Convert"}
                              </button>

@@ -8,7 +8,6 @@ import {
 import { clsx } from 'clsx';
 import { productionApi } from '@/lib/api';
 import { toast } from 'react-hot-toast';
-import { formatERPNumber } from '@/lib/utils';
 
 export default function QCClient() {
   const searchParams = useSearchParams();
@@ -182,7 +181,7 @@ export default function QCClient() {
                 <tbody className="divide-y divide-gray-100">
                   {filteredProdBatches.map((batch) => (
                     <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{formatERPNumber("PRD", batch.batchCode, batch.createdAt)}</td>
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
                       <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.quantity} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
                       <td className="px-4 py-3">
@@ -231,7 +230,7 @@ export default function QCClient() {
                       const badge = qcStatusBadge[batch.qcStatus] || { label: batch.qcStatus, className: 'text-gray-600 bg-gray-50 border-gray-200' };
                       return (
                         <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{formatERPNumber("PRD", batch.batchCode, batch.createdAt)}</td>
+                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
                           <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.approvedQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
                           <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.rejectionQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
@@ -280,7 +279,7 @@ export default function QCClient() {
                 <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-sm font-mono font-semibold text-[#f58220]">
-                    {formatERPNumber("PRD", selectedBatchDetails.batchCode, selectedBatchDetails.createdAt)}
+                    {selectedBatchDetails.batchCode || "—"}
                   </span>
                   <span className={clsx(
                     "px-2 py-0.5 rounded-full text-xs font-semibold",
@@ -504,7 +503,7 @@ export default function QCClient() {
             <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-start justify-between">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">QC Inspection</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Batch: {formatERPNumber("PRD", qcModalBatch.batchCode, qcModalBatch.createdAt)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Batch: {qcModalBatch.batchCode || "—"}</p>
               </div>
               <button
                 onClick={() => setQcModalBatch(null)}
