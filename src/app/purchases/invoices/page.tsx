@@ -332,6 +332,10 @@ export default function PurchaseBillsPage() {
       if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) setShowCalendar(false);
       if (fromCalRef.current && !fromCalRef.current.contains(e.target as Node)) setShowFromCal(false);
       if (toCalRef.current && !toCalRef.current.contains(e.target as Node)) setShowToCal(false);
+      
+      if (!(e.target as Element).closest?.('.unit-dropdown-container')) {
+        setOpenUnitDrop(null);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -757,7 +761,7 @@ export default function PurchaseBillsPage() {
                             className="w-full text-sm text-gray-700 text-center outline-none bg-transparent"
                           />
                         </td>
-                        <td style={{ position: "relative", overflow: "visible" }}>
+                        <td style={{ position: "relative", overflow: "visible" }} className="unit-dropdown-container">
                           <button
                             className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 hover:bg-gray-50"
                             onClick={e => {
