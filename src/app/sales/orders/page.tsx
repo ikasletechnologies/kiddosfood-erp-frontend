@@ -209,6 +209,12 @@ export default function SalesOrdersPage() {
   const [roundOffEnabled, setRoundOffEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  // One key per "New Sales Order" form session — a retry/double-click that
+  // races past disabled={saving} hits SalesService.createSalesOrder's
+  // idempotency check server-side and returns the already-created order
+  // instead of posting a second one (this form has no source Estimate to
+  // dedup against, unlike Estimate -> Convert).
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
   const [previewingOrder, setPreviewingOrder] = useState<any>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
@@ -417,6 +423,7 @@ export default function SalesOrdersPage() {
 
   const resetForm = () => {
     setDraftId(null);
+    setIdempotencyKey(crypto.randomUUID());
     setReadOnly(false);
     setViewOrderRef(null);
     setSelectedCustomer(null);
@@ -486,7 +493,7 @@ export default function SalesOrdersPage() {
         // Editing an existing order — update it, never create another one.
         await api.patch(`/api/sales/orders/${draftId}`, apiPayload);
       } else {
-        const res = await api.post("/api/sales/orders", apiPayload);
+        const res = await api.post("/api/sales/orders", { ...apiPayload, idempotencyKey });
         // Track the new record's ID so subsequent saves in the same session
         // update it rather than creating yet another duplicate.
         if (res?.data?.id) setDraftId(res.data.id);

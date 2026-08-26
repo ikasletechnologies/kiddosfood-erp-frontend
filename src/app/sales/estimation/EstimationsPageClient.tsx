@@ -399,6 +399,13 @@ export default function EstimationsPageClient({
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(initialDraftData ? initialDraftData.id : null);
+  // The status this record had when it was loaded — a brand-new/DRAFT
+  // record is safe to silently resave on Back (that's the whole point of
+  // "Save Draft"), but a SENT/CONVERTED/CANCELLED one is being VIEWED, not
+  // edited: autosaving over it would either get rejected by the backend
+  // (updateProformaInvoice/updateQuotation both reject non-DRAFT updates)
+  // or, worse, silently regress its status back to DRAFT.
+  const [loadedStatus, setLoadedStatus] = useState<string | null>(initialDraftData ? initialDraftData.status || null : null);
 
   // GSTInvoice preview/print/download/share modal
   const [previewEstimate, setPreviewEstimate] = useState<any>(null);
@@ -542,6 +549,10 @@ export default function EstimationsPageClient({
 
   const loadDraft = (draft: any) => {
     setDraftId(draft.id);
+    // A locally-cached _rawState draft (draftsApi) is always a genuine
+    // in-progress DRAFT — only a real API record (the `else` branch below)
+    // can carry a finalized status like SENT/CONVERTED.
+    setLoadedStatus(draft._rawState ? "DRAFT" : (draft.status || null));
     const raw = draft._rawState || {};
     if (draft._rawState) {
       setPartyType(raw.partyType || "CUSTOMER");
@@ -728,8 +739,14 @@ export default function EstimationsPageClient({
   };
 
   const handleBack = () => {
+    // Only auto-save-as-draft for a record that's actually still a DRAFT
+    // (or brand new, loadedStatus === null) — never for one that was
+    // opened already SENT/CONVERTED/CANCELLED. That's a VIEW, and
+    // resaving it would either get rejected by the backend or silently
+    // regress its status back to DRAFT (see loadedStatus above).
+    const isEditableDraft = loadedStatus === null || loadedStatus === "DRAFT";
     const hasData = selectedCustomer || items.some(i => i.productId || i.itemSearch.trim());
-    if (hasData) {
+    if (hasData && isEditableDraft) {
        handleSave(true);
     } else {
        if (onCancel) onCancel();
