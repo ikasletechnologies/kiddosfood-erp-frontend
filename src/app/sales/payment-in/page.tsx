@@ -7,7 +7,8 @@ import {
   Calendar, Check, Printer
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, draftsApi } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import { customersApi, dealersApi, franchiseApi, draftsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -15,6 +16,25 @@ import api from "@/lib/api/base";
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PAYMENT_MODES = ["Cash", "Cheque", "Online Transfer", "UPI", "Card", "Bank Transfer"];
+
+const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "DEALER", label: "Dealer" },
+  { value: "FRANCHISE", label: "Franchise" },
+];
+
+// Normalizes Customer / Dealer / Franchise master rows (different shapes)
+// into the one shape the party dropdown needs — same pattern as
+// EstimationsPageClient's normalizeParty.
+function normalizeParty(partyType: "CUSTOMER" | "DEALER" | "FRANCHISE", raw: any) {
+  if (partyType === "FRANCHISE") {
+    return { id: raw.id, name: raw.name, phone: raw.contactNum || "", raw };
+  }
+  if (partyType === "DEALER") {
+    return { id: raw.id, name: raw.name, phone: raw.phone || "", raw };
+  }
+  return { id: raw.id, name: raw.name, phone: raw.phone || "", raw };
+}
 
 const PERIOD_OPTIONS = [
   { label: "This Month", value: "this_month" },
@@ -172,9 +192,13 @@ export default function PaymentInPage() {
   // form state
   const [view, setView] = useState<"list" | "create">("list");
   const [saving, setSaving] = useState(false);
+  const [partyType, setPartyType] = useState<"CUSTOMER" | "DEALER" | "FRANCHISE">("CUSTOMER");
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0]);
   const [amount, setAmount] = useState<string>("");
@@ -226,8 +250,23 @@ export default function PaymentInPage() {
     } catch {}
   }, []);
 
-  // Tax Invoices with an outstanding balance — a customer payment must be
-  // recorded against a specific invoice (see FinanceService.createPayment's
+  // Dealers and Franchises are also valid Tax Invoice parties (see
+  // Order.partyType) — the invoice/payment flow must not assume Customer.
+  const fetchDealers = useCallback(async () => {
+    try {
+      const res = await dealersApi.getAll();
+      setDealers(((res as any).data || []).map((d: any) => normalizeParty("DEALER", d)));
+    } catch {}
+  }, []);
+  const fetchFranchises = useCallback(async () => {
+    try {
+      const res = await franchiseApi.getAll();
+      setFranchises(((res as any).data || []).map((f: any) => normalizeParty("FRANCHISE", f)));
+    } catch {}
+  }, []);
+
+  // Tax Invoices with an outstanding balance — a payment must be recorded
+  // against a specific invoice (see FinanceService.createPayment's
   // invoiceId-driven paid/outstanding recompute); without this the page had
   // no invoice concept at all.
   const fetchInvoices = useCallback(async () => {
@@ -237,11 +276,47 @@ export default function PaymentInPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchPayments(); fetchCustomers(); fetchInvoices(); }, [fetchPayments, fetchCustomers, fetchInvoices]);
+  useEffect(() => {
+    fetchPayments(); fetchCustomers(); fetchDealers(); fetchFranchises(); fetchInvoices();
+  }, [fetchPayments, fetchCustomers, fetchDealers, fetchFranchises, fetchInvoices]);
 
+  const partySourceList = partyType === "DEALER" ? dealers : partyType === "FRANCHISE" ? franchises : customers;
+
+  // A Tax Invoice's party is identified by partyId+partyType (Order's
+  // generic fields), not customerId — customerId is only ever populated
+  // for partyType CUSTOMER.
   const customerInvoices = selectedCustomer
-    ? invoices.filter((inv: any) => inv.order?.customerId === selectedCustomer.id && inv.status !== "PAID")
+    ? invoices.filter((inv: any) => {
+        const order = inv.order || {};
+        const invPartyType = order.partyType || "CUSTOMER";
+        const invPartyId = invPartyType === "CUSTOMER" ? (order.partyId || order.customerId) : order.partyId;
+        return invPartyType === partyType && invPartyId === selectedCustomer.id && inv.status !== "PAID";
+      })
     : [];
+
+  // Deep-link from the Tax Invoice view's "Record Payment" button
+  // (?invoiceId=&partyType=&partyId=). Runs once invoices/parties are
+  // loaded so the matching invoice/party rows actually exist to select.
+  const searchParamsHook = useSearchParams();
+  useEffect(() => {
+    const linkedInvoiceId = searchParamsHook.get("invoiceId");
+    const linkedPartyType = searchParamsHook.get("partyType") as "CUSTOMER" | "DEALER" | "FRANCHISE" | null;
+    const linkedPartyId = searchParamsHook.get("partyId");
+    if (!linkedInvoiceId || !linkedPartyId) return;
+    if (invoices.length === 0) return;
+    if (customers.length === 0 && dealers.length === 0 && franchises.length === 0) return;
+
+    const pt = linkedPartyType || "CUSTOMER";
+    const sourceList = pt === "DEALER" ? dealers : pt === "FRANCHISE" ? franchises : customers;
+    const party = sourceList.find((p: any) => p.id === linkedPartyId);
+    if (!party) return;
+
+    setPartyType(pt);
+    setSelectedCustomer(party);
+    setCustomerSearch(party.name);
+    setSelectedInvoiceId(linkedInvoiceId);
+    setView("create");
+  }, [searchParamsHook, invoices, customers, dealers, franchises]);
   const selectedInvoice = customerInvoices.find((inv: any) => inv.id === selectedInvoiceId) || null;
   const invoicePaidSoFar = selectedInvoice
     ? (selectedInvoice.payments || []).filter((p: any) => p.status === "PAID" && !p.isCancelled).reduce((s: number, p: any) => s + (p.paidAmount || 0), 0)
@@ -300,8 +375,10 @@ export default function PaymentInPage() {
             paymentMode: paymentMode,
             paidAmount: Number(amount) || 0,
             _rawState: {
+              partyType,
               selectedCustomer,
               customerSearch,
+              selectedInvoiceId,
               amount,
               paymentMode,
               description,
@@ -344,7 +421,7 @@ export default function PaymentInPage() {
         status: "PAID",
         method: methodMap[paymentMode] || "CASH",
         entityId: selectedCustomer.id,
-        entityType: "CUSTOMER",
+        entityType: partyType,
         entity: selectedCustomer.name,
         invoiceId: selectedInvoice.id,
         linkedDocType: "INVOICE",
@@ -353,6 +430,11 @@ export default function PaymentInPage() {
         sourceModule: "MANUAL",
         reference: chequeNo || description || undefined,
         createdBy: "SYSTEM",
+        // One key per logical "Record Payment" submission — a retry/
+        // double-click that races past the `disabled={saving}` guard hits
+        // FinanceService.createPayment's idempotency check and returns the
+        // already-created Payment instead of posting a second one.
+        idempotencyKey,
       });
 
       // If we saved a payment that was previously a draft, remove the draft
@@ -377,6 +459,7 @@ export default function PaymentInPage() {
 
   const resetForm = () => {
     setDraftId(null);
+    setPartyType("CUSTOMER");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setSelectedInvoiceId("");
@@ -385,6 +468,7 @@ export default function PaymentInPage() {
     setDescription("");
     setChequeNo("");
     setReceiptDate(new Date().toISOString().split("T")[0]);
+    setIdempotencyKey(crypto.randomUUID());
   };
 
 
@@ -401,17 +485,20 @@ export default function PaymentInPage() {
   const loadDraft = (draft: any) => {
     setDraftId(draft.id);
     const raw = draft._rawState || {};
+    setPartyType(raw.partyType || "CUSTOMER");
     setSelectedCustomer(raw.selectedCustomer || null);
     setCustomerSearch(raw.customerSearch || "");
+    setSelectedInvoiceId(raw.selectedInvoiceId || "");
     setAmount(raw.amount || "");
     setPaymentMode(raw.paymentMode || "Cash");
     setDescription(raw.description || "");
     setChequeNo(raw.chequeNo || "");
     setReceiptDate(raw.receiptDate || new Date().toISOString().split("T")[0]);
+    setIdempotencyKey(crypto.randomUUID());
     setView("create");
   };
 
-  const filteredCustomers = customers.filter(c =>
+  const filteredParties = partySourceList.filter((c: any) =>
     !customerSearch ||
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.phone?.includes(customerSearch)
@@ -425,7 +512,7 @@ export default function PaymentInPage() {
     }
     if (search) {
       const q = search.toLowerCase();
-      const entityName = (p.entity?.name || "").toLowerCase();
+      const entityName = (typeof p.entity === "string" ? p.entity : p.entity?.name || "").toLowerCase();
       const num = (p.paymentNumber || "").toLowerCase();
       if (!entityName.includes(q) && !num.includes(q)) return false;
     }
@@ -454,6 +541,31 @@ export default function PaymentInPage() {
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
+          {/* Party type toggle */}
+          <div className="flex items-center gap-2">
+            {PARTY_TYPES.map(pt => (
+              <button
+                key={pt.value}
+                onClick={() => {
+                  if (pt.value === partyType) return;
+                  setPartyType(pt.value);
+                  setSelectedCustomer(null);
+                  setCustomerSearch("");
+                  setSelectedInvoiceId("");
+                  setAmount("");
+                }}
+                className={clsx(
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors",
+                  partyType === pt.value
+                    ? "bg-[#f58220] text-white border-[#f58220]"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                )}
+              >
+                {pt.label}
+              </button>
+            ))}
+          </div>
+
           {/* Party + Date row */}
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-5 flex flex-wrap gap-4 items-start">
 
@@ -470,7 +582,7 @@ export default function PaymentInPage() {
                   <div className="text-[10px] text-[#f58220] font-medium leading-none mb-0.5">Party *</div>
                   <input
                     className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
-                    placeholder="Search by Name/Phone"
+                    placeholder={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} by Name/Phone`}
                     value={customerSearch}
                     onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                     onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
@@ -488,15 +600,11 @@ export default function PaymentInPage() {
 
               {showCustomerDrop && (
                 <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto">
-                  <button
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#f58220] hover:bg-orange-50 border-b border-gray-100"
-                    onClick={() => setShowCustomerDrop(false)}
-                  >
-                    <Plus size={14} /> Add Party
-                  </button>
-                  {filteredCustomers.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-gray-400 text-center">No customers found</div>
-                  ) : filteredCustomers.map(c => (
+                  {filteredParties.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                      No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
+                    </div>
+                  ) : filteredParties.map((c: any) => (
                     <button
                       key={c.id}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
@@ -861,7 +969,7 @@ export default function PaymentInPage() {
                       <td className="px-4 py-3 text-sm">
                         <div className="flex flex-col items-start gap-1">
                           <span className="font-medium text-gray-800">
-                            {p.entity?.name || p.entityId || "—"}
+                            {(typeof p.entity === "string" ? p.entity : p.entity?.name) || p.entityId || "—"}
                           </span>
                           {!isDraft && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
@@ -881,9 +989,17 @@ export default function PaymentInPage() {
                           <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-yellow-50 text-yellow-700 border-yellow-200 uppercase">
                             Draft
                           </span>
-                        ) : (
+                        ) : p.isCancelled ? (
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-slate-100 text-slate-500 border-slate-200 uppercase">
+                            Cancelled
+                          </span>
+                        ) : p.status === "PAID" ? (
                           <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 uppercase">
                             Paid
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-amber-50 text-amber-700 border-amber-200 uppercase">
+                            {p.status || "Pending"}
                           </span>
                         )}
                       </td>

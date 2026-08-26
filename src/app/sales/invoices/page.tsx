@@ -826,8 +826,14 @@ export default function SalesInvoicesPage() {
     const customer = inv.customer || {};
     const invoice = inv.invoice || {};
     const payments = inv.payments || [];
-    const paidAmt = payments.reduce((s: number, p: any) => s + (p.amount || 0), 0);
-    const balanceAmt = (inv.totalAmount || 0) - paidAmt;
+    // Payment.paidAmount/paymentMode are the real field names (see
+    // prisma schema) — only PAID, non-cancelled rows count toward what's
+    // actually been received, matching FinanceService.createPayment's own
+    // paid/outstanding recompute.
+    const paidAmt = payments
+      .filter((p: any) => p.status === "PAID" && !p.isCancelled)
+      .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
+    const balanceAmt = Math.max(0, (inv.totalAmount || 0) - paidAmt);
 
     return (
       <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
@@ -850,14 +856,26 @@ export default function SalesInvoicesPage() {
               )}
             </div>
           </div>
-          <span className={clsx(
-            "inline-block px-3 py-1 rounded-full text-xs font-bold border",
-            invoice.status === "PAID" ? "text-emerald-600 bg-emerald-50 border-emerald-200"
-            : invoice.status === "PARTIAL" ? "text-amber-600 bg-amber-50 border-amber-200"
-            : "text-slate-600 bg-slate-50 border-slate-200"
-          )}>
-            {invoice.status || inv.paymentStatus || "UNPAID"}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className={clsx(
+              "inline-block px-3 py-1 rounded-full text-xs font-bold border",
+              invoice.status === "PAID" ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+              : invoice.status === "PARTIAL" ? "text-amber-600 bg-amber-50 border-amber-200"
+              : "text-slate-600 bg-slate-50 border-slate-200"
+            )}>
+              {invoice.status || inv.paymentStatus || "UNPAID"}
+            </span>
+            {invoice.id && balanceAmt > 0.01 && (
+              <button
+                onClick={() => router.push(
+                  `/sales/payment-in?invoiceId=${invoice.id}&partyType=${inv.partyType || "CUSTOMER"}&partyId=${inv.partyId || inv.customerId || ""}`
+                )}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-lg transition-colors"
+              >
+                Record Payment
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
@@ -932,8 +950,11 @@ export default function SalesInvoicesPage() {
                 <div className="space-y-1">
                   {payments.map((p: any, i: number) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className="text-gray-500">{p.method || p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}</span>
-                      <span className="font-mono font-semibold text-emerald-600">₹{Number(p.amount || 0).toFixed(2)}</span>
+                      <span className={clsx("text-gray-500", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
+                        {p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}
+                        {p.isCancelled ? " (Cancelled)" : p.status !== "PAID" ? ` (${p.status})` : ""}
+                      </span>
+                      <span className="font-mono font-semibold text-emerald-600">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
