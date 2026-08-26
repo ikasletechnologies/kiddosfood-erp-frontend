@@ -875,6 +875,12 @@ export default function SalesInvoicesPage() {
                 Record Payment
               </button>
             )}
+            <button
+              onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.id}`)}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+            >
+              Create Delivery Challan
+            </button>
           </div>
         </div>
 

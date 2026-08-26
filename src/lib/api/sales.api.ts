@@ -34,6 +34,16 @@ export const salesApi = {
   getDeliveryChallanById: (id: string) => api.get(`/api/sales/delivery-challans/${id}`),
   createDeliveryChallan: (data: any) => api.post('/api/sales/delivery-challans', data),
   updateDeliveryChallan: (id: string, data: any) => api.patch(`/api/sales/delivery-challans/${id}`, data),
+  markDeliveryChallanDelivered: (id: string, data: { receivedBy?: string; deliveredAt?: string; podReference?: string }) =>
+    api.post(`/api/sales/delivery-challans/${id}/deliver`, data),
+
+  getTransitStock: () => api.get('/api/sales/transit-stock'),
+  getDispatchTracking: (params?: { status?: string }) => api.get('/api/sales/dispatch-tracking', { params }),
+
+  getDeliveryChallanReturns: (params?: { challanId?: string }) => api.get('/api/sales/delivery-challan-returns', { params }),
+  createDeliveryChallanReturn: (data: any) => api.post('/api/sales/delivery-challan-returns', data),
+  receiveDeliveryChallanReturn: (id: string, itemConditions: Array<{ returnItemId: string; condition: string }>) =>
+    api.post(`/api/sales/delivery-challan-returns/${id}/receive`, { itemConditions }),
 
 
   getReturns: (params?: any) => api.get('/api/sales/returns', { params }),
