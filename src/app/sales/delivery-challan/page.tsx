@@ -175,7 +175,9 @@ export default function DeliveryChallanPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
-  const [sourceFranchiseId, setSourceFranchiseId] = useState("hq-001");
+  // Empty until resolved to the real HQ franchise once `franchises` loads
+  // (see the effect below) — there's no fixed literal id to default to.
+  const [sourceFranchiseId, setSourceFranchiseId] = useState("");
   const [vehicleNo, setVehicleNo] = useState("");
   const [driverName, setDriverName] = useState("");
   const [challanNo, setChallanNo] = useState<string>("1");
@@ -428,7 +430,7 @@ export default function DeliveryChallanPage() {
       setChallanNo(draft.challanNo ?? "1");
       setDestType(draft.destType ?? "CUSTOMER");
       setCustomerPhone(draft.customerPhone ?? "");
-      setSourceFranchiseId(draft.sourceFranchiseId ?? "hq-001");
+      setSourceFranchiseId(draft.sourceFranchiseId ?? "");
       setVehicleNo(draft.vehicleNo ?? "");
       setDriverName(draft.driverName ?? "");
       setInvoiceDate(draft.invoiceDate ?? new Date().toISOString().split("T")[0]);
@@ -616,6 +618,24 @@ export default function DeliveryChallanPage() {
     }
   };
 
+  // Prefer the real HQ franchise (see FranchiseService.getHqFranchise) —
+  // never a hardcoded literal id, which silently breaks the moment that id
+  // stops being a real Franchise row. Falls back to the first franchise in
+  // the list only when no franchise is flagged isHQ yet, so the field
+  // still has something usable rather than staying stuck empty.
+  const defaultSourceFranchiseId = () => franchises.find((f: any) => f.isHQ)?.id || franchises[0]?.id || "";
+
+  // Same resolution, applied once the franchise list actually loads — the
+  // initial useState("") and the quick-add-restore path both run before
+  // `franchises` is populated, so they can't call defaultSourceFranchiseId()
+  // synchronously. Never overrides a value the user (or a resumed draft)
+  // already set.
+  useEffect(() => {
+    if (!sourceFranchiseId && franchises.length > 0) {
+      setSourceFranchiseId(defaultSourceFranchiseId());
+    }
+  }, [franchises]);
+
   const resetForm = () => {
     setDraftId(null);
     setIdempotencyKey(crypto.randomUUID());
@@ -625,7 +645,7 @@ export default function DeliveryChallanPage() {
     setSelectedFranchise(null);
     setCustomerSearch("");
     setCustomerPhone("");
-    setSourceFranchiseId("hq-001");
+    setSourceFranchiseId(defaultSourceFranchiseId());
     setVehicleNo("");
     setDriverName("");
     setInvoiceDate(new Date().toISOString().split("T")[0]);
@@ -768,7 +788,7 @@ export default function DeliveryChallanPage() {
     setCustomerPhone(raw.customerPhone || dc.customerPhone || "");
     setVehicleNo(raw.vehicleNo || dc.vehicleNo || "");
     setDriverName(raw.driverName || dc.driverName || "");
-    setSourceFranchiseId(raw.sourceFranchiseId || dc.sourceFranchiseId || "hq-001");
+    setSourceFranchiseId(raw.sourceFranchiseId || dc.sourceFranchiseId || defaultSourceFranchiseId());
     setInvoiceDate(raw.invoiceDate || dc.invoiceDate);
     setDueDate(raw.dueDate || dc.dueDate);
     setStateOfSupply(raw.stateOfSupply || dc.stateOfSupply || "");
@@ -1023,7 +1043,7 @@ export default function DeliveryChallanPage() {
                         (`w.franchiseId`) that never existed, so it was always
                         empty. */}
                     <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white">
-                      {franchises.length === 0 && <option value="hq-001">HQ / Main Warehouse</option>}
+                      {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
                       {franchises.map((f: any) => {
                         const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
                         return (

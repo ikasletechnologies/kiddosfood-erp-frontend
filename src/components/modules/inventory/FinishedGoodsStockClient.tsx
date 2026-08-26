@@ -87,18 +87,62 @@ export default function FinishedGoodsStockClient() {
   // Product catalog form. hqInventoryItemId is only unset when
   // matchesProduct() (see above) can't find this product's own
   // correctly-scoped InventoryItem yet.
-  const openEditPage = (item: InventoryDemandItem) => {
-    if (!item.hqInventoryItemId) {
+  //
+  // That's the normal, expected state for a just-bulk-imported Finished
+  // Good: bulk import only creates the Product catalog row (name/SKU/unit/
+  // category/tax) — it deliberately never creates stock (see the import
+  // comment above), so there's no InventoryItem to open yet. Previously
+  // this just refused to edit anything ("no HQ inventory record"), which
+  // meant a bulk-imported row could never be corrected before its first
+  // production run. Fall back to the Product catalog editor in that case —
+  // the one place SKU/name/unit/tax actually live pre-stock. The `inv:`
+  // prefix marks a synthetic row with no real Product (see
+  // inventoryOnlyItems below); that case has no catalog entry to edit
+  // either, so it keeps the original error.
+  // A row is editable if it's backed by a Product catalog entry (bulk
+  // import always creates one) OR already has an HQ InventoryItem. Only a
+  // synthetic `inv:`-prefixed row (an InventoryItem with no Product behind
+  // it — see inventoryOnlyItems below) has neither and stays uneditable.
+  const isEditable = (item: InventoryDemandItem) =>
+    !!item.hqInventoryItemId || (!!item.productId && !item.productId.startsWith("inv:"));
+
+  const [creatingItemId, setCreatingItemId] = useState<string | null>(null);
+
+  // Finished Goods edit through the same Item Master screen
+  // (/inventory/stock/edit -> EditItemForm -> rawMaterialsApi.update) Raw
+  // Materials already uses — a separate Product-catalog form here would be
+  // an inconsistent second editor for the same kind of record. A
+  // bulk-imported product has no InventoryItem yet (bulk import only
+  // creates the catalog row — see the import comment above), so the first
+  // Edit click creates one (0 stock, HQ-scoped, same SKU/name/unit) via the
+  // exact endpoint Raw Material creation already uses, then opens it in
+  // the real editor — instead of either failing or bouncing to a
+  // differently-designed screen.
+  const openEditPage = async (item: InventoryDemandItem) => {
+    if (item.hqInventoryItemId) {
+      router.push(`/inventory/stock/edit?id=${item.hqInventoryItemId}`);
+      return;
+    }
+    if (!item.productId || item.productId.startsWith("inv:")) {
       toast.error("This product has no HQ inventory record yet to edit.");
       return;
     }
-    router.push(`/inventory/stock/edit?id=${item.hqInventoryItemId}`);
+    setCreatingItemId(item.productId);
+    try {
+      const res = await rawMaterialsApi.create({
+        name: item.productName,
+        sku: item.sku,
+        unit: item.unit,
+        category: "FINISHED_GOOD",
+        initialStock: 0,
+      });
+      router.push(`/inventory/stock/edit?id=${res.data.id}`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Failed to create the inventory record for this product.");
+    } finally {
+      setCreatingItemId(null);
+    }
   };
-
-  // TEMPORARY DEBUG — on-page panel so the Edit-button diagnosis doesn't
-  // require DevTools access. Remove alongside the console.log below once
-  // diagnosed.
-  const [debugInfo, setDebugInfo] = useState<any>(null);
 
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,26 +158,30 @@ export default function FinishedGoodsStockClient() {
   // /api/products/bulk-import -> ProductService.bulkCreateFinishedGoods),
   // not the Inventory Item Master. That's what natively supports two rows
   // with the same product Name but different Size/Unit as distinct SKUs
-  // (FG-IDLI-150G vs FG-IDLI-250G), and it never creates stock — this only
-  // builds the Finished Good master/catalog. Actual stock still only enters
-  // via production -> QC -> packaging.
+  // (FG-IDLI-150G vs FG-IDLI-250G), and it never creates STOCK — this only
+  // builds the Finished Good master/catalog (currentStock stays 0; actual
+  // stock still only enters via production -> QC -> packaging, or PO ->
+  // GRN). Selling Price is a separate concept from stock and IS captured
+  // here — it sets Product.basePrice, the only thing POS reads for price;
+  // omitting it imports the product at ₹0 (sellable, priced later via the
+  // Inventory Item Master editor).
   const importFileRef = useRef<HTMLInputElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importRows, setImportRows] = useState<Array<{ category: string; name: string; size: string; unit: string; gstPercent: string; error?: string }>>([]);
+  const [importRows, setImportRows] = useState<Array<{ category: string; name: string; size: string; unit: string; gstPercent: string; sellingPrice: string; error?: string }>>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ success: number; duplicates: number; invalid: number } | null>(null);
   const [importDuplicates, setImportDuplicates] = useState<Array<{ name: string; sku: string; reason: string }>>([]);
   const [importInvalid, setImportInvalid] = useState<Array<{ name: string; reason: string }>>([]);
 
-  const IMPORT_TEMPLATE_HEADERS = ["Category", "Name", "Size", "Unit", "GST %"];
+  const IMPORT_TEMPLATE_HEADERS = ["Category", "Name", "Size", "Unit", "GST %", "Selling Price"];
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([
       IMPORT_TEMPLATE_HEADERS,
-      ["SPICE BLENDS", "IDLI PODI", "150", "G", "5"],
-      ["SPICE BLENDS", "IDLI PODI", "250", "G", "5"],
-      ["COLD PRESSED OILS", "GROUNDNUT OIL", "500", "ML", "5"],
-      ["COLD PRESSED OILS", "GROUNDNUT OIL", "1", "L", "5"],
+      ["SPICE BLENDS", "IDLI PODI", "150", "G", "5", "80"],
+      ["SPICE BLENDS", "IDLI PODI", "250", "G", "5", "130"],
+      ["COLD PRESSED OILS", "GROUNDNUT OIL", "500", "ML", "5", "180"],
+      ["COLD PRESSED OILS", "GROUNDNUT OIL", "1", "L", "5", "340"],
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Finished Goods");
@@ -180,6 +228,7 @@ export default function FinishedGoodsStockClient() {
           size: pickField(row, "size", "weight", "quantity"),
           unit: pickField(row, "unit").toUpperCase(),
           gstPercent: pickField(row, "gst %", "gst", "gst percent", "tax"),
+          sellingPrice: pickField(row, "selling price", "price", "mrp", "rate"),
         };
         let error: string | undefined;
         if (!rowData.name) error = "Missing name";
@@ -210,6 +259,7 @@ export default function FinishedGoodsStockClient() {
           size: row.size || undefined,
           unit: row.unit || undefined,
           gstPercent: row.gstPercent ? Number(row.gstPercent) : undefined,
+          sellingPrice: row.sellingPrice ? Number(row.sellingPrice) : undefined,
         }))
       );
       const data = res.data as { success: number; duplicates: Array<{ name: string; sku: string; reason: string }>; invalid: Array<{ name: string; reason: string }> };
@@ -270,20 +320,6 @@ export default function FinishedGoodsStockClient() {
         const matchedItems = inventoryItems.filter((it) => matchesProduct(it, prod));
         const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId } = summarizeStock(matchedItems, franchises);
 
-        // TEMPORARY DEBUG — remove after diagnosing the disabled Edit button.
-        if (prod.sku === "FG-ALLI-500G") {
-          const debugPayload = {
-            productSku: prod.sku,
-            productName: prod.name,
-            inventoryItemsBySku: inventoryItems.filter((it) => it.sku === prod.sku),
-            matchedItems: matchedItems.map((it) => ({ id: it.id, sku: it.sku, name: it.name, franchiseId: it.franchiseId })),
-            matchedItemsHqCheck: matchedItems.map((it) => ({ id: it.id, franchiseId: it.franchiseId, isHq: isHqFranchise(it.franchiseId, franchises) })),
-            franchises: franchises.map((f: any) => ({ id: f.id, name: f.name, isHQ: f.isHQ })),
-            hqItemId,
-          };
-          console.log("FINISHED GOOD EDIT DEBUG", debugPayload);
-          setDebugInfo(debugPayload);
-        }
         // InventoryItem doesn't carry a per-row damaged/expired flag the way
         // ProductBatch did — damaged/expired retail stock would need a
         // per-batch lookup (Expiry Tracking), out of scope for this fix.
@@ -533,18 +569,6 @@ export default function FinishedGoodsStockClient() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* TEMPORARY DEBUG PANEL — remove once the disabled Edit button is diagnosed */}
-      {debugInfo && (
-        <div className="p-4 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950/20">
-          <p className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-2">
-            FINISHED GOOD EDIT DEBUG — FG-ALLI-500G
-          </p>
-          <pre className="text-[11px] font-mono text-amber-900 dark:text-amber-200 whitespace-pre-wrap break-all overflow-x-auto">
-            {JSON.stringify(debugInfo, null, 2)}
-          </pre>
-        </div>
-      )}
-
       {/* ── Top Metric Cards Strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <InventoryMetricCard
@@ -814,11 +838,11 @@ export default function FinishedGoodsStockClient() {
 
                         <button
                           onClick={() => openEditPage(item)}
-                          disabled={!item.hqInventoryItemId}
+                          disabled={!isEditable(item) || creatingItemId === item.productId}
                           className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
-                          title={item.hqInventoryItemId ? "Edit Item" : "No HQ inventory record to edit"}
+                          title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
                         >
-                          <Edit2 size={15} />
+                          {creatingItemId === item.productId ? <RefreshCw size={15} className="animate-spin" /> : <Edit2 size={15} />}
                         </button>
                       </div>
                     </div>
@@ -910,11 +934,11 @@ export default function FinishedGoodsStockClient() {
                     <td className="px-6 py-4 text-right">
                       <button
                         onClick={() => openEditPage(item)}
-                        disabled={!item.hqInventoryItemId}
-                        title={item.hqInventoryItemId ? "Edit Item" : "No HQ inventory record to edit"}
+                        disabled={!isEditable(item) || creatingItemId === item.productId}
+                        title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
                       >
-                        <Edit2 size={12} />
+                        {creatingItemId === item.productId ? <RefreshCw size={12} className="animate-spin" /> : <Edit2 size={12} />}
                       </button>
                     </td>
                   </tr>
@@ -1053,6 +1077,7 @@ export default function FinishedGoodsStockClient() {
                     <th className="px-3 py-2 text-left font-bold text-slate-500">Size</th>
                     <th className="px-3 py-2 text-left font-bold text-slate-500">Unit</th>
                     <th className="px-3 py-2 text-left font-bold text-slate-500">GST %</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Selling Price</th>
                     <th className="px-3 py-2 text-left font-bold text-slate-500">Auto SKU</th>
                     <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
                   </tr>
@@ -1065,6 +1090,9 @@ export default function FinishedGoodsStockClient() {
                       <td className="px-3 py-2 text-slate-600">{row.size || "—"}</td>
                       <td className="px-3 py-2 text-slate-600">{row.unit || "—"}</td>
                       <td className="px-3 py-2 text-slate-600">{row.gstPercent || "5 (default)"}</td>
+                      <td className={clsx("px-3 py-2", row.sellingPrice ? "text-slate-600" : "text-amber-600 font-semibold")}>
+                        {row.sellingPrice ? `₹${row.sellingPrice}` : "₹0 (no price set)"}
+                      </td>
                       <td className="px-3 py-2 text-slate-600 font-mono">{row.name ? previewSku(row.name, row.size, row.unit) : "—"}</td>
                       <td className="px-3 py-2">
                         {row.error

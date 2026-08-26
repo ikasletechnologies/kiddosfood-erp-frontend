@@ -203,9 +203,9 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
           vendorsApi.getAll().catch(() => ({ data: [] })),
           inventoryApi.getWarehouses().catch(() => ({ data: [] }))
         ]);
-        setFranchises((fRes.data || []).filter((f: any) =>
-          !f.name.toUpperCase().includes("HEADQUARTERS") && f.id !== "hq-001"
-        ));
+        // Franchise.isHQ is the one real definition of HQ (see
+        // FranchiseService.getHqFranchise) — not a name/id guess.
+        setFranchises((fRes.data || []).filter((f: any) => !f.isHQ));
         setVendors(vRes.data || []);
         setWarehouses(wRes.data || []);
       } catch (e) {
@@ -355,7 +355,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       gstRate,
       minimumStock: Number(minimumStock) || 0,
       initialStock: Number(openingStock) || 0,
-      franchiseId: "hq-001",
+      // Omitted, not a hardcoded literal id — this form has no franchise
+      // selector, so it always creates HQ-scoped stock, and
+      // InventoryService.createItem treats "no franchiseId at all" as
+      // HQ-scoped (franchiseId: null) already. A hardcoded "hq-001"
+      // pointed at whatever id happened to exist when this was written;
+      // that id is no longer a real Franchise row, so this would fail its
+      // foreign key constraint outright.
       costPrice: prices.purchasePrice,
       basePrice: discountValue > 0 ? discountedSellingPrice : prices.customerPrice,
       secondaryUnit,

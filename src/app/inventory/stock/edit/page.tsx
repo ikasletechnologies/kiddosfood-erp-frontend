@@ -209,9 +209,9 @@ function EditItemForm() {
 
         const m = matRes.data;
         setVendors(vendRes.data || []);
-        setFranchises((fRes.data || []).filter((f: any) =>
-          !f.name.toUpperCase().includes("HEADQUARTERS") && f.id !== "hq-001"
-        ));
+        // Franchise.isHQ is the one real definition of HQ (see
+        // FranchiseService.getHqFranchise) — not a name/id guess.
+        setFranchises((fRes.data || []).filter((f: any) => !f.isHQ));
         setWarehouses(wRes.data || []);
 
         // Hydrate product state details

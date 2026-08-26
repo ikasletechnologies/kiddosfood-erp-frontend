@@ -28,6 +28,7 @@ interface Franchise {
   outstandingAmount: number;
   creditLimit: number;
   walletBalance: number;
+  isHQ?: boolean;
   ledgerEntries?: Array<{
     id: string;
     type: "DEBIT" | "CREDIT";
@@ -71,13 +72,10 @@ export default function BranchLedgerPage() {
     try {
       const res = await franchiseApi.getAll();
       const data: Franchise[] = res.data?.franchises ?? res.data ?? [];
-      // Filter out Headquarters / HQ since HQ is the main settlement entity and doesn't settle with itself
-      let filtered = data.filter(
-        (f) =>
-          f.id !== "hq-001" &&
-          !f.name.toLowerCase().includes("headquarters") &&
-          !f.name.toLowerCase().includes("hq")
-      );
+      // Filter out HQ since HQ is the main settlement entity and doesn't
+      // settle with itself — Franchise.isHQ is the one real definition of
+      // HQ (see FranchiseService.getHqFranchise), not a name/id guess.
+      let filtered = data.filter((f) => !f.isHQ);
 
       // If the user is a franchise admin, filter only their own franchise
       if (user && user.role === "FRANCHISE_ADMIN" && user.franchiseId) {

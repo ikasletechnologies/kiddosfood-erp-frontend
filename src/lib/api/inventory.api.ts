@@ -12,9 +12,11 @@ export const productsFullApi = {
   create: (data: any) => api.post('/api/products', data),
   update: (id: string, data: any) => api.patch(`/api/products/${id}`, data),
   delete: (id: string) => api.delete(`/api/products/${id}`),
-  // Finished Good catalog only — never creates stock. Never aborts on one
-  // bad row; returns per-row success/duplicate/invalid buckets.
-  bulkImport: (rows: Array<{ category?: string; name: string; size?: string; unit?: string; gstPercent?: number }>) =>
+  // Finished Good catalog only — never creates stock (currentStock stays 0).
+  // sellingPrice sets Product.basePrice, the only thing POS reads for
+  // price — omit it and the product imports at ₹0. Never aborts on one bad
+  // row; returns per-row success/duplicate/invalid buckets.
+  bulkImport: (rows: Array<{ category?: string; name: string; size?: string; unit?: string; gstPercent?: number; sellingPrice?: number }>) =>
     api.post('/api/products/bulk-import', { rows }),
 };
 

@@ -196,7 +196,12 @@ export default function RawMaterialStockClient() {
           name: row.name,
           category: "RAW_MATERIAL",
           unit: row.unit,
-          franchiseId: "hq-001",
+          // Omitted, not a hardcoded literal id — InventoryService.createItem
+          // treats "no franchiseId at all" as HQ-scoped (franchiseId: null),
+          // the one convention every module resolves HQ stock through. A
+          // hardcoded "hq-001" pointed at whatever id happened to exist when
+          // this was written; that id no longer exists as a real Franchise
+          // row, so this would fail its foreign key constraint outright.
         });
         success++;
       } catch {

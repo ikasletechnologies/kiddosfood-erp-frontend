@@ -75,11 +75,14 @@ export default function Dashboard() {
   const fetchOutlets = useCallback(async () => {
     try {
       const res = await franchiseApi.getAll();
+      // Franchise.isHQ is the one real definition of HQ (see
+      // FranchiseService.getHqFranchise) — not a name/id guess. The
+      // "Distribution Center" name exclusion is a separate, unrelated
+      // demo-data filter and is left as-is.
       const cleanList = (res.data ?? []).filter(
         (f: any) =>
-          !f.name?.includes("Headquarters (HQ)") &&
-          !f.name?.includes("Distribution Center") &&
-          f.id !== "hq-001"
+          !f.isHQ &&
+          !f.name?.includes("Distribution Center")
       );
       setOutlets(cleanList);
     } catch (e) {
