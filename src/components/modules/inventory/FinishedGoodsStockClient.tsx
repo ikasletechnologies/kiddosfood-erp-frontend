@@ -95,6 +95,11 @@ export default function FinishedGoodsStockClient() {
     router.push(`/inventory/stock/edit?id=${item.hqInventoryItemId}`);
   };
 
+  // TEMPORARY DEBUG — on-page panel so the Edit-button diagnosis doesn't
+  // require DevTools access. Remove alongside the console.log below once
+  // diagnosed.
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -267,7 +272,7 @@ export default function FinishedGoodsStockClient() {
 
         // TEMPORARY DEBUG — remove after diagnosing the disabled Edit button.
         if (prod.sku === "FG-ALLI-500G") {
-          console.log("FINISHED GOOD EDIT DEBUG", {
+          const debugPayload = {
             productSku: prod.sku,
             productName: prod.name,
             inventoryItemsBySku: inventoryItems.filter((it) => it.sku === prod.sku),
@@ -275,7 +280,9 @@ export default function FinishedGoodsStockClient() {
             matchedItemsHqCheck: matchedItems.map((it) => ({ id: it.id, franchiseId: it.franchiseId, isHq: isHqFranchise(it.franchiseId, franchises) })),
             franchises: franchises.map((f: any) => ({ id: f.id, name: f.name, isHQ: f.isHQ })),
             hqItemId,
-          });
+          };
+          console.log("FINISHED GOOD EDIT DEBUG", debugPayload);
+          setDebugInfo(debugPayload);
         }
         // InventoryItem doesn't carry a per-row damaged/expired flag the way
         // ProductBatch did — damaged/expired retail stock would need a
@@ -526,6 +533,18 @@ export default function FinishedGoodsStockClient() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
+      {/* TEMPORARY DEBUG PANEL — remove once the disabled Edit button is diagnosed */}
+      {debugInfo && (
+        <div className="p-4 rounded-xl border-2 border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950/20">
+          <p className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-2">
+            FINISHED GOOD EDIT DEBUG — FG-ALLI-500G
+          </p>
+          <pre className="text-[11px] font-mono text-amber-900 dark:text-amber-200 whitespace-pre-wrap break-all overflow-x-auto">
+            {JSON.stringify(debugInfo, null, 2)}
+          </pre>
+        </div>
+      )}
+
       {/* ── Top Metric Cards Strip ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <InventoryMetricCard
