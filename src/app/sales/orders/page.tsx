@@ -482,7 +482,15 @@ export default function SalesOrdersPage() {
     };
 
     try {
-      await api.post("/api/sales/orders", apiPayload);
+      if (draftId) {
+        // Editing an existing order — update it, never create another one.
+        await api.patch(`/api/sales/orders/${draftId}`, apiPayload);
+      } else {
+        const res = await api.post("/api/sales/orders", apiPayload);
+        // Track the new record's ID so subsequent saves in the same session
+        // update it rather than creating yet another duplicate.
+        if (res?.data?.id) setDraftId(res.data.id);
+      }
       showToast("Sales Order saved successfully", "success");
       fetchAllData();
       setView("list");

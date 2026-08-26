@@ -4,10 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft
+  AlignLeft, FileText, ArrowLeft, Truck
 } from "lucide-react";
 import { clsx } from "clsx";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { customersApi, productsFullApi, draftsApi, franchiseApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -229,6 +229,8 @@ export default function SalesInvoicesPage() {
 
   // shared
   const [view, setView] = useState<"list" | "create">("list");
+  const [viewInvoice, setViewInvoice] = useState<any>(null); // Tax Invoice deep-link view
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [printingInvoice, setPrintingInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -469,6 +471,27 @@ export default function SalesInvoicesPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Deep-link from Proforma "View Tax Invoice" (?id=<orderId>).
+  // convertedInvoiceId on ProformaInvoice is an Order.id — fetch it via
+  // GET /api/orders/:id (POSService.getOrderById) and render read-only.
+  const deepLinkedInvoiceId = searchParams.get("id");
+  useEffect(() => {
+    if (!deepLinkedInvoiceId) {
+      setViewInvoice(null);
+      return;
+    }
+    const loadLinked = async () => {
+      try {
+        const res = await api.get(`/api/orders/${deepLinkedInvoiceId}`);
+        if (res.data) setViewInvoice(res.data);
+      } catch (err) {
+        console.error("Failed to load deep-linked Tax Invoice", err);
+        showToast("Failed to open Tax Invoice", "error");
+      }
+    };
+    loadLinked();
+  }, [deepLinkedInvoiceId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -795,9 +818,148 @@ export default function SalesInvoicesPage() {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
+  // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (viewInvoice) {
+    const inv = viewInvoice;
+    const items = inv.orderItems || [];
+    const customer = inv.customer || {};
+    const invoice = inv.invoice || {};
+    const payments = inv.payments || [];
+    const paidAmt = payments.reduce((s: number, p: any) => s + (p.amount || 0), 0);
+    const balanceAmt = (inv.totalAmount || 0) - paidAmt;
+
+    return (
+      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+        {/* Top bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setViewInvoice(null);
+                window.history.replaceState({}, "", window.location.pathname);
+              }}
+              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+            >
+              <ArrowLeft size={17} />
+            </button>
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">Tax Invoice — {inv.invoiceNum || "—"}</h2>
+              {inv.sourceProformaInvoiceId && (
+                <p className="text-xs text-gray-400 mt-0.5">Source Proforma: <span className="font-mono font-semibold text-orange-500">{inv.sourceProformaNumber || inv.sourceProformaInvoiceId}</span></p>
+              )}
+            </div>
+          </div>
+          <span className={clsx(
+            "inline-block px-3 py-1 rounded-full text-xs font-bold border",
+            invoice.status === "PAID" ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+            : invoice.status === "PARTIAL" ? "text-amber-600 bg-amber-50 border-amber-200"
+            : "text-slate-600 bg-slate-50 border-slate-200"
+          )}>
+            {invoice.status || inv.paymentStatus || "UNPAID"}
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+          {/* Party + Invoice Meta */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Party</p>
+                <p className="text-xs text-gray-500 font-medium">Type: <span className="text-gray-800">{inv.partyType || "CUSTOMER"}</span></p>
+                <p className="text-base font-bold text-gray-800">{customer.name || inv.customerName || "—"}</p>
+                {customer.contact && <p className="text-sm text-gray-500">{customer.contact}</p>}
+                {customer.phone && <p className="text-sm text-gray-500">{customer.phone}</p>}
+                {customer.email && <p className="text-xs text-gray-400">{customer.email}</p>}
+                {customer.gstNumber && <p className="text-xs text-gray-400">GSTIN: {customer.gstNumber}</p>}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Invoice Details</p>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Invoice No.</span><span className="font-mono font-bold text-gray-800">{inv.invoiceNum || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Date</span><span className="text-gray-700">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
+                {inv.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500">State of Supply</span><span className="text-gray-700">{inv.stateOfSupply}</span></div>}
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Payment Type</span><span className="text-gray-700">{inv.paymentType || inv.paymentMode || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Order Type</span><span className="text-gray-700">{inv.orderType || "TAX_INVOICE"}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <th className="px-4 py-2.5 text-left w-8">#</th>
+                  <th className="px-4 py-2.5 text-left">Product</th>
+                  <th className="px-4 py-2.5 text-center">Qty</th>
+                  <th className="px-4 py-2.5 text-center">UOM</th>
+                  <th className="px-4 py-2.5 text-right">Rate</th>
+                  <th className="px-4 py-2.5 text-center">Tax %</th>
+                  <th className="px-4 py-2.5 text-right">Tax Amt</th>
+                  <th className="px-4 py-2.5 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map((it: any, idx: number) => (
+                  <tr key={it.id || idx} className="hover:bg-orange-50/30">
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{idx + 1}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-gray-800">{it.product?.name || it.productName || "—"}</div>
+                      {it.productId && <div className="text-[10px] text-gray-400 font-mono">{it.productId}</div>}
+                      {it.batchNumber && <div className="text-[10px] text-gray-500">Batch: {it.batchNumber}</div>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">{it.quantity}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">{it.unit || "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-mono">₹{Number(it.price || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals + Payment */}
+          <div className="flex gap-4 items-start">
+            {/* Payment history */}
+            {payments.length > 0 && (
+              <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Payment History</p>
+                <div className="space-y-1">
+                  {payments.map((p: any, i: number) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className="text-gray-500">{p.method || p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}</span>
+                      <span className="font-mono font-semibold text-emerald-600">₹{Number(p.amount || 0).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 w-72 shrink-0 space-y-2 ml-auto">
+              <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span className="font-mono">₹{Number(inv.subTotal || 0).toFixed(2)}</span></div>
+              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Tax</span><span className="font-mono text-gray-600">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
+              {(inv.discountAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Discount</span><span className="font-mono text-red-500">-₹{Number(inv.discountAmount || 0).toFixed(2)}</span></div>}
+              <div className="pt-2 border-t border-gray-100 flex justify-between font-bold text-base"><span>Total</span><span className="font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-emerald-600">Paid</span><span className="font-mono text-emerald-600">₹{paidAmt.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm font-semibold"><span className={balanceAmt > 0 ? "text-rose-600" : "text-emerald-600"}>Balance</span><span className={clsx("font-mono", balanceAmt > 0 ? "text-rose-600" : "text-emerald-600")}>₹{balanceAmt.toFixed(2)}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CREATE VIEW — Vyapar-style full-page form
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
+
     return (
       <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
 
@@ -1621,6 +1783,17 @@ export default function SalesInvoicesPage() {
                             </button>
                           ) : (
                             <>
+                              <button
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Navigating to Delivery Challan using the underlying Order ID (which represents the Tax Invoice)
+                                  router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
+                                }}
+                                className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                title="Create Delivery Challan"
+                              >
+                                <Truck className="h-4 w-4" />
+                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handlePrint(inv); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"

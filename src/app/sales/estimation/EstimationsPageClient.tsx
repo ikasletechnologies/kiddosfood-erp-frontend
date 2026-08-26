@@ -577,7 +577,7 @@ export default function EstimationsPageClient({
       setCustomerPhone(draft.customerPhone || party?.phone || "");
       setInvoiceDate(draft.validUntil ? new Date(draft.validUntil).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
       setStateOfSupply(party?.state || "");
-      setRefNo(draft.quotationNumber || "");
+      setRefNo(draft.quotationNumber || draft.proformaNumber || "");
       
       const mappedItems = draft.items && draft.items.length > 0
         ? draft.items.map((i: any) => ({

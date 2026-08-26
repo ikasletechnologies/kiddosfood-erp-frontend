@@ -314,6 +314,7 @@ export default function GRNPage() {
           await purchaseReturnsApi.create({
             vendorId,
             reason: "AUTO-GENERATED FROM GRN REJECTION",
+            returnSource: "GRN_REJECTION",
             items: rejectedItems.map(item => ({
               itemName: item.inventoryItem?.name || "Unknown Material",
               quantity: item.rejectedQty,

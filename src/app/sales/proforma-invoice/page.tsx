@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FileText, Search, RefreshCw, Check, Printer } from "lucide-react";
 import { clsx } from "clsx";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api/base";
 import { settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -36,6 +36,7 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
 export default function ProformaInvoicePage() {
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [proformas, setProformas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,25 +71,28 @@ export default function ProformaInvoicePage() {
   }, []);
 
   // Deep-link from Sales Order's "View Proforma Invoice" (?id=<id>).
+  // useSearchParams() is the correct hook for App Router client components —
+  // window.location.search is not reactive to client-side navigations.
+  const deepLinkedId = searchParams.get("id");
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("id");
-    if (!id) return;
+    if (!deepLinkedId) return;
 
-    // Fetch full detail for the deep-linked Proforma directly from the API 
+    // Fetch full detail for the deep-linked Proforma directly from the API
     // instead of waiting for the list, guaranteeing we have items & source info.
     const loadLinked = async () => {
       try {
-        const res = await api.get(`/api/sales/proforma-invoices/${id}`);
+        const res = await api.get(`/api/sales/proforma-invoices/${deepLinkedId}`);
         if (res.data) {
           setInitialDraftData(res.data);
           setView("create");
         }
       } catch (err) {
         console.error("Failed to load deep-linked Proforma Invoice", err);
+        showToast("Failed to open Proforma Invoice", "error");
       }
     };
     loadLinked();
-  }, []);
+  }, [deepLinkedId]);
 
   const handleConvert = async (proforma: any) => {
     setConvertingId(proforma.id);

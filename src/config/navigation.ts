@@ -110,6 +110,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/purchases/invoices",
         roles: SUPER_ONLY,
       },
+      {
+        icon: Undo2,
+        label: "Purchase Returns",
+        href: "/purchases/returns",
+        roles: SUPER_ONLY,
+      },
     ],
   },
   {
