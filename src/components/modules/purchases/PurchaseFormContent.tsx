@@ -104,6 +104,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
+        discountAmount: discountAmount || 0,
+        freightCost: freightCost || 0,
         items: items.map(item => ({
           inventoryItemId: item.materialId,
           quantity: item.quantity,
@@ -150,6 +152,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
         expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
+        discountAmount: discountAmount || 0,
+        freightCost: freightCost || 0,
         status: "DRAFT",
         items: items
           .filter(item => item.materialId)
