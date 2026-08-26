@@ -293,15 +293,34 @@ export default function SalesOrdersPage() {
   // autoOpenedIdRef guards against re-opening on every later orders
   // refresh (e.g. after Confirm) once the user has navigated away.
   useEffect(() => {
-    if (orders.length === 0) return;
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id || autoOpenedIdRef.current === id) return;
-    const match = orders.find((o) => o.id === id);
-    if (match) {
-      autoOpenedIdRef.current = id;
-      openOrderView(match);
-    }
-  }, [orders]);
+    
+    const loadDeepLinkedOrder = async () => {
+      try {
+        const res = await api.get(`/api/sales/orders/${id}`);
+        if (res.data) {
+          autoOpenedIdRef.current = id;
+          const o = res.data;
+          // Alias fields just like fetchAllData so the UI consumes them correctly
+          const match = {
+            ...o,
+            orderNo: o.orderNumber || o.orderNo,
+            invoiceDate: o.invoiceDate || o.createdAt,
+            dueDate: o.dueDate || o.deliveryDate || o.createdAt,
+            finalAmount: o.finalAmount ?? o.totalAmount ?? 0,
+            balance: o.balance ?? (o.paymentStatus === "PAID" ? 0 : (o.totalAmount ?? 0)),
+            customerName: o.customerName || o.customer?.name || "Unknown Party",
+            customerPhone: o.customerPhone || o.customer?.phone || "",
+          };
+          openOrderView(match);
+        }
+      } catch (err) {
+        console.error("Failed to fetch deep-linked order", err);
+      }
+    };
+    loadDeepLinkedOrder();
+  }, []);
 
   // Click outside logic
   useEffect(() => {
@@ -662,10 +681,17 @@ export default function SalesOrdersPage() {
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-[#f58220]" />
-              {readOnly ? `Sales Order ${orderNo}` : view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
-            </h2>
+            <div className="flex flex-col">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-[#f58220]" />
+                {readOnly ? `Sales Order ${orderNo}` : view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
+              </h2>
+              {viewOrderRef?.quotation?.quotationNumber && (
+                <span className="text-xs font-semibold text-gray-500 mt-0.5 pl-7">
+                  Source Estimate: {viewOrderRef.quotation.quotationNumber}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
