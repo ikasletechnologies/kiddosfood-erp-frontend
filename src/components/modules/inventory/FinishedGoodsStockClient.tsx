@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import * as XLSX from "xlsx";
 import {
   Package, Search, RefreshCw, Send, Building2,
   Clock, Truck, CheckCircle2, AlertTriangle, ExternalLink,
-  Layers, Filter, Eye, LayoutGrid, List, ArrowRight, ShieldCheck
+  Layers, Filter, Eye, LayoutGrid, List, ArrowRight, ShieldCheck,
+  Upload, Download, Edit2
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -16,6 +19,8 @@ import { toast } from "react-hot-toast";
 import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
 import BranchStockDrawer from "./BranchStockDrawer";
+import { Modal } from "@/components/ui/Modal";
+import { generateSKU } from "@/lib/utils/erp";
 
 // HQ is now the explicit Franchise.isHQ field, not an id/name guess — a
 // franchise named anything (e.g. "Default") is HQ iff isHQ is true.
@@ -42,8 +47,13 @@ function matchesProduct(item: { sku?: string; name?: string }, prod: { sku?: str
   const itemName = item.name?.toUpperCase() || "";
   const prodSku = prod.sku?.toUpperCase() || "";
   const prodName = prod.name?.toUpperCase() || "";
-  if (prodSku && itemSku === prodSku) return true;
-  if (prodName && itemName === prodName) return true;
+  // Once a product has a SKU, match by SKU only — falling back to name
+  // would bleed two same-named weight variants (e.g. 500G/250G, distinct
+  // SKUs) onto whichever InventoryItem happens to share the name, which is
+  // exactly what silently broke the Edit link for bulk-imported variants.
+  // Name-only matching stays for the legacy case of a product with no SKU.
+  if (prodSku) return itemSku === prodSku;
+  if (prodName) return itemName === prodName;
   return false;
 }
 
@@ -66,10 +76,25 @@ function summarizeStock(matchedItems: any[], franchises: any[]) {
     branchMap.set(fid, existing);
   });
 
-  return { hqAvailable, totalBranchAvailable, branchStockBreakdown: Array.from(branchMap.values()) };
+  return { hqAvailable, totalBranchAvailable, branchStockBreakdown: Array.from(branchMap.values()), hqItemId: hqItems[0]?.id as string | undefined };
 }
 
 export default function FinishedGoodsStockClient() {
+  const router = useRouter();
+  // Finished Goods edit through the Inventory Item Master editor
+  // (/inventory/stock/edit -> EditItemForm -> rawMaterialsApi.update), the
+  // same full item-master screen Raw Materials uses — not the standalone
+  // Product catalog form. hqInventoryItemId is only unset when
+  // matchesProduct() (see above) can't find this product's own
+  // correctly-scoped InventoryItem yet.
+  const openEditPage = (item: InventoryDemandItem) => {
+    if (!item.hqInventoryItemId) {
+      toast.error("This product has no HQ inventory record yet to edit.");
+      return;
+    }
+    router.push(`/inventory/stock/edit?id=${item.hqInventoryItemId}`);
+  };
+
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -79,6 +104,120 @@ export default function FinishedGoodsStockClient() {
   // Drawer States
   const [selectedDemandProduct, setSelectedDemandProduct] = useState<InventoryDemandItem | null>(null);
   const [selectedBranchProduct, setSelectedBranchProduct] = useState<InventoryDemandItem | null>(null);
+
+  // Excel Bulk Import — goes through the Product catalog (POST
+  // /api/products/bulk-import -> ProductService.bulkCreateFinishedGoods),
+  // not the Inventory Item Master. That's what natively supports two rows
+  // with the same product Name but different Size/Unit as distinct SKUs
+  // (FG-IDLI-150G vs FG-IDLI-250G), and it never creates stock — this only
+  // builds the Finished Good master/catalog. Actual stock still only enters
+  // via production -> QC -> packaging.
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<Array<{ category: string; name: string; size: string; unit: string; gstPercent: string; error?: string }>>([]);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: number; duplicates: number; invalid: number } | null>(null);
+  const [importDuplicates, setImportDuplicates] = useState<Array<{ name: string; sku: string; reason: string }>>([]);
+  const [importInvalid, setImportInvalid] = useState<Array<{ name: string; reason: string }>>([]);
+
+  const IMPORT_TEMPLATE_HEADERS = ["Category", "Name", "Size", "Unit", "GST %"];
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.aoa_to_sheet([
+      IMPORT_TEMPLATE_HEADERS,
+      ["SPICE BLENDS", "IDLI PODI", "150", "G", "5"],
+      ["SPICE BLENDS", "IDLI PODI", "250", "G", "5"],
+      ["COLD PRESSED OILS", "GROUNDNUT OIL", "500", "ML", "5"],
+      ["COLD PRESSED OILS", "GROUNDNUT OIL", "1", "L", "5"],
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Finished Goods");
+    XLSX.writeFile(wb, "finished_goods_import_template.xlsx");
+  };
+
+  const pickField = (row: Record<string, any>, ...keys: string[]) => {
+    for (const key of Object.keys(row)) {
+      if (keys.some(k => k.toLowerCase() === key.trim().toLowerCase())) {
+        const val = row[key];
+        return val === undefined || val === null ? "" : String(val).trim();
+      }
+    }
+    return "";
+  };
+
+  // Mirrors ProductService.bulkCreateFinishedGoods on the backend, which
+  // generates the authoritative SKU with the same generateSKU() — this is
+  // only for the live preview so what's shown here matches what gets created.
+  const previewSku = (name: string, size: string, unit: string) =>
+    generateSKU("FINISHED_GOOD", name, size ? `${size}${unit}` : undefined);
+
+  const handleImportFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+      if (rows.length === 0) {
+        toast.error("No rows found in the file");
+        return;
+      }
+
+      const parsed = rows.map(row => {
+        const name = pickField(row, "name", "item name", "product name");
+        const rowData = {
+          name,
+          category: pickField(row, "category"),
+          size: pickField(row, "size", "weight", "quantity"),
+          unit: pickField(row, "unit").toUpperCase(),
+          gstPercent: pickField(row, "gst %", "gst", "gst percent", "tax"),
+        };
+        let error: string | undefined;
+        if (!rowData.name) error = "Missing name";
+        return { ...rowData, error };
+      });
+
+      setImportRows(parsed);
+      setImportResult(null);
+      setImportDuplicates([]);
+      setImportInvalid([]);
+      setShowImportModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not read that file — expected .xlsx or .csv");
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    const validRows = importRows.filter(r => !r.error);
+    if (validRows.length === 0) return;
+
+    setImporting(true);
+    try {
+      const res = await productsFullApi.bulkImport(
+        validRows.map(row => ({
+          category: row.category || undefined,
+          name: row.name,
+          size: row.size || undefined,
+          unit: row.unit || undefined,
+          gstPercent: row.gstPercent ? Number(row.gstPercent) : undefined,
+        }))
+      );
+      const data = res.data as { success: number; duplicates: Array<{ name: string; sku: string; reason: string }>; invalid: Array<{ name: string; reason: string }> };
+      setImportResult({ success: data.success, duplicates: data.duplicates.length, invalid: data.invalid.length });
+      setImportDuplicates(data.duplicates);
+      setImportInvalid(data.invalid);
+      fetchDemandData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Bulk import failed");
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const fetchDemandData = useCallback(async () => {
     setLoading(true);
@@ -124,7 +263,7 @@ export default function FinishedGoodsStockClient() {
         // or shipped) and mislabeled HQ's own production batches as
         // "Branch Holdings" even when nothing was ever transferred out.
         const matchedItems = inventoryItems.filter((it) => matchesProduct(it, prod));
-        const { hqAvailable, totalBranchAvailable, branchStockBreakdown } = summarizeStock(matchedItems, franchises);
+        const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId } = summarizeStock(matchedItems, franchises);
         // InventoryItem doesn't carry a per-row damaged/expired flag the way
         // ProductBatch did — damaged/expired retail stock would need a
         // per-batch lookup (Expiry Tracking), out of scope for this fix.
@@ -227,6 +366,7 @@ export default function FinishedGoodsStockClient() {
           productName: prod.name,
           sku: prod.sku || "",
           unit: matchedItems[0]?.unit || "KG",
+          hqInventoryItemId: hqItemId,
           hqAvailableStock: hqAvailable,
           hqReservedStock: reservedStockQty,
           inTransitStock: inTransitStockQty,
@@ -255,12 +395,13 @@ export default function FinishedGoodsStockClient() {
         bySku.set(sku, [...(bySku.get(sku) || []), it]);
       });
       const inventoryOnlyItems: InventoryDemandItem[] = Array.from(bySku.entries()).map(([sku, group]) => {
-        const { hqAvailable, totalBranchAvailable, branchStockBreakdown } = summarizeStock(group, franchises);
+        const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId } = summarizeStock(group, franchises);
         return {
           productId: `inv:${sku}`,
           productName: group[0].name,
           sku,
           unit: group[0].unit || "KG",
+          hqInventoryItemId: hqItemId,
           hqAvailableStock: hqAvailable,
           hqReservedStock: 0,
           inTransitStock: 0,
@@ -481,6 +622,15 @@ export default function FinishedGoodsStockClient() {
             </button>
           </div>
 
+          {/* Bulk Import */}
+          <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
+          <button
+            onClick={() => importFileRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
+          >
+            <Upload size={14} /> Bulk Import (Excel)
+          </button>
+
           {/* Refresh Button */}
           <button
             onClick={fetchDemandData}
@@ -629,6 +779,15 @@ export default function FinishedGoodsStockClient() {
                             <Building2 size={15} />
                           </button>
                         )}
+
+                        <button
+                          onClick={() => openEditPage(item)}
+                          disabled={!item.hqInventoryItemId}
+                          className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                          title={item.hqInventoryItemId ? "Edit Item" : "No HQ inventory record to edit"}
+                        >
+                          <Edit2 size={15} />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -651,7 +810,8 @@ export default function FinishedGoodsStockClient() {
                   <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>HQ Reserved</th>
                   <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>In-Transit</th>
                   {hasAnyBranchHoldings && <th className="w-[16%] px-6 py-4 text-center">Branch Holdings</th>}
-                  <th className={clsx("px-6 py-4 text-right", hasAnyBranchHoldings ? "w-[16%]" : "w-[25%]")}>Franchise Demand</th>
+                  <th className={clsx("px-6 py-4 text-right", hasAnyBranchHoldings ? "w-[12%]" : "w-[20%]")}>Franchise Demand</th>
+                  <th className="w-[70px] px-6 py-4 text-right">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
@@ -714,6 +874,17 @@ export default function FinishedGoodsStockClient() {
                         </button>
                       )}
                     </td>
+
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => openEditPage(item)}
+                        disabled={!item.hqInventoryItemId}
+                        title={item.hqInventoryItemId ? "Edit Item" : "No HQ inventory record to edit"}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -733,6 +904,149 @@ export default function FinishedGoodsStockClient() {
         item={selectedBranchProduct}
         onClose={() => setSelectedBranchProduct(null)}
       />
+
+      {/* ── Bulk Import from Excel ── */}
+      <Modal
+        isOpen={showImportModal}
+        onClose={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
+        title="Import Finished Goods from Excel"
+        size="lg"
+        footer={
+          importResult ? (
+            <button
+              onClick={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
+              className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
+            >
+              Done
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() => { setShowImportModal(false); setImportRows([]); }}
+                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing || importRows.filter(r => !r.error).length === 0}
+                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+              >
+                {importing ? "Importing…" : `Import ${importRows.filter(r => !r.error).length} Item${importRows.filter(r => !r.error).length === 1 ? '' : 's'}`}
+              </button>
+            </>
+          )
+        }
+      >
+        {importResult ? (
+          <div className="py-6 space-y-4">
+            <div className="text-center space-y-3">
+              <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <CheckCircle2 size={32} />
+              </div>
+              <p className="text-lg font-bold text-slate-800">
+                {importResult.success + importResult.duplicates + importResult.invalid} rows
+              </p>
+              <div className="flex items-center justify-center gap-4 text-sm font-semibold">
+                <span className="text-emerald-600">{importResult.success} Imported</span>
+                {importResult.duplicates > 0 && <span className="text-amber-600">{importResult.duplicates} Already exist</span>}
+                {importResult.invalid > 0 && <span className="text-rose-600">{importResult.invalid} Invalid</span>}
+              </div>
+            </div>
+
+            {importDuplicates.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1.5">Already Exist</p>
+                <div className="border border-amber-100 rounded-xl overflow-hidden max-h-[25vh] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-amber-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold text-amber-700">Name</th>
+                        <th className="px-3 py-2 text-left font-bold text-amber-700">SKU</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importDuplicates.map((f, i) => (
+                        <tr key={i} className="border-t border-amber-50">
+                          <td className="px-3 py-2 font-semibold text-slate-800">{f.name}</td>
+                          <td className="px-3 py-2 text-slate-600 font-mono">{f.sku}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {importInvalid.length > 0 && (
+              <div>
+                <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1.5">Invalid</p>
+                <div className="border border-rose-100 rounded-xl overflow-hidden max-h-[25vh] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-rose-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-bold text-rose-600">Name</th>
+                        <th className="px-3 py-2 text-left font-bold text-rose-600">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importInvalid.map((f, i) => (
+                        <tr key={i} className="border-t border-rose-50">
+                          <td className="px-3 py-2 font-semibold text-slate-800">{f.name}</td>
+                          <td className="px-3 py-2 text-rose-600">{f.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                {importRows.length} row{importRows.length === 1 ? '' : 's'} found · {importRows.filter(r => r.error).length} with errors will be skipped.
+              </p>
+              <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:underline">
+                <Download size={14} /> Download Template
+              </button>
+            </div>
+            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Category</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Name</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Size</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Unit</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">GST %</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Auto SKU</th>
+                    <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row, i) => (
+                    <tr key={i} className={clsx("border-t border-slate-100", row.error && "bg-rose-50/50")}>
+                      <td className="px-3 py-2 text-slate-600">{row.category || "—"}</td>
+                      <td className="px-3 py-2 font-semibold text-slate-800">{row.name || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.size || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.unit || "—"}</td>
+                      <td className="px-3 py-2 text-slate-600">{row.gstPercent || "5 (default)"}</td>
+                      <td className="px-3 py-2 text-slate-600 font-mono">{row.name ? previewSku(row.name, row.size, row.unit) : "—"}</td>
+                      <td className="px-3 py-2">
+                        {row.error
+                          ? <span className="text-rose-600 font-bold">{row.error}</span>
+                          : <span className="text-emerald-600 font-bold">Ready</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

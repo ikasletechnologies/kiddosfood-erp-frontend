@@ -265,6 +265,10 @@ export interface InventoryDemandItem {
   productName: string;
   sku: string;
   unit: string;
+  // The underlying InventoryItem.id at HQ for this SKU, if one exists —
+  // needed to route to the Item Master edit screen, which edits a single
+  // InventoryItem row, not the Product catalog entry.
+  hqInventoryItemId?: string;
   hqAvailableStock: number;
   hqReservedStock: number;
   inTransitStock: number;
