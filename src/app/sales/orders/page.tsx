@@ -1282,8 +1282,13 @@ export default function SalesOrdersPage() {
                   return (
                     <tr key={o.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800 text-sm">{o.customerName}</div>
-                        {o.customerPhone && <div className="text-xs text-gray-400">{o.customerPhone}</div>}
+                        <div className="flex flex-col items-start gap-1">
+                          <div className="font-medium text-gray-800 text-sm">{o.customerName}</div>
+                          {o.customerPhone && <div className="text-xs text-gray-400">{o.customerPhone}</div>}
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                            {o.partyType || (o.customerId ? "CUSTOMER" : "UNKNOWN")}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-600 text-xs">
                         {o.orderNo}

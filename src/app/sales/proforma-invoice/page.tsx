@@ -9,6 +9,8 @@ import { settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatDate } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import EstimationsPageClient from "@/app/sales/estimation/EstimationsPageClient";
+import { Plus } from "lucide-react";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -40,6 +42,8 @@ export default function ProformaInvoicePage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "create">("list");
+  const [initialDraftData, setInitialDraftData] = useState<any>(null);
 
   // GSTInvoice preview/print modal
   const [previewProforma, setPreviewProforma] = useState<any>(null);
@@ -76,8 +80,8 @@ export default function ProformaInvoicePage() {
       try {
         const res = await api.get(`/api/sales/proforma-invoices/${id}`);
         if (res.data) {
-          setPreviewProforma(res.data);
-          setSearch(res.data.proformaNumber);
+          setInitialDraftData(res.data);
+          setView("create");
         }
       } catch (err) {
         console.error("Failed to load deep-linked Proforma Invoice", err);
@@ -100,6 +104,16 @@ export default function ProformaInvoicePage() {
     }
   };
 
+  const handleUpdateStatus = async (id: string, status: string) => {
+    try {
+      await api.put(`/api/sales/proforma-invoices/${id}/status`, { status });
+      showToast(`Proforma marked as ${status}`, "success");
+      fetchData();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || `Failed to mark as ${status}`, "error");
+    }
+  };
+
   const filtered = proformas.filter((p) => {
     const matchSearch = !search ||
       p.proformaNumber?.toLowerCase().includes(search.toLowerCase()) ||
@@ -115,9 +129,35 @@ export default function ProformaInvoicePage() {
     converted: proformas.filter((p) => p.status === "CONVERTED").length,
   };
 
+  if (view === "create") {
+    return (
+      <EstimationsPageClient
+        documentType="PROFORMA"
+        initialView="create"
+        initialDraftData={initialDraftData}
+        onCancel={() => {
+          setView("list");
+          setInitialDraftData(null);
+          fetchData();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       {/* ── Page Content ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+        <button
+          onClick={() => {
+            setInitialDraftData(null);
+            setView("create");
+          }}
+          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
+        >
+          <Plus className="h-4 w-4" /> New Proforma Invoice
+        </button>
+      </div>
 
       <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
         <div className="grid grid-cols-4 gap-4">
@@ -204,7 +244,12 @@ export default function ProformaInvoicePage() {
                         {p.proformaNumber}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800 text-sm">{p.customer?.name || p.customerName || "—"}</div>
+                        <div className="flex flex-col items-start gap-1">
+                          <div className="font-medium text-gray-800 text-sm">{p.customer?.name || p.customerName || "—"}</div>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                            {p.partyType || (p.customerId ? "CUSTOMER" : "UNKNOWN")}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
                         ₹{Number(p.totalAmount || 0).toFixed(2)}
@@ -230,6 +275,22 @@ export default function ProformaInvoicePage() {
                               className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
                             >
                               {convertingId === p.id ? "..." : "Convert to Tax Invoice"}
+                            </button>
+                          )}
+                          {p.status === "DRAFT" && (
+                            <button
+                              onClick={() => handleUpdateStatus(p.id, "SENT")}
+                              className="px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                            >
+                              Mark as Sent
+                            </button>
+                          )}
+                          {(p.status === "DRAFT" || p.status === "SENT") && (
+                            <button
+                              onClick={() => handleUpdateStatus(p.id, "CANCELLED")}
+                              className="px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              Cancel
                             </button>
                           )}
                           {p.status === "CONVERTED" && (

@@ -1578,9 +1578,16 @@ export default function SalesInvoicesPage() {
                           : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">
-                          {inv.order?.customer?.name || "Walk-In Customer"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium text-gray-800">
+                            {inv.order?.customer?.name || "Walk-In Customer"}
+                          </span>
+                          {!isDraft && inv.order?.customer && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                              {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : "UNKNOWN")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
                         {/* Source of truth is the order's own paymentType — `inv.paymentMode`

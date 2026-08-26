@@ -318,13 +318,25 @@ function MiniCalendar({ value, onChange, onClose }: {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { documentType?: DocumentType } = {}) {
+interface EstimationsPageClientProps {
+  documentType?: DocumentType;
+  initialView?: "list" | "create";
+  initialDraftData?: any | null;
+  onCancel?: () => void;
+}
+
+export default function EstimationsPageClient({ 
+  documentType = "ESTIMATE",
+  initialView = "list",
+  initialDraftData = null,
+  onCancel,
+}: EstimationsPageClientProps) {
   const { showToast } = useToast();
   const router = useRouter();
   const L = DOC_LABELS[documentType];
 
   // shared
-  const [view, setView] = useState<"list" | "create">("list");
+  const [view, setView] = useState<"list" | "create">(initialView);
   const [estimations, setEstimations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -386,7 +398,7 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [saving, setSaving] = useState(false);
   const [converting, setConverting] = useState<string | null>(null);
-  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftData ? initialDraftData.id : null);
 
   // GSTInvoice preview/print/download/share modal
   const [previewEstimate, setPreviewEstimate] = useState<any>(null);
@@ -421,11 +433,13 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
   const shareDropRef = useRef<HTMLDivElement>(null);
   const priceDropRef = useRef<HTMLDivElement>(null);
 
+  const apiUrl = documentType === "PROFORMA" ? "/api/sales/proforma-invoices" : "/api/sales/quotations";
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
-        api.get("/api/sales/quotations").catch(() => ({ data: [] })),
+        api.get(apiUrl).catch(() => ({ data: [] })),
         customersApi.getAll(),
         // Estimates sell finished goods, not raw materials/semi-finished/packaging —
         // exclude those categories to get the sellable Finished Goods catalog
@@ -636,6 +650,12 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
 
+  useEffect(() => {
+    if (initialDraftData) {
+      loadDraft(initialDraftData);
+    }
+  }, [initialDraftData]);
+
   const addRow = () => setItems(prev => [...prev, makeItem()]);
 
   const removeRow = (idx: number) => {
@@ -688,9 +708,9 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
       };
 
       if (draftId) {
-        await api.patch(`/api/sales/quotations/${draftId}`, payload);
+        await api.put(`${apiUrl}/${draftId}`, payload);
       } else {
-        const res = await api.post("/api/sales/quotations", payload);
+        const res = await api.post(apiUrl, payload);
         // Keep saving into the SAME record on repeat "Save Draft" clicks —
         // without this, every click created a brand-new Quotation.
         if (isDraft && res?.data?.id) setDraftId(res.data.id);
@@ -698,7 +718,8 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
 
       showToast(isDraft ? "Draft saved successfully" : L.savedToast, "success");
       fetchData();
-      setView("list");
+      if (onCancel) onCancel();
+      else setView("list");
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Failed to save estimation", "error");
     } finally {
@@ -711,7 +732,8 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
     if (hasData) {
        handleSave(true);
     } else {
-       setView("list");
+       if (onCancel) onCancel();
+       else setView("list");
     }
   };
 
@@ -1508,9 +1530,16 @@ export default function EstimationsPageClient({ documentType = "ESTIMATE" }: { d
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">
-                          {est.customer?.name || est.customerName || "—"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium text-gray-800">
+                            {est.customer?.name || est.customerName || "—"}
+                          </span>
+                          {!isDraft && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                              {est.partyType || (est.customerId ? "CUSTOMER" : "UNKNOWN")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">
                         ₹ {(est.totalAmount || 0).toLocaleString("en-IN")}

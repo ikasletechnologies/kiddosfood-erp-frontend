@@ -859,9 +859,16 @@ export default function PaymentInPage() {
                         {p.paymentNumber ? formatERPNumber("RCPT", p.paymentNumber, p.createdAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">
-                          {p.entity?.name || p.entityId || "—"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium text-gray-800">
+                            {p.entity?.name || p.entityId || "—"}
+                          </span>
+                          {!isDraft && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                              {p.entityType || "UNKNOWN"}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {p.paymentMode || "—"}

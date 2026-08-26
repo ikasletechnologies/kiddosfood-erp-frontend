@@ -279,7 +279,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Wallet,
-        label: "Customer Payments",
+        label: "Payments",
         href: "/sales/payment-in",
         roles: SUPER_ONLY,
       },
