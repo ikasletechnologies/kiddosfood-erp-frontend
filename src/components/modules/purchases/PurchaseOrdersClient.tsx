@@ -242,7 +242,7 @@ export default function PurchaseOrdersClient() {
       title: "Approve Purchase Order",
       message: "Are you sure you want to approve this purchase order? Once approved, it can be sent to the vendor.",
       confirmText: "Approve PO",
-      confirmStyle: "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20 text-white",
+      confirmStyle: "bg-[#f58220] hover:bg-[#e8740e] shadow-[#f58220]/20 text-white",
       icon: CheckCircle2,
       onConfirm: async () => {
         closeConfirm();
@@ -519,7 +519,7 @@ export default function PurchaseOrdersClient() {
                             <button
                               type="button"
                               onClick={() => handleApprove(po.id)}
-                              className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-xs font-bold hover:bg-emerald-100 transition-colors mr-1"
+                              className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors mr-1"
                             >
                               Approve
                             </button>
@@ -1026,8 +1026,15 @@ export default function PurchaseOrdersClient() {
       {/* Custom Confirmation Modal */}
       <Modal isOpen={confirmConfig.isOpen} onClose={closeConfirm} title={confirmConfig.title} size="sm">
         <div className="flex flex-col items-center text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-900 flex items-center justify-center border border-slate-100 dark:border-slate-800">
-            {confirmConfig.icon && <confirmConfig.icon size={28} className={confirmConfig.confirmStyle?.includes("rose") ? "text-rose-500" : confirmConfig.confirmStyle?.includes("emerald") ? "text-emerald-500" : "text-orange-500"} />}
+          <div className={clsx(
+            "w-16 h-16 rounded-full flex items-center justify-center border",
+            confirmConfig.confirmStyle?.includes("rose")
+              ? "bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30 text-rose-500"
+              : confirmConfig.confirmStyle?.includes("emerald")
+              ? "bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 text-emerald-500"
+              : "bg-orange-50 border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 text-[#f58220]"
+          )}>
+            {confirmConfig.icon && <confirmConfig.icon size={28} />}
           </div>
           <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
             {confirmConfig.message}

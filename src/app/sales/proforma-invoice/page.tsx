@@ -67,12 +67,24 @@ export default function ProformaInvoicePage() {
 
   // Deep-link from Sales Order's "View Proforma Invoice" (?id=<id>).
   useEffect(() => {
-    if (proformas.length === 0) return;
     const id = new URLSearchParams(window.location.search).get("id");
     if (!id) return;
-    const match = proformas.find((p) => p.id === id);
-    if (match) setSearch(match.proformaNumber);
-  }, [proformas]);
+
+    // Fetch full detail for the deep-linked Proforma directly from the API 
+    // instead of waiting for the list, guaranteeing we have items & source info.
+    const loadLinked = async () => {
+      try {
+        const res = await api.get(`/api/sales/proforma-invoices/${id}`);
+        if (res.data) {
+          setPreviewProforma(res.data);
+          setSearch(res.data.proformaNumber);
+        }
+      } catch (err) {
+        console.error("Failed to load deep-linked Proforma Invoice", err);
+      }
+    };
+    loadLinked();
+  }, []);
 
   const handleConvert = async (proforma: any) => {
     setConvertingId(proforma.id);
@@ -243,6 +255,7 @@ export default function ProformaInvoicePage() {
         <GSTInvoice
           order={{
             poNumber: previewProforma.proformaNumber,
+            sourceSalesOrderNumber: previewProforma.sourceSalesOrderNumber,
             createdAt: previewProforma.createdAt,
             discount: previewProforma.discountAmount || previewProforma.discount || 0,
             items: (previewProforma.items || []).map((it: any, idx: number) => ({

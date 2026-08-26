@@ -297,6 +297,12 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                   <td className="text-gray-500 w-24">{numberLabel}</td>
                   <td className="font-semibold text-gray-900">{invoiceNo}</td>
                 </tr>
+                {order.sourceSalesOrderNumber && (
+                  <tr>
+                    <td className="text-gray-500">Source Sales Order</td>
+                    <td className="font-semibold text-gray-900">{order.sourceSalesOrderNumber}</td>
+                  </tr>
+                )}
                 <tr>
                   <td className="text-gray-500">{docTitle} Date</td>
                   <td className="font-semibold text-gray-900">{fmtDate(invoiceDate)}</td>
