@@ -264,6 +264,19 @@ export default function FinishedGoodsStockClient() {
         // "Branch Holdings" even when nothing was ever transferred out.
         const matchedItems = inventoryItems.filter((it) => matchesProduct(it, prod));
         const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId } = summarizeStock(matchedItems, franchises);
+
+        // TEMPORARY DEBUG — remove after diagnosing the disabled Edit button.
+        if (prod.sku === "FG-ALLI-500G") {
+          console.log("FINISHED GOOD EDIT DEBUG", {
+            productSku: prod.sku,
+            productName: prod.name,
+            inventoryItemsBySku: inventoryItems.filter((it) => it.sku === prod.sku),
+            matchedItems: matchedItems.map((it) => ({ id: it.id, sku: it.sku, name: it.name, franchiseId: it.franchiseId })),
+            matchedItemsHqCheck: matchedItems.map((it) => ({ id: it.id, franchiseId: it.franchiseId, isHq: isHqFranchise(it.franchiseId, franchises) })),
+            franchises: franchises.map((f: any) => ({ id: f.id, name: f.name, isHQ: f.isHQ })),
+            hqItemId,
+          });
+        }
         // InventoryItem doesn't carry a per-row damaged/expired flag the way
         // ProductBatch did — damaged/expired retail stock would need a
         // per-batch lookup (Expiry Tracking), out of scope for this fix.
