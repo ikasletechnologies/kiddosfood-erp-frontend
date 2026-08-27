@@ -515,36 +515,59 @@ export default function RawMaterialStockClient() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-slate-500">
-                {importRows.length} row{importRows.length === 1 ? '' : 's'} found · {importRows.filter(r => r.error).length} with errors will be skipped.
+                {importRows.length > 0 ? (
+                  <>{importRows.length} row{importRows.length === 1 ? '' : 's'} found · {importRows.filter(r => r.error).length} with errors will be skipped.</>
+                ) : (
+                  <>Select an Excel file (.xlsx, .csv) to preview raw materials before importing.</>
+                )}
               </p>
               <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:underline">
                 <Download size={14} /> Download Template
               </button>
             </div>
-            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Name</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Unit</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importRows.map((row, i) => (
-                    <tr key={i} className={clsx("border-t border-slate-100", row.error && "bg-rose-50/50")}>
-                      <td className="px-3 py-2 font-semibold text-slate-800">{row.name || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.unit}</td>
-                      <td className="px-3 py-2">
-                        {row.error
-                          ? <span className="text-rose-600 font-bold">{row.error}</span>
-                          : <span className="text-emerald-600 font-bold">Ready</span>}
-                      </td>
+
+            {importRows.length === 0 ? (
+              <div
+                onClick={() => importFileRef.current?.click()}
+                className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-[#f58220] rounded-2xl p-10 text-center bg-slate-50/50 dark:bg-slate-900/50 hover:bg-orange-50/20 transition-all cursor-pointer group"
+              >
+                <UploadCloud size={44} className="mx-auto text-slate-400 group-hover:text-[#f58220] transition-colors mb-3" />
+                <p className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">Click to select or drag & drop an Excel file</p>
+                <p className="text-xs text-slate-400 mb-4">Supported formats: .xlsx, .xls, .csv</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); importFileRef.current?.click(); }}
+                  className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-bold rounded-xl shadow-2xs transition-all"
+                >
+                  Browse File
+                </button>
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-bold text-slate-500">Name</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-500">Unit</th>
+                      <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {importRows.map((row, i) => (
+                      <tr key={i} className={clsx("border-t border-slate-100", row.error && "bg-rose-50/50")}>
+                        <td className="px-3 py-2 font-semibold text-slate-800">{row.name || "—"}</td>
+                        <td className="px-3 py-2 text-slate-600">{row.unit}</td>
+                        <td className="px-3 py-2">
+                          {row.error
+                            ? <span className="text-rose-600 font-bold">{row.error}</span>
+                            : <span className="text-emerald-600 font-bold">Ready</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </Modal>

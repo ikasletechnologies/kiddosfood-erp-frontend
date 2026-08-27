@@ -179,13 +179,13 @@ export default function Sidebar() {
                     onClick={() => toggleSection(section.title)}
                     className="w-full px-2.5 py-1.5 flex items-center justify-between group/sec text-left"
                   >
-                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500 group-hover/sec:text-[#F58220] transition-colors">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-400 group-hover/sec:text-emerald-800 dark:group-hover/sec:text-emerald-300 transition-colors">
                       {section.title}
                     </span>
                     <ChevronDown
                       size={12}
                       className={clsx(
-                        "text-slate-300 dark:text-slate-600 transition-transform duration-200",
+                        "text-emerald-600/60 dark:text-emerald-400/60 transition-transform duration-200",
                         isSectionCollapsed && "-rotate-90"
                       )}
                     />

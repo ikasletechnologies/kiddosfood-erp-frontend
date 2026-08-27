@@ -401,11 +401,7 @@ function EditItemForm() {
     setError(null);
     setSuccess(null);
 
-    const weightSuffix = size ? `-${size.toUpperCase()}` : "";
-    const generatedSku = name.toUpperCase().replace(/\s+/g, "-").slice(0, 20) + weightSuffix;
-    const finalSku = itemCode 
-      ? (itemCode.toUpperCase().endsWith(weightSuffix) ? itemCode.toUpperCase() : `${itemCode.toUpperCase()}${weightSuffix}`)
-      : generatedSku;
+    const finalSku = itemCode; // Preserve existing SKU verbatim — NEVER regenerate on edit!
 
     // Prepare payload
     const payload = {
@@ -562,35 +558,16 @@ function EditItemForm() {
                     />
                   </div>
 
-                  {/* Item Code / Barcode */}
+                  {/* Item SKU (Locked) */}
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Item Code / Barcode</label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          placeholder="Enter item code or scan barcode"
-                          value={itemCode}
-                          onChange={e => setItemCode(e.target.value)}
-                          className="w-full pl-3 pr-10 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-slate-800 dark:text-white transition-all text-xs font-semibold"
-                        />
-                        <Barcode size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (name.trim()) {
-                            // Generate code based on item name (e.g., "Batter Idly" -> "BATTER-IDLY")
-                            const base = name.trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '');
-                            setItemCode(base);
-                          } else {
-                            const code = "ITM-" + Math.random().toString(36).toUpperCase().slice(2, 8);
-                            setItemCode(code);
-                          }
-                        }}
-                        className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:border-orange-400 hover:text-orange-600 transition-all whitespace-nowrap"
-                      >
-                        Assign Code
-                      </button>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SKU / Item Code (Locked)</label>
+                    <div className="relative">
+                      <input
+                        disabled
+                        readOnly
+                        value={itemCode}
+                        className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-500 dark:text-slate-400 font-mono text-xs font-bold cursor-not-allowed"
+                      />
                     </div>
                   </div>
 
