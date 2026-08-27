@@ -7,3 +7,4 @@ export * from './procurement.api';
 export * from './accounting.api';
 export * from './user.api';
 export * from './dashboard.api';
+export * from './warehouse.api';

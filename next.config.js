@@ -11,18 +11,9 @@ const nextConfig = {
       },
     ],
   },
-  async redirects() {
-    return [
-      {
-        source: '/sales/proforma-invoice',
-        destination: '/sales/estimation',
-        permanent: false,
-      },
-    ];
-  },
   webpack: (config, { isServer }) => {
     config.watchOptions = {
-      ignored: ['**/node_modules', '**/pagefile.sys', '**/.next'],
+      ignored: ['**/node_modules', '**/pagefile.sys', '**/hiberfil.sys', '**/swapfile.sys', '**/.next'],
     };
     return config;
   },

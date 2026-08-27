@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, Fragment } from "react";
-import { useRouter } from "next/navigation";
-import { X,
+import { useState, useEffect, useCallback, Fragment, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
   PackageCheck, RefreshCw, AlertTriangle,
-  CheckCircle2, Clock, Filter, Package, Building2
+  CheckCircle2, Clock, Filter, Package, Building2, X
 } from "lucide-react";
 import { clsx } from "clsx";
 import { productBatchesApi, productsFullApi, franchiseApi, productionApi } from "@/lib/api";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
-import { formatERPNumber } from "@/lib/utils";
 import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMaterialConsumptionClient";
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
+import { formatDate } from "@/lib/utils";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
@@ -43,10 +43,13 @@ const STAGE_LABELS: Record<string, string> = {
   READY_FOR_QC: "QC",
 };
 
-export default function ProductBatchesPage() {
+function ProductBatchesRegistry() {
   const { user } = useAuth();
   const isSuper = user?.role === "SUPER_ADMIN";
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestedBatchId = searchParams.get("batchId");
 
   const [batches, setBatches] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -56,22 +59,40 @@ export default function ProductBatchesPage() {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<string>("ALL");
-  const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">("ACTIVE_RUNS");
+  const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">(
+    requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" ? requestedTab : "ACTIVE_RUNS"
+  );
 
   // Batch Details SlideOver State
   const [showBatchDetails, setShowBatchDetails] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState<any>(null);
 
-  // Fetch active franchises for Super Admin
+  // Sync activeTab when URL requestedTab changes
+  useEffect(() => {
+    if (requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" || requestedTab === "ACTIVE_RUNS") {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedTab]);
+
+  // Deep-link support: a batch opened from Expiry Tracking (or elsewhere)
+  // via ?batchId= auto-opens straight to that same batch's detail drawer.
+  useEffect(() => {
+    if (!requestedBatchId || batches.length === 0) return;
+    const match = batches.find((b: any) => b.id === requestedBatchId);
+    if (match) {
+      setSelectedBatch(match);
+      setShowBatchDetails(true);
+    }
+  }, [requestedBatchId, batches]);
+
+  // Fetch every branch/outlet for Super Admin — batches can belong to HQ
+  // itself (it's a real location batches ship from), so unlike the
+  // franchise-management screens this filter must not drop it from the list.
   useEffect(() => {
     if (isSuper) {
       franchiseApi.getAll()
         .then((res) => {
-          const branches = (res.data ?? []).filter((f: any) => 
-            !f.name.includes("Headquarters (HQ)") && 
-            f.id !== "hq-001"
-          );
-          setFranchises(branches);
+          setFranchises(res.data ?? []);
         })
         .catch((err) => console.error("Failed to load franchises", err));
     }
@@ -87,7 +108,17 @@ export default function ProductBatchesPage() {
         }),
         productsFullApi.getAll(),
       ]);
-      setBatches(bRes.data ?? []);
+      // /api/production/batches also merges in GRN raw-material inventory
+      // lots that carry an expiry date (batchType: 'GRN_RAW_MATERIAL') —
+      // useful for Expiry Tracking, which shares this same endpoint, but
+      // Batch Manufacturing's registry is specifically about manufactured
+      // output, not raw materials. Also drop batches from a recipe whose
+      // user-assigned category is itself "Raw Material" (e.g. a recipe
+      // created by mistake to log a raw material's batches here).
+      const isRawMaterial = (b: any) =>
+        b.batchType === "GRN_RAW_MATERIAL" ||
+        (b.production?.recipe?.category || "").toLowerCase().includes("raw material");
+      setBatches((bRes.data ?? []).filter((b: any) => !isRawMaterial(b)));
       setProducts(pRes.data ?? []);
     } catch (e) {
       console.error(e);
@@ -96,9 +127,12 @@ export default function ProductBatchesPage() {
     }
   }, []);
 
+  // Automatically re-fetch batches whenever the active tab is REGISTRY or filters change
   useEffect(() => { 
-    fetchBatches(productFilter || undefined, selectedFranchiseId || undefined); 
-  }, [fetchBatches, productFilter, selectedFranchiseId]);
+    if (activeTab === "REGISTRY") {
+      fetchBatches(productFilter || undefined, selectedFranchiseId || undefined); 
+    }
+  }, [fetchBatches, activeTab, productFilter, selectedFranchiseId]);
 
   const handleProductFilter = (pid: string) => {
     setProductFilter(pid);
@@ -109,7 +143,8 @@ export default function ProductBatchesPage() {
     const matchSearch = !search ||
       b.batchCode?.toLowerCase().includes(q) ||
       b.product?.name?.toLowerCase().includes(q) ||
-      (b.createdAt && new Date(b.createdAt).toLocaleDateString().includes(q));
+      b.production?.recipe?.name?.toLowerCase().includes(q) ||
+      (b.createdAt && formatDate(b.createdAt).includes(q));
     const matchExpiry = expiryFilter === "ALL" || (b.expiryStatus ?? "VALID") === expiryFilter;
     return matchSearch && matchExpiry;
   });
@@ -129,15 +164,9 @@ export default function ProductBatchesPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <PackageCheck className="h-5 w-5 text-[#f58220]" />
-          Batch Manufacturing
-        </h1>
-      </div>
+      {/* ── Main Content ── */}
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-screen-2xl mx-auto px-6 py-5 space-y-5">
 
         {/* ── Tab Bar ── */}
         <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
@@ -148,9 +177,14 @@ export default function ProductBatchesPage() {
           ] as const).map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                if (tab.key === "REGISTRY") {
+                  fetchBatches(productFilter || undefined, selectedFranchiseId || undefined);
+                }
+              }}
               className={clsx(
-                "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
+                "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer",
                 activeTab === tab.key ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
               )}
             >
@@ -254,17 +288,19 @@ export default function ProductBatchesPage() {
               </div>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+              <table className="w-full text-sm min-w-[980px]">
                 <thead>
                   <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
                     <th className="text-left px-4 py-3">Batch ID</th>
                     <th className="text-left px-4 py-3">Product</th>
                     <th className="text-left px-4 py-3">Qty Produced</th>
+                    <th className="text-left px-4 py-3">QC Approved</th>
+                    <th className="text-left px-4 py-3">QC Rejected</th>
                     <th className="text-left px-4 py-3">Unit Cost</th>
                     <th className="text-left px-4 py-3">Packed</th>
-                    <th className="text-left px-4 py-3">Bulk</th>
-                    <th className="text-left px-4 py-3">Available</th>
+                    <th className="text-left px-4 py-3">Approved Bulk</th>
+                    <th className="text-left px-4 py-3">Available FG</th>
                     <th className="text-left px-4 py-3">Expiry</th>
                     <th className="text-center px-4 py-3">Status</th>
                     <th className="text-right px-4 py-3">Actions</th>
@@ -280,33 +316,43 @@ export default function ProductBatchesPage() {
                             onClick={() => { setSelectedBatch(batch); setShowBatchDetails(true); }}
                             className="font-mono font-semibold text-[#f58220] hover:text-[#e8740e] text-xs transition-colors"
                           >
-                            {batch.batchCode ? formatERPNumber("PRD", batch.batchCode, batch.createdAt) : "—"}
+                            {batch.batchCode || "—"}
                           </button>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span className="font-medium text-gray-800">
-                            {batch.product?.name ?? "—"}
+                            {batch.product?.name ?? batch.production?.recipe?.name ?? "—"}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.quantity} <span className="text-xs text-gray-400">{batch.product?.unit}</span>
+                          {batch.quantity} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-emerald-700">
+                          {batch.qcStatus === "PENDING" ? "—" : (
+                            <>{batch.approvedQty || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-rose-700">
+                          {batch.qcStatus === "PENDING" ? "—" : (
+                            <>{batch.rejectionQty || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
                           {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.packedQuantity || 0}
+                          {batch.packedQuantity || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700">
-                          {batch.bulkQuantity || 0}
+                          {batch.bulkQuantity || 0} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || "KG"}</span>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium text-gray-800">
-                          {Math.max(0, batch.quantity - (batch.packagedQty || 0))}
+                          {batch.availableQuantity || 0} <span className="text-xs text-gray-400">pcs</span>
                         </td>
                         <td className={clsx("px-4 py-3 text-xs whitespace-nowrap",
                           status === "EXPIRED" ? "text-rose-600 font-semibold" : status === "EXPIRING_SOON" ? "text-amber-600 font-semibold" : "text-gray-600"
                         )}>
-                          {getEffectiveExpiry(batch) ? new Date(getEffectiveExpiry(batch)!).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                          {formatDate(getEffectiveExpiry(batch))}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border",
@@ -325,35 +371,45 @@ export default function ProductBatchesPage() {
                               : batch.qcStatus === "REJECTED" ? "Rejected" : "Pending"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
                             {[
                               { label: "View", always: true },
                               { label: "QC", disabled: !!batch.qcStatus && batch.qcStatus !== "PENDING" },
                               { label: "Pack", disabled: !["APPROVED", "PARTIALLY_APPROVED"].includes(batch.qcStatus) || batch.packagingStatus === "PACKAGED" },
                               { label: "Dispatch", always: true },
                               { label: "Recall", always: true },
-                            ].map(({ label, disabled, always }) => (
-                              <button
-                                key={label}
-                                disabled={!!disabled}
-                                onClick={() => {
-                                  if (label === "Pack") { router.push("/packaging/queue"); }
-                                  else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
-                                  else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}`); }
-                                  else if (label === "Dispatch") { router.push("/delivery"); }
-                                  else if (label === "Recall") { router.push("/production/batch-recall"); }
-                                }}
-                                className={clsx(
-                                  "px-1.5 py-1 text-[11px] font-medium rounded transition-colors",
-                                  disabled
-                                    ? "text-gray-300 cursor-not-allowed"
-                                    : "text-gray-500 hover:text-[#f58220] hover:bg-orange-50"
-                                )}
-                              >
-                                {label}
-                              </button>
-                            ))}
+                            ].map(({ label, disabled }) => {
+                              const actionStyles: Record<string, string> = {
+                                View: "border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900",
+                                QC: "border-blue-200 bg-blue-50/80 text-blue-700 hover:bg-blue-100 hover:border-blue-300 hover:text-blue-800",
+                                Pack: "border-orange-200 bg-orange-50/80 text-[#f58220] hover:bg-orange-100 hover:border-orange-300 hover:text-[#e8740e]",
+                                Dispatch: "border-emerald-200 bg-emerald-50/80 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800",
+                                Recall: "border-rose-200 bg-rose-50/80 text-rose-700 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-800",
+                              };
+
+                              return (
+                                <button
+                                  key={label}
+                                  disabled={!!disabled}
+                                  onClick={() => {
+                                    if (label === "Pack") { router.push("/packaging/queue"); }
+                                    else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
+                                    else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}`); }
+                                    else if (label === "Dispatch") { router.push("/delivery"); }
+                                    else if (label === "Recall") { router.push("/production/batch-recall"); }
+                                  }}
+                                  className={clsx(
+                                    "px-2 py-0.5 text-[11px] font-semibold rounded border shadow-2xs transition-all active:scale-95",
+                                    disabled
+                                      ? "border-gray-200/60 bg-gray-50 text-gray-300 cursor-not-allowed shadow-none"
+                                      : actionStyles[label] || "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                                  )}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
                           </div>
                         </td>
                       </tr>
@@ -377,7 +433,7 @@ export default function ProductBatchesPage() {
                 <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-sm font-mono font-semibold text-[#f58220]">
-                    {formatERPNumber("PRD", selectedBatch.batchCode, selectedBatch.createdAt)}
+                    {selectedBatch.batchCode || "—"}
                   </span>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">Active</span>
                 </div>
@@ -393,7 +449,7 @@ export default function ProductBatchesPage() {
                 <div className="flex justify-between items-end mb-4">
                   <div>
                     <p className="text-xs text-gray-500">Product</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBatch.product?.name}</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBatch.product?.name ?? selectedBatch.production?.recipe?.name ?? "—"}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-500">Recipe Version</p>
@@ -460,10 +516,10 @@ export default function ProductBatchesPage() {
               {/* Yield & Cost */}
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Production Yield &amp; Cost</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-gray-500">Produced</p>
-                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatch.product?.unit || "KG"}</span></p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatch.production?.recipe?.yieldUnit || "KG"}</span></p>
                   </div>
                   <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-gray-500">Approved / Rejected</p>
@@ -476,6 +532,11 @@ export default function ProductBatchesPage() {
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-emerald-600 font-semibold">Unit Cost</p>
                     <p className="text-base font-bold text-emerald-700 mt-1 tabular-nums">₹{(selectedBatch.unitCost ?? 0).toFixed(2)}</p>
+                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-rose-600 font-semibold">QC Wastage Cost</p>
+                    <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">₹{((selectedBatch.rejectionQty ?? 0) * (selectedBatch.unitCost ?? 0)).toFixed(2)}</p>
+                    <p className="text-[11px] text-rose-400 mt-0.5">{selectedBatch.rejectionQty ?? 0} {selectedBatch.production?.recipe?.yieldUnit || "KG"} rejected</p>
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
@@ -554,5 +615,18 @@ export default function ProductBatchesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ProductBatchesPage() {
+  return (
+    <Suspense fallback={
+      <div className="py-16 text-center flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin" />
+        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Loading Batches...</p>
+      </div>
+    }>
+      <ProductBatchesRegistry />
+    </Suspense>
   );
 }

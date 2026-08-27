@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Layers, ChefHat, Scale, IndianRupee } from "lucide-react";
+import { ChefHat, IndianRupee } from "lucide-react";
 import { clsx } from "clsx";
 import RecipeMasterTab from "@/components/modules/production/RecipeMasterTab";
-import FormulaScalingTab from "@/components/modules/production/FormulaScalingTab";
 import RecipeCostingTab from "@/components/modules/production/RecipeCostingTab";
 
 const TABS = [
   { id: "master", label: "Recipe Master", icon: ChefHat },
-  { id: "scaling", label: "Formula Scaling", icon: Scale },
   { id: "costing", label: "Recipe Costing", icon: IndianRupee },
 ] as const;
 
@@ -54,7 +52,6 @@ export default function RecipesPage() {
       {/* ── Tab Content ── */}
       <div className="pt-2">
         {activeTab === "master" && <RecipeMasterTab />}
-        {activeTab === "scaling" && <FormulaScalingTab />}
         {activeTab === "costing" && <RecipeCostingTab />}
       </div>
     </div>

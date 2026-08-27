@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
   Plus, Search,
@@ -13,7 +13,7 @@ import {
   Package, Truck, Receipt, LayoutDashboard, Settings2,
   AlertTriangle, Star, Calendar, FileCheck, Loader2,
   Printer, MoreVertical, Filter, ChevronDown, MessageSquare, Clock, X,
-  Upload, FileSpreadsheet
+  Upload, FileSpreadsheet, Eye, Copy, ExternalLink
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -22,8 +22,7 @@ import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { Modal } from "@/components/ui/Modal";
-
-
+import { formatDate } from "@/lib/utils";
 
 // Local YYYY-MM-DD — never use toISOString() for "today", it renders in UTC and
 // silently shifts the date by a day whenever the local timezone has a non-zero offset.
@@ -39,6 +38,11 @@ const VENDOR_STATUS = [
 
 export default function VendorsClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const actionParam = searchParams.get("action");
+  const newParam = searchParams.get("new");
+  const returnToParam = searchParams.get("returnTo");
+
   const { user } = useAuth();
   const { showToast } = useToast();
 
@@ -48,6 +52,13 @@ export default function VendorsClient() {
   const [search, setSearch] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [filters, setFilters] = useState({ all: true, active: false, inactive: false, toReceive: false, toPay: false });
+
+  useEffect(() => {
+    if (actionParam === "new" || newParam === "true") {
+      setEditing(null);
+      setShowForm(true);
+    }
+  }, [actionParam, newParam]);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [selectedTab, setSelectedTab] = useState<'OVERVIEW' | 'POS' | 'GRNS' | 'MATERIALS' | 'INVOICES' | 'LEDGER'>('OVERVIEW');
 
@@ -74,6 +85,8 @@ export default function VendorsClient() {
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [openLedgerRowMenuId, setOpenLedgerRowMenuId] = useState<string | null>(null);
+  const [ledgerDetailEntry, setLedgerDetailEntry] = useState<any>(null);
 
   // Excel Import
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -106,6 +119,7 @@ export default function VendorsClient() {
         setIsMoreMenuOpen(false);
         setIsPrintDropdownOpen(false);
         setIsExportDropdownOpen(false);
+        setOpenLedgerRowMenuId(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -153,6 +167,15 @@ export default function VendorsClient() {
   const [vendorInvoices, setVendorInvoices] = useState<any[]>([]);
   const [loadingInvoices, setLoadingInvoices] = useState(false);
   const [accounts, setAccounts] = useState<any[]>([]);
+  // One key per "opened this payment modal" — reused across retries within
+  // that same session so a double-click or a slow/retried request can't
+  // post the same settlement twice.
+  const paymentIdempotencyKeyRef = useRef("");
+  useEffect(() => {
+    if (showPaymentModal) {
+      paymentIdempotencyKeyRef.current = `vendor-pay-${selectedVendorId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+  }, [showPaymentModal, selectedVendorId]);
 
   // -- Data Fetching --
   const fetchData = useCallback(async () => {
@@ -174,7 +197,7 @@ export default function VendorsClient() {
         const accs = aRes.value.data || [];
         setAccounts(accs);
         if (accs.length > 0) {
-          setPaymentForm(prev => ({ ...prev, accountId: prev.accountId || accs[0].id }));
+          // Default must be Select Account (empty)
         }
       }
     } catch (e) {
@@ -372,8 +395,8 @@ export default function VendorsClient() {
       return;
     }
 
-    const fromDateStr = ledgerFromDate && range === 'filtered' ? new Date(ledgerFromDate).toLocaleDateString() : 'All Dates';
-    const toDateStr = ledgerToDate && range === 'filtered' ? new Date(ledgerToDate).toLocaleDateString() : 'Present';
+    const fromDateStr = ledgerFromDate && range === 'filtered' ? formatDate(ledgerFromDate) : 'All Dates';
+    const toDateStr = ledgerToDate && range === 'filtered' ? formatDate(ledgerToDate) : 'Present';
 
     let printDebitTotal = 0;
     let printCreditTotal = 0;
@@ -387,7 +410,7 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       return `
         <tr>
-          <td>${new Date(e.createdAt).toLocaleDateString()}</td>
+          <td>${formatDate(e.createdAt)}</td>
           <td>${e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType}</td>
           <td>${e.referenceId || '—'}</td>
           <td>${e.note || '—'}</td>
@@ -529,7 +552,7 @@ export default function VendorsClient() {
 
       stream += `BT /F2 14 Tf ${leftMargin} ${y} Td (${title.replace(/[()\\\r\n]/g, "")}) Tj ET\n`;
       y -= 18;
-      stream += `BT /F1 9 Tf ${leftMargin} ${y} Td (Vendor: ${vendorName.replace(/[()\\\r\n]/g, "")} | Date: ${new Date().toLocaleDateString()}) Tj ET\n`;
+      stream += `BT /F1 9 Tf ${leftMargin} ${y} Td (Vendor: ${vendorName.replace(/[()\\\r\n]/g, "")} | Date: ${formatDate(new Date())}) Tj ET\n`;
       y -= 22;
 
       stream += `0.93 0.94 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
@@ -633,7 +656,7 @@ export default function VendorsClient() {
       runningCredit += creditVal;
       
       return [
-        new Date(e.createdAt).toLocaleDateString(),
+        formatDate(e.createdAt),
         e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
         e.referenceId || '',
         e.note || '',
@@ -660,7 +683,7 @@ export default function VendorsClient() {
     if (format === 'xlsx') {
       const ws = XLSX.utils.aoa_to_sheet([
         [`Vendor Transactions Ledger - ${selectedVendorDetail.name}`],
-        [`Vendor Code: ${selectedVendorDetail.vendorCode || '-'} | GSTIN: ${selectedVendorDetail.gstNumber || '-'} | Date: ${new Date().toLocaleDateString()}`],
+        [`Vendor Code: ${selectedVendorDetail.vendorCode || '-'} | GSTIN: ${selectedVendorDetail.gstNumber || '-'} | Date: ${formatDate(new Date())}`],
         [],
         headers,
         ...rows
@@ -717,7 +740,7 @@ export default function VendorsClient() {
       runningCredit += creditVal;
       
       return [
-        new Date(e.createdAt).toLocaleDateString(),
+        formatDate(e.createdAt),
         e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
         e.referenceId || '',
         e.note || '',
@@ -732,7 +755,7 @@ export default function VendorsClient() {
       [`Party Name: ${vendor.name}`, `Vendor Code: ${vendor.vendorCode || '-'}`],
       [`Contact: ${vendor.contact || vendor.phone || '-'}`, `Email: ${vendor.email || '-'}`],
       [`GSTIN: ${vendor.gstNumber || vendor.gstin || '-'}`, `Category: ${vendor.category || '-'}`],
-      [`Generated Date: ${new Date().toLocaleDateString()}`],
+      [`Generated Date: ${formatDate(new Date())}`],
       [],
       headers,
       ...rows,
@@ -809,7 +832,7 @@ export default function VendorsClient() {
 
       const aoa = [
         ['ALL PARTIES MASTER REPORT'],
-        [`Generated Date: ${new Date().toLocaleDateString()}`, `Total Parties Count: ${list.length}`],
+        [`Generated Date: ${formatDate(new Date())}`, `Total Parties Count: ${list.length}`],
         [],
         headers,
         ...rows,
@@ -942,6 +965,34 @@ export default function VendorsClient() {
 
   // -- Actions --
 
+  const amountNum = Number(paymentForm.amount) || 0;
+  const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
+  const accountBalance = selectedAccount?.balance || 0;
+  const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
+  const noPayableDue = paymentForm.type === 'PAYMENT' && vendorNetPayable <= 0;
+
+  const getFilteredAccounts = () => {
+    if (paymentForm.paymentMode === "CASH") {
+      return accounts.filter(a => a.type === "CASH");
+    } else {
+      return accounts.filter(a => a.type === "BANK");
+    }
+  };
+
+  const handlePaymentModeChange = (mode: string) => {
+    setPaymentForm(prev => {
+      const filtered = mode === "CASH"
+        ? accounts.filter(a => a.type === "CASH")
+        : accounts.filter(a => a.type === "BANK");
+      const isStillValid = filtered.some(a => a.id === prev.accountId);
+      return {
+        ...prev,
+        paymentMode: mode,
+        accountId: isStillValid ? prev.accountId : ""
+      };
+    });
+  };
+
   const handlePayment = async () => {
     const isRefRequired = paymentForm.paymentMode !== 'CASH';
     if (!selectedVendorId || !paymentForm.amount || !paymentForm.accountId) {
@@ -950,6 +1001,14 @@ export default function VendorsClient() {
     }
     if (isRefRequired && !paymentForm.transactionRef.trim()) {
       showToast("Reference Number is required for non-cash payments", "error");
+      return;
+    }
+    if (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable + 0.01) {
+      showToast(`Payment amount cannot exceed Net Payable of ₹${vendorNetPayable.toLocaleString()}`, "error");
+      return;
+    }
+    if (amountNum > accountBalance) {
+      showToast(`Payment amount cannot exceed Available Account Balance of ₹${accountBalance.toLocaleString()}`, "error");
       return;
     }
     setSaving(true);
@@ -961,7 +1020,8 @@ export default function VendorsClient() {
         accountId: paymentForm.accountId,
         vendorInvoiceId: paymentForm.vendorInvoiceId || undefined,
         paymentMode: paymentForm.paymentMode,
-        transactionRef: paymentForm.transactionRef.trim() || undefined
+        transactionRef: paymentForm.transactionRef.trim() || undefined,
+        idempotencyKey: paymentIdempotencyKeyRef.current
       });
       showToast("Financial settlement recorded", "success");
       setShowPaymentModal(false);
@@ -985,49 +1045,41 @@ export default function VendorsClient() {
     }
   };
 
-  const amountNum = Number(paymentForm.amount) || 0;
-  const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
-  const accountBalance = selectedAccount?.balance || 0;
-  // Pay Due against a vendor that has no outstanding payable doesn't make sense —
-  // block it rather than silently recording a payment with nothing to pay.
-  const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
-  const noPayableDue = paymentForm.type === 'PAYMENT' && vendorNetPayable <= 0;
-
   return (
     <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
 
       {/* Sidebar */}
       <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
         
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-          <span className="text-lg font-bold text-slate-800">Vendors</span>
-          <button
-            onClick={() => { setEditing(null); setShowForm(true); }}
-            className="p-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-full transition-all shadow-sm active:scale-95"
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-
-        {/* Search & List Headers */}
-        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
-          <div className="relative">
+        {/* Search & Action Header */}
+        <div className="p-3 border-b border-slate-200 flex items-center gap-2">
+          <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search Vendor Name"
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-slate-700"
+              className="w-full pl-9 pr-7 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#F58220] text-slate-700"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
+          <button
+            onClick={() => { setEditing(null); setShowForm(true); }}
+            className="p-2 bg-[#F58220] hover:bg-[#e0751a] text-white rounded-xl transition-all shadow-sm shrink-0"
+            title="Add New Vendor"
+          >
+            <Plus size={15} />
+          </button>
+        </div>
+
+        {/* List Filter Header */}
+        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
 
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
             <div 
@@ -1255,7 +1307,7 @@ export default function VendorsClient() {
                     {/* 3. Payments Made */}
                     <div>
                       <p className="text-xl font-bold text-slate-700 dark:text-slate-300">
-                        ₹ {Math.round(selectedVendor.totalPaid || 0).toLocaleString()}
+                        ₹ {Math.round(selectedVendor.totalPayments || 0).toLocaleString()}
                       </p>
                       <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Payments Made</p>
                     </div>
@@ -1748,7 +1800,7 @@ export default function VendorsClient() {
                               <td className="px-6 py-4 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 {e.paymentNumber || e.referenceId || "—"}
                               </td>
-                              <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{new Date(e.createdAt).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(e.createdAt)}</td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 <div>{e.note || "—"}</div>
                                 {e.transactionRef && (
@@ -1765,9 +1817,52 @@ export default function VendorsClient() {
                                 ₹ {Math.abs(Math.round(balance)).toLocaleString()} {balance >= 0 ? 'Cr' : 'Dr'}
                               </td>
                               <td className="px-2 py-4 text-center">
-                                <button className="text-slate-300 hover:text-slate-500">
-                                  <MoreVertical size={14} />
-                                </button>
+                                <div className="relative inline-block filter-popover-container">
+                                  <button
+                                    onClick={() => setOpenLedgerRowMenuId(openLedgerRowMenuId === e.id ? null : e.id)}
+                                    className="text-slate-300 hover:text-slate-500"
+                                  >
+                                    <MoreVertical size={14} />
+                                  </button>
+                                  {openLedgerRowMenuId === e.id && (
+                                    <div className="absolute top-full right-0 mt-1 w-52 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 py-1.5 text-left">
+                                      <button
+                                        onClick={() => { setOpenLedgerRowMenuId(null); setLedgerDetailEntry(e); }}
+                                        className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                      >
+                                        <Eye size={13} /> View Details
+                                      </button>
+                                      {(e.paymentNumber || e.referenceId) && (
+                                        <button
+                                          onClick={() => {
+                                            setOpenLedgerRowMenuId(null);
+                                            navigator.clipboard?.writeText(e.paymentNumber || e.referenceId || "");
+                                            showToast("Reference copied", "success");
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <Copy size={13} /> Copy Reference ID
+                                        </button>
+                                      )}
+                                      {e.referenceType === 'PURCHASE' && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/invoices'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Bills
+                                        </button>
+                                      )}
+                                      {(e.referenceType === 'PAYMENT' || e.referenceType === 'ADVANCE') && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/orders'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Orders
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1803,27 +1898,42 @@ export default function VendorsClient() {
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Material Name</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Item Code</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500">Unit</th>
+                        <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Purchased Qty</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Vendor Price</th>
+                        <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Total Amount</th>
                         <th className="px-6 py-3 font-semibold text-xs text-slate-500 text-right">Last Updated</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {selectedVendorDetail?.suppliedMaterials?.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="text-center py-10 text-slate-400 text-xs font-semibold">
+                          <td colSpan={7} className="text-center py-10 text-slate-400 text-xs font-semibold">
                             No materials linked to this vendor yet.
                           </td>
                         </tr>
                       ) : (
-                        selectedVendorDetail?.suppliedMaterials?.map((m: any) => (
-                          <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                            <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
-                            <td className="px-6 py-4 text-xs text-slate-500">{m.material?.unit || "Units"}</td>
-                            <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {m.price || m.material?.basePrice || 0}</td>
-                            <td className="px-6 py-4 text-xs text-slate-400 text-right">{m.lastUpdated ? new Date(m.lastUpdated).toLocaleDateString() : "—"}</td>
-                          </tr>
-                        ))
+                        selectedVendorDetail?.suppliedMaterials?.map((m: any) => {
+                          const unitStr = m.material?.unit ? m.material.unit.replace(/^1\s*/, "") : "Units";
+                          const qty = m.totalQuantity !== undefined ? m.totalQuantity : (m.quantity || 0);
+                          const price = Number(m.price || m.material?.costPrice || m.material?.basePrice || 0);
+                          const totalAmt = Number(m.totalAmount !== undefined ? m.totalAmount : (qty * price));
+
+                          return (
+                            <tr key={m.id || m.materialId} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                              <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-white">{m.material?.name || "—"}</td>
+                              <td className="px-6 py-4 text-xs text-slate-500">{m.material?.sku || m.material?.itemCode || m.material?.id?.slice(0, 8) || "—"}</td>
+                              <td className="px-6 py-4 text-xs text-slate-500 font-medium">{unitStr}</td>
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-700 dark:text-slate-300 text-right">
+                                {qty > 0 ? `${qty} ${unitStr}` : `0 ${unitStr}`}
+                              </td>
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {price.toLocaleString()}</td>
+                              <td className="px-6 py-4 text-xs font-bold text-slate-900 dark:text-white text-right">
+                                ₹ {totalAmt.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400 text-right">{formatDate(m.lastUpdated)}</td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -1857,14 +1967,34 @@ export default function VendorsClient() {
       {/* Modals */}
       <AddPartyModal
         isOpen={showForm}
-        onClose={() => setShowForm(false)}
+        onClose={() => {
+          setShowForm(false);
+          if (returnToParam && (actionParam === "new" || newParam === "true")) {
+            router.push(returnToParam);
+          }
+        }}
         onSave={async (data) => {
           try {
-            if (editing) await vendorsApi.update(editing.id, data);
-            else await vendorsApi.create(data);
+            let savedVendor: any;
+            if (editing) {
+              const res = await vendorsApi.update(editing.id, data);
+              savedVendor = res.data;
+            } else {
+              const res = await vendorsApi.create(data);
+              savedVendor = res.data;
+            }
             showToast(editing ? "Vendor identity synchronized" : "New vendor registered", "success");
             setShowForm(false);
-            fetchData();
+
+            if (returnToParam) {
+              const vendorId = savedVendor?.id || savedVendor?.vendor?.id;
+              const targetUrl = vendorId
+                ? `${returnToParam}${returnToParam.includes('?') ? '&' : '?'}vendorId=${vendorId}`
+                : returnToParam;
+              router.push(targetUrl);
+            } else {
+              fetchData();
+            }
           } catch (e: any) {
             const err = e.response?.data?.error || e.response?.data?.message || "";
             if (err.toLowerCase().includes("gst") && (err.toLowerCase().includes("exist") || err.toLowerCase().includes("duplicate") || err.toLowerCase().includes("unique"))) {
@@ -1960,6 +2090,41 @@ export default function VendorsClient() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!ledgerDetailEntry}
+        onClose={() => setLedgerDetailEntry(null)}
+        title="Transaction Details"
+        size="sm"
+        footer={
+          <button
+            onClick={() => setLedgerDetailEntry(null)}
+            className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
+          >
+            Close
+          </button>
+        }
+      >
+        {ledgerDetailEntry && (
+          <div className="space-y-3 text-sm">
+            {[
+              { label: "Type", value: ledgerDetailEntry.referenceType === 'PAYMENT' ? 'Payment Out' : ledgerDetailEntry.referenceType === 'PURCHASE' ? 'Purchase' : ledgerDetailEntry.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : ledgerDetailEntry.referenceType },
+              { label: "Reference", value: ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
+              { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
+              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
+              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
+              { label: "Balance After", value: `₹ ${Math.abs(Math.round(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0)).toLocaleString()} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
+              { label: "Note", value: ledgerDetailEntry.note || "—" },
+              ...(ledgerDetailEntry.transactionRef ? [{ label: "Transaction Ref", value: ledgerDetailEntry.transactionRef }] : []),
+            ].map((row) => (
+              <div key={row.label} className="flex items-start justify-between gap-4 py-1.5 border-b border-slate-50 dark:border-white/5 last:border-0">
+                <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest shrink-0">{row.label}</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-200 text-right break-all">{row.value}</span>
+              </div>
+            ))}
           </div>
         )}
       </Modal>
@@ -2092,7 +2257,8 @@ export default function VendorsClient() {
                     ) : (
                       <div className="space-y-1.5">
                         <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
-                          {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                          <option value="">Select Account</option>
+                          {getFilteredAccounts().map(a => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
                         </select>
                         {selectedAccount && (
                           <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${amountNum > accountBalance ? 'bg-rose-50 border border-rose-200 text-rose-600' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
@@ -2106,7 +2272,7 @@ export default function VendorsClient() {
 
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-gray-500">Payment Mode</label>
-                    <select value={paymentForm.paymentMode} onChange={e => setPaymentForm({ ...paymentForm, paymentMode: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
+                    <select value={paymentForm.paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
                       <option value="CASH">Cash</option>
                       <option value="UPI">UPI</option>
                       <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -2217,16 +2383,16 @@ export default function VendorsClient() {
               <p className="text-xs text-gray-500">
                 {accounts.length === 0
                   ? <span className="text-rose-500 font-semibold">⚠ No debit account available</span>
-                  : noPayableDue
-                  ? <span className="text-rose-500 font-semibold">⚠ No outstanding balance to pay — switch to Advance</span>
-                  : !amountNum
-                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
                   : !paymentForm.accountId
                   ? <span className="text-rose-500 font-semibold">⚠ Select a debit account</span>
+                  : !amountNum
+                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
+                  : paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable
+                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds Net Payable</span>
+                  : amountNum > accountBalance
+                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds available account balance</span>
                   : paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()
                   ? <span className="text-rose-500 font-semibold">⚠ Reference number required</span>
-                  : amountNum > accountBalance
-                  ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds account balance</span>
                   : <span className="text-emerald-600 font-semibold">✓ Ready to record</span>}
               </p>
               <div className="flex items-center gap-3">
@@ -2235,11 +2401,11 @@ export default function VendorsClient() {
                   onClick={handlePayment}
                   className={clsx(
                     "px-6 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm",
-                    saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())
+                    saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance
                       ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
                       : "bg-[#f58220] text-white hover:bg-[#e8740e] active:scale-95"
                   )}
-                  disabled={saving || noPayableDue || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim())}
+                  disabled={saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance}
                 >
                   {saving ? "Processing…" : "Record Payment"}
                 </button>

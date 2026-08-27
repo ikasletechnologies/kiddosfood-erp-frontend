@@ -32,6 +32,7 @@ function EditProductForm() {
     is_menu_item: true,
     isVeg: true,
     isActive: true,
+    shelfLifeDays: null as number | null,
   });
 
   useEffect(() => {
@@ -57,6 +58,7 @@ function EditProductForm() {
           is_menu_item: p.is_menu_item ?? true,
           isVeg: p.isVeg ?? true,
           isActive: p.isActive ?? true,
+          shelfLifeDays: p.shelfLifeDays ?? null,
         });
       } catch (e) {
         console.error(e);
@@ -320,6 +322,18 @@ function EditProductForm() {
                   />
                   <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 font-bold">%</div>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Shelf Life (Days)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 7"
+                  value={form.shelfLifeDays ?? ""}
+                  onChange={(e) => setForm((f) => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) }))}
+                  className="w-full px-6 py-4 text-base font-bold bg-slate-50 dark:bg-white/5 border-none rounded-2xl outline-none focus:ring-4 ring-orange-500/10 dark:text-white transition-all placeholder:text-gray-300 dark:placeholder:text-white/10"
+                />
+                <p className="text-[10px] font-bold text-gray-400 ml-1">Batch expiry = Production Date + Shelf Life. Blank uses the default (7 days).</p>
               </div>
             </div>
           </div>

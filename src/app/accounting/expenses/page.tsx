@@ -9,6 +9,7 @@ import {
 import { clsx } from "clsx";
 import { accountingApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -16,6 +17,15 @@ interface LineItem { id: string; item: string; qty: number; rate: number; }
 
 const CATEGORIES = ["RENT", "SALARY", "TRANSPORT", "UTILITIES", "MARKETING", "MAINTENANCE", "OTHER"];
 const PAYMENT_TYPES = ["Cash", "Bank Transfer", "UPI", "Cheque", "Card"];
+
+// Which Account.type a chosen Payment Type can draw from — matches the
+// mapping the backend already uses for payment-mode classification
+// (Cheque/Card settle out of a bank account, same as Bank Transfer).
+function compatibleAccountType(paymentType: string): "CASH" | "BANK" | "UPI" {
+  if (paymentType === "Cash") return "CASH";
+  if (paymentType === "UPI") return "UPI";
+  return "BANK";
+}
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PAID:    { label: "Paid",    color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
@@ -67,9 +77,7 @@ function MiniCalendar({ value, onChange, onClose }: { value: string; onChange: (
 function makeItem(): LineItem { return { id: Math.random().toString(36).slice(2), item: "", qty: 1, rate: 0 }; }
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function fmtDate(d: string) {
-  if (!d) return "—";
-  const datePart = d.split("T")[0];
-  return new Date(datePart + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -89,6 +97,7 @@ export default function ExpensesPage() {
   const [showDateCal, setShowDateCal] = useState(false);
   const [items, setItems] = useState<LineItem[]>([makeItem(), makeItem()]);
   const [paymentType, setPaymentType] = useState("Cash");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const [roundOffEnabled, setRoundOffEnabled] = useState(true);
   const [isGstEnabled, setIsGstEnabled] = useState(false);
   const [showNote, setShowNote] = useState(false);
@@ -125,6 +134,23 @@ export default function ExpensesPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const compatibleAccounts = accounts.filter(
+    a => a.status === "ACTIVE" && a.type === compatibleAccountType(paymentType)
+  );
+
+  // Whenever the payment type changes (or accounts load), make sure the
+  // selected account is still one of the compatible ones — auto-pick the
+  // first compatible account, but never silently fall back to some other
+  // unrelated account the way the old hardcoded default did.
+  useEffect(() => {
+    if (!compatibleAccounts.some(a => a.id === selectedAccountId)) {
+      setSelectedAccountId(compatibleAccounts[0]?.id || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentType, accounts]);
+
+  const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+
   const totalUnrounded = items.reduce((s, it) => s + it.qty * it.rate, 0);
   const roundOffAmt = roundOffEnabled ? Math.round(totalUnrounded) - totalUnrounded : 0;
   const grandTotal = totalUnrounded + roundOffAmt;
@@ -137,7 +163,7 @@ export default function ExpensesPage() {
 
   const resetForm = () => {
     setCategory("OTHER"); setExpenseDate(todayStr()); setItems([makeItem(), makeItem()]);
-    setPaymentType("Cash"); setRoundOffEnabled(true); setIsGstEnabled(false);
+    setPaymentType("Cash"); setSelectedAccountId(""); setRoundOffEnabled(true); setIsGstEnabled(false);
     setNoteText(""); setShowNote(false);
   };
 
@@ -146,9 +172,13 @@ export default function ExpensesPage() {
   const handleSave = async () => {
     const valid = items.filter(it => it.item.trim() || it.rate > 0);
     if (!valid.length) { toast.error("Add at least one item"); return; }
+    if (!selectedAccountId) { toast.error("Select a payment account to pay from"); return; }
+    if (selectedAccount && selectedAccount.balance < grandTotal) {
+      toast.error(`Insufficient balance in ${selectedAccount.name}. Available: ₹${selectedAccount.balance.toLocaleString("en-IN")}`);
+      return;
+    }
     setSaving(true);
     try {
-      const defaultAccount = accounts.find(a => a.type === "CASH") || accounts[0];
       await accountingApi.recordExpense({
         category,
         payee: valid[0].item.trim() || category,
@@ -156,7 +186,7 @@ export default function ExpensesPage() {
         note: JSON.stringify({ items: valid, isGstEnabled, noteText }),
         date: expenseDate,
         isPaidImmediately: true,
-        accountId: defaultAccount?.id || undefined,
+        accountId: selectedAccountId,
         paymentMode: paymentType.toUpperCase(),
       });
       toast.success("Expense saved");
@@ -177,16 +207,16 @@ export default function ExpensesPage() {
 
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50 -m-8" style={{ minHeight: "100vh" }}>
+      <div className="flex flex-col bg-slate-50 p-4 sm:p-6 min-h-screen space-y-4 animate-in fade-in duration-500">
         {/* Top Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-3">
-            <button onClick={() => { setView("list"); resetForm(); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between z-20 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button onClick={() => { setView("list"); resetForm(); }} className="p-2 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors">
               <ArrowLeft size={18} />
             </button>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Purchase & Expense</p>
-              <h1 className="text-sm font-bold text-gray-900 leading-tight">New Expense</h1>
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">Purchase & Expense</p>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight leading-tight">New Expense</h1>
             </div>
           </div>
           <div className="flex items-center gap-3 text-sm">
@@ -203,9 +233,9 @@ export default function ExpensesPage() {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 flex flex-col gap-4">
           {/* Header Fields */}
-          <div className="bg-white border-b border-gray-200 px-6 py-5">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex flex-col lg:flex-row gap-6 justify-between">
               {/* Left: Category */}
               <div className="flex-1 max-w-xs">
@@ -259,7 +289,7 @@ export default function ExpensesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="mx-6 my-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -335,7 +365,7 @@ export default function ExpensesPage() {
           </div>
 
           {/* Bottom: Payment + Note + Summary */}
-          <div className="mx-6 mb-6 flex gap-4 flex-col lg:flex-row">
+          <div className="flex gap-4 flex-col lg:flex-row pb-6">
             {/* Left */}
             <div className="flex-1 space-y-3">
               <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -347,6 +377,42 @@ export default function ExpensesPage() {
                 >
                   {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-4 mb-2">Paid From</p>
+                {compatibleAccounts.length === 0 ? (
+                  <p className="text-xs text-rose-500 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                    No active {compatibleAccountType(paymentType)} account found. Create one under Business Accounts.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {compatibleAccounts.map(acc => {
+                      const insufficient = grandTotal > 0 && acc.balance < grandTotal;
+                      const isSelected = acc.id === selectedAccountId;
+                      return (
+                        <button
+                          key={acc.id}
+                          type="button"
+                          onClick={() => setSelectedAccountId(acc.id)}
+                          className={clsx(
+                            "w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left transition-colors",
+                            isSelected ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:border-gray-300"
+                          )}
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{acc.name}</p>
+                            <p className="text-[10px] text-gray-400">{acc.accountCode}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={clsx("text-sm font-semibold", insufficient ? "text-rose-500" : "text-gray-700")}>
+                              ₹{acc.balance.toLocaleString("en-IN")}
+                            </p>
+                            {insufficient && <p className="text-[10px] font-semibold text-rose-500">Insufficient Funds</p>}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               {!showNote ? (
                 <button onClick={() => setShowNote(true)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-orange-500 transition-colors">
@@ -401,8 +467,8 @@ export default function ExpensesPage() {
         </div>
 
         {/* Sticky Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between gap-3 sticky bottom-0 z-20">
-          <span className="text-xs text-gray-400">
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between gap-3 sticky bottom-4 z-20 shadow-sm">
+          <span className="text-xs font-bold text-slate-500">
             {category} · {fmtDate(expenseDate)}
             {grandTotal > 0 && ` · ₹${grandTotal.toFixed(2)}`}
           </span>
@@ -424,7 +490,7 @@ export default function ExpensesPage() {
             </div>
             <button
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !selectedAccountId || (!!selectedAccount && grandTotal > 0 && selectedAccount.balance < grandTotal)}
               className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
               style={{ background: saving ? "#f5a050" : "linear-gradient(135deg, #f58220, #e8740e)" }}
             >
@@ -440,29 +506,28 @@ export default function ExpensesPage() {
   // ── LIST VIEW ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 -m-8">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 space-y-4 animate-in fade-in duration-500">
       {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}>
-            <TrendingUp size={16} className="text-white" />
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-orange-50 text-orange-600 border border-orange-100">
+            <TrendingUp size={20} />
           </div>
           <div>
-            <h1 className="text-sm font-bold text-gray-900">Expenses</h1>
-            <p className="text-xs text-gray-400">Track & record business expenses</p>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Expenses</h1>
+            <p className="text-sm font-medium text-slate-500">Track & record business expenses</p>
           </div>
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
-          style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 shadow-sm transition-all"
         >
-          <Plus size={15} /> Add Expense
+          <Plus size={16} /> Add Expense
         </button>
       </div>
 
       {/* Summary Strip */}
-      <div className="px-6 py-4 grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: "Total Expenses", value: `₹${totalExpenses.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-orange-400" },
           { label: "This Month", value: `₹${filtered.filter(e => new Date(e.date).getMonth() === new Date().getMonth()).reduce((s, e) => s + (e.amount || 0), 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-blue-400" },
@@ -479,15 +544,15 @@ export default function ExpensesPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="px-6 pb-4 flex items-center gap-3 flex-wrap">
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex items-center justify-end gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search category, payee..."
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 outline-none w-52 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
+              className="pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white text-slate-800 outline-none w-52 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all shadow-sm"
             />
             {search && (
               <X 
@@ -497,18 +562,15 @@ export default function ExpensesPage() {
               />
             )}
           </div>
-          <button onClick={fetchData} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-orange-500 hover:border-orange-300 bg-white transition-colors" title="Refresh">
-            <RefreshCw size={15} />
-          </button>
-          <button className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 bg-white transition-colors" title="Print">
-            <Printer size={15} />
+          <button onClick={fetchData} className="p-2.5 border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-50 bg-white transition-colors shadow-sm" title="Refresh">
+            <RefreshCw size={16} />
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="px-6 pb-8">
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div>
+        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           {loading ? (
             <div className="flex items-center justify-center py-24">
               <div className="flex flex-col items-center gap-3">

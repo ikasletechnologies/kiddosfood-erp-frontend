@@ -1,28 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
-  Search, CheckCircle2, XCircle, Thermometer, Package,
-  ArrowRight, ClipboardCheck, Trash2, RefreshCw, ShieldCheck, X
+  Search, CheckCircle2, XCircle, ClipboardCheck, RefreshCw, ShieldCheck, X
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { qcApi, productionApi } from '@/lib/api';
+import { productionApi } from '@/lib/api';
 import { toast } from 'react-hot-toast';
+import { formatDate } from '@/lib/utils';
 
 export default function QCClient() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'GRN' | 'PRODUCTION'>('GRN');
+  const router = useRouter();
 
-  // GRN State
-  const [grnItems, setGrnItems] = useState<any[]>([]);
-  const [selectedGrnItem, setSelectedGrnItem] = useState<any>(null);
-
-  // Production State — a plain table + a dialog for the actual inspection,
-  // not the split list/detail panel GRN uses. Only one number is entered
-  // (rejected qty); accepted is always produced - rejected.
+  // Production State — a plain table + a dialog for the actual inspection.
+  // Only one number is entered (rejected qty); accepted is always
+  // produced - rejected.
   const [prodBatches, setProdBatches] = useState<any[]>([]);
   const [qcModalBatch, setQcModalBatch] = useState<any>(null);
+  const [qcDecision, setQcDecision] = useState<'ACCEPT' | 'REJECT'>('ACCEPT');
   const [qcRejectedQty, setQcRejectedQty] = useState<number>(0);
   const [qcRemarks, setQcRemarks] = useState('');
   const [autoOpenedBatchId, setAutoOpenedBatchId] = useState<string | null>(null);
@@ -33,50 +30,46 @@ export default function QCClient() {
   // Search Filter
   const [searchQuery, setSearchQuery] = useState('');
 
-  // GRN Form State
-  const [grnInspection, setGrnInspection] = useState({
-    approvedQty: 0,
-    rejectedQty: 0,
-    scrapQty: 0,
-    actionTaken: 'APPROVE' as any,
-    remarks: '',
-    temperature: '',
-    moistureContent: '',
-    packagingOk: true
-  });
+  // QC History Batch Details SlideOver / Drawer
+  const [selectedBatchDetails, setSelectedBatchDetails] = useState<any | null>(null);
+  const [showBatchDetails, setShowBatchDetails] = useState(false);
+
+  const STAGE_LABELS: Record<string, string> = {
+    QUEUED: 'Queued',
+    IN_PROGRESS: 'Cooking',
+    QUALITY_CHECK: 'Quality Check',
+    COMPLETED: 'Completed',
+    STOPPED: 'Stopped',
+  };
+
+  const formatDurationMinutes = (minutes: number): string => {
+    if (minutes < 60) return `${minutes}m`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  };
 
   const fetchPending = useCallback(async () => {
     try {
       setLoading(true);
-      if (activeTab === 'GRN') {
-        const res = await qcApi.getPending();
-        setGrnItems(res.data || []);
-        if (res.data?.length > 0 && !selectedGrnItem) {
-          setSelectedGrnItem(res.data[0]);
-        }
-      } else {
-        const res = await productionApi.getPendingQC();
-        setProdBatches(res.data || []);
-      }
+      // Pull every batch (not just pending) so already-inspected batches
+      // still show up here as QC history instead of vanishing from the
+      // page the moment they're inspected.
+      const res = await productionApi.getAllBatches();
+      setProdBatches(res.data || []);
     } catch (err) {
       toast.error('Failed to load pending quality checks');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, selectedGrnItem]);
+  }, []);
 
   useEffect(() => {
     fetchPending();
-  }, [activeTab]);
+  }, [fetchPending]);
 
-  // Arriving from Batch Registry with ?batchId=... — jump straight to the
-  // Production tab and open that batch's inspection dialog, instead of
-  // landing on the generic queue and making the user find it again.
-  useEffect(() => {
-    const batchId = searchParams.get('batchId');
-    if (batchId) setActiveTab('PRODUCTION');
-  }, [searchParams]);
-
+  // Arriving from Batch Registry with ?batchId=... jumps straight to that
+  // batch's inspection dialog, instead of making the user find it again.
   useEffect(() => {
     const batchId = searchParams.get('batchId');
     if (!batchId || batchId === autoOpenedBatchId) return;
@@ -87,70 +80,11 @@ export default function QCClient() {
     }
   }, [prodBatches, searchParams, autoOpenedBatchId]);
 
-  // Sync GRN form when item changes
-  useEffect(() => {
-    if (selectedGrnItem) {
-      setGrnInspection(prev => ({
-        ...prev,
-        approvedQty: selectedGrnItem.receivedQty,
-        rejectedQty: 0,
-        scrapQty: 0,
-        actionTaken: 'APPROVE'
-      }));
-    }
-  }, [selectedGrnItem]);
-
   const openInspect = (batch: any) => {
     setQcModalBatch(batch);
+    setQcDecision('ACCEPT');
     setQcRejectedQty(0);
     setQcRemarks('');
-  };
-
-  const handleGrnQtyChange = (field: string, val: number) => {
-    const total = selectedGrnItem?.receivedQty || 0;
-    let newApproved = grnInspection.approvedQty;
-    let newRejected = grnInspection.rejectedQty;
-
-    if (field === 'approvedQty') {
-      newApproved = val;
-      newRejected = Math.max(0, total - val);
-    } else {
-      newRejected = val;
-      newApproved = Math.max(0, total - val);
-    }
-
-    setGrnInspection(prev => ({
-      ...prev,
-      approvedQty: newApproved,
-      rejectedQty: newRejected,
-      actionTaken: newRejected > 0 ? (prev.actionTaken === 'APPROVE' ? 'REJECT_RETURN' : prev.actionTaken) : 'APPROVE'
-    }));
-  };
-
-  const handleGrnSubmit = async () => {
-    if (!selectedGrnItem) return;
-
-    try {
-      setIsSubmitting(true);
-      await qcApi.inspect({
-        grnItemId: selectedGrnItem.id,
-        approvedQty: Number(grnInspection.approvedQty),
-        rejectedQty: Number(grnInspection.rejectedQty),
-        actionTaken: grnInspection.actionTaken,
-        remarks: grnInspection.remarks,
-        temperature: grnInspection.temperature ? Number(grnInspection.temperature) : undefined,
-        moistureContent: grnInspection.moistureContent ? Number(grnInspection.moistureContent) : undefined,
-        packagingOk: grnInspection.packagingOk
-      });
-
-      toast.success('Material inspection recorded successfully');
-      setSelectedGrnItem(null);
-      fetchPending();
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to record material inspection');
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   const handleProdSubmit = async () => {
@@ -159,7 +93,7 @@ export default function QCClient() {
     try {
       setIsSubmitting(true);
       await productionApi.inspectBatch(qcModalBatch.id, {
-        rejectionQty: Number(qcRejectedQty),
+        rejectionQty: qcDecision === 'REJECT' ? Number(qcRejectedQty) : 0,
         qcRemarks: qcRemarks.trim() || undefined,
       });
 
@@ -173,318 +107,106 @@ export default function QCClient() {
     }
   };
 
-  // Filter items
-  const filteredGrnItems = grnItems.filter(item =>
-    item.inventoryItem?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.vendorBatchNo?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const prodBatchName = (batch: any) => batch.product?.name || batch.production?.recipe?.name || 'Unknown';
 
-  const filteredProdBatches = prodBatches.filter(batch =>
-    batch.product?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  const searchedProdBatches = prodBatches.filter(batch =>
+    prodBatchName(batch).toLowerCase().includes(searchQuery.toLowerCase()) ||
     batch.batchCode.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredProdBatches = searchedProdBatches.filter(batch => batch.qcStatus === 'PENDING');
+  const filteredProdHistory = searchedProdBatches
+    .filter(batch => batch.qcStatus && batch.qcStatus !== 'PENDING')
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const qcStatusBadge: Record<string, { label: string; className: string }> = {
+    APPROVED: { label: 'Passed', className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
+    PARTIALLY_APPROVED: { label: 'Partial', className: 'text-amber-600 bg-amber-50 border-amber-200' },
+    REJECTED: { label: 'Failed', className: 'text-rose-600 bg-rose-50 border-rose-200' },
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-[#f58220]" />
-          Quality Control
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
           <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
         </button>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
-        {/* Tab Bar */}
-        <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
-          <button
-            onClick={() => { setActiveTab('GRN'); setSelectedGrnItem(null); setSearchQuery(''); }}
-            className={clsx(
-              "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
-              activeTab === 'GRN' ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
-            )}
-          >
-            Inward Materials
-          </button>
-          <button
-            onClick={() => { setActiveTab('PRODUCTION'); setQcModalBatch(null); setSearchQuery(''); }}
-            className={clsx(
-              "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap",
-              activeTab === 'PRODUCTION' ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
-            )}
-          >
-            Production Batches
-          </button>
-        </div>
-
-        {activeTab === 'GRN' ? (
-          <div className="flex flex-col md:flex-row gap-5 items-start">
-            {/* Left Side: List Panel */}
-            <div className="w-full md:w-1/3 bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
-              <div className="p-3 border-b border-gray-200 bg-gray-50">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search materials or batches..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
-                  />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-                {loading && grnItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-400">
-                    <RefreshCw className="h-6 w-6 animate-spin text-orange-400 opacity-60" />
-                    <p className="text-xs text-gray-400">Retrieving queue...</p>
-                  </div>
-                ) : filteredGrnItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-6">
-                    <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center">
-                      <CheckCircle2 className="h-6 w-6 text-[#f58220]" />
-                    </div>
-                    <p className="text-sm text-gray-500 font-medium">Queue is completely clear!</p>
-                  </div>
-                ) : (
-                  filteredGrnItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedGrnItem(item)}
-                      className={clsx(
-                        "w-full text-left p-3 transition-colors hover:bg-gray-50",
-                        selectedGrnItem?.id === item.id && "bg-orange-50"
-                      )}
-                    >
-                      <div className="flex justify-between items-start mb-1.5">
-                        <span className="text-[11px] font-mono text-gray-400">GRN-{item.grn?.id.substring(0, 8)}</span>
-                        <span className="px-2 py-0.5 bg-amber-50 text-amber-600 border border-amber-200 text-[10px] rounded font-semibold">M-Hold</span>
-                      </div>
-                      <p className="text-sm font-medium text-gray-800">{item.inventoryItem?.name}</p>
-                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
-                        <Package className="h-3 w-3 text-gray-400" />
-                        {item.receivedQty} {item.inventoryItem?.unit}
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* Right Side: Form Panel */}
-            <div className="flex-1 w-full bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col" style={{ minHeight: 480 }}>
-              {!selectedGrnItem ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-                  <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
-                    <ClipboardCheck className="h-8 w-8 text-[#f58220]" />
-                  </div>
-                  <p className="text-gray-800 font-semibold">Ready for Material QC</p>
-                  <p className="text-gray-500 text-sm mt-1 max-w-xs">Select an inward GRN material consignment to inspect.</p>
-                </div>
-              ) : (
-                <div className="flex flex-col h-full">
-                  {/* Header */}
-                  <div className="p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 text-xs">
-                        <span className="font-semibold text-[#f58220]">Material Verification</span>
-                        <ArrowRight className="h-3 w-3 text-gray-400" />
-                        <span className="text-gray-500">{selectedGrnItem.grn?.procurementOrder?.vendor?.name}</span>
-                      </div>
-                      <h2 className="text-lg font-bold text-gray-800">{selectedGrnItem.inventoryItem?.name}</h2>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono text-gray-500">Batch: {selectedGrnItem.vendorBatchNo || 'N/A'}</span>
-                        <span className="px-2 py-1 bg-white border border-gray-200 rounded text-[11px] font-mono text-gray-500">PO: {selectedGrnItem.grn?.procurementOrder?.poNumber || 'N/A'}</span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs text-gray-500">Total Received</p>
-                      <p className="text-xl font-bold text-gray-800">{selectedGrnItem.receivedQty} <span className="text-sm text-gray-400">{selectedGrnItem.inventoryItem?.unit}</span></p>
-                    </div>
-                  </div>
-
-                  {/* Form Content */}
-                  <div className="flex-1 overflow-y-auto p-5 space-y-6">
-
-                    {/* Physical Parameters */}
-                    <section>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                        <Thermometer className="h-3.5 w-3.5 text-[#f58220]" /> Physical Parameters
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Temperature (°C)</label>
-                          <input
-                            type="number"
-                            placeholder="24.5"
-                            value={grnInspection.temperature}
-                            onChange={(e) => setGrnInspection({ ...grnInspection, temperature: e.target.value })}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Moisture Content (%)</label>
-                          <input
-                            type="number"
-                            placeholder="12.0"
-                            value={grnInspection.moistureContent}
-                            onChange={(e) => setGrnInspection({ ...grnInspection, moistureContent: e.target.value })}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-500 mb-1.5">Packaging Integrity</label>
-                          <button
-                            onClick={() => setGrnInspection({ ...grnInspection, packagingOk: !grnInspection.packagingOk })}
-                            className={clsx(
-                              "w-full py-2 px-3 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
-                              grnInspection.packagingOk ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-rose-50 text-rose-600 border-rose-200"
-                            )}
-                          >
-                            {grnInspection.packagingOk ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
-                            {grnInspection.packagingOk ? 'Intact & Sealed' : 'Damaged / Leaked'}
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Quantity Tally */}
-                    <section>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                        <Package className="h-3.5 w-3.5 text-[#f58220]" /> Accepted vs Rejected
-                      </h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
-                        <div>
-                          <div className="flex justify-between items-center text-xs font-medium text-gray-500 mb-2">
-                            <span className="text-[#f58220]">Accepted Quantity</span>
-                            <span>Usable Stock</span>
-                          </div>
-                          <input
-                            type="number"
-                            value={grnInspection.approvedQty}
-                            onChange={(e) => handleGrnQtyChange('approvedQty', Number(e.target.value))}
-                            className="w-full text-2xl font-bold bg-transparent outline-none text-gray-800"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex justify-between items-center text-xs font-medium text-gray-500 mb-2">
-                            <span className="text-rose-500">Rejected Quantity</span>
-                            <span>Deducted Stock</span>
-                          </div>
-                          <input
-                            type="number"
-                            value={grnInspection.rejectedQty}
-                            onChange={(e) => handleGrnQtyChange('rejectedQty', Number(e.target.value))}
-                            className="w-full text-2xl font-bold bg-transparent outline-none text-gray-800"
-                          />
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Final Disposition */}
-                    <section>
-                      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                        <RefreshCw className="h-3.5 w-3.5 text-[#f58220]" /> Final Disposition
-                      </h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                          { id: 'APPROVE', label: 'Release Stock', icon: CheckCircle2, activeColor: 'border-[#f58220] text-[#f58220] bg-orange-50' },
-                          { id: 'REJECT_RETURN', label: 'Return Vendor', icon: Trash2, activeColor: 'border-amber-500 text-amber-600 bg-amber-50' },
-                          { id: 'REJECT_SCRAP', label: 'Scrap/Destroy', icon: XCircle, activeColor: 'border-rose-500 text-rose-600 bg-rose-50' },
-                          { id: 'REWORK', label: 'Internal Rework', icon: RefreshCw, activeColor: 'border-sky-500 text-sky-600 bg-sky-50' }
-                        ].map((btn) => (
-                          <button
-                            key={btn.id}
-                            onClick={() => setGrnInspection({ ...grnInspection, actionTaken: btn.id })}
-                            className={clsx(
-                              "flex flex-col items-center gap-2 p-3 border rounded-lg text-[11px] font-semibold transition-colors",
-                              grnInspection.actionTaken === btn.id ? btn.activeColor : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-                            )}
-                          >
-                            <btn.icon className="h-4 w-4" />
-                            <span>{btn.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-
-                    {/* Remarks */}
-                    <section>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Inspection Remarks</label>
-                      <textarea
-                        rows={3}
-                        placeholder="Enter remarks..."
-                        value={grnInspection.remarks}
-                        onChange={(e) => setGrnInspection({ ...grnInspection, remarks: e.target.value })}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white resize-none"
-                      />
-                    </section>
-                  </div>
-
-                  {/* Footer Actions */}
-                  <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
-                    <button
-                      onClick={() => setSelectedGrnItem(null)}
-                      className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white transition-colors"
-                    >
-                      Discard Changes
-                    </button>
-                    <button
-                      onClick={handleGrnSubmit}
-                      disabled={isSubmitting}
-                      className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-60 transition-colors flex items-center gap-2"
-                    >
-                      {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}
-                      Record Inspection
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+        {/* Production Batches */}
+        <div className="space-y-4">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search finished goods or batches..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+            />
+          {searchQuery && (
+            <X
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+              onClick={() => setSearchQuery("")}
+            />
+          )}
           </div>
-        ) : (
-          /* Production Batches — a plain table + an Inspect dialog. Not a
-             lab QMS screen: no moisture/color/texture parameters, no
-             multi-way disposition toggle — just accept/reject quantities
-             against what was actually produced. */
-          <div className="space-y-4">
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search finished goods or batches..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
-              />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
-            </div>
 
-            {loading && prodBatches.length === 0 ? (
-              <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
-            ) : filteredProdBatches.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
-                  <CheckCircle2 className="h-8 w-8 text-[#f58220]" />
-                </div>
-                <p className="text-gray-800 font-semibold">Queue is completely clear!</p>
+          {loading && prodBatches.length === 0 ? (
+            <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
+          ) : filteredProdBatches.length === 0 ? (
+            <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="h-8 w-8 text-[#f58220]" />
+              </div>
+              <p className="text-gray-800 font-semibold">Queue is completely clear!</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                    <th className="text-left px-4 py-3">Batch</th>
+                    <th className="text-left px-4 py-3">Product</th>
+                    <th className="text-right px-4 py-3">Produced Qty</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-right px-4 py-3">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredProdBatches.map((batch) => (
+                    <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.quantity} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-amber-600 bg-amber-50 border-amber-200">
+                          QC Pending
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => openInspect(batch)}
+                          className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
+                        >
+                          Inspect
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* QC History — batches already inspected. */}
+          <div className="pt-2">
+            <h2 className="text-sm font-bold text-gray-800 mb-3">QC History</h2>
+            {loading && prodBatches.length === 0 ? null : filteredProdHistory.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg py-12 flex flex-col items-center justify-center text-center">
+                <p className="text-sm text-gray-400">No batches have been QC inspected yet.</p>
               </div>
             ) : (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -493,39 +215,283 @@ export default function QCClient() {
                     <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
                       <th className="text-left px-4 py-3">Batch</th>
                       <th className="text-left px-4 py-3">Product</th>
-                      <th className="text-right px-4 py-3">Produced Qty</th>
-                      <th className="text-left px-4 py-3">Status</th>
+                      <th className="text-right px-4 py-3">Approved</th>
+                      <th className="text-right px-4 py-3">Rejected</th>
+                      <th className="text-left px-4 py-3">Result</th>
+                      <th className="text-left px-4 py-3">Inspected</th>
                       <th className="text-right px-4 py-3">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {filteredProdBatches.map((batch) => (
-                      <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode}</td>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-800">{batch.product?.name}</td>
-                        <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.quantity} {batch.product?.unit || 'units'}</td>
-                        <td className="px-4 py-3">
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-amber-600 bg-amber-50 border-amber-200">
-                            QC Pending
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => openInspect(batch)}
-                            className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
-                          >
-                            Inspect
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredProdHistory.map((batch) => {
+                      const badge = qcStatusBadge[batch.qcStatus] || { label: batch.qcStatus, className: 'text-gray-600 bg-gray-50 border-gray-200' };
+                      return (
+                        <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.approvedQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.rejectionQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                          <td className="px-4 py-3">
+                            <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", badge.className)}>
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500">
+                            {formatDate(batch.createdAt)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedBatchDetails(batch);
+                                setShowBatchDetails(true);
+                              }}
+                              className="px-3 py-1.5 border border-gray-200 hover:border-gray-300 text-gray-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
+
+      {/* Batch Details Drawer / Side Panel */}
+      {showBatchDetails && selectedBatchDetails && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div
+            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm transition-opacity"
+            onClick={() => setShowBatchDetails(false)}
+          />
+          <div className="relative w-full max-w-2xl bg-white shadow-2xl h-full flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300 z-10">
+            {/* Drawer Header */}
+            <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+              <div>
+                <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-sm font-mono font-semibold text-[#f58220]">
+                    {selectedBatchDetails.batchCode || "—"}
+                  </span>
+                  <span className={clsx(
+                    "px-2 py-0.5 rounded-full text-xs font-semibold",
+                    selectedBatchDetails.qcStatus === 'APPROVED' ? "bg-emerald-100 text-emerald-700" :
+                    selectedBatchDetails.qcStatus === 'PARTIALLY_APPROVED' ? "bg-amber-100 text-amber-700" :
+                    selectedBatchDetails.qcStatus === 'REJECTED' ? "bg-rose-100 text-rose-700" :
+                    "bg-emerald-100 text-emerald-700"
+                  )}>
+                    {qcStatusBadge[selectedBatchDetails.qcStatus]?.label || "Active"}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchDetails(false)}
+                className="p-2 hover:bg-gray-200/70 rounded-lg transition-colors font-semibold text-gray-500 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Product Header & Timeline */}
+              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                <div className="flex justify-between items-end mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Product</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{prodBatchName(selectedBatchDetails)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-500">Recipe Version</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">
+                      {selectedBatchDetails.production?.recipe?.version ? `v${selectedBatchDetails.production.recipe.version}` : "v1.2 (Standard)"}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Production Timeline */}
+                <div className="mt-6">
+                  <h4 className="text-xs font-semibold text-gray-500 mb-4">Production Timeline</h4>
+                  {(() => {
+                    const production = selectedBatchDetails.production;
+                    const stageLogs = production?.stageLogs ?? [];
+                    const points: { key: string; label: string; time: string }[] = stageLogs.map((log: any) => ({
+                      key: log.id,
+                      label: STAGE_LABELS[log.stage] ?? log.stage,
+                      time: log.enteredAt,
+                    }));
+                    if (production?.status === 'COMPLETED' && production?.endTime) {
+                      points.push({ key: 'completed', label: 'Completed', time: production.endTime });
+                    } else if (production?.status === 'STOPPED' && production?.endTime) {
+                      points.push({ key: 'stopped', label: 'Paused', time: production.endTime });
+                    }
+
+                    if (points.length === 0) {
+                      const start = selectedBatchDetails.createdAt || selectedBatchDetails.production?.startTime;
+                      const end = selectedBatchDetails.production?.endTime || selectedBatchDetails.updatedAt;
+                      return (
+                        <div className="flex items-center gap-4 text-[11px] font-semibold text-gray-500">
+                          {start && <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                          {end && <span>End: <span className="text-gray-800">{new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                        </div>
+                      );
+                    }
+
+                    const start = points[0]?.time;
+                    const end = points.length > 1 ? points[points.length - 1].time : null;
+                    const durationMinutes = start && end
+                      ? Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000))
+                      : null;
+
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-gray-600 relative before:absolute before:top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-gray-200 overflow-x-auto pb-1">
+                          {points.map((p, idx) => (
+                            <div key={p.key ?? idx} className="relative flex flex-col items-center gap-2 group z-10 shrink-0">
+                              <div className="w-3 h-3 rounded-full bg-[#f58220] border-2 border-white shadow-sm" />
+                              <span className="w-16 text-center leading-tight bg-gray-50">
+                                {new Date(p.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                                <br />
+                                {p.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-4 mt-3 text-[11px] font-semibold text-gray-500">
+                          <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>
+                          <span>End: <span className="text-gray-800">{end ? new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "In Progress"}</span></span>
+                          {durationMinutes !== null && <span>Duration: <span className="text-gray-800">{formatDurationMinutes(durationMinutes)}</span></span>}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Yield & Cost */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Production Yield &amp; Cost</h3>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500">Produced</p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
+                      {selectedBatchDetails.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatchDetails.production?.recipe?.yieldUnit || "KG"}</span>
+                    </p>
+                  </div>
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500">Approved / Rejected</p>
+                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
+                      {selectedBatchDetails.approvedQty ?? 0} <span className="text-xs text-rose-500">/ {selectedBatchDetails.rejectionQty ?? 0}</span>
+                    </p>
+                  </div>
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-[#f58220] font-semibold">Material Cost</p>
+                    <p className="text-base font-bold text-[#e8740e] mt-1 tabular-nums">
+                      ₹{(selectedBatchDetails.production?.materialCost ?? selectedBatchDetails.totalCost ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-emerald-600 font-semibold">Unit Cost</p>
+                    <p className="text-base font-bold text-emerald-700 mt-1 tabular-nums">
+                      ₹{(selectedBatchDetails.unitCost ?? 0).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-rose-600 font-semibold">QC Wastage Cost</p>
+                    <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">
+                      ₹{((selectedBatchDetails.rejectionQty ?? 0) * (selectedBatchDetails.unitCost ?? 0)).toFixed(2)}
+                    </p>
+                    <p className="text-[11px] text-rose-400 mt-0.5">
+                      {selectedBatchDetails.rejectionQty ?? 0} {selectedBatchDetails.production?.recipe?.yieldUnit || "KG"} rejected
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Unit cost reflects the real price on whichever purchase bill(s) this run actually consumed (FIFO) — it can differ run-to-run of the same recipe as older, cheaper bills run out and newer purchase prices take over.
+                </p>
+              </div>
+
+              {/* QC Remarks / Details if available */}
+              {selectedBatchDetails.qcRemarks && (
+                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-lg">
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">QC Inspection Remarks</h4>
+                  <p className="text-xs text-amber-900 leading-relaxed">{selectedBatchDetails.qcRemarks}</p>
+                </div>
+              )}
+
+              {/* Ingredients Used */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Ingredients Consumption</h3>
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                      <tr>
+                        <th className="px-4 py-2">Ingredient</th>
+                        <th className="px-4 py-2">Purchase Bill</th>
+                        <th className="px-4 py-2 text-right">Qty</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-150 text-sm text-gray-700">
+                      {(selectedBatchDetails.production?.items ?? []).map((pi: any) => {
+                        const breakdown: any[] = Array.isArray(pi.batchBreakdown) ? pi.batchBreakdown : [];
+                        return (
+                          <React.Fragment key={pi.id}>
+                            <tr className="bg-gray-50/70 font-semibold">
+                              <td className="px-4 py-2.5">{pi.inventoryItem?.name ?? "—"}</td>
+                              <td className="px-4 py-2.5 text-xs text-gray-400 normal-case">
+                                {breakdown.length > 1 ? `Blended across ${breakdown.length} bills` : ""}
+                              </td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">{pi.usedQuantity} {pi.inventoryItem?.unit}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">₹{(pi.unitCost ?? 0).toFixed(2)}</td>
+                              <td className="px-4 py-2.5 text-right tabular-nums">₹{(pi.totalCost ?? 0).toFixed(2)}</td>
+                            </tr>
+                            {breakdown.length > 0 ? (
+                              breakdown.map((b: any, idx: number) => {
+                                const isFallback = !b.batchId;
+                                return (
+                                  <tr key={idx} className="text-xs text-gray-500">
+                                    <td className="px-4 py-2"></td>
+                                    <td className="px-4 py-2 normal-case">
+                                      <span className={isFallback ? "font-semibold text-amber-600" : "font-mono font-semibold text-gray-600"}>
+                                        {b.billNumber || "—"}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-2 text-right tabular-nums">{b.qty} {pi.inventoryItem?.unit}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">₹{(b.unitCost ?? 0).toFixed(2)}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">₹{(b.totalCost ?? 0).toFixed(2)}</td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr className="text-xs text-gray-400">
+                                <td className="px-4 py-2"></td>
+                                <td className="px-4 py-2 normal-case" colSpan={4}>No purchase bill on record for this consumption</td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                      {(!selectedBatchDetails.production?.items || selectedBatchDetails.production.items.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-6 text-center text-gray-400">No ingredient data recorded for this run</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QC Inspection Dialog */}
       {qcModalBatch && (
@@ -534,7 +500,7 @@ export default function QCClient() {
             <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-start justify-between">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">QC Inspection</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Batch: {qcModalBatch.batchCode}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Batch: {qcModalBatch.batchCode || "—"}</p>
               </div>
               <button
                 onClick={() => setQcModalBatch(null)}
@@ -548,11 +514,11 @@ export default function QCClient() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-medium text-gray-500 mb-1">Product</p>
-                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.product?.name}</p>
+                  <p className="text-sm font-semibold text-gray-800">{prodBatchName(qcModalBatch)}</p>
                 </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 mb-1">Produced Quantity</p>
-                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.quantity} {qcModalBatch.product?.unit || 'units'}</p>
+                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.quantity} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
                 </div>
               </div>
 
@@ -560,19 +526,19 @@ export default function QCClient() {
                 <p className="text-xs font-medium text-gray-500 mb-2">QC Decision</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
-                    onClick={() => { setQcRejectedQty(0); setQcRemarks(''); }}
+                    onClick={() => { setQcDecision('ACCEPT'); setQcRejectedQty(0); setQcRemarks(''); }}
                     className={clsx(
                       "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
-                      qcRejectedQty === 0 ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                      qcDecision === 'ACCEPT' ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                     )}
                   >
                     <CheckCircle2 className="h-4 w-4" /> Accept
                   </button>
                   <button
-                    onClick={() => setQcRejectedQty(qcModalBatch.quantity)}
+                    onClick={() => { setQcDecision('REJECT'); setQcRejectedQty(qcModalBatch.quantity); }}
                     className={clsx(
                       "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
-                      qcRejectedQty > 0 ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                      qcDecision === 'REJECT' ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
                     )}
                   >
                     <XCircle className="h-4 w-4" /> Reject
@@ -580,7 +546,7 @@ export default function QCClient() {
                 </div>
               </div>
 
-              {qcRejectedQty > 0 ? (
+              {qcDecision === 'REJECT' ? (
                 <>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">Rejection Quantity (KG)</label>
@@ -595,7 +561,7 @@ export default function QCClient() {
                       }}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-[#f58220] bg-white"
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">Accepted: {(qcModalBatch.quantity - qcRejectedQty).toFixed(2)} {qcModalBatch.product?.unit || 'units'}</p>
+                    <p className="text-xs text-gray-500 mt-1.5">Accepted: {(qcModalBatch.quantity - qcRejectedQty).toFixed(2)} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -613,7 +579,7 @@ export default function QCClient() {
               ) : (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                   <p className="text-xs font-medium text-emerald-600 mb-1">Accepted Quantity</p>
-                  <p className="text-xl font-bold text-gray-800">{qcModalBatch.quantity} <span className="text-sm text-gray-400">{qcModalBatch.product?.unit || 'units'}</span></p>
+                  <p className="text-xl font-bold text-gray-800">{qcModalBatch.quantity} <span className="text-sm text-gray-400">{qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</span></p>
                 </div>
               )}
             </div>
@@ -627,7 +593,7 @@ export default function QCClient() {
               </button>
               <button
                 onClick={handleProdSubmit}
-                disabled={isSubmitting || (qcRejectedQty > 0 && !qcRemarks.trim())}
+                disabled={isSubmitting || (qcDecision === 'REJECT' && !qcRemarks.trim())}
                 className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm disabled:opacity-60 transition-colors flex items-center gap-2"
               >
                 {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ClipboardCheck className="h-4 w-4" />}

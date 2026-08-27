@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft
+  AlignLeft, FileText, ArrowLeft, Truck
 } from "lucide-react";
 import { clsx } from "clsx";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
@@ -219,8 +219,18 @@ export default function SalesInvoicesPage() {
   const { user } = useAuth();
   const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN";
 
+  // A franchise-scoped user always has one; SUPER_ADMIN doesn't, and the
+  // backend requires a franchiseId to save an Order (it's a required FK) —
+  // without this, submitting as SUPER_ADMIN crashed with a raw Prisma
+  // "Argument `franchise` is missing" error instead of ever asking who the
+  // sale is for.
+  const [franchises, setFranchises] = useState<any[]>([]);
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(user?.franchiseId || "");
+
   // shared
   const [view, setView] = useState<"list" | "create">("list");
+  const [viewInvoice, setViewInvoice] = useState<any>(null); // Tax Invoice deep-link view
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [printingInvoice, setPrintingInvoice] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -229,10 +239,18 @@ export default function SalesInvoicesPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
 
-  // list date filters
+  // list date filters — local Y/M/D components, not .toISOString() (which
+  // shifts a local midnight date back a day in a UTC+ locale, e.g. "This
+  // Month" for August rendering as 31 Jul -> 30 Aug).
   const now = new Date();
-  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-  const lastOfMonth  = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  const toLocalDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  const firstOfMonth = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const lastOfMonth  = toLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo,   setDateTo]   = useState(lastOfMonth);
   const [showFromCal, setShowFromCal] = useState(false);
@@ -385,14 +403,21 @@ export default function SalesInvoicesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [iRes, cRes, pRes, dRes, vRes] = await Promise.allSettled([
+      const [iRes, cRes, pRes, dRes, vRes, fRes] = await Promise.allSettled([
         api.get("/api/finance/invoices").catch(() => ({ data: [] })),
         customersApi.getAll(),
         productsFullApi.getAll(),
         draftsApi.getDrafts("invoice").catch(() => ({ data: [] })),
         api.get("/api/vendors").catch(() => ({ data: [] })),
+        isFranchiseUser ? Promise.resolve({ data: [] }) : franchiseApi.getAll().catch(() => ({ data: [] })),
       ]);
-      
+
+      if (fRes.status === "fulfilled") {
+        const franchiseList = (fRes.value as any).data || [];
+        setFranchises(franchiseList);
+        setSelectedFranchiseId(prev => prev || user?.franchiseId || franchiseList[0]?.id || "");
+      }
+
       let apiInvoices = iRes.status === "fulfilled" ? (iRes.value as any).data || [] : [];
       let drafts = dRes.status === "fulfilled" ? (dRes.value as any).data || [] : [];
       
@@ -403,7 +428,13 @@ export default function SalesInvoicesPage() {
         createdAt: d.createdAt,
         finalAmount: d.data.finalTotal || 0,
         order: {
-          invoiceNum: "DRAFT",
+          // The literal string "DRAFT" used to go here unconditionally — every
+          // draft row then ran that SAME literal through formatERPNumber(),
+          // which hashes an unrecognized string to a deterministic 4-digit
+          // suffix ("DRAFT" always hashes to 7009), so every draft displayed
+          // the identical fake "INV-2026-7009" no matter which draft it was.
+          // A draft only has a real number once the user typed one in.
+          invoiceNum: d.data._rawState?.invoiceNumber || null,
           customer: d.data._rawState?.selectedCustomer || { name: "Unknown Customer" },
           orderItems: d.data._rawState?.items?.map((i: any) => ({
             product: { name: i.itemSearch },
@@ -440,6 +471,27 @@ export default function SalesInvoicesPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Deep-link from Proforma "View Tax Invoice" (?id=<orderId>).
+  // convertedInvoiceId on ProformaInvoice is an Order.id — fetch it via
+  // GET /api/orders/:id (POSService.getOrderById) and render read-only.
+  const deepLinkedInvoiceId = searchParams.get("id");
+  useEffect(() => {
+    if (!deepLinkedInvoiceId) {
+      setViewInvoice(null);
+      return;
+    }
+    const loadLinked = async () => {
+      try {
+        const res = await api.get(`/api/orders/${deepLinkedInvoiceId}`);
+        if (res.data) setViewInvoice(res.data);
+      } catch (err) {
+        console.error("Failed to load deep-linked Tax Invoice", err);
+        showToast("Failed to open Tax Invoice", "error");
+      }
+    };
+    loadLinked();
+  }, [deepLinkedInvoiceId]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -639,6 +691,11 @@ export default function SalesInvoicesPage() {
       return;
     }
 
+    if (!selectedFranchiseId) {
+      showToast("Please select a branch/franchise for this invoice", "error");
+      return;
+    }
+
     setSaving(true);
     try {
       let finalCustomerId = selectedCustomer?.id;
@@ -674,6 +731,7 @@ export default function SalesInvoicesPage() {
       const payload: any = {
         invoiceDate,
         invoiceNumber: invoiceNumber.trim() || undefined,
+        franchiseId: selectedFranchiseId,
         stateOfSupply: stateOfSupply || undefined,
         paymentType,
         status: "SENT",
@@ -760,9 +818,175 @@ export default function SalesInvoicesPage() {
   );
 
   // ══════════════════════════════════════════════════════════════════════════
+  // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (viewInvoice) {
+    const inv = viewInvoice;
+    const items = inv.orderItems || [];
+    const customer = inv.customer || {};
+    const invoice = inv.invoice || {};
+    const payments = inv.payments || [];
+    // Payment.paidAmount/paymentMode are the real field names (see
+    // prisma schema) — only PAID, non-cancelled rows count toward what's
+    // actually been received, matching FinanceService.createPayment's own
+    // paid/outstanding recompute.
+    const paidAmt = payments
+      .filter((p: any) => p.status === "PAID" && !p.isCancelled)
+      .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
+    const balanceAmt = Math.max(0, (inv.totalAmount || 0) - paidAmt);
+
+    return (
+      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+        {/* Top bar */}
+        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setViewInvoice(null);
+                window.history.replaceState({}, "", window.location.pathname);
+              }}
+              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+            >
+              <ArrowLeft size={17} />
+            </button>
+            <div>
+              <h2 className="text-base font-semibold text-gray-800">Tax Invoice — {inv.invoiceNum || "—"}</h2>
+              {inv.sourceProformaInvoiceId && (
+                <p className="text-xs text-gray-400 mt-0.5">Source Proforma: <span className="font-mono font-semibold text-orange-500">{inv.sourceProformaNumber || inv.sourceProformaInvoiceId}</span></p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={clsx(
+              "inline-block px-3 py-1 rounded-full text-xs font-bold border",
+              invoice.status === "PAID" ? "text-emerald-600 bg-emerald-50 border-emerald-200"
+              : invoice.status === "PARTIAL" ? "text-amber-600 bg-amber-50 border-amber-200"
+              : "text-slate-600 bg-slate-50 border-slate-200"
+            )}>
+              {invoice.status || inv.paymentStatus || "UNPAID"}
+            </span>
+            {invoice.id && balanceAmt > 0.01 && (
+              <button
+                onClick={() => router.push(
+                  `/sales/payment-in?invoiceId=${invoice.id}&partyType=${inv.partyType || "CUSTOMER"}&partyId=${inv.partyId || inv.customerId || ""}`
+                )}
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-lg transition-colors"
+              >
+                Record Payment
+              </button>
+            )}
+            <button
+              onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.id}`)}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+            >
+              Create Delivery Challan
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+          {/* Party + Invoice Meta */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Party</p>
+                <p className="text-xs text-gray-500 font-medium">Type: <span className="text-gray-800">{inv.partyType || "CUSTOMER"}</span></p>
+                <p className="text-base font-bold text-gray-800">{customer.name || inv.customerName || "—"}</p>
+                {customer.contact && <p className="text-sm text-gray-500">{customer.contact}</p>}
+                {customer.phone && <p className="text-sm text-gray-500">{customer.phone}</p>}
+                {customer.email && <p className="text-xs text-gray-400">{customer.email}</p>}
+                {customer.gstNumber && <p className="text-xs text-gray-400">GSTIN: {customer.gstNumber}</p>}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Invoice Details</p>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Invoice No.</span><span className="font-mono font-bold text-gray-800">{inv.invoiceNum || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Date</span><span className="text-gray-700">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
+                {inv.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500">State of Supply</span><span className="text-gray-700">{inv.stateOfSupply}</span></div>}
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Payment Type</span><span className="text-gray-700">{inv.paymentType || inv.paymentMode || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500">Order Type</span><span className="text-gray-700">{inv.orderType || "TAX_INVOICE"}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <th className="px-4 py-2.5 text-left w-8">#</th>
+                  <th className="px-4 py-2.5 text-left">Product</th>
+                  <th className="px-4 py-2.5 text-center">Qty</th>
+                  <th className="px-4 py-2.5 text-center">UOM</th>
+                  <th className="px-4 py-2.5 text-right">Rate</th>
+                  <th className="px-4 py-2.5 text-center">Tax %</th>
+                  <th className="px-4 py-2.5 text-right">Tax Amt</th>
+                  <th className="px-4 py-2.5 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map((it: any, idx: number) => (
+                  <tr key={it.id || idx} className="hover:bg-orange-50/30">
+                    <td className="px-4 py-2.5 text-xs text-gray-400">{idx + 1}</td>
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium text-gray-800">{it.product?.name || it.productName || "—"}</div>
+                      {it.productId && <div className="text-[10px] text-gray-400 font-mono">{it.productId}</div>}
+                      {it.batchNumber && <div className="text-[10px] text-gray-500">Batch: {it.batchNumber}</div>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">{it.quantity}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">{it.unit || "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-mono">₹{Number(it.price || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals + Payment */}
+          <div className="flex gap-4 items-start">
+            {/* Payment history */}
+            {payments.length > 0 && (
+              <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4">
+                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Payment History</p>
+                <div className="space-y-1">
+                  {payments.map((p: any, i: number) => (
+                    <div key={i} className="flex justify-between text-sm">
+                      <span className={clsx("text-gray-500", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
+                        {p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}
+                        {p.isCancelled ? " (Cancelled)" : p.status !== "PAID" ? ` (${p.status})` : ""}
+                      </span>
+                      <span className="font-mono font-semibold text-emerald-600">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 w-72 shrink-0 space-y-2 ml-auto">
+              <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span className="font-mono">₹{Number(inv.subTotal || 0).toFixed(2)}</span></div>
+              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Tax</span><span className="font-mono text-gray-600">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
+              {(inv.discountAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Discount</span><span className="font-mono text-red-500">-₹{Number(inv.discountAmount || 0).toFixed(2)}</span></div>}
+              <div className="pt-2 border-t border-gray-100 flex justify-between font-bold text-base"><span>Total</span><span className="font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-emerald-600">Paid</span><span className="font-mono text-emerald-600">₹{paidAmt.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm font-semibold"><span className={balanceAmt > 0 ? "text-rose-600" : "text-emerald-600"}>Balance</span><span className={clsx("font-mono", balanceAmt > 0 ? "text-rose-600" : "text-emerald-600")}>₹{balanceAmt.toFixed(2)}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // CREATE VIEW — Vyapar-style full-page form
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
+
     return (
       <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
 
@@ -772,9 +996,23 @@ export default function SalesInvoicesPage() {
             <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">New Sale Invoice</h2>
+            <h2 className="text-base font-semibold text-gray-800">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
           </div>
-          <span className="text-xs text-gray-400">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
+          <div className="flex items-center gap-4">
+            {!isFranchiseUser && (
+              <select
+                value={selectedFranchiseId}
+                onChange={e => setSelectedFranchiseId(e.target.value)}
+                className="text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-gray-700"
+              >
+                {franchises.length === 0 && <option value="">No branches found</option>}
+                {franchises.map((f: any) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            )}
+            <span className="text-xs text-gray-400">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
+          </div>
         </div>
 
         {/* Scrollable body */}
@@ -887,7 +1125,7 @@ export default function SalesInvoicesPage() {
                       className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
                     >
                       <Calendar size={13} className="text-orange-500 shrink-0" />
-                      {invoiceDate ? new Date(invoiceDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Pick date"}
+                      {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1 z-[200]">
@@ -1367,7 +1605,7 @@ export default function SalesInvoicesPage() {
 }
   // LIST VIEW — Simplified Clean UI
   // ════════════════════════════════════════════════════════════════════════════
-  const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmt = (d: string) => formatDate(d + "T00:00:00");
 
   const nonDraft     = filtered.filter(i => i.status !== "DRAFT");
   const totalAmt     = nonDraft.reduce((s, i) => s + (i.finalAmount || 0), 0);
@@ -1377,12 +1615,8 @@ export default function SalesInvoicesPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Receipt className="h-5 w-5 text-[#f58220]" />
-          Sale Invoices
-        </h1>
+      {/* ── Page Header Toolbar ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -1525,18 +1759,33 @@ export default function SalesInvoicesPage() {
                       }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(inv.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(inv.createdAt)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
-                        {inv.order?.invoiceNum ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt) : "Lite Sale"}
+                        {inv.order?.invoiceNum
+                          ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
+                          : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">
-                          {inv.order?.customer?.name || "Walk-In Customer"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium text-gray-800">
+                            {inv.order?.customer?.name || "Walk-In Customer"}
+                          </span>
+                          {!isDraft && inv.order?.customer && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                              {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : "UNKNOWN")}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {inv.paymentMode === "CASH" || inv.order?.paymentType === "CASH" ? "Cash" : "Credit"}
+                        {/* Source of truth is the order's own paymentType — `inv.paymentMode`
+                            isn't a field the Invoice API returns, so that half of the old check
+                            was always false. Falling through to "Credit" for a missing/unmapped
+                            value was also backwards: the Order schema's own default is CASH, so
+                            anything not explicitly CREDIT should read as Cash, not the other way
+                            around. */}
+                        {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800">
                         ₹ {(inv.finalAmount || 0).toLocaleString("en-IN")}
@@ -1561,6 +1810,17 @@ export default function SalesInvoicesPage() {
                             </button>
                           ) : (
                             <>
+                              <button
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  // Navigating to Delivery Challan using the underlying Order ID (which represents the Tax Invoice)
+                                  router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
+                                }}
+                                className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                title="Create Delivery Challan"
+                              >
+                                <Truck className="h-4 w-4" />
+                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handlePrint(inv); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
@@ -1611,6 +1871,7 @@ export default function SalesInvoicesPage() {
               email: 'hello@kiddosfood.com',
               phone: '+91 98765 43210'
             }}
+            documentType="TAX_INVOICE"
             onClose={() => setPrintingInvoice(null)}
           />
         )}

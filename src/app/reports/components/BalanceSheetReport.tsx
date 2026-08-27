@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { reportsApi } from "@/lib/api/accounting.api";
+import { formatDate } from "@/lib/utils";
 
 interface ReportData {
   kpiValue: string;
@@ -417,7 +418,7 @@ export default function CentralBalanceSheetReport({
         </div>
 
         <div className="px-5 pb-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
-          Balance Sheet as on {new Date(endDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+          Balance Sheet as on {formatDate(endDate)}
         </div>
 
         {layout === "horizontal" ? (

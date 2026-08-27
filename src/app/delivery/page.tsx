@@ -1,171 +1,238 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  Truck, 
-  Clock, 
-  CheckCircle2, 
-  MapPin, 
-  Phone,
+import { useState, useEffect, useMemo } from "react";
+import {
+  Truck,
+  CheckCircle2,
+  Package,
+  Clock,
+  AlertTriangle,
+  RotateCcw,
   Search,
-  User,
-  ShieldCheck
 } from "lucide-react";
 import { clsx } from "clsx";
-import api from "@/lib/api";
+import { salesApi } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
+import { useToast } from "@/context/ToastContext";
 
-export default function DeliveryPage() {
-  const [deliveries, setDeliveries] = useState<any[]>([]);
+// Dispatch Tracking = SHIPMENT STATUS (vehicle/driver/dates/party), as
+// distinct from Transit Stock = QUANTITY (see /dispatch/transit-stock).
+// Sourced from SalesService.getDispatchTracking() — one row per Delivery
+// Challan, deliberately not a separate model (see backend comment): a DC
+// already carries every field this view needs, so a parallel
+// "DispatchTracking" table would just be a second copy of the same
+// shipment kept in sync by hand.
+//
+// This route previously showed an unrelated POS home-delivery feed
+// (order.riderName / /api/delivery/active) with a hardcoded "Active
+// Riders" roster and fixed 24min/99.2%/94.8% performance stats — none of
+// that was wired to any real rider/fleet model, and it had nothing to do
+// with Delivery Challan dispatch. Removed; that backend API is untouched
+// in case something else still depends on it, this page just no longer
+// reads it.
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
+  DELIVERED: { label: "Delivered", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
+  IN_TRANSIT: { label: "In Transit", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200", dot: "bg-blue-500" },
+  DRAFT: { label: "Draft", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200", dot: "bg-slate-400" },
+  CANCELLED: { label: "Cancelled", color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200", dot: "bg-rose-500" },
+};
+function getConf(status: string) {
+  return STATUS_CONFIG[status] ?? STATUS_CONFIG.DRAFT;
+}
+
+export default function DispatchTrackingPage() {
+  const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const { showToast } = useToast();
+
+  const fetchTracking = async () => {
+    setLoading(true);
+    try {
+      const res = await salesApi.getDispatchTracking();
+      setRows((res as any).data || []);
+    } catch (err) {
+      console.error("Failed to fetch dispatch tracking:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchDeliveries = async () => {
-      try {
-        const response = await api.get('/api/delivery/active');
-        setDeliveries(response.data);
-      } catch (err) {
-        console.error("Failed to fetch deliveries:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchDeliveries();
+    fetchTracking();
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "DELIVERED": return "bg-green-100 text-green-700";
-      case "IN_TRANSIT": return "bg-blue-100 text-blue-700";
-      case "ASSIGNED": return "bg-amber-100 text-amber-700";
-      default: return "bg-gray-100 text-gray-700";
+  const filtered = rows.filter((r) => {
+    if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      r.challanNumber?.toLowerCase().includes(q) ||
+      r.dispatchId?.toLowerCase().includes(q) ||
+      r.invoiceNumber?.toLowerCase().includes(q) ||
+      r.partyName?.toLowerCase().includes(q) ||
+      r.vehicleNo?.toLowerCase().includes(q) ||
+      r.driverName?.toLowerCase().includes(q)
+    );
+  });
+
+  // Real record counts only — no placeholder fleet stats.
+  const stats = useMemo(() => ({
+    total: rows.length,
+    inTransit: rows.filter(r => r.status === "IN_TRANSIT").length,
+    delivered: rows.filter(r => r.status === "DELIVERED" || r.status === "CLOSED").length,
+    delayed: rows.filter(r => r.status === "IN_TRANSIT" && r.expectedDeliveryDate && new Date(r.expectedDeliveryDate) < new Date()).length,
+  }), [rows]);
+
+  const handleMarkDelivered = async (challanId: string) => {
+    if (!window.confirm("Mark this shipment as Delivered?")) return;
+    setMarkingId(challanId);
+    try {
+      await salesApi.markDeliveryChallanDelivered(challanId, {});
+      showToast("Delivery confirmed", "success");
+      fetchTracking();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Failed to confirm delivery", "error");
+    } finally {
+      setMarkingId(null);
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <header className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">Logistics & Delivery</h1>
-          <p className="text-muted-foreground">Track live orders, manage riders, and verify successful handovers.</p>
-        </div>
-        <div className="flex gap-4">
-          <div className="bg-white p-4 rounded-2xl border border-muted shadow-sm flex items-center gap-3">
-             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                <Truck size={20} />
-             </div>
-             <div>
-                <p className="text-[10px] font-bold text-muted-foreground uppercase">Active Riders</p>
-                <p className="text-lg font-bold">12 Online</p>
-             </div>
+    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 min-h-screen text-slate-800">
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center border-b border-slate-200 pb-4">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+            <div className="flex items-center px-2 text-slate-400"><Search size={14} /></div>
+            <input
+              type="text"
+              placeholder="Search DC, invoice, party, vehicle, driver..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="bg-transparent border-none text-slate-700 focus:ring-0 p-1 font-semibold text-sm outline-none w-64"
+            />
           </div>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Live Tracking List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-xl">Active Shipments</h3>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={16} />
-              <input type="text" placeholder="Search orders..." className="w-full pl-10 pr-4 py-2 bg-white border border-muted rounded-xl text-sm" />
-            </div>
+          <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-white">
+            {["ALL", "IN_TRANSIT", "DELIVERED", "DRAFT"].map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={clsx("px-3 py-2 text-xs font-semibold transition-colors", statusFilter === s ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-slate-50")}
+              >
+                {s === "ALL" ? "All" : getConf(s).label}
+              </button>
+            ))}
           </div>
-
-          {loading ? (
-             <div className="p-20 text-center text-muted-foreground">Loading deliveries...</div>
-          ) : (
-            <div className="space-y-4">
-              {deliveries.map((order) => (
-                <div key={order.id} className="bg-white p-6 rounded-3xl border border-muted hover:shadow-lg transition-all flex items-center justify-between">
-                  <div className="flex items-center gap-6">
-                    <div className={clsx("w-14 h-14 rounded-2xl flex items-center justify-center", getStatusColor(order.status))}>
-                      {order.status === "DELIVERED" ? <ShieldCheck size={28} /> : <Truck size={28} />}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-bold text-lg">Order #{order.transaction?.invoiceNum || order.id.slice(0,8)}</h4>
-                        <span className={clsx("text-[10px] font-black px-2 py-0.5 rounded uppercase", getStatusColor(order.status))}>
-                          {order.status}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1"><User size={14} /> {order.riderName || 'Seeking Rider'}</span>
-                        <span className="flex items-center gap-1"><MapPin size={14} /> 2.4km away</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                       <p className="text-xs font-bold text-muted-foreground uppercase opacity-50 mb-1">Customer</p>
-                       <p className="font-bold text-sm flex items-center gap-2"><Phone size={14} className="text-primary"/> {order.customerPhone}</p>
-                    </div>
-                    <button className="px-6 py-3 bg-muted/30 rounded-2xl font-bold text-xs hover:bg-muted transition-all">
-                      View Map
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {deliveries.length === 0 && (
-                 <div className="p-20 bg-muted/10 rounded-3xl border-2 border-dashed border-muted text-center italic text-muted-foreground">
-                    No active deliveries at the moment.
-                 </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Dispatch Overview */}
-        <div className="space-y-6">
-           <div className="bg-zinc-950 text-white p-8 rounded-[2rem] shadow-xl space-y-6 relative overflow-hidden">
-              <div className="relative z-10">
-                <h3 className="text-xl font-bold mb-2">Performance</h3>
-                <p className="text-zinc-400 text-sm mb-6">Real-time logistics efficiency</p>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-zinc-500">Avg. Time</span>
-                    <span className="font-bold">24 mins</span>
-                  </div>
-                  <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-                    <div className="bg-primary h-full w-[85%]"></div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-zinc-500">Success Rate</span>
-                    <span className="font-bold">99.2%</span>
-                  </div>
-                  <div className="w-full bg-zinc-800 h-1 rounded-full overflow-hidden">
-                    <div className="bg-secondary h-full w-[99%]"></div>
-                  </div>
-                </div>
-              </div>
-              <div className="absolute -right-10 -bottom-10 opacity-10">
-                 <Truck size={160} />
-              </div>
-           </div>
-
-           <div className="bg-white p-6 rounded-[2rem] border border-muted space-y-4">
-              <h3 className="font-bold px-2">Recent Fleet Activity</h3>
-              <div className="space-y-3">
-                 {[1,2,3].map(i => (
-                   <div key={i} className="flex items-center gap-3 p-3 hover:bg-muted/30 rounded-2xl transition-all cursor-pointer">
-                      <div className="w-10 h-10 rounded-full bg-secondary/10 text-secondary flex items-center justify-center font-bold">R</div>
-                      <div className="flex-1 min-w-0">
-                         <p className="text-sm font-bold truncate">Rider #{i*152}</p>
-                         <p className="text-[10px] text-muted-foreground font-medium uppercase">Active • 12 Orders today</p>
-                      </div>
-                      <ChevronRight size={16} className="text-muted" />
-                   </div>
-                 ))}
-              </div>
-           </div>
+          <button
+            onClick={fetchTracking}
+            title="Refresh Data"
+            className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 shadow-sm transition-all duration-150 active:scale-95"
+          >
+            <RotateCcw size={16} className={clsx(loading && "animate-spin")} />
+          </button>
         </div>
       </div>
-    </div>
-  );
-}
 
-function ChevronRight({ size, className }: { size: number, className: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m9 18 6-6-6-6"/></svg>
+      {/* Stats Row — real record counts only */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {[
+          { label: "Total Dispatches", value: stats.total, icon: Package, color: "text-indigo-600", bg: "bg-indigo-50", borderColor: "border-indigo-200" },
+          { label: "In Transit", value: stats.inTransit, icon: Truck, color: "text-blue-600", bg: "bg-blue-50", borderColor: "border-blue-200" },
+          { label: "Delivered", value: stats.delivered, icon: CheckCircle2, color: "text-emerald-600", bg: "bg-emerald-50", borderColor: "border-emerald-200" },
+          { label: "Delayed", value: stats.delayed, icon: AlertTriangle, color: "text-rose-600", bg: "bg-rose-50", borderColor: "border-rose-200" },
+        ].map((s) => (
+          <div key={s.label} className={clsx("flex items-center gap-3 px-4 py-3 rounded-xl border shadow-sm bg-white", s.borderColor)}>
+            <div className={clsx("p-2 rounded-lg", s.bg)}><s.icon size={16} className={s.color} /></div>
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</p>
+              <p className="text-lg font-black text-slate-900 tabular-nums leading-tight">{s.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Shipments Table */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="py-20 text-center space-y-3">
+            <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading dispatches...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-20 text-center space-y-3">
+            <Truck size={40} className="text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-400">{search || statusFilter !== "ALL" ? "No dispatches match your filters." : "No dispatches yet."}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-y border-slate-200">
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Dispatch ID</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">DC No</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Invoice No</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Party</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Vehicle / Driver</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider">Dispatch Date</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider text-center">Status</th>
+                  <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 uppercase tracking-wider text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((r) => {
+                  const conf = getConf(r.status);
+                  return (
+                    <tr key={r.challanId} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 sm:px-5 py-3">
+                        <p className="text-[13px] font-bold text-orange-600 font-mono">{r.dispatchId}</p>
+                      </td>
+                      <td className="px-4 sm:px-5 py-3 text-[13px] font-semibold text-slate-700">{r.challanNumber}</td>
+                      <td className="px-4 sm:px-5 py-3 text-[13px] text-slate-600">{r.invoiceNumber || "—"}</td>
+                      <td className="px-4 sm:px-5 py-3">
+                        <div className="text-[13px] font-semibold text-slate-700">{r.partyName || "—"}</div>
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">{r.partyType}</div>
+                      </td>
+                      <td className="px-4 sm:px-5 py-3 text-[13px] text-slate-600">
+                        {r.vehicleNo || "—"}{r.driverName ? ` / ${r.driverName}` : ""}
+                      </td>
+                      <td className="px-4 sm:px-5 py-3 text-[13px] text-slate-500">{formatDate(r.dispatchDate)}</td>
+                      <td className="px-4 sm:px-5 py-3 text-center">
+                        <span className={clsx("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold uppercase tracking-wider", conf.bg, conf.color, conf.border)}>
+                          <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", conf.dot, r.status === "IN_TRANSIT" && "animate-pulse")} />
+                          {conf.label}
+                        </span>
+                      </td>
+                      <td className="px-4 sm:px-5 py-3 text-right">
+                        {r.status === "IN_TRANSIT" ? (
+                          <button
+                            onClick={() => handleMarkDelivered(r.challanId)}
+                            disabled={markingId === r.challanId}
+                            className="px-3 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {markingId === r.challanId ? "..." : "Mark Delivered"}
+                          </button>
+                        ) : (
+                          <span className="px-3 py-1.5 text-xs font-bold text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && filtered.length > 0 && (
+          <div className="px-4 sm:px-5 py-3 bg-slate-50/50 border-t border-slate-200">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Showing {filtered.length} of {rows.length} dispatches</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

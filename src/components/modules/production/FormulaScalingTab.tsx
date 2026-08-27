@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { convertUnit } from "@/lib/unitConversion";
 
 interface RecipeItem {
   id: string;
@@ -129,14 +130,21 @@ export default function FormulaScalingTab() {
 
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYield / recipe.yieldQty : 1;
 
-  const getAvailableStock = (itemId: string, itemSku: string) => {
+  // Stock is stored and reported in the inventory item's own unit (e.g. KG),
+  // while the recipe's requirement is expressed in the recipe item's unit
+  // (e.g. g) — those are two independent fields with no guarantee they
+  // match. Converting the raw stock figure into the recipe's unit here is
+  // what makes every comparison/display below apples-to-apples; without it,
+  // 8 KG of stock reads as "8" against a 500 g requirement and looks short.
+  const getAvailableStock = (itemId: string, itemSku: string, recipeUnit: string) => {
     if (!Array.isArray(warehouseStock)) return 0;
     const found = warehouseStock.find((fi: any) => {
       const matchSku = fi.sku && itemSku && fi.sku.trim().toLowerCase() === itemSku.trim().toLowerCase();
       const matchId = fi.inventoryItemId === itemId || fi.id === itemId;
       return matchSku || matchId;
     });
-    return found ? (found.availableStock ?? 0) : 0;
+    if (!found) return 0;
+    return convertUnit(found.availableStock ?? 0, found.unit, recipeUnit);
   };
 
   // True if the selected warehouse doesn't have enough of at least one
@@ -145,15 +153,31 @@ export default function FormulaScalingTab() {
   const hasShortage = recipe
     ? recipe.recipeItems.some((item) => {
         const scaledQty = item.quantityRequired * multiplier;
-        return getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku) < scaledQty;
+        return getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit) < scaledQty;
       })
     : false;
 
   const handleStartProduction = async () => {
     if (!recipe) return;
     if (hasShortage) {
-      toast.error("Not enough stock for this batch — taking you to Purchase Orders to restock first.");
-      router.push('/purchases/orders');
+      const shortageItems = recipe.recipeItems
+        .map((item) => {
+          const required = item.quantityRequired * multiplier;
+          const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
+          const shortage = required - stock;
+          return {
+            materialId: item.inventoryItemId,
+            name: item.inventoryItem?.name || "",
+            required,
+            stock,
+            shortage,
+            unit: item.unit || "KG",
+          };
+        })
+        .filter((item) => item.shortage > 0);
+
+      sessionStorage.setItem('prefilledPoItems', JSON.stringify(shortageItems));
+      router.push('/purchases/new');
       return;
     }
     if (!selectedWarehouseId) {
@@ -483,7 +507,7 @@ export default function FormulaScalingTab() {
                     <tbody className="divide-y divide-gray-100 text-xs font-semibold text-gray-700">
                       {recipe.recipeItems.map((item) => {
                         const scaledQty = item.quantityRequired * multiplier;
-                        const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku);
+                        const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
                         const sufficient = available >= scaledQty;
                         const deficit = scaledQty - available;
 

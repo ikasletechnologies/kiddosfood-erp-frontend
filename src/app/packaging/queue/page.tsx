@@ -9,16 +9,18 @@ import { clsx } from "clsx";
 import { productionApi, franchiseApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
+import { convertUnit } from "@/lib/unitConversion";
 
 interface ProductBatch {
   id: string;
   batchCode: string;
   quantity: number;
-  approvedQty: number;
-  packagedQty: number;
+  approvedQty: number | null;
+  packagedQty: number | null;
   qcStatus: string;
   packagingStatus: string;
   expiryDate: string;
+  recall?: { status: string } | null;
   product: {
     name: string;
     sku: string;
@@ -26,11 +28,36 @@ interface ProductBatch {
   };
 }
 
-const QC_BADGE: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  APPROVED: { label: "Pass", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  REJECTED: { label: "Fail", color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },
-};
-const DEFAULT_QC_BADGE = { label: "Hold (QC)", color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" };
+// Derive a human-readable packaging status label and styling for a batch.
+// Priority: recalled > fully packaged > QC not eligible > ready
+function getPackagingBadge(batch: ProductBatch): { label: string; color: string; bg: string; border: string } {
+  const isRecalled = batch.recall?.status === 'IN_PROGRESS';
+  if (isRecalled) {
+    return { label: 'Recalled — Packaging Blocked', color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' };
+  }
+
+  const approvedQty = batch.approvedQty ?? 0;
+  const packagedQty = batch.packagedQty ?? 0;
+  const remaining = approvedQty - packagedQty;
+  const isEligibleQcStatus = batch.qcStatus === 'APPROVED' || batch.qcStatus === 'PARTIALLY_APPROVED';
+
+  if (!isEligibleQcStatus) {
+    if (batch.qcStatus === 'REJECTED') {
+      return { label: 'QC Rejected', color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200' };
+    }
+    return { label: 'Pending QC', color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-200' };
+  }
+
+  if (remaining <= 0.001) {
+    return { label: 'Fully Packaged', color: 'text-gray-500', bg: 'bg-gray-50', border: 'border-gray-200' };
+  }
+
+  if (batch.qcStatus === 'PARTIALLY_APPROVED') {
+    return { label: 'Partially Approved — Ready to Package', color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200' };
+  }
+
+  return { label: 'Ready to Package', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' };
+}
 
 export default function PackagingQueuePage() {
   const [batches, setBatches] = useState<ProductBatch[]>([]);
@@ -41,17 +68,48 @@ export default function PackagingQueuePage() {
   const [selectedBatch, setSelectedBatch] = useState<ProductBatch | null>(null);
 
   // Form states
-  const [packetSize, setPacketSize] = useState("500g");
+  const [packetSize, setPacketSize] = useState("");
+  const [sizeValue, setSizeValue] = useState("");
+  const [sizeUnit, setSizeUnit] = useState("g");
   const [quantityPackets, setQuantityPackets] = useState(10);
   const [submitting, setSubmitting] = useState(false);
+
+  const handleSizeValueChange = (val: string) => {
+    setSizeValue(val);
+    if (val && !isNaN(Number(val)) && Number(val) > 0) {
+      setPacketSize(`${val}${sizeUnit}`);
+    } else {
+      setPacketSize("");
+    }
+  };
+
+  const handleSizeUnitChange = (unit: string) => {
+    setSizeUnit(unit);
+    if (sizeValue && !isNaN(Number(sizeValue)) && Number(sizeValue) > 0) {
+      setPacketSize(`${sizeValue}${unit}`);
+    } else {
+      setPacketSize("");
+    }
+  };
+
+  const handleSelectPreset = (val: string, unit: string) => {
+    setSizeValue(val);
+    setSizeUnit(unit);
+    setPacketSize(`${val}${unit}`);
+  };
 
   useEffect(() => {
     async function initData() {
       try {
         const fRes = await franchiseApi.getAll();
-        setFranchises(fRes.data || []);
-        if (fRes.data?.length > 0) {
-          setSelectedFranchiseId(fRes.data[0].id);
+        const list = fRes.data || [];
+        setFranchises(list);
+        if (list.length > 0) {
+          // Deterministic default: open at HQ if one is configured, rather
+          // than whichever franchise the DB happened to return first.
+          const hq = list.find((f: any) => f.isHQ);
+          const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+          setSelectedFranchiseId((hq || fallback).id);
         }
       } catch (err) {
         toast.error("Failed to load franchises");
@@ -77,19 +135,30 @@ export default function PackagingQueuePage() {
     loadBatches();
   }, [selectedFranchiseId]);
 
-  // Compute total bulk stock conversion needed
-  const parseWeight = (size: string): number => {
-    const match = size.match(/^(\d+(\.\d+)?)\s*(g|kg|l|ml|pcs|unit)$/i);
+  // Compute total bulk stock conversion needed — delegates the actual
+  // unit-conversion arithmetic to the canonical shared engine
+  // (@businessgroupikasle/erp-units via the unitConversion shim) instead of
+  // a local kg/g/l/ml table, so this preview always agrees with what the
+  // server actually deducts (see production.service.ts's own parseWeight).
+  const parseWeight = (size: string, baseUnit?: string): number => {
+    if (!size) return 0;
+    const match = size.trim().match(/^(\d+(\.\d+)?)\s*([a-zA-Z]+)?$/i);
     if (!match) return 1.0;
     const val = parseFloat(match[1]);
-    const unit = match[3].toLowerCase();
-
-    if (unit === 'g' || unit === 'ml') return val / 1000;
-    return val;
+    if (isNaN(val) || val <= 0) return 0;
+    const unit = match[3] || baseUnit || 'KG';
+    return convertUnit(val, unit, baseUnit || 'KG');
   };
 
-  const unitMultiplier = parseWeight(packetSize);
+  const unitMultiplier = parseWeight(packetSize, selectedBatch?.product?.unit);
   const totalWeightNeeded = quantityPackets * unitMultiplier;
+  // IMPORTANT: approvedQty is the ceiling for packaging — never total produced quantity.
+  // This ensures rejected QC quantities never become packagable.
+  const availableBulk = selectedBatch
+    ? Math.max(0, (selectedBatch.approvedQty ?? 0) - (selectedBatch.packagedQty || 0))
+    : 0;
+  const maxPackets = unitMultiplier > 0 ? Math.floor(availableBulk / unitMultiplier) : 0;
+  const bulkRemaining = availableBulk - totalWeightNeeded;
 
   const handlePackageRun = async () => {
     if (!selectedBatch) return;
@@ -100,17 +169,20 @@ export default function PackagingQueuePage() {
 
     setSubmitting(true);
     try {
+      // This only creates an AWAITING_CONFIRMATION ticket — bulk stock and
+      // Finished Goods are untouched until the operator completes physical
+      // packaging/labeling and submits Confirm Packaging.
       await productionApi.packageBatch(selectedBatch.id, {
         packetSize,
         quantityPackets
       });
-      toast.success("Packaging conversion successful!");
+      toast.success("Packaging started — print stickers, then confirm once packing is complete.");
       setSelectedBatch(null);
       loadBatches();
       // Redirect to label view to print
       window.location.href = "/packaging/labels";
     } catch (err: any) {
-      toast.error(err?.response?.data?.error || "Error executing packaging run. Verify bulk stock.");
+      toast.error(err?.response?.data?.error || "Error starting packaging run. Verify bulk stock.");
     } finally {
       setSubmitting(false);
     }
@@ -123,12 +195,8 @@ export default function PackagingQueuePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Package className="h-5 w-5 text-[#f58220]" />
-          Packaging Queue
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
 
         <select
           value={selectedFranchiseId}
@@ -189,13 +257,21 @@ export default function PackagingQueuePage() {
                         <th className="text-center px-4 py-3">QC Status</th>
                         <th className="text-right px-4 py-3">Yield Qty</th>
                         <th className="text-right px-4 py-3">Packaged Qty</th>
+                        <th className="text-right px-4 py-3">Balance Qty</th>
                         <th className="text-center px-4 py-3">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredBatches.map((batch) => {
-                        const isApproved = batch.qcStatus === "APPROVED";
-                        const badge = QC_BADGE[batch.qcStatus] || DEFAULT_QC_BADGE;
+                        const badge = getPackagingBadge(batch);
+                        const isRecalled = batch.recall?.status === 'IN_PROGRESS';
+                        const isEligibleQcStatus = batch.qcStatus === 'APPROVED' || batch.qcStatus === 'PARTIALLY_APPROVED';
+                        // Use approvedQty as the ceiling — rejected quantity must never be exposed
+                        const approvedQty = batch.approvedQty ?? 0;
+                        const packagedQty = batch.packagedQty ?? 0;
+                        const balanceQty = Math.max(0, approvedQty - packagedQty);
+                        const isFullyPackaged = batch.packagingStatus === 'PACKAGED' || balanceQty <= 0.001;
+                        const canPackage = isEligibleQcStatus && !isRecalled && !isFullyPackaged;
 
                         return (
                           <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
@@ -213,19 +289,39 @@ export default function PackagingQueuePage() {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700">
-                              {batch.quantity} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                              {approvedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-right text-gray-700">
-                              {batch.packagedQty || 0} <span className="text-xs text-gray-400">{batch.product?.unit || "KG"}</span>
+                              {packagedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-800">
+                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 font-normal">{batch.product?.unit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button
-                                disabled={!isApproved}
-                                onClick={() => setSelectedBatch(batch)}
-                                className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
-                              >
-                                Package
-                              </button>
+                              {isFullyPackaged ? (
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                                  Completed
+                                </span>
+                              ) : isRecalled ? (
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200">
+                                  Recalled
+                                </span>
+                              ) : (
+                                <button
+                                  disabled={!canPackage}
+                                  onClick={() => {
+                                    setSelectedBatch(batch);
+                                    const defaultUnit = (batch.product?.unit || "KG").toUpperCase() === "L" || (batch.product?.unit || "KG").toUpperCase() === "ML" ? "ml" : "g";
+                                    setSizeValue("500");
+                                    setSizeUnit(defaultUnit);
+                                    setPacketSize(`500${defaultUnit}`);
+                                    setQuantityPackets(10);
+                                  }}
+                                  className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
+                                >
+                                  Package
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -239,7 +335,14 @@ export default function PackagingQueuePage() {
 
           {/* Right 1 Column: Conversion form panel */}
           <div className="lg:col-span-1">
-            {selectedBatch ? (
+            {selectedBatch && (() => {
+              const isRecalled = selectedBatch.recall?.status === 'IN_PROGRESS';
+              const approvedQty = selectedBatch.approvedQty ?? 0;
+              const packagedQty = selectedBatch.packagedQty ?? 0;
+              const remaining = approvedQty - packagedQty;
+              const isFormEligible = !isRecalled && remaining > 0.001;
+              return isFormEligible;
+            })() ? (
               <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
                 <div className="flex justify-between items-start border-b border-gray-100 pb-3">
                   <div>
@@ -249,7 +352,11 @@ export default function PackagingQueuePage() {
                     </h3>
                   </div>
                   <button
-                    onClick={() => setSelectedBatch(null)}
+                    onClick={() => {
+                      setSelectedBatch(null);
+                      setPacketSize("");
+                      setSizeValue("");
+                    }}
                     className="text-xs font-semibold text-gray-400 hover:text-gray-600"
                   >
                     Close
@@ -259,28 +366,91 @@ export default function PackagingQueuePage() {
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Available approved bulk</span>
-                    <span className="text-gray-800 font-semibold">{selectedBatch.quantity - (selectedBatch.packagedQty || 0)} {selectedBatch.product?.unit || "KG"}</span>
+                    {/* approvedQty minus already packaged — never total produced quantity */}
+                    <span className="text-gray-800 font-semibold">{availableBulk} {selectedBatch.product?.unit || 'KG'}</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Target Pack Size</label>
-                    <select
-                      value={packetSize}
-                      onChange={(e) => setPacketSize(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
-                    >
-                      <option value="250g">250 G Packet</option>
-                      <option value="500g">500 G Packet</option>
-                      <option value="1kg">1.0 KG Packet</option>
-                      <option value="200ml">200 ML Bottle</option>
-                      <option value="500ml">500 ML Bottle</option>
-                      <option value="1l">1.0 L Bottle</option>
-                      <option value="1unit">1 Unit Box</option>
-                    </select>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-gray-500">Target Pack Size</label>
+                      {packetSize && (
+                        <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                          {sizeValue} {sizeUnit.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {[
+                        { label: "250g", val: "250", unit: "g" },
+                        { label: "500g", val: "500", unit: "g" },
+                        { label: "1kg", val: "1", unit: "kg" },
+                        { label: "2kg", val: "2", unit: "kg" },
+                        { label: "5kg", val: "5", unit: "kg" },
+                        { label: "200ml", val: "200", unit: "ml" },
+                        { label: "500ml", val: "500", unit: "ml" },
+                        { label: "1L", val: "1", unit: "l" },
+                        { label: "1 Unit", val: "1", unit: "unit" },
+                      ].map((preset) => {
+                        const isSelected = sizeValue === preset.val && sizeUnit.toLowerCase() === preset.unit.toLowerCase();
+                        return (
+                          <button
+                            key={`${preset.val}${preset.unit}`}
+                            type="button"
+                            onClick={() => handleSelectPreset(preset.val, preset.unit)}
+                            className={clsx(
+                              "px-2 py-1 text-[11px] font-semibold rounded border transition-all active:scale-95",
+                              isSelected
+                                ? "bg-[#f58220] text-white border-[#f58220] shadow-xs"
+                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                            )}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Custom Number Input + Unit Selector */}
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.001"
+                          placeholder="Enter size (e.g. 250)"
+                          value={sizeValue}
+                          onChange={(e) => handleSizeValueChange(e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-medium"
+                        />
+                      </div>
+                      <select
+                        value={sizeUnit}
+                        onChange={(e) => handleSizeUnitChange(e.target.value)}
+                        className="w-32 border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-semibold cursor-pointer"
+                      >
+                        <option value="g">G (Grams)</option>
+                        <option value="kg">KG (Kilograms)</option>
+                        <option value="ml">ML (Milliliters)</option>
+                        <option value="l">L (Liters)</option>
+                        <option value="pcs">PCS (Pieces)</option>
+                        <option value="unit">Unit (Box/Pkt)</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Quantity of Packets</label>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-gray-500">Quantity of Packets</label>
+                      <button
+                        type="button"
+                        onClick={() => setQuantityPackets(Math.max(1, maxPackets))}
+                        className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e]"
+                      >
+                        Use All Bulk ({maxPackets})
+                      </button>
+                    </div>
                     <input
                       type="number"
                       min="1"
@@ -288,37 +458,53 @@ export default function PackagingQueuePage() {
                       onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
                       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
                     />
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Maximum possible with available bulk: {maxPackets} packets
+                    </p>
                   </div>
 
-                  {/* Simulated conversions */}
+                  {/* Planned conversion — nothing here is applied yet. Bulk is only
+                      deducted and Finished Goods only created once this run is
+                      confirmed on the Confirm Packaging screen. */}
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
                     <div className="flex justify-between items-center text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
-                      <span>Audit Simulation</span>
+                      <span>Packaging Plan (Pending Confirmation)</span>
                       <Scale className="h-3.5 w-3.5 text-[#f58220]" />
                     </div>
 
                     <div className="space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Total Bulk Stock Deduct</span>
-                        <span className="text-rose-600 font-semibold">-{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-gray-500">Bulk Stock to Deduct on Confirm</span>
+                        <span className="text-rose-600 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Total Retail Stock Added</span>
-                        <span className="text-emerald-600 font-semibold">+{quantityPackets} packets</span>
+                        <span className="text-gray-500">Bulk Stock Remaining</span>
+                        <span className="text-gray-700 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Planned Packets</span>
+                        <span className="text-emerald-600 font-semibold">{quantityPackets} packets</span>
                       </div>
                     </div>
                   </div>
 
                   <button
                     onClick={handlePackageRun}
-                    disabled={submitting || totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0))}
+                    disabled={submitting || !packetSize || totalWeightNeeded > availableBulk}
                     className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
-                    Package & Generate Labels
+                    Start Packaging &amp; Print Stickers
                   </button>
 
-                  {totalWeightNeeded > (selectedBatch.quantity - (selectedBatch.packagedQty || 0)) && (
+                  {!packetSize && (
+                    <div className="flex gap-2 text-xs text-amber-600 font-medium p-2.5 border border-amber-200 bg-amber-50 rounded-lg">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                      <span>Select a target pack size to continue.</span>
+                    </div>
+                  )}
+
+                  {packetSize && totalWeightNeeded > availableBulk && (
                     <div className="flex gap-2 text-xs text-rose-600 font-medium p-2.5 border border-rose-200 bg-rose-50 rounded-lg">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       <span>Insufficient bulk stock to fulfill this quantity of packs.</span>

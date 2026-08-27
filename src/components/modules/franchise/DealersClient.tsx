@@ -1,23 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X, 
-  Users, 
-  Plus, 
-  Search, 
-  Store, 
-  Mail, 
-  Phone,
-  MapPin,
-  Trash2,
-  CheckCircle2,
-  XCircle,
-  MoreVertical,
-  Building2
+import React, { useState, useEffect } from "react";
+import {
+  Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
+  Edit3, Printer, FileText as ExcelIcon, X, Info, Store,
+  MapPin, Phone as PhoneIcon, Mail, Building2, XCircle
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import api, { franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3 pb-2 border-b border-gray-100";
 
 interface Dealer {
   id: string;
@@ -38,13 +31,44 @@ export default function DealersClient() {
   const { user } = useAuth();
   const isSuper = user?.role === "SUPER_ADMIN";
 
-  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [franchisesLoading, setFranchisesLoading] = useState(true);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
+
+  useEffect(() => {
+    if (!isSuper) {
+      setFranchisesLoading(false);
+      return;
+    }
+    setFranchisesLoading(true);
+    franchiseApi.getAll()
+      .then((res) => setFranchises(res.data ?? []))
+      .catch((err) => console.error("Failed to load franchises list", err))
+      .finally(() => setFranchisesLoading(false));
+  }, [isSuper]);
+
+  const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
+  const effectiveFranchiseId = isSuper
+    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
+    : (user as any)?.franchiseId;
+
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  
+  const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
+  
+  const [isTransactionSearchOpen, setIsTransactionSearchOpen] = useState(false);
+  const [transactionSearchQuery, setTransactionSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
   
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -53,53 +77,78 @@ export default function DealersClient() {
     franchiseId: ""
   });
 
-  // Fetch franchises if SUPER_ADMIN
-  useEffect(() => {
-    if (isSuper) {
-      franchiseApi.getAll()
-        .then((res) => {
-          // Filter out main Headquarters/DC to focus on active franchise branches
-          const branches = (res.data ?? []).filter((f: any) => 
-            !f.name.includes("Headquarters (HQ)") && 
-            f.id !== "hq-001"
-          );
-          setFranchises(branches);
-        })
-        .catch((err) => console.error("Failed to load franchises list", err));
-    }
-  }, [isSuper]);
+  const transactionTypes = [
+    "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note", 
+    "Debit Note", "Sale Order", "Purchase Order", "Payment-In", 
+    "Payment-Out", "Estimate", "Delivery Challan", "Journal Entry"
+  ];
+  
+  const [filters, setFilters] = useState({
+    all: false,
+    active: false,
+    inactive: false
+  });
 
-  useEffect(() => {
-    fetchDealers();
-  }, [user, selectedFranchiseId]);
+  const [printOptions, setPrintOptions] = useState({
+    itemDetails: false,
+    description: false,
+    paymentInfo: false,
+    paymentStatus: false
+  });
+
+  const transactions: any[] = [];
 
   const fetchDealers = async () => {
+    if (isSuper && franchisesLoading) return;
+    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+      setDealers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const fId = isSuper ? selectedFranchiseId : (user as any)?.franchiseId;
+      const fId = effectiveFranchiseId;
       const url = fId ? `/api/dealers?franchiseId=${fId}` : `/api/dealers`;
       const res = await api.get(url);
-      setDealers(res.data);
+      const data = res.data || [];
+      setDealers(data);
+      if (!selectedDealerId && data.length > 0) {
+        setSelectedDealerId(data[0].id);
+      }
     } catch (error) {
-      toast.error("Failed to fetch dealers");
+      console.error(error);
+      toast.error("Failed to load dealers");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const finalFranchiseId = isSuper ? formData.franchiseId : (user as any)?.franchiseId;
+  useEffect(() => {
+    fetchDealers();
+  }, [user, isSuper, scope, selectedFranchiseId, franchisesLoading, effectiveFranchiseId]);
 
-    if (!finalFranchiseId) {
-      toast.error("Please select a franchise branch.");
+  const handleCreate = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      toast.error("Dealer Name is required.");
+      return;
+    }
+
+    if (isSuper && scope === "HQ" && !hqFranchiseId) {
+      toast.error("HQ is not configured.");
+      return;
+    }
+
+    if ((isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) || (!isSuper && !effectiveFranchiseId)) {
+      toast.error(isSuper ? "Select a franchise branch first." : "Please select a franchise branch.");
       return;
     }
 
     try {
       await api.post(`/api/dealers`, {
         ...formData,
-        franchiseId: finalFranchiseId
+        franchiseId: effectiveFranchiseId
       });
       toast.success("Dealer added successfully");
       setShowAddModal(false);
@@ -110,263 +159,531 @@ export default function DealersClient() {
     }
   };
 
-  const filteredDealers = dealers.filter(d => 
-    d.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    d.franchise?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const selectedDealer = dealers.find(d => d.id === selectedDealerId) || null;
+
+  const filteredDealers = dealers.filter(d => {
+    if (searchQuery && !d.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    if (filters.all) return true;
+    const checkStatus = filters.active || filters.inactive;
+    if (checkStatus) {
+      const statusMatch = (filters.active && d.status === 'ACTIVE') || (filters.inactive && d.status !== 'ACTIVE');
+      if (!statusMatch) return false;
+    }
+    return true;
+  });
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <Store className="text-blue-500" size={24} />
-            Dealer Management
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {isSuper ? "Global oversight of B2B partners across all franchises" : "Manage your franchise's B2B distribution network"}
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setFormData({
-              name: "",
-              email: "",
-              phone: "",
-              address: "",
-              franchiseId: isSuper ? "" : (user as any)?.franchiseId || ""
-            });
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95"
-        >
-          <Plus size={18} />
-          Add New Dealer
-        </button>
-      </div>
-
-      {/* Filters Strip */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-2 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
-            type="text"
-            placeholder="Search dealers by name, email, or branch..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-semibold"
-          />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
+    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white text-slate-800">
+      
+      {/* Left Sidebar - Dealer List */}
+      <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
+        
+        {/* Sidebar Header */}
+        <div className="px-4 py-3 border-b border-slate-200">
+          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 hover:text-blue-600 transition-colors">
+            Dealers <ChevronDown size={18} className="text-blue-500" />
+          </button>
         </div>
 
-        {/* Franchise Dropdown for Super Admin */}
+        {/* HQ / Franchise Scope Selector — Super Admin only */}
         {isSuper && (
-          <div>
-            <select
-              value={selectedFranchiseId}
-              onChange={(e) => setSelectedFranchiseId(e.target.value)}
-              className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500/20 transition-all text-sm font-bold text-slate-700 dark:text-slate-300"
-            >
-              <option value="">All Franchise Branches</option>
-              {franchises.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
+          <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+            <div className="flex gap-1 bg-slate-100 rounded-full p-1">
+              <button
+                type="button"
+                onClick={() => setScope("HQ")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                HQ
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("FRANCHISE")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                Franchise
+              </button>
+            </div>
+            {scope === "FRANCHISE" && (
+              <select
+                value={selectedFranchiseId}
+                onChange={(e) => setSelectedFranchiseId(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
+                disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
+              >
+                {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
+                  <option value="">No franchises available</option>
+                ) : (
+                  <>
+                    <option value="">Select Franchise</option>
+                    {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            )}
+            {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
+              <div className="w-full text-xs border border-rose-200 bg-rose-50 text-rose-600 rounded-full px-3 py-1.5 text-center font-medium">
+                HQ is not configured
+              </div>
+            )}
           </div>
         )}
 
-        <div className="bg-blue-50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/10 rounded-2xl p-4 flex items-center justify-between md:col-span-1">
-          <span className="text-sm font-bold text-blue-600 dark:text-blue-400">Total network size</span>
-          <span className="text-2xl font-black text-blue-700 dark:text-blue-300">{dealers.length}</span>
+        {/* Search & List Headers */}
+        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search Dealer Name" 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+          
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
+            <div 
+              className="flex items-center gap-2 cursor-pointer"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+            >
+              <span className="text-[12px] font-bold text-slate-500">Dealer Name</span>
+              <Filter size={12} className="text-orange-500" />
+            </div>
+
+            {/* Filter Popover */}
+            {isFilterOpen && (
+              <div className="absolute top-full left-4 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 p-3">
+                <div className="space-y-2 mb-3">
+                  {[
+                    { id: "all", label: "All" },
+                    { id: "active", label: "Active" },
+                    { id: "inactive", label: "Inactive" },
+                  ].map((f) => (
+                    <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
+                      <div className="relative flex items-center justify-center">
+                        <input 
+                          type="checkbox" 
+                          checked={(filters as any)[f.id]}
+                          onChange={(e) => setFilters({...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false})}
+                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors" 
+                        />
+                        <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      </div>
+                      <span className="text-xs font-medium text-slate-700">{f.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                  <button 
+                    onClick={() => { setFilters({ all: true, active: false, inactive: false }); setIsFilterOpen(false); }}
+                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-full transition-colors"
+                  >
+                    Clear
+                  </button>
+                  <button 
+                    onClick={() => setIsFilterOpen(false)}
+                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-full transition-colors"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex items-center gap-1.5 cursor-pointer">
+              <span className="text-[12px] font-bold text-slate-500">Status</span>
+            </div>
+          </div>
         </div>
+
+        {/* List Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          {loading ? (
+            <div className="p-6 text-center text-xs font-semibold text-slate-400 animate-pulse">Loading dealers...</div>
+          ) : filteredDealers.length === 0 ? (
+            <div className="p-6 text-center text-xs font-semibold text-slate-400">No dealers found</div>
+          ) : (
+            filteredDealers.map((d) => {
+              const isActive = d.id === selectedDealerId;
+              return (
+                <div 
+                  key={d.id}
+                  onClick={() => setSelectedDealerId(d.id)}
+                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 transition-colors ${
+                    isActive ? "bg-[#e6f4fc]" : "hover:bg-slate-50 bg-white"
+                  }`}
+                >
+                  <span className="text-sm text-slate-800 truncate pr-2">{d.name}</span>
+                  <div className="flex flex-col items-end shrink-0">
+                    <span className={`text-[10px] font-bold uppercase ${d.status === 'ACTIVE' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                      {d.status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+
       </div>
 
-      {/* Grid List Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Dealer Name</th>
-                {isSuper && <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Franchise Branch</th>}
-                <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Contact Info</th>
-                <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">Address</th>
-                <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading ? (
-                Array(3).fill(0).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td colSpan={isSuper ? 5 : 4} className="px-6 py-4 h-16 bg-slate-50/50 dark:bg-slate-800/20" />
-                  </tr>
-                ))
-              ) : filteredDealers.length === 0 ? (
-                <tr>
-                  <td colSpan={isSuper ? 5 : 4} className="px-6 py-12 text-center text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                    No B2B dealers registered.
-                  </td>
-                </tr>
-              ) : (
-                filteredDealers.map((dealer) => (
-                  <tr key={dealer.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5 transition-colors group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 font-bold shrink-0">
-                          {dealer.name.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{dealer.name}</p>
-                          <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 mt-1 inline-block">
-                            {dealer.status}
-                          </span>
-                        </div>
+      {/* Right Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 bg-white">
+        
+        {/* Top Header Actions */}
+        <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200">
+          <button 
+            onClick={() => {
+              if (isSuper && franchisesLoading) return;
+              if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
+                toast.error("Select a franchise before adding a dealer.");
+                return;
+              }
+              if (isSuper && scope === "HQ" && !hqFranchiseId) {
+                toast.error("HQ is not configured.");
+                return;
+              }
+              setFormData({
+                name: "", email: "", phone: "", address: "", franchiseId: ""
+              });
+              setShowAddModal(true);
+            }} 
+            disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
+              (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 text-white"
+            }`}
+          >
+            <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Dealer"}
+          </button>
+        </div>
+
+        {/* Dealer Details Header */}
+        {selectedDealer ? (
+          <div className="px-6 py-4 flex items-start justify-between border-b border-slate-200 bg-white">
+            <div className="space-y-4 w-full">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-800 tracking-tight">{selectedDealer.name}</h2>
+                  <button className="text-orange-500 hover:text-orange-600 transition-colors">
+                    <Edit3 size={16} />
+                  </button>
+                </div>
+                <div className="flex items-center gap-4 text-slate-400">
+                  <div className="relative filter-popover-container">
+                    <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 transition-colors"><MoreVertical size={18} /></button>
+                    {/* More Options Menu */}
+                    {isMoreMenuOpen && (
+                      <div className="absolute top-full right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-1.5">
+                        {[
+                          "Dealer Statement (Report)",
+                          "All Dealers (Report)"
+                        ].map((item, i) => (
+                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                            {item}
+                          </button>
+                        ))}
                       </div>
-                    </td>
-                    {isSuper && (
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-slate-700 dark:text-zinc-300 font-bold">
-                          <Building2 size={13} className="text-slate-400" />
-                          <span>{dealer.franchise?.name || "Independent"}</span>
-                        </div>
-                      </td>
                     )}
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <p className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                          <Mail size={12} className="text-slate-400" /> {dealer.email || 'N/A'}
-                        </p>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-2 font-medium">
-                          <Phone size={12} className="text-slate-400" /> {dealer.phone || 'N/A'}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <p className="text-sm text-slate-500 flex items-center gap-2">
-                        <MapPin size={14} className="text-slate-400 shrink-0" />
-                        <span className="truncate max-w-[200px]">{dealer.address || 'No address provided'}</span>
-                      </p>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg text-slate-400 hover:text-blue-500 transition-colors">
-                        <MoreVertical size={18} />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-6 max-w-3xl">
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-0.5">Phone Number</p>
+                  <p className="text-[13px] font-medium text-slate-700">{selectedDealer.phone || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-0.5">Email</p>
+                  <p className="text-[13px] font-medium text-slate-700">{selectedDealer.email || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-400 mb-0.5">Branch</p>
+                  <p className="text-[13px] font-medium text-slate-700 flex items-center gap-1">
+                    <Building2 size={12} className="text-slate-400" />
+                    {selectedDealer.franchise?.name || "HQ"}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[11px] text-slate-400 mb-0.5">Address</p>
+                <p className="text-[13px] font-medium text-slate-700 flex items-center gap-1">
+                  <MapPin size={12} className="text-slate-400" />
+                  {selectedDealer.address || "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="px-6 py-4 flex items-center justify-center border-b border-slate-200">
+            <span className="text-sm font-semibold text-slate-400">Select a dealer to view details</span>
+          </div>
+        )}
+
+        {/* Transactions Section */}
+        <div className="flex-1 flex flex-col min-h-0 bg-white">
+          {/* Section Header */}
+          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200">
+            <h3 className="text-sm font-bold text-slate-700">Transactions</h3>
+            <div className="flex items-center gap-3 text-slate-400">
+              {isTransactionSearchOpen ? (
+                <div className="flex items-center bg-slate-100 rounded-full px-3 py-1">
+                  <Search size={14} className="text-slate-400" />
+                  <input 
+                    type="text" 
+                    autoFocus
+                    placeholder="Search transactions..." 
+                    className="bg-transparent border-none text-xs w-32 focus:outline-none ml-2 text-slate-700 placeholder:text-slate-400"
+                    value={transactionSearchQuery}
+                    onChange={(e) => setTransactionSearchQuery(e.target.value)}
+                    onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
+                  />
+                  {transactionSearchQuery && (
+                    <X 
+                      size={14} 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                      onClick={() => setTransactionSearchQuery("")} 
+                    />
+                  )}
+                </div>
+              ) : (
+                <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 transition-colors"><Search size={16} /></button>
+              )}
+              <button onClick={() => setIsPrintModalOpen(true)} className="hover:text-slate-600 transition-colors"><Printer size={16} /></button>
+              <button className="text-emerald-600 hover:text-emerald-700 transition-colors"><ExcelIcon size={16} fill="currentColor" className="opacity-20" /></button>
+            </div>
+          </div>
+
+          {/* Transactions Table */}
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-white sticky top-0 z-10 border-b border-slate-200">
+                <tr>
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 relative filter-popover-container">
+                    <div className="flex items-center justify-between">
+                      Type 
+                      <button onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
+                        <Filter size={14} className="text-slate-400 hover:text-slate-700" />
                       </button>
+                    </div>
+                    {/* Type Filter Popover */}
+                    {isTypeFilterOpen && (
+                      <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden flex flex-col font-normal text-slate-700 normal-case tracking-normal">
+                        <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-2 space-y-1">
+                          {transactionTypes.map(type => (
+                            <label key={type} className="flex items-start gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer group">
+                              <input 
+                                type="checkbox" 
+                                checked={selectedTypes.includes(type)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedTypes([...selectedTypes, type]);
+                                  else setSelectedTypes(selectedTypes.filter(t => t !== type));
+                                }}
+                                className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                              />
+                              <span className="text-[11px] leading-tight group-hover:text-slate-900">{type}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="p-2 border-t border-slate-100 flex items-center gap-2 bg-white">
+                          <button 
+                            onClick={() => setSelectedTypes([])} 
+                            className="flex-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition-colors"
+                          >
+                            Clear
+                          </button>
+                          <button 
+                            onClick={() => setIsTypeFilterOpen(false)} 
+                            className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </th>
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100">
+                    Number
+                  </th>
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 text-right">
+                    Total
+                  </th>
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 text-right">
+                    Balance
+                  </th>
+                  <th className="w-10 px-2 py-3 border-b border-slate-200"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
+                      No transactions yet
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  transactions.map((t, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
+                      <td className="px-2 py-4 text-center">
+                        <button className="text-slate-300 hover:text-slate-500">
+                          <MoreVertical size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
+
       </div>
 
-      {/* Add Dealer Modal */}
+      {/* Print Options Modal Overlay */}
+      {isPrintModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-800">Print Options</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              {[
+                { id: "itemDetails", label: "Item Details" },
+                { id: "description", label: "Description" },
+                { id: "paymentInfo", label: "Payment Info" },
+                { id: "paymentStatus", label: "Payment Status" }
+              ].map(opt => (
+                <label key={opt.id} className="flex items-center justify-between cursor-pointer group">
+                  <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-800">{opt.label}</span>
+                  <input 
+                    type="checkbox" 
+                    checked={(printOptions as any)[opt.id]}
+                    onChange={(e) => setPrintOptions({...printOptions, [opt.id]: e.target.checked})}
+                    className="w-4 h-4 rounded-sm border-slate-300 text-orange-500 focus:ring-orange-500" 
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="px-6 py-4 flex items-center justify-end gap-6 border-t border-slate-100">
+              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-800 uppercase tracking-wide">Cancel</button>
+              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-800 uppercase tracking-wide">OK</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-black text-slate-900 dark:text-white">Add New B2B Dealer</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200">
+              <h2 className="text-base font-semibold text-gray-800">ADD DEALER</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
                 <XCircle size={20} />
               </button>
             </div>
-            <form onSubmit={handleCreate} className="p-6 space-y-4">
-              
-              {/* Franchise Select Dropdown for Super Admin in Create Modal */}
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
               {isSuper && (
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Franchise Branch *</label>
-                  <select
-                    required
-                    value={formData.franchiseId}
-                    onChange={(e) => setFormData({...formData, franchiseId: e.target.value})}
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold text-slate-700 dark:text-slate-300"
-                  >
-                    <option value="">Select Target Branch...</option>
-                    {franchises.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
+                <div>
+                  <label className={dealerSectionLabelClass}>Target Scope</label>
+                  <div className="w-full border border-orange-200 bg-orange-50 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700">
+                    {scope === "HQ"
+                      ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
+                      : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected")}
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Dealer Name</label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Acme Distribution"
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Email</label>
-                  <input
-                    type="email"
-                    placeholder="dealer@example.com"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                    value={formData.email}
-                    onChange={e => setFormData({...formData, email: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Phone</label>
-                  <input
-                    type="tel"
-                    placeholder="Contact Number"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
-                    value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
-                  />
+              <div>
+                <label className={dealerSectionLabelClass}>Business Information</label>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Dealer Name *</label>
+                    <input
+                      required
+                      type="text"
+                      placeholder="e.g. Acme Distribution"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                      value={formData.name}
+                      onChange={e => setFormData({...formData, name: e.target.value})}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        placeholder="dealer@example.com"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        value={formData.email}
+                        onChange={e => setFormData({...formData, email: e.target.value})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                      <input
+                        type="tel"
+                        placeholder="Contact Number"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        value={formData.phone}
+                        onChange={e => setFormData({...formData, phone: e.target.value})}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Full Address</label>
+              <div>
+                <label className={dealerSectionLabelClass}>Address</label>
                 <textarea
                   rows={3}
                   placeholder="Enter shop/office address..."
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm font-semibold"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors resize-none"
                   value={formData.address}
                   onChange={e => setFormData({...formData, address: e.target.value})}
                 />
               </div>
+            </div>
 
-              <div className="pt-4 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95"
-                >
-                  Save Dealer
-                </button>
-              </div>
-            </form>
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                Save Dealer
+              </button>
+            </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

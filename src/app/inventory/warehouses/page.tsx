@@ -94,15 +94,8 @@ export default function WarehousesPage() {
       />
 
       <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-white/5">
-          <div className="space-y-1">
-            
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              Warehouses Directory
-            </h1>
-            <p className="text-sm font-medium text-slate-500">Manage your storage locations and distribution centers.</p>
-          </div>
+        {/* Header Toolbar */}
+        <div className="flex items-center justify-end gap-4 pb-4 border-b border-slate-200 dark:border-white/5">
 
           <button 
             onClick={() => setShowSidebar(true)}

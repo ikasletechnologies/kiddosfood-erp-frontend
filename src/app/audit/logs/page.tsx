@@ -16,6 +16,7 @@ import {
 import { auditApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { clsx } from "clsx";
+import RequireSuperAdmin from "@/components/auth/RequireSuperAdmin";
 
 interface AuditLog {
   id: string;
@@ -64,18 +65,10 @@ export default function AuditLogsPage() {
   };
 
   return (
+    <RequireSuperAdmin>
     <div className="space-y-6 max-w-[1400px] mx-auto p-4 md:p-6 animate-in fade-in duration-700">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-            <ClipboardList className="text-orange-500" size={28} />
-            Audit Logs
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Monitor system activities and user actions across the platform
-          </p>
-        </div>
+      {/* Header Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center gap-3">
           <button 
             onClick={fetchLogs}
@@ -209,5 +202,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
     </div>
+    </RequireSuperAdmin>
   );
 }

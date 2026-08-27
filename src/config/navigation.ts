@@ -30,7 +30,6 @@ import {
   FilePlus2,
   Barcode,
   MapPin,
-  Lock,
   ShieldAlert,
 } from "lucide-react";
 
@@ -68,12 +67,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: LayoutDashboard,
         label: "Executive Dashboard",
         href: "/",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Wallet,
-        label: "Cash Overview",
-        href: "/accounting/cash-flow",
         roles: SUPER_ONLY,
       },
       {
@@ -115,6 +108,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: Receipt,
         label: "Purchase Bills",
         href: "/purchases/invoices",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Undo2,
+        label: "Purchase Returns",
+        href: "/purchases/returns",
         roles: SUPER_ONLY,
       },
     ],
@@ -162,7 +161,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         label: "Batch Recall",
         href: "/production/batch-recall",
         roles: SUPER_ONLY,
-        isNew: true,
       },
     ],
   },
@@ -181,27 +179,38 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/packaging/labels",
         roles: SUPER_ONLY,
       },
+      {
+        icon: PackageCheck,
+        label: "Confirm Packaging",
+        href: "/packaging/confirm",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
+        roles: SUPER_ONLY,
+      },
     ],
   },
   {
     title: "INVENTORY",
     items: [
       {
-        icon: Layers,
-        label: "Raw Materials",
+        icon: ClipboardList,
+        label: "Item Master",
         href: "/inventory/raw-material-stock",
         roles: SUPER_ONLY,
       },
       {
-        icon: Package,
-        label: "Finished Goods",
-        href: "/inventory/stock?type=FINISHED",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Clock,
-        label: "Expiry Tracking",
-        href: "/inventory/expiry-tracking",
+        icon: Layers,
+        label: "Stock Hub",
+        href: "/inventory/stock",
         roles: SUPER_ONLY,
       },
       {
@@ -214,6 +223,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: ClipboardList,
         label: "Stock Reconciliation",
         href: "/inventory/reconciliation",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Clock,
+        label: "Expiry Tracking",
+        href: "/inventory/expiry-tracking",
         roles: SUPER_ONLY,
       },
     ],
@@ -270,7 +285,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Wallet,
-        label: "Customer Payments",
+        label: "Payments",
         href: "/sales/payment-in",
         roles: SUPER_ONLY,
       },
@@ -308,15 +323,15 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/franchise",
         roles: SUPER_ONLY,
       },
-      {
-        icon: Package,
-        label: "Outlet Inventory",
-        href: "/franchise/stock",
-        roles: SUPER_ONLY,
-      },
+      // {
+      //   icon: Package,
+      //   label: "Outlet Inventory",
+      //   href: "/franchise/stock",
+      //   roles: SUPER_ONLY,
+      // },
       {
         icon: ShoppingCart,
-        label: "Outlet Sales",
+        label: "Franchise Orders",
         href: "/franchise-orders",
         roles: SUPER_ONLY,
       },
@@ -330,6 +345,23 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: Landmark,
         label: "Outstanding",
         href: "/accounting/ledgers",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "PARTNERS",
+    items: [
+      {
+        icon: Users,
+        label: "Customers",
+        href: "/customers",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Store,
+        label: "Dealers",
+        href: "/franchise/dealers",
         roles: SUPER_ONLY,
       },
     ],
@@ -373,33 +405,33 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     title: "REPORTS",
     items: [
       {
-        icon: BarChart3,
+        icon: Factory,
         label: "Production",
-        href: "/reports?report=Stock summary",
+        href: "/reports?parent=production",
         roles: SUPER_ONLY,
       },
       {
-        icon: BarChart3,
+        icon: Package,
         label: "Inventory",
-        href: "/reports?report=Stock summary",
+        href: "/reports?parent=inventory",
         roles: SUPER_ONLY,
       },
       {
         icon: FileText,
         label: "Inventory Ledger",
-        href: "/inventory/raw-material-ledger",
+        href: "/reports?parent=inventory-ledger",
         roles: SUPER_ONLY,
       },
       {
-        icon: BarChart3,
+        icon: Landmark,
         label: "Financial",
-        href: "/reports?report=Profit And Loss",
+        href: "/reports?parent=financial",
         roles: SUPER_ONLY,
       },
       {
         icon: BarChart3,
         label: "Franchise",
-        href: "/reports?report=Party Statement",
+        href: "/reports?parent=franchise",
         roles: SUPER_ONLY,
       },
     ],
@@ -410,18 +442,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       {
         icon: User,
         label: "Users",
-        href: "/admin/users",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: UserCheck,
-        label: "Roles",
-        href: "/admin/users",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Lock,
-        label: "Permissions",
         href: "/admin/users",
         roles: SUPER_ONLY,
       },
@@ -479,6 +499,17 @@ export const franchiseMenuSections: MenuSection[] = [
         icon: FileText,
         label: "Settlement",
         href: "/pos/settlement",
+        roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
         roles: FRANCHISE_ONLY,
       },
     ],
@@ -577,6 +608,17 @@ export const franchiseMenuSections: MenuSection[] = [
         icon: Undo2,
         label: "Returns",
         href: "/sales/returns",
+        roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "APPROVALS",
+    items: [
+      {
+        icon: UserCheck,
+        label: "Approval Workflows",
+        href: "/admin/approvals",
         roles: FRANCHISE_ONLY,
       },
     ],

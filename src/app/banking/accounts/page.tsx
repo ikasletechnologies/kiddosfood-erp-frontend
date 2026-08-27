@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { accountsApi } from '@/lib/api';
 import {
   Plus,
@@ -11,10 +12,11 @@ import {
   ChevronRight,
   Landmark,
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { SlideOver } from '@/components/ui/SlideOver';
 import clsx from 'clsx';
+
+const MAX_ACCOUNT_BALANCE = 1_000_000_000_000; // ₹1 trillion — matches backend guard
 
 export default function AccountsPage() {
   const router = useRouter();
@@ -48,11 +50,16 @@ export default function AccountsPage() {
     e.preventDefault();
     if (!formData.name) return showToast("Account name is required", "error");
 
+    const balance = Number(formData.balance) || 0;
+    if (Math.abs(balance) > MAX_ACCOUNT_BALANCE) {
+      return showToast(`Opening balance looks too large — please check for extra digits (max ₹${MAX_ACCOUNT_BALANCE.toLocaleString("en-IN")})`, "error");
+    }
+
     try {
       await accountsApi.create({
         name: formData.name,
         type: formData.type as any,
-        balance: Number(formData.balance) || 0
+        balance
       });
       showToast("Financial account active", "success");
       setShowAddForm(false);
@@ -80,12 +87,8 @@ export default function AccountsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Landmark className="h-5 w-5 text-[#f58220]" />
-          Business Accounts
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => setShowAddForm(true)}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -128,7 +131,11 @@ export default function AccountsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {accounts.map(acc => (
-              <div key={acc.id} className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 hover:shadow-sm transition-shadow group">
+              <div
+                key={acc.id}
+                onClick={() => router.push(`/banking/accounts/${acc.id}`)}
+                className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 hover:shadow-sm transition-shadow group cursor-pointer"
+              >
                 <div className="flex items-start justify-between">
                   <div className={clsx(
                     "p-2.5 rounded-lg",
@@ -148,7 +155,7 @@ export default function AccountsPage() {
                       {acc.status}
                     </span>
                     <button
-                      onClick={() => handleDelete(acc.id)}
+                      onClick={(e) => { e.stopPropagation(); handleDelete(acc.id); }}
                       className="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
                     >
                       <Trash2 size={14} />
@@ -234,6 +241,8 @@ export default function AccountsPage() {
                 value={formData.balance}
                 onChange={e => setFormData({ ...formData, balance: e.target.value })}
                 placeholder="0.00"
+                min={-MAX_ACCOUNT_BALANCE}
+                max={MAX_ACCOUNT_BALANCE}
                 className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220] transition-colors"
               />
             </div>

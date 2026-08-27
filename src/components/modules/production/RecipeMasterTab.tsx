@@ -18,9 +18,10 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { clsx } from "clsx";
-import { recipesApi, rawMaterialsApi, productsApi } from "@/lib/api";
+import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { formatDate } from "@/lib/utils";
 
 interface RecipeItem {
   inventoryItemId: string;
@@ -35,8 +36,9 @@ const emptyForm = {
   category: "",
   name: "",
   productId: "",
+  shelfLifeDays: null as number | null,
   yieldQty: 1,
-  yieldUnit: "units",
+  yieldUnit: "",
   instructions: "",
   estimatedDurationMinutes: null as number | null,
   items: [] as RecipeItem[],
@@ -66,10 +68,6 @@ export default function RecipeMasterTab() {
   const [materialList, setMaterialList] = useState<{ id: string; name: string; unit: string }[]>([{ id: "1", name: "", unit: "kg" }]);
   const [savingMaterial, setSavingMaterial] = useState(false);
 
-  const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
-  const [savingProduct, setSavingProduct] = useState(false);
-
   const uniqueCategories = categories.map(c => c.name);
 
   const fetchAll = useCallback(async () => {
@@ -77,7 +75,7 @@ export default function RecipeMasterTab() {
     try {
       const [rRes, mRes, pRes, cRes] = await Promise.all([
         recipesApi.getAll(),
-        rawMaterialsApi.getAll(),
+        rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
         productsApi.getAll(),
         recipesApi.getCategories()
       ]);
@@ -109,8 +107,9 @@ export default function RecipeMasterTab() {
       category: recipe.category ?? "",
       name: recipe.name ?? "",
       productId: recipe.productId ?? "",
+      shelfLifeDays: products.find((p: any) => p.id === recipe.productId)?.shelfLifeDays ?? null,
       yieldQty: recipe.yieldQty ?? 1,
-      yieldUnit: recipe.yieldUnit ?? "units",
+      yieldUnit: recipe.yieldUnit ?? "",
       instructions: recipe.instructions ?? "",
       estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
       items: (recipe.recipeItems ?? []).map((i: any) => ({
@@ -126,7 +125,16 @@ export default function RecipeMasterTab() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError("Recipe name is required."); return; }
+    if (!form.yieldUnit) { setError("Select the recipe's yield unit (e.g. KG, L, PCS)."); return; }
     if (form.items.length === 0) { setError("Add at least one ingredient."); return; }
+    if (form.items.some(item => !item.inventoryItemId)) {
+      setError("Please select a material for all ingredients.");
+      return;
+    }
+    if (form.items.some(item => !item.quantityRequired || Number(item.quantityRequired) <= 0)) {
+      setError("Please specify a valid quantity greater than 0 for all ingredients.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -142,6 +150,11 @@ export default function RecipeMasterTab() {
         estimatedDurationMinutes: form.estimatedDurationMinutes,
         items: form.items,
       });
+      // Shelf life lives on the linked Product master (batch expiry is
+      // computed from it there), not on the recipe row itself.
+      if (form.productId) {
+        await productsFullApi.update(form.productId, { shelfLifeDays: form.shelfLifeDays });
+      }
       toast.success(editingId ? "Recipe updated" : "Recipe created");
       setShowForm(false);
       fetchAll();
@@ -153,104 +166,133 @@ export default function RecipeMasterTab() {
   };
 
   const downloadRecipePDF = (recipe: any) => {
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("Please allow pop-ups in your browser to print/download the recipe.");
+        return;
+      }
 
-    const instructions = (recipe.instructions || "")
-      .replace(/\[unitWeight:[\d.]+\]/, "")
-      .replace(/\[weightUnit:\w+\]/, "")
-      .trim();
+      const instructions = (recipe.instructions || "")
+        .replace(/\[unitWeight:[\d.]+\]/, "")
+        .replace(/\[weightUnit:\w+\]/, "")
+        .trim();
 
-    const html = `
-      <html>
-        <head>
-          <title>Recipe - ${recipe.name}</title>
-          <style>
-            body { font-family: 'Inter', system-ui, sans-serif; padding: 40px; color: #1e293b; line-height: 1.5; }
-            .header { border-bottom: 4px solid #F97316; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-end; }
-            .title-section h1 { font-size: 28px; font-weight: 900; margin: 0; color: #0f172a; text-transform: uppercase; letter-spacing: -0.02em; }
-            .product { color: #64748b; font-size: 14px; margin-top: 4px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; }
-            .date { font-size: 12px; color: #94a3b8; font-weight: bold; }
-            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 40px; }
-            .stat-box { background: #f8fafc; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; }
-            .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.1em; }
-            .stat-value { font-size: 20px; font-weight: 900; color: #0f172a; }
-            .section-title { font-size: 12px; font-weight: 900; text-transform: uppercase; color: #F97316; margin-bottom: 16px; letter-spacing: 0.15em; display: flex; align-items: center; gap: 8px; }
-            .section-title::after { content: ""; flex: 1; height: 1px; background: #fee2e2; }
-            table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 40px; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; }
-            th { text-align: left; background: #f8fafc; padding: 14px 20px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
-            td { padding: 14px 20px; border-top: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; color: #334155; }
-            .instructions-box { background: #fffaf5; padding: 30px; border-radius: 24px; border: 1px solid #fed7aa; }
-            .instructions-content { white-space: pre-wrap; line-height: 1.8; font-size: 14px; color: #431407; font-weight: 500; }
-            @media print {
-              body { padding: 0; }
-              .no-print { display: none; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="title-section">
-              <h1>${recipe.name}</h1>
-              <div class="product">Finished Product: ${recipe.product?.name || 'N/A'}</div>
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>Recipe - ${recipe.name}</title>
+            <style>
+              @page { size: A4; margin: 15mm; }
+              body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 24px; color: #1e293b; line-height: 1.5; margin: 0; background: #fff; }
+              .action-bar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+              .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; }
+              .btn-primary { background: #f97316; color: white; }
+              .btn-primary:hover { background: #ea580c; }
+              .btn-secondary { background: #f1f5f9; color: #475569; }
+              .btn-secondary:hover { background: #e2e8f0; }
+              .header { border-bottom: 3px solid #f97316; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+              .title-section h1 { font-size: 24px; font-weight: 800; margin: 0; color: #0f172a; text-transform: uppercase; }
+              .product { color: #64748b; font-size: 13px; margin-top: 4px; font-weight: 600; }
+              .date { font-size: 12px; color: #94a3b8; font-weight: 600; }
+              .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+              .stat-box { background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
+              .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
+              .stat-value { font-size: 18px; font-weight: 800; color: #0f172a; }
+              .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #ea580c; margin-bottom: 12px; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+              .section-title::after { content: ""; flex: 1; height: 1px; background: #fed7aa; }
+              table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 28px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+              th { text-align: left; background: #f8fafc; padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
+              td { padding: 12px 16px; border-top: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #334155; }
+              .instructions-box { background: #fffaf5; padding: 20px; border-radius: 12px; border: 1px solid #fed7aa; }
+              .instructions-content { white-space: pre-wrap; line-height: 1.6; font-size: 13px; color: #431407; font-weight: 500; }
+              @media print {
+                .no-print { display: none !important; }
+                body { padding: 0; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="action-bar no-print">
+              <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+              <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF</button>
             </div>
-            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
-          </div>
-          
-          <div class="stats">
-            <div class="stat-box">
-              <div class="stat-label">Yield Units</div>
-              <div class="stat-value">${recipe.yieldQty} Units</div>
+            <div class="header">
+              <div class="title-section">
+                <h1>${recipe.name}</h1>
+                <div class="product">Finished Product: ${recipe.product?.name || 'N/A'} ${recipe.recipeCode ? `(${recipe.recipeCode})` : ''}</div>
+              </div>
+              <div class="date">Generated: ${formatDate(new Date())}</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Batch Configuration</div>
-              <div class="stat-value">${recipe.batchSize || '1'} ${recipe.recipeItems?.[0]?.unit || 'KG'}</div>
+            
+            <div class="stats">
+              <div class="stat-box">
+                <div class="stat-label">Yield Output</div>
+                <div class="stat-value">${recipe.yieldQty} ${recipe.yieldUnit || 'Units'}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Batch Configuration</div>
+                <div class="stat-value">${recipe.batchSize || '1'} ${recipe.yieldUnit || recipe.recipeItems?.[0]?.unit || 'KG'}</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Total Components</div>
+                <div class="stat-value">${recipe.recipeItems?.length || 0} Materials</div>
+              </div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Total Components</div>
-              <div class="stat-value">${recipe.recipeItems?.length || 0} Materials</div>
-            </div>
-          </div>
 
-          <div class="section-title">Bill of Materials</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Ingredient / Raw Material</th>
-                <th style="text-align: center;">Required Quantity</th>
-                <th style="text-align: right;">Unit of Measure</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${recipe.recipeItems?.map((item: any) => `
+            <div class="section-title">Bill of Materials (Formula)</div>
+            <table>
+              <thead>
                 <tr>
-                  <td style="font-weight: 700; color: #1e293b;">${item.inventoryItem?.name || 'Unknown Material'}</td>
-                  <td style="text-align: center; font-weight: 700;">${item.quantityRequired}</td>
-                  <td style="text-align: right; color: #64748b; font-weight: 600;">${item.unit || 'KG'}</td>
+                  <th>#</th>
+                  <th>Ingredient / Raw Material</th>
+                  <th style="text-align: center;">Required Quantity</th>
+                  <th style="text-align: right;">Unit of Measure</th>
                 </tr>
-              `).join('')}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                ${recipe.recipeItems && recipe.recipeItems.length > 0
+                  ? recipe.recipeItems.map((item: any, idx: number) => `
+                    <tr>
+                      <td style="color: #94a3b8; font-weight: 600; width: 40px;">${idx + 1}</td>
+                      <td style="font-weight: 700; color: #1e293b;">${item.inventoryItem?.name || item.name || 'Material'}</td>
+                      <td style="text-align: center; font-weight: 700;">${item.quantityRequired}</td>
+                      <td style="text-align: right; color: #64748b; font-weight: 600;">${item.unit || 'KG'}</td>
+                    </tr>
+                  `).join('')
+                  : `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No ingredients added yet</td></tr>`
+                }
+              </tbody>
+            </table>
 
-          <div class="section-title">Production Methodology</div>
-          <div class="instructions-box">
-            <div class="instructions-content">${instructions || 'Standard production procedures apply.'}</div>
-          </div>
+            <div class="section-title">Production Methodology</div>
+            <div class="instructions-box">
+              <div class="instructions-content">${instructions || 'Standard production procedures apply.'}</div>
+            </div>
+          </body>
+        </html>
+      `;
 
-          <script>
-            window.onload = () => {
-              setTimeout(() => {
-                window.print();
-                window.onafterprint = () => window.close();
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
+      printWindow.document.open();
+      printWindow.document.write(html);
+      printWindow.document.close();
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+      toast.success("Opening printable recipe document...");
+
+      setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch (e) {
+          console.error("Auto print error", e);
+        }
+      }, 400);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to generate recipe document.");
+    }
   };
 
   const handleCreateCategory = async () => {
@@ -302,31 +344,6 @@ export default function RecipeMasterTab() {
       toast.error(e?.response?.data?.error ?? "Failed to create material");
     } finally {
       setSavingMaterial(false);
-    }
-  };
-
-  const handleCreateProduct = async () => {
-    if (!newProduct.name.trim()) return;
-    setSavingProduct(true);
-    try {
-      const res = await productsApi.create({
-        name: newProduct.name.trim(),
-        basePrice: newProduct.basePrice,
-        category: newProduct.category,
-        sku: newProduct.sku || undefined
-      });
-      await fetchAll();
-
-      setForm(f => ({ ...f, productId: res.data.id }));
-
-      setIsAddingProduct(false);
-      setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
-      toast.success("Product created");
-    } catch (e: any) {
-      console.error(e);
-      toast.error(e?.response?.data?.error ?? "Failed to create product");
-    } finally {
-      setSavingProduct(false);
     }
   };
 
@@ -595,50 +612,39 @@ export default function RecipeMasterTab() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {form.productId && (
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Linked Product</label>
-              <select
-                value={form.productId}
-                onChange={e => {
-                  if (e.target.value === "___NEW_PRODUCT___") {
-                    setIsAddingProduct(true);
-                  } else {
-                    setForm(f => ({ ...f, productId: e.target.value }));
-                  }
-                }}
+              <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="e.g. 7"
+                value={form.shelfLifeDays ?? ""}
+                onChange={e => setForm(f => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) }))}
                 className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-              >
-                <option value="">None</option>
-                {products.map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-                <option value="___NEW_PRODUCT___" className="font-bold text-[#f58220]">+ Add New Product</option>
-              </select>
+              />
+              <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Yield *</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={1}
-                  value={form.yieldQty}
-                  onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
-                  className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-                />
-                <select
-                  value={form.yieldUnit || "units"}
-                  onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
-                  className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
-                >
-                  <option value="units">UNITS</option>
-                  <option value="kg">KG</option>
-                  <option value="g">G</option>
-                  <option value="L">L</option>
-                  <option value="ml">ML</option>
-                </select>
-              </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-gray-700">Yield *</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                value={form.yieldQty}
+                onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
+                className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+              />
+              <select
+                value={form.yieldUnit}
+                onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
+                className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
+              >
+                <option value="" disabled>Select...</option>
+                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+              </select>
             </div>
           </div>
 
@@ -872,48 +878,6 @@ export default function RecipeMasterTab() {
         </div>
       </SlideOver>
 
-      {/* Product Creation SlideOver */}
-      <SlideOver
-        isOpen={isAddingProduct}
-        onClose={() => {
-          setIsAddingProduct(false);
-          setNewProduct({ name: "", basePrice: 0, category: "FINISHED_GOOD", sku: "" });
-        }}
-        title="Add New Linked Product"
-      >
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Product Name *</label>
-            <input
-              value={newProduct.name}
-              onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
-              placeholder="e.g. Masala Dosa Batter"
-              autoFocus
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Category</label>
-            <select
-              value={newProduct.category}
-              onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
-            >
-              <option value="FINISHED_GOOD">Finished Good</option>
-              <option value="SEMI_FINISHED">Semi Finished</option>
-            </select>
-          </div>
-
-          <button
-            onClick={handleCreateProduct}
-            disabled={savingProduct || !newProduct.name.trim()}
-            className="w-full bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {savingProduct ? "Saving..." : "Create Product"}
-          </button>
-        </div>
-      </SlideOver>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import Link from "next/link";
 import { clsx } from "clsx";
 import api from "@/lib/api";
 import { useSearchParams } from "next/navigation";
+import { formatDate } from "@/lib/utils";
 
 interface Lead {
   id: string;
@@ -103,8 +104,8 @@ export default function CRMLeadsClient() {
       l.contactName, l.orgName || "", l.email || "", l.phone || "",
       l.contactCountry || "", l.customerCity || "", l.leadSource || "",
       l.budget || "", l.status, l.pipeline?.name || "",
-      new Date(l.createdAt).toLocaleDateString(),
-      l.followUpDate ? new Date(l.followUpDate).toLocaleDateString() : ""
+      formatDate(l.createdAt),
+      l.followUpDate ? formatDate(l.followUpDate) : ""
     ]);
     const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -118,25 +119,14 @@ export default function CRMLeadsClient() {
   return (
     <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8 font-sans">
       <div className="p-8 space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest">
-            <Link href="/" className="hover:text-[#7C3AED]">Dashboard</Link>
-            <ChevronRight size={10} />
-            <span className="text-[#666]">All Leads</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-black text-[#1A1A1A] dark:text-white">
-              Lead Management
-            </h1>
-            <Link
-              href="/crm/leads/new"
-              className="flex items-center gap-2 px-6 py-2.5 bg-[#D81159] hover:bg-[#B00E4A] text-white rounded-lg font-bold text-[13px] transition-all active:scale-95 shadow-lg shadow-pink-200/50"
-            >
-              <Plus size={18} strokeWidth={3} />
-              Add Lead
-            </Link>
-          </div>
+        <div className="flex items-center justify-end">
+          <Link
+            href="/crm/leads/new"
+            className="flex items-center gap-2 px-6 py-2.5 bg-[#D81159] hover:bg-[#B00E4A] text-white rounded-lg font-bold text-[13px] transition-all active:scale-95 shadow-lg shadow-pink-200/50"
+          >
+            <Plus size={18} strokeWidth={3} />
+            Add Lead
+          </Link>
         </div>
 
         <div className="flex items-center gap-8 border-b border-[#F0EAF0] dark:border-slate-800">
@@ -261,7 +251,7 @@ export default function CRMLeadsClient() {
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.orgName || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.email || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.phone || "—"}</td>
-                      <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{new Date(lead.createdAt).toLocaleDateString()}</td>
+                      <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{formatDate(lead.createdAt)}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.leadSource || "—"}</td>
                       <td className="p-4 text-[13px] text-[#666] dark:text-slate-400">{lead.budget ? `₹${lead.budget.toLocaleString()}` : "—"}</td>
                       <td className="p-4">

@@ -38,3 +38,18 @@ next-env.d.ts
 
 # temp files
 /tmp/
+
+# One-off debug/patch/transform scripts dropped in the repo root during
+# investigation — use the OS scratchpad dir instead so these never need
+# cleaning up again. Anchored to root only so a legitimately-named file
+# inside src/ is never accidentally hidden.
+/scratch/
+/scratch_*.js
+/scratch_*.ts
+/fix_*.js
+/fix-*.js
+/check_*.js
+/transform*.js
+/patch_*.js
+/*.log
+/pnpm-lock.yaml.*

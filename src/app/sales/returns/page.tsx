@@ -5,10 +5,21 @@ import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2, 
   ChevronRight, Printer, FileSpreadsheet, Check, 
   CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, MoreVertical, X } from "lucide-react";
-import { salesApi, franchiseApi, customersApi, franchiseOrdersApi } from "@/lib/api";
+import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
 import api from "@/lib/api/base";
+import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -73,8 +84,17 @@ export default function SalesReturnsPage() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [returnNo, setReturnNo] = useState("1");
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
+  const [previewingReturn, setPreviewingReturn] = useState<ReturnOrder | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const currentCompany = companyProfile || FALLBACK_COMPANY;
 
   // ── Data Syncing ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => { if (res.data) setCompanyProfile(res.data); })
+      .catch(() => {});
+  }, []);
 
   const fetchReturns = useCallback(async () => {
     setLoading(true);
@@ -383,87 +403,6 @@ export default function SalesReturnsPage() {
     }
   };
 
-  const printReturn = (ret: ReturnOrder) => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(`
-      <html>
-      <head>
-        <title>Sales Return #${ret.returnNumber}</title>
-        <style>
-          body { font-family: sans-serif; padding: 30px; color: #334155; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }
-          .title { font-size: 22px; font-weight: bold; color: #1e293b; text-transform: uppercase; }
-          .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
-          .box { border: 1px solid #e2e8f0; padding: 15px; border-radius: 8px; background: #f8fafc; }
-          .box-title { font-size: 11px; font-weight: bold; color: #64748b; text-transform: uppercase; margin-bottom: 5px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f1f5f9; padding: 10px; font-size: 12px; font-weight: bold; text-align: left; }
-          td { padding: 12px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-          .totals { text-align: right; margin-top: 30px; font-size: 15px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div>
-            <div class="title">Sales Return / Credit Note</div>
-            <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Return No: <strong>${ret.returnNumber}</strong></div>
-          </div>
-          <div style="text-align: right; font-size: 13px;">
-            <div>Logged Date: <strong>${new Date(ret.createdAt).toLocaleDateString()}</strong></div>
-            <div>Order Reference: <strong>#${ret.orderRefNumber}</strong></div>
-            <div style="margin-top: 5px;"><span style="background: #e2e8f0; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: bold;">${ret.status}</span></div>
-          </div>
-        </div>
-        <div class="meta">
-          <div class="box">
-            <div class="box-title">Source Party</div>
-            <strong>${ret.entityName}</strong><br/>
-            ${ret.entityPhone ? `Phone: ${ret.entityPhone}<br/>` : ""}
-            Source Type: ${ret.source === "FRANCHISE" ? "Franchise Branch" : "Retailer/Dealer"}
-          </div>
-          <div class="box">
-            <div class="box-title">Reason & Method</div>
-            Reason: ${ret.reason}<br/>
-            Refund: ${ret.refundMethod}
-          </div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Description</th>
-              <th>Qty Bought</th>
-              <th>Qty Returned</th>
-              <th>Condition</th>
-              <th>Price/Unit</th>
-              <th style="text-align: right;">Total Credit</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${ret.items.map((it, i) => `
-              <tr>
-                <td>${i + 1}</td>
-                <td>${it.productName}</td>
-                <td>${it.orderQuantity}</td>
-                <td><strong>${it.returnQuantity}</strong></td>
-                <td><span style="font-size: 11px; background: #f1f5f9; padding: 2px 6px; border-radius: 4px;">${it.condition}</span></td>
-                <td>₹${Number(it.rate).toFixed(2)}</td>
-                <td style="text-align: right; font-weight: bold;">₹${Number(it.rate * it.returnQuantity).toFixed(2)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        <div class="totals">
-          Estimated Refund Credit: <span style="font-size: 18px; color: #b91c1c; font-weight: bold; margin-left: 10px;">₹${Number(ret.refundAmount).toFixed(2)}</span>
-        </div>
-        <script>window.onload = () => { window.print(); window.onafterprint = () => window.close(); }</script>
-      </body>
-      </html>
-    `);
-    win.document.close();
-  };
-
   // ── Filters ──────────────────────────────────────────────────────────────────
 
   const getFilteredReturns = () => {
@@ -576,7 +515,7 @@ export default function SalesReturnsPage() {
                   <option value="">{selectedEntity ? "Choose original order..." : "Select entity first"}</option>
                   {ordersList.map(o => (
                     <option key={o.id} value={o.id}>
-                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {new Date(o.createdAt).toLocaleDateString()}
+                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
                     </option>
                   ))}
                 </select>
@@ -735,12 +674,8 @@ export default function SalesReturnsPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
 
-      {/* ── Page Header ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Undo2 className="h-5 w-5 text-[#f58220]" />
-          Sales Returns / Credit Notes
-        </h1>
+      {/* ── Page Header Toolbar ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => { resetForm(); setView("create"); }}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -867,7 +802,7 @@ export default function SalesReturnsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600">
-                        {new Date(r.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(r.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -916,7 +851,7 @@ export default function SalesReturnsPage() {
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => { printReturn(r); setShowRowMenu(null); }}
+                                  onClick={() => { setPreviewingReturn(r); setShowRowMenu(null); }}
                                   className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
                                 >
                                   Print
@@ -940,6 +875,28 @@ export default function SalesReturnsPage() {
           </div>
         )}
       </div>
+
+      {previewingReturn && (
+        <GSTInvoice
+          order={{
+            poNumber: previewingReturn.returnNumber,
+            createdAt: previewingReturn.createdAt,
+            items: (previewingReturn.items || []).map((it) => ({
+              itemName: it.productName,
+              quantity: it.returnQuantity,
+              price: it.rate,
+              gstRate: 0,
+            })),
+          }}
+          vendor={{
+            name: previewingReturn.entityName,
+            phone: previewingReturn.entityPhone,
+          }}
+          companyDetails={currentCompany}
+          documentType="SALES_RETURN"
+          onClose={() => setPreviewingReturn(null)}
+        />
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, ArrowDownLeft, ArrowUpRight, History, Info } from "lucide-react";
 import { vendorsApi } from "@/lib/api";
 import { clsx } from "clsx";
+import { formatDate } from "@/lib/utils";
 
 interface LedgerEntry {
   id: string;
@@ -57,7 +58,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
   const exportExcel = () => {
     const headers = ["Date", "Type", "Reference", "Note", "Amount", "Balance"];
     const rows = filteredLedger.map(e => [
-      new Date(e.createdAt).toLocaleDateString(),
+      formatDate(e.createdAt),
       e.type,
       e.referenceType,
       e.note,
@@ -94,7 +95,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
           <div className="flex justify-between items-start">
             <div>
               <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Vendor Statement</h1>
-              <p className="text-sm font-bold text-slate-500 mt-1">Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
+              <p className="text-sm font-bold text-slate-500 mt-1">Generated on {formatDate(new Date())} at {new Date().toLocaleTimeString()}</p>
             </div>
             <div className="text-right">
               <h2 className="text-xl font-black text-slate-900">{vendor.name}</h2>
@@ -244,7 +245,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
                     <td className="py-4 pl-4 rounded-l-xl border-y border-l border-[#F0EAF0]">
                       <div className="flex flex-col">
                         <span className="text-sm text-[#1A1A1A] font-bold whitespace-nowrap">
-                          {new Date(entry.createdAt).toLocaleDateString()}
+                          {formatDate(entry.createdAt)}
                         </span>
                         <span className="text-[10px] text-[#999] font-medium">
                           {new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

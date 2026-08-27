@@ -23,6 +23,14 @@ export const auditApi = {
   getLogs: (params?: any) => api.get('/api/audit/logs', { params }),
 };
 
+// --- Approval Workflows ---
+export const workflowApprovalsApi = {
+  getAll: (category?: string) => api.get('/api/workflow-approvals', { params: category ? { category } : undefined }),
+  getOne: (id: string) => api.get(`/api/workflow-approvals/${id}`),
+  create: (data: any) => api.post('/api/workflow-approvals', data),
+  approve: (id: string, notes?: string) => api.post(`/api/workflow-approvals/${id}/approve`, { notes }),
+};
+
 // --- System Settings & Company Profile ---
 export const settingsApi = {
   getCompanyProfile: () => api.get('/api/settings/company'),

@@ -15,6 +15,7 @@ const WASTE_REASONS = [
 ];
 
 export default function RawMaterialStockDashboard() {
+  const [activeCategory, setActiveCategory] = useState<"RAW_MATERIAL" | "FINISHED_GOOD">("RAW_MATERIAL");
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -46,14 +47,14 @@ export default function RawMaterialStockDashboard() {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId || undefined);
+      const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId || undefined, undefined, activeCategory);
       setItems(res.data ?? []);
     } catch (e) {
       console.error("Failed to fetch raw material stock:", e);
     } finally {
       setLoading(false);
     }
-  }, [selectedWarehouseId]);
+  }, [selectedWarehouseId, activeCategory]);
 
   const handleUpdateThreshold = async (itemId: string) => {
     setUpdating(true);
@@ -147,12 +148,34 @@ export default function RawMaterialStockDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Layers className="h-5 w-5 text-[#f58220]" />
-          Raw Material Stock
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+            <button
+              onClick={() => setActiveCategory("RAW_MATERIAL")}
+              className={clsx(
+                "px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                activeCategory === "RAW_MATERIAL"
+                  ? "bg-white text-[#f58220] shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Raw Material Stock
+            </button>
+            <button
+              onClick={() => setActiveCategory("FINISHED_GOOD")}
+              className={clsx(
+                "px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                activeCategory === "FINISHED_GOOD"
+                  ? "bg-white text-[#f58220] shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Finished Goods Stock
+            </button>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
@@ -196,7 +219,7 @@ export default function RawMaterialStockDashboard() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
             <button className="px-3 py-2 text-xs font-medium bg-[#f58220] text-white whitespace-nowrap">
-              Raw Materials Only
+              {activeCategory === "FINISHED_GOOD" ? "Finished Goods Only" : "Raw Materials Only"}
             </button>
           </div>
           <select
@@ -213,7 +236,7 @@ export default function RawMaterialStockDashboard() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search SKU / Material Name..."
+              placeholder="Search SKU / Product Name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
@@ -234,7 +257,7 @@ export default function RawMaterialStockDashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
-                  <th className="text-left px-4 py-3">Material</th>
+                  <th className="text-left px-4 py-3">Product</th>
                   <th className="text-center px-4 py-3">Available Stock</th>
                   <th className="text-center px-4 py-3">Reserved Stock</th>
                   <th className="text-center px-4 py-3">Near Expiry</th>
@@ -366,7 +389,7 @@ export default function RawMaterialStockDashboard() {
             {filtered.length === 0 && (
               <div className="py-20 text-center space-y-4">
                 <div className="inline-flex p-6 bg-gray-50 rounded-full mb-2"><Database className="h-8 w-8 text-gray-300" /></div>
-                <p className="text-sm text-gray-400">No matching raw material items found</p>
+                <p className="text-sm text-gray-400">No matching items found</p>
               </div>
             )}
           </div>

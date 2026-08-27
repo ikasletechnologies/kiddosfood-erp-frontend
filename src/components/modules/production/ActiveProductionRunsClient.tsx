@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText } from "lucide-react";
+import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText, CalendarClock } from "lucide-react";
 import { productionApi, inventoryApi } from "@/lib/api";
-import { formatERPNumber } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
+import { convertUnit } from "@/lib/unitConversion";
 
 const STAGES = ["QUEUED", "MIXING", "COOKING", "COOLING", "READY_FOR_QC"] as const;
 
@@ -59,6 +59,7 @@ export default function ActiveProductionRunsClient() {
   const [batchToApprove, setBatchToApprove] = useState<any | null>(null);
   const [actualYield, setActualYield] = useState<number>(0);
   const [remarks, setRemarks] = useState<string>("");
+  const [expiryDate, setExpiryDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   // Stock the shortage check compares against, scoped to whichever warehouse
   // each run actually launched against — keyed by warehouseId. Runs from
@@ -103,17 +104,26 @@ export default function ActiveProductionRunsClient() {
   }, [fetchHistory]);
 
   // Resolves available stock for one recipe ingredient, scoped to the run's
-  // warehouse when known.
+  // warehouse when known. Stock is reported in the inventory item's own unit
+  // (e.g. KG) while `required` below is computed in the recipe item's unit
+  // (item.unit, e.g. g) — those are independent fields with no guarantee
+  // they match, so the raw figure is converted into item.unit here before
+  // it's ever compared against `required`.
   const getAvailableFor = (run: any, item: any): number => {
     const stockList = run.warehouseId ? warehouseStockByWarehouse[run.warehouseId] : undefined;
+    let raw = item.inventoryItem?.currentStock || 0;
+    let rawUnit = item.inventoryItem?.unit;
     if (stockList) {
       const match = stockList.find((s: any) =>
         s.id === item.inventoryItemId ||
         (s.sku && item.inventoryItem?.sku && s.sku.trim().toLowerCase() === item.inventoryItem.sku.trim().toLowerCase())
       );
-      if (match) return match.availableStock || 0;
+      if (match) {
+        raw = match.availableStock || 0;
+        rawUnit = match.unit || rawUnit;
+      }
     }
-    return item.inventoryItem?.currentStock || 0;
+    return convertUnit(raw, rawUnit, item.unit);
   };
 
   const handleAdvanceStage = async (id: string, stage: string) => {
@@ -162,6 +172,10 @@ export default function ActiveProductionRunsClient() {
     const expected = (production.quantity || 0) * (production.recipe?.yieldQty || 1);
     setActualYield(expected);
     setRemarks(production.remarks || "");
+    // Pre-fill from the estimate computed when the run started (shelf life /
+    // ingredient batch expiry) — the operator confirms or corrects it here,
+    // same as GRN's expiry capture for raw material lots.
+    setExpiryDate(production.expiryDate ? new Date(production.expiryDate).toISOString().split("T")[0] : "");
     setShowApprovalModal(true);
   };
 
@@ -169,9 +183,10 @@ export default function ActiveProductionRunsClient() {
     if (!batchToApprove) return;
     setSubmitting(true);
     try {
-      await productionApi.approveBatch(batchToApprove.id, { 
+      await productionApi.approveBatch(batchToApprove.id, {
         actualYield: Number(actualYield),
-        remarks: remarks.trim() || undefined
+        remarks: remarks.trim() || undefined,
+        expiryDate: expiryDate || undefined
       });
       toast.success("Production completed & added to Batch Registry");
       setShowApprovalModal(false);
@@ -212,7 +227,11 @@ export default function ActiveProductionRunsClient() {
           activeRuns.map((run) => {
             const shortItems = (run.recipe?.recipeItems || []).filter((item: any) => {
               const required = (item.quantityRequired || 0) * (run.quantity || 1);
-              return getAvailableFor(run, item) < required;
+              // Since this batch is already active (IN_PROGRESS/STOPPED), its raw materials 
+              // have already been deducted from the warehouse stock. We add the required quantity 
+              // back to get the pre-deduction available stock for a true shortage check.
+              const available = getAvailableFor(run, item) + required;
+              return available < required;
             });
 
             return (
@@ -242,7 +261,7 @@ export default function ActiveProductionRunsClient() {
                     <div>
                       <span className="text-xs font-semibold text-gray-500 block uppercase">Batch</span>
                       <span className="text-sm font-semibold text-gray-800 font-mono mt-0.5 block">
-                        {formatERPNumber("PRD", run.id, run.producedAt)}
+                        {run.productionBatchCode || "Batch code pending"}
                       </span>
                     </div>
                     <div>
@@ -301,14 +320,14 @@ export default function ActiveProductionRunsClient() {
                         <tbody className="divide-y divide-rose-200/50">
                           {shortItems.map((item: any, idx: number) => {
                             const required = (item.quantityRequired || 0) * (run.quantity || 1);
-                            const available = getAvailableFor(run, item);
+                            const available = getAvailableFor(run, item) + required;
                             const short = required - available;
                             return (
                               <tr key={idx} className="text-rose-900 font-bold">
                                 <td className="py-2">{item.inventoryItem?.name || "Ingredient"}</td>
-                                <td className="py-2">{required.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2">{available.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2">{required.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2">{available.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
                               </tr>
                             );
                           })}
@@ -408,7 +427,7 @@ export default function ActiveProductionRunsClient() {
               <div className="text-right">
                 <p className="text-xs text-gray-500">Batch</p>
                 <p className="text-xs font-semibold text-[#f58220] font-mono mt-0.5">
-                  {formatERPNumber("PRD", batchToApprove.id, batchToApprove.producedAt)}
+                  {batchToApprove.productionBatchCode || "Batch code pending"}
                 </p>
               </div>
             </div>
@@ -475,6 +494,21 @@ export default function ActiveProductionRunsClient() {
               placeholder={`Enter actual yield in ${yieldUnit}`}
               className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+              <CalendarClock size={12} /> Expiry Date
+            </label>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold text-gray-800"
+            />
+            <p className="text-[11px] text-gray-400">
+              Pre-filled from the product&apos;s configured shelf life — confirm or correct before completing.
+            </p>
           </div>
 
           <div className="space-y-2">

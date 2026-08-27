@@ -3,6 +3,7 @@ import { Download, Printer, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { reportsApi } from '@/lib/api/accounting.api';
 import toast from 'react-hot-toast';
+import { formatDate } from '@/lib/utils';
 
 export default function DiscountReport() {
   const [data, setData] = useState<any[]>([]);
@@ -98,7 +99,7 @@ export default function DiscountReport() {
               data.map((row, idx) => (
                 <tr key={idx} className="hover:bg-gray-50">
                   <td className="px-4 py-3 border-r whitespace-nowrap">
-                    {new Date(row.date).toLocaleDateString('en-IN')}
+                    {formatDate(row.date)}
                   </td>
                   <td className="px-4 py-3 border-r font-medium text-blue-600">
                     {row.invoiceNo}

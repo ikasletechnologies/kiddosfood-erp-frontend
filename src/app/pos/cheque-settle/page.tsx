@@ -18,6 +18,7 @@ import { clsx } from "clsx";
 import { chequesApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface Cheque {
   id: string;
@@ -93,22 +94,15 @@ export default function ChequeSettlePage() {
   return (
     <div className="max-w-[1400px] mx-auto h-[calc(100vh-100px)] flex flex-col space-y-6 py-6 px-4 animate-in fade-in duration-700">
       {/* Header */}
-      <header className="flex items-center justify-between gap-6 bg-white dark:bg-card/40 p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-black/[0.03]">
-        <div className="flex items-center gap-6">
-          <Link href="/pos" className="p-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl hover:bg-slate-100 transition-all">
-            <ArrowLeft size={20} className="text-slate-500" />
+      <header className="flex items-center justify-between gap-6 bg-white dark:bg-card/40 p-6 rounded-[32px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-black/[0.03]">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/pos"
+            className="p-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-100 transition-all text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
+          >
+            <ArrowLeft size={14} className="text-slate-500" />
+            <span>Back to POS</span>
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-violet-500 rounded-xl shadow-lg shadow-violet-500/20">
-                <Landmark size={20} className="text-white" />
-              </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
-                Cheque <span className="text-slate-400 font-medium italic">Settlement</span>
-              </h1>
-            </div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2 ml-14">Manage post-dated and current cheques collection</p>
-          </div>
         </div>
 
         <div className="flex items-center gap-3">
@@ -218,7 +212,7 @@ export default function ChequeSettlePage() {
                         <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-white/5 flex items-center justify-center text-slate-400"><Calendar size={14} /></div>
                         <div>
                           <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Due</p>
-                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{new Date(cheque.dueDate).toLocaleDateString()}</p>
+                          <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300">{formatDate(cheque.dueDate)}</p>
                         </div>
                       </div>
                     </div>

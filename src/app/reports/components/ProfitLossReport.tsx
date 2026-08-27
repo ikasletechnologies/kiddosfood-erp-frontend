@@ -15,6 +15,9 @@ interface ReportData {
   rows: Record<string, any>[];
   revenue?: number;
   cogs?: number;
+  purchase?: number;
+  taxPayable?: number;
+  taxReceivable?: number;
   grossProfit?: number;
   expenses?: number;
   netProfit?: number;
@@ -59,6 +62,9 @@ export default function CentralProfitLossReport({
 
   const revenue = reportData?.revenue || 0;
   const cogs = reportData?.cogs || 0;
+  const purchase = reportData?.purchase || 0;
+  const taxPayable = reportData?.taxPayable || 0;
+  const taxReceivable = reportData?.taxReceivable || 0;
   const grossProfit = reportData?.grossProfit || (revenue - cogs);
   const expenses = reportData?.expenses || 0;
   const netProfit = reportData?.netProfit || (grossProfit - expenses);
@@ -158,7 +164,7 @@ export default function CentralProfitLossReport({
                     Purchase (-)
                   </td>
                   <td className="px-4 py-2.5 text-[13px] font-bold text-right text-rose-500 dark:text-rose-400">
-                    {formatPrice(cogs)}
+                    {formatPrice(purchase)}
                   </td>
                 </tr>
 
@@ -235,7 +241,7 @@ export default function CentralProfitLossReport({
                     Tax Payable (Cr) (+)
                   </td>
                   <td className="px-4 py-2.5 text-[13px] font-bold text-right text-emerald-600 dark:text-emerald-400">
-                    {formatPrice(0)}
+                    {formatPrice(taxPayable)}
                   </td>
                 </tr>
 
@@ -278,7 +284,7 @@ export default function CentralProfitLossReport({
                     Tax Receivable (Dr) (-)
                   </td>
                   <td className="px-4 py-2.5 text-[13px] font-bold text-right text-rose-500 dark:text-rose-455">
-                    {formatPrice(0)}
+                    {formatPrice(taxReceivable)}
                   </td>
                 </tr>
 

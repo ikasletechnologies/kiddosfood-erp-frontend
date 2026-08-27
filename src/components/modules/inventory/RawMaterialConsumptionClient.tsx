@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { X, Search, RefreshCw, Download, Database } from "lucide-react";
 import { clsx } from "clsx";
 import { inventoryApi } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 
 const TYPE_FILTERS = [
   { id: "ALL", label: "All" },
@@ -57,7 +58,7 @@ export default function RawMaterialConsumptionClient() {
   const downloadCSV = () => {
     const headers = ["Date", "Item Name", "SKU", "Type", "Quantity", "Unit", "Valuation (₹)", "Notes"];
     const rows = filtered.map(item => [
-      new Date(item.date).toLocaleDateString(),
+      formatDate(item.date),
       item.itemName || "",
       item.sku || "",
       item.consumptionType || "",
@@ -207,7 +208,7 @@ export default function RawMaterialConsumptionClient() {
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(item.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(item.date)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {prefix}-{item.id.substring(0, 4).toUpperCase()}

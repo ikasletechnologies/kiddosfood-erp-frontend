@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { inventoryApi } from "@/lib/api";
 import {
   Bell,
@@ -16,6 +17,7 @@ import {
   RefreshCw,
   Shield,
   Clock,
+  ChevronRight,
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -34,28 +36,19 @@ interface Alert {
   actionHref?: string;
 }
 
-const INITIAL_ALERTS: Alert[] = [];
-
-const TYPE_CONFIG: Record<AlertType, { label: string; icon: any; color: string; bg: string }> = {
-  inventory: { label: "Inventory", icon: Package,      color: "text-orange-500",  bg: "bg-orange-50 dark:bg-orange-900/20" },
-  order:     { label: "Order",     icon: ShoppingCart, color: "text-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-900/20" },
-  payment:   { label: "Payment",   icon: Shield,       color: "text-purple-500",  bg: "bg-purple-50 dark:bg-purple-900/20" },
-  dispatch:  { label: "Dispatch",  icon: TrendingUp,   color: "text-blue-500",    bg: "bg-blue-50 dark:bg-blue-900/20" },
-  system:    { label: "System",    icon: RefreshCw,    color: "text-gray-500",    bg: "bg-gray-50 dark:bg-white/10" },
-};
-
-const SEVERITY_STYLES: Record<AlertSeverity, string> = {
-  critical: "border-l-4 border-l-red-500 bg-red-50/30 dark:bg-red-900/5",
-  warning:  "border-l-4 border-l-amber-400 bg-amber-50/30 dark:bg-amber-900/5",
-  info:     "border-l-4 border-l-blue-400 bg-blue-50/30 dark:bg-blue-900/5",
-  success:  "border-l-4 border-l-emerald-400 bg-emerald-50/30 dark:bg-emerald-900/5",
+const TYPE_CONFIG: Record<AlertType, { label: string; icon: any; color: string; bg: string; border: string }> = {
+  inventory: { label: "Inventory", icon: Package,      color: "text-[#F58220]",  bg: "bg-orange-50 dark:bg-orange-950/30",  border: "border-orange-200/60 dark:border-orange-500/20" },
+  order:     { label: "Order",     icon: ShoppingCart, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200/60 dark:border-emerald-500/20" },
+  payment:   { label: "Payment",   icon: Shield,       color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-950/30",  border: "border-purple-200/60 dark:border-purple-500/20" },
+  dispatch:  { label: "Dispatch",  icon: TrendingUp,   color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200/60 dark:border-blue-500/20" },
+  system:    { label: "System",    icon: RefreshCw,    color: "text-slate-600",   bg: "bg-slate-50 dark:bg-white/5",         border: "border-slate-200 dark:border-white/10" },
 };
 
 const SEVERITY_BADGE: Record<AlertSeverity, string> = {
-  critical: "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400",
-  warning:  "bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400",
-  info:     "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
-  success:  "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400",
+  critical: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-500/20",
+  warning:  "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-500/20",
+  info:     "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-500/20",
+  success:  "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-500/20",
 };
 
 function mapApiAlerts(apiItems: any[]): Alert[] {
@@ -70,23 +63,30 @@ function mapApiAlerts(apiItems: any[]): Alert[] {
     time: "Just now",
     read: false,
     actionLabel: "Reorder",
-    actionHref: "/purchases",
+    actionHref: "/purchases/new",
   }));
 }
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filterType, setFilterType] = useState<"all" | AlertType>("all");
   const [filterSeverity, setFilterSeverity] = useState<"all" | AlertSeverity>("all");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const fetchAlerts = () => {
+    setIsRefreshing(true);
     inventoryApi.getAlerts()
       .then((res) => {
         const mapped = mapApiAlerts(res.data ?? []);
-        if (mapped.length > 0) setAlerts(mapped);
+        setAlerts(mapped);
       })
-      .catch(() => { /* keep mock data on error */ });
+      .catch(() => {})
+      .finally(() => setIsRefreshing(false));
+  };
+
+  useEffect(() => {
+    fetchAlerts();
   }, []);
 
   const filtered = alerts.filter((a) => {
@@ -98,148 +98,313 @@ export default function AlertsPage() {
 
   const unreadCount = alerts.filter((a) => !a.read).length;
   const criticalCount = alerts.filter((a) => a.severity === "critical" && !a.read).length;
+  const inventoryCount = alerts.filter((a) => a.type === "inventory").length;
+  const orderCount = alerts.filter((a) => a.type === "order").length;
 
   const markRead = (id: string) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, read: true } : a));
   const markAllRead = () => setAlerts((p) => p.map((a) => ({ ...a, read: true })));
   const dismiss = (id: string) => setAlerts((p) => p.filter((a) => a.id !== id));
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-            <Bell size={24} className="text-orange-500" />
-            Real-Time Alerts
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Owner-level visibility into raw materials, production, sales & franchise operations</p>
-        </div>
+    <div className="min-h-full space-y-6 animate-in fade-in duration-200">
+      {/* ── 1. TOP ACTION TOOLBAR ── */}
+      <div className="flex items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={fetchAlerts}
+            className="p-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5 text-xs font-bold"
+            title="Refresh alerts"
+          >
+            <RefreshCw
+              size={13}
+              className={clsx("transition-transform", isRefreshing && "animate-spin text-[#F58220]")}
+            />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2.5">
           {unreadCount > 0 && (
-            <button onClick={markAllRead} className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-[12px] font-bold text-gray-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
-              <CheckCircle2 size={13} /> Mark All Read
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5"
+            >
+              <CheckCircle2 size={13} className="text-emerald-600" />
+              <span>Mark All Read</span>
             </button>
           )}
-          <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 rounded-xl px-3 py-2">
-            <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" />
-            <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400">Live Monitoring</span>
+
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live Monitoring</span>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Unread",    value: unreadCount,  color: "text-orange-500", bg: "bg-orange-50 dark:bg-orange-900/10",    icon: Bell },
-          { label: "Critical",  value: criticalCount, color: "text-red-500",   bg: "bg-red-50 dark:bg-red-900/10",          icon: AlertTriangle },
-          { label: "Inventory", value: alerts.filter((a) => a.type === "inventory").length,    color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-900/10", icon: Package },
-          { label: "Orders",    value: alerts.filter((a) => a.type === "order").length, color: "text-emerald-500",  bg: "bg-emerald-50 dark:bg-emerald-900/10",        icon: ShoppingCart },
-        ].map((s) => (
-          <div key={s.label} className={clsx("rounded-2xl border border-gray-100 dark:border-white/5 p-4 flex items-center gap-3", s.bg)}>
-            <div className="w-9 h-9 rounded-xl bg-white dark:bg-card flex items-center justify-center shadow-sm">
-              <s.icon size={16} className={s.color} />
+      {/* ── 2. STATS CARDS (Matching Dashboard KPI Design) ── */}
+      <div className="space-y-2">
+        <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          ALERT SUMMARY
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Unread */}
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[135px]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-orange-50 text-[#F58220] border-orange-200/60 dark:bg-orange-950/30 dark:border-orange-500/20">
+                <Bell size={16} strokeWidth={2.2} />
+              </div>
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                UNREAD ALERTS
+              </p>
             </div>
-            <div>
-              <p className={clsx("text-xl font-black", s.color)}>{s.value}</p>
-              <p className="text-[11px] text-gray-500 dark:text-slate-400 font-semibold">{s.label}</p>
+            <div className="my-2.5">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                {unreadCount}
+              </h3>
+            </div>
+            <div className="min-h-[18px]">
+              {unreadCount > 0 && (
+                <p className="text-xs font-medium text-[#F58220]">
+                  Requires owner attention
+                </p>
+              )}
             </div>
           </div>
-        ))}
+
+          {/* Card 2: Critical */}
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[135px]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-rose-50 text-rose-600 border-rose-200/60 dark:bg-rose-950/30 dark:border-rose-500/20">
+                <AlertTriangle size={16} strokeWidth={2.2} />
+              </div>
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                CRITICAL ISSUES
+              </p>
+            </div>
+            <div className="my-2.5">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                {criticalCount}
+              </h3>
+            </div>
+            <div className="min-h-[18px]">
+              {criticalCount > 0 && (
+                <p className="text-xs font-medium text-rose-600">
+                  Immediate action required
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Card 3: Inventory */}
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[135px]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-blue-50 text-blue-600 border-blue-200/60 dark:bg-blue-950/30 dark:border-blue-500/20">
+                <Package size={16} strokeWidth={2.2} />
+              </div>
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                INVENTORY ALERTS
+              </p>
+            </div>
+            <div className="my-2.5">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                {inventoryCount}
+              </h3>
+            </div>
+            <div className="min-h-[18px]">
+              {inventoryCount > 0 && (
+                <p className="text-xs font-medium text-slate-500">
+                  Low stock / reorder triggers
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Card 4: Orders */}
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[135px]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-emerald-50 text-emerald-600 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-500/20">
+                <ShoppingCart size={16} strokeWidth={2.2} />
+              </div>
+              <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                ORDER ALERTS
+              </p>
+            </div>
+            <div className="my-2.5">
+              <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+                {orderCount}
+              </h3>
+            </div>
+            <div className="min-h-[18px]">
+              {orderCount > 0 && (
+                <p className="text-xs font-medium text-slate-500">
+                  Pending dispatch approvals
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 p-4">
-        <Filter size={14} className="text-gray-400" />
+      {/* ── 3. FILTER BAR (Dashboard Segmented Style) ── */}
+      <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Type filters */}
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5">
+            {(["all", "inventory", "order", "payment", "dispatch", "system"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setFilterType(t)}
+                className={clsx(
+                  "px-3 py-1 rounded-lg text-[11px] font-bold capitalize transition-all select-none",
+                  filterType === t
+                    ? "bg-white dark:bg-slate-800 text-[#F58220] shadow-sm border border-slate-200 dark:border-white/10"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                )}
+              >
+                {t === "all" ? "All Types" : TYPE_CONFIG[t as AlertType]?.label}
+              </button>
+            ))}
+          </div>
 
-        <div className="flex gap-1.5 flex-wrap">
-          {(["all", "inventory", "order", "payment", "dispatch", "system"] as const).map((t) => (
-            <button key={t} onClick={() => setFilterType(t)}
-              className={clsx("px-3 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-all",
-                filterType === t ? "bg-orange-500 text-white" : "bg-gray-100 dark:bg-white/5 text-gray-500 hover:bg-orange-50 hover:text-orange-600"
-              )}
-            >
-              {t === "all" ? "All Types" : TYPE_CONFIG[t as AlertType]?.label}
-            </button>
-          ))}
+          <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-white/10" />
+
+          {/* Severity filters */}
+          <div className="flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5">
+            {(["all", "critical", "warning", "info", "success"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setFilterSeverity(s)}
+                className={clsx(
+                  "px-2.5 py-1 rounded-lg text-[11px] font-bold capitalize transition-all select-none",
+                  filterSeverity === s
+                    ? "bg-white dark:bg-slate-800 text-[#F58220] shadow-sm border border-slate-200 dark:border-white/10"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                )}
+              >
+                {s === "all" ? "All" : s}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="w-px h-5 bg-gray-200 dark:bg-white/10" />
-
-        <div className="flex gap-1.5">
-          {(["all", "critical", "warning", "info", "success"] as const).map((s) => (
-            <button key={s} onClick={() => setFilterSeverity(s)}
-              className={clsx("px-3 py-1.5 rounded-xl text-[11px] font-bold capitalize transition-all",
-                filterSeverity === s ? "bg-orange-500 text-white" : "bg-gray-100 dark:bg-white/5 text-gray-500 hover:bg-orange-50 hover:text-orange-600"
-              )}
-            >
-              {s === "all" ? "All" : s}
-            </button>
-          ))}
-        </div>
-
-        <button onClick={() => setShowUnreadOnly(!showUnreadOnly)}
-          className={clsx("ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all",
-            showUnreadOnly ? "bg-orange-500 text-white" : "bg-gray-100 dark:bg-white/5 text-gray-500 hover:bg-orange-50 hover:text-orange-600"
+        <button
+          type="button"
+          onClick={() => setShowUnreadOnly(!showUnreadOnly)}
+          className={clsx(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all",
+            showUnreadOnly
+              ? "bg-[#F58220] text-white border-[#F58220]"
+              : "bg-white dark:bg-[#12141c] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-slate-300"
           )}
         >
-          {showUnreadOnly ? <EyeOff size={12} /> : <Eye size={12} />}
-          {showUnreadOnly ? "Show All" : "Unread Only"}
+          {showUnreadOnly ? <EyeOff size={13} /> : <Eye size={13} />}
+          <span>{showUnreadOnly ? "Showing Unread" : "Unread Only"}</span>
         </button>
       </div>
 
-      {/* Alert Feed */}
-      <div className="space-y-2">
+      {/* ── 4. ALERT LIST (Clean Invoice/Dashboard Style Cards) ── */}
+      <div className="space-y-3">
         {filtered.map((alert) => {
-          const typeConf = TYPE_CONFIG[alert.type];
+          const typeConf = TYPE_CONFIG[alert.type] || TYPE_CONFIG.system;
           const Icon = typeConf.icon;
+
           return (
             <div
               key={alert.id}
               className={clsx(
-                "bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 overflow-hidden transition-all hover:shadow-sm",
-                SEVERITY_STYLES[alert.severity],
-                !alert.read && "ring-1 ring-orange-200 dark:ring-orange-800/30"
+                "bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-4 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition-all flex items-start gap-4",
+                !alert.read && "ring-1 ring-[#F58220]/20"
               )}
             >
-              <div className="flex items-start gap-4 p-4">
-                <div className={clsx("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", typeConf.bg)}>
-                  <Icon size={16} className={typeConf.color} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-[13px] font-bold text-gray-900 dark:text-white leading-tight">{alert.title}</h3>
-                      {!alert.read && <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 mt-0.5" />}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className={clsx("px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider", SEVERITY_BADGE[alert.severity])}>
-                        {alert.severity}
-                      </span>
-                      <button onClick={() => dismiss(alert.id)} className="p-1 rounded-lg text-gray-300 hover:text-gray-500 dark:hover:text-slate-400 transition-colors">
-                        <X size={13} />
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-[12px] text-gray-500 dark:text-slate-400 mt-1 leading-relaxed">{alert.message}</p>
-                  <div className="flex items-center gap-3 mt-2.5">
-                    <span className="text-[10px] text-gray-400 flex items-center gap-1">
-                      <Clock size={10} /> {alert.time}
-                    </span>
-                    <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-lg", typeConf.bg, typeConf.color)}>
-                      {typeConf.label}
-                    </span>
+              {/* Type Icon */}
+              <div
+                className={clsx(
+                  "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border",
+                  typeConf.bg,
+                  typeConf.color,
+                  typeConf.border
+                )}
+              >
+                <Icon size={16} strokeWidth={2.2} />
+              </div>
+
+              {/* Alert Body */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                      {alert.title}
+                    </h3>
                     {!alert.read && (
-                      <button onClick={() => markRead(alert.id)} className="text-[10px] text-orange-500 font-bold hover:underline">
-                        Mark Read
-                      </button>
-                    )}
-                    {alert.actionLabel && alert.actionHref && (
-                      <a href={alert.actionHref} className="text-[10px] font-bold text-white bg-orange-500 hover:bg-orange-400 px-2.5 py-1 rounded-lg transition-all">
-                        {alert.actionLabel} →
-                      </a>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F58220] shrink-0" />
                     )}
                   </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={clsx(
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
+                        SEVERITY_BADGE[alert.severity]
+                      )}
+                    >
+                      {alert.severity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => dismiss(alert.id)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      title="Dismiss alert"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  {alert.message}
+                </p>
+
+                {/* Footer Meta & Actions */}
+                <div className="flex flex-wrap items-center gap-3 mt-3 pt-2.5 border-t border-slate-100 dark:border-white/5">
+                  <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+                    <Clock size={11} /> {alert.time}
+                  </span>
+
+                  <span
+                    className={clsx(
+                      "text-[10px] font-bold px-2 py-0.5 rounded border",
+                      typeConf.bg,
+                      typeConf.color,
+                      typeConf.border
+                    )}
+                  >
+                    {typeConf.label}
+                  </span>
+
+                  {!alert.read && (
+                    <button
+                      type="button"
+                      onClick={() => markRead(alert.id)}
+                      className="text-[11px] text-slate-500 hover:text-[#F58220] font-bold transition-colors"
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+
+                  {alert.actionLabel && alert.actionHref && (
+                    <Link
+                      href={alert.actionHref}
+                      className="ml-auto text-[11px] font-bold text-white bg-[#F58220] hover:bg-[#e0751a] px-3 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+                    >
+                      <span>{alert.actionLabel}</span>
+                      <ChevronRight size={12} />
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
@@ -247,9 +412,14 @@ export default function AlertsPage() {
         })}
 
         {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 gap-4 text-gray-300 dark:text-slate-600">
-            <CheckCircle2 size={48} strokeWidth={1} />
-            <p className="text-sm font-semibold">No alerts matching your filters</p>
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-12 text-center space-y-2">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
+              <CheckCircle2 size={18} className="text-emerald-500" />
+            </div>
+            <p className="text-xs font-bold text-slate-800 dark:text-white">All Clear — No Active Alerts</p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+              All inventory thresholds, purchase orders, and system checks are operating within normal parameters.
+            </p>
           </div>
         )}
       </div>

@@ -77,6 +77,8 @@ interface PurchaseOrderContextType {
   autoFilledIds: Set<string>;
   setAutoFilledIds: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   editId?: string;
+  contextMessage: string | null;
+  setContextMessage: (msg: string | null) => void;
 }
 
 const PurchaseOrderContext = createContext<PurchaseOrderContextType | undefined>(undefined);
@@ -86,6 +88,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [items, setItems] = useState<LineItem[]>([
     { id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }
   ]);
+  const [contextMessage, setContextMessage] = useState<string | null>(null);
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -109,11 +112,17 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             })));
           }
           if (po.purchaseType) setPurchaseType(po.purchaseType);
-          if (po.warehouseId) setWarehouseId(po.warehouseId);
+          if (po.warehouseId) {
+            setWarehouseId(po.warehouseId);
+          } else if (po.franchise?.primaryWarehouseId) {
+            setWarehouseId(po.franchise.primaryWarehouseId);
+          }
           if (po.expectedDeliveryDate) setExpectedDeliveryDate(po.expectedDeliveryDate.split('T')[0]);
           if (po.paymentTerms) setPaymentTerms(po.paymentTerms);
           if (po.internalNotes) setInternalNotes(po.internalNotes);
           if (po.vendorNotes) setVendorNotes(po.vendorNotes);
+          if (po.discountAmount !== undefined) setDiscountAmount(Number(po.discountAmount) || 0);
+          if (po.freightCost !== undefined) setFreightCost(Number(po.freightCost) || 0);
           if (po.status) setPoStatus(po.status);
           setIsLoaded(true);
         }).catch(err => {
@@ -122,16 +131,72 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
-      const saved = localStorage.getItem('draftPurchaseOrder');
-      if (saved) {
+      const prefilled = sessionStorage.getItem('prefilledPoItems');
+      if (prefilled) {
         try {
-          const parsed = JSON.parse(saved);
-          if (parsed.selectedVendor) setSelectedVendor(parsed.selectedVendor);
-          if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+          const parsed = JSON.parse(prefilled);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const mapped = parsed.map((item: any, idx: number) => ({
+              id: (idx + 1).toString(),
+              materialId: item.materialId,
+              name: item.name,
+              quantity: item.shortage,
+              unit: item.unit || "KG",
+              price: 0,
+              gstRate: 5
+            }));
+            setItems(mapped);
+            setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.`);
+            sessionStorage.removeItem('prefilledPoItems');
+          }
         } catch (e) {
-          console.error("Failed to parse draft PO", e);
+          console.error("Failed to parse prefilled PO items", e);
+        }
+      } else {
+        const saved = localStorage.getItem('draftPurchaseOrder');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.selectedVendor) setSelectedVendor(parsed.selectedVendor);
+            if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+          } catch (e) {
+            console.error("Failed to parse draft PO", e);
+          }
         }
       }
+
+      // Check if vendorId is in URL (e.g. redirected after creating vendor)
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const vendorIdParam = params.get("vendorId");
+        if (vendorIdParam) {
+          import('@/lib/api').then(({ vendorsApi }) => {
+            vendorsApi.getAll().then((res) => {
+              const list = res.data?.vendors || res.data || [];
+              const found = list.find((v: any) => v.id === vendorIdParam);
+              if (found) {
+                setSelectedVendor({
+                  id: found.id,
+                  name: found.name,
+                  phone: found.phone || found.mobile || found.contact,
+                  email: found.email,
+                  gstNumber: found.gstNumber,
+                  advanceBalance: found.advanceBalance || (found.balance < 0 ? Math.abs(found.balance) : 0),
+                  balanceDue: found.balanceDue || (found.balance > 0 ? found.balance : 0),
+                  creditLimit: found.creditLimit || 0,
+                  vendorCode: found.vendorCode,
+                  suppliedMaterials: found.suppliedMaterials?.map((sm: any) => ({
+                    materialId: sm.materialId,
+                    price: sm.price,
+                    name: sm.material?.name || "Material"
+                  })) || []
+                });
+              }
+            }).catch(err => console.error("Failed to auto-select vendor from URL", err));
+          });
+        }
+      }
+
       setIsLoaded(true);
     }
   }, [editId]);
@@ -364,6 +429,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       getVendorPrice,
       autoFilledIds,
       setAutoFilledIds,
+      contextMessage,
+      setContextMessage,
     }}>
       {children}
     </PurchaseOrderContext.Provider>

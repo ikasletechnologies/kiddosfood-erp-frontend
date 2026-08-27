@@ -7,10 +7,21 @@ import {
   FileText, ArrowLeft,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { vendorsApi, accountsApi, accountingApi } from "@/lib/api";
+import { vendorsApi, accountsApi, accountingApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 const PAYMENT_MODES = ["Cash", "Bank Transfer", "UPI", "Cheque", "Card"];
 
@@ -89,6 +100,10 @@ export default function PaymentOutPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [accountId, setAccountId] = useState("");
 
+  // document preview / company profile
+  const [viewingPayment, setViewingPayment] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
   // date filter
   const now = new Date();
   const [dateFrom, setDateFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
@@ -102,7 +117,7 @@ export default function PaymentOutPage() {
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
 
-  const fmtD = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  const fmtD = (d: string) => formatDate(d);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -140,6 +155,12 @@ export default function PaymentOutPage() {
   }, [date, accountId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => { /* fall back to FALLBACK_COMPANY */ });
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -297,7 +318,7 @@ export default function PaymentOutPage() {
                       className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
                     >
                       <Calendar size={13} className="text-orange-500 shrink-0" />
-                      {new Date(date + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                      {formatDate(date)}
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1 z-[200]">
@@ -371,12 +392,8 @@ export default function PaymentOutPage() {
   // ── LIST VIEW ──────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Wallet className="h-5 w-5 text-[#f58220]" />
-          Payment-Out
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
         >
@@ -475,7 +492,7 @@ export default function PaymentOutPage() {
                   return (
                     <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                        {new Date(p.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                        {formatDate(p.date)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
                         {p.receiptNo || `REC-${String(i + 1).padStart(4, "0")}`}
@@ -493,7 +510,7 @@ export default function PaymentOutPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          <button className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"><Printer className="h-4 w-4" /></button>
+                          <button onClick={() => setViewingPayment(p)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"><Printer className="h-4 w-4" /></button>
                           <button className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"><Share2 className="h-4 w-4" /></button>
                         </div>
                       </td>
@@ -510,6 +527,28 @@ export default function PaymentOutPage() {
           </div>
         )}
       </div>
+
+      {viewingPayment && (() => {
+        const paymentVendor = vendors.find(v => v.id === viewingPayment.vendorId);
+        return (
+          <GSTInvoice
+            order={{
+              poNumber: viewingPayment.receiptNo || undefined,
+              createdAt: viewingPayment.date,
+              items: [{
+                itemName: viewingPayment.note || `Payment to ${viewingPayment.vendorName || "Vendor"}`,
+                quantity: 1,
+                price: Number(viewingPayment.amount) || 0,
+                gstRate: 0,
+              }],
+            }}
+            vendor={paymentVendor || { name: viewingPayment.vendorName || "Vendor" }}
+            companyDetails={companyProfile || FALLBACK_COMPANY}
+            documentType="PAYOUT_RECEIPT"
+            onClose={() => setViewingPayment(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

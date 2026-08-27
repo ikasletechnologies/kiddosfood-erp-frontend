@@ -11,6 +11,7 @@ import { X,
 import Link from "next/link";
 import api from "@/lib/api";
 import { clsx } from "clsx";
+import { formatDate } from "@/lib/utils";
 
 interface Employee {
   id: string;
@@ -252,13 +253,7 @@ export default function EmployeesClient() {
   return (
     <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8 p-2 sm:p-1">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="text-center md:text-left">
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white flex items-center justify-center md:justify-start gap-2">
-            <User size={22} className="text-orange-500" /> Employee Master
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-1">Manage personnel records and salary structures</p>
-        </div>
+      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
         <div className="flex flex-wrap justify-center gap-2">
           <button onClick={loadData} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 transition-colors">
             <RefreshCw size={16} className={clsx("text-gray-400", loading && "animate-spin")} />
@@ -383,7 +378,7 @@ export default function EmployeesClient() {
               </div>
               <div className="bg-indigo-50/30 dark:bg-indigo-500/5 p-2 rounded-xl border border-indigo-100 dark:border-indigo-500/10 flex flex-col justify-center">
                 <p className="text-[8px] sm:text-[9px] font-bold text-indigo-600 uppercase tracking-tighter mb-0.5">Joined</p>
-                <p className="text-xs sm:text-sm font-bold truncate">{new Date(emp.dateOfJoining).toLocaleDateString()}</p>
+                <p className="text-xs sm:text-sm font-bold truncate">{formatDate(emp.dateOfJoining)}</p>
               </div>
               <div className="bg-emerald-50/30 dark:bg-emerald-500/5 p-2 rounded-xl border border-emerald-100 dark:border-emerald-500/10 flex flex-col justify-center">
                 <p className="text-[8px] sm:text-[9px] font-bold text-emerald-600 uppercase tracking-tighter mb-0.5">Salary</p>

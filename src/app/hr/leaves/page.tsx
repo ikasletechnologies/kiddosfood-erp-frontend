@@ -5,6 +5,7 @@ import { Plus, Check, X, Calendar } from "lucide-react";
 import Link from "next/link";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 interface Leave {
   id: string;
@@ -95,14 +96,10 @@ export default function LeavesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Leave Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage employee leave requests</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           <button onClick={() => setShowTypeForm(true)} className="border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Leave Types</button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" /> Apply Leave
           </button>
         </div>
@@ -150,7 +147,7 @@ export default function LeavesPage() {
                   <span className={`ml-1 text-xs ${leave.leaveType.isPaid ? "text-green-600" : "text-gray-400"}`}>({leave.leaveType.isPaid ? "Paid" : "Unpaid"})</span>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-600">
-                  {new Date(leave.startDate).toLocaleDateString()} – {new Date(leave.endDate).toLocaleDateString()}
+                  {formatDate(leave.startDate)} – {formatDate(leave.endDate)}
                 </td>
                 <td className="px-4 py-3 font-medium text-gray-700">{leave.days}d</td>
                 <td className="px-4 py-3 text-gray-600 max-w-[150px] truncate">{leave.reason}</td>

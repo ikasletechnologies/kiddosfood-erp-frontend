@@ -1,61 +1,46 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Truck, Search, CheckCircle, Clock } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Truck, Search, CheckCircle, RefreshCw, Calendar } from "lucide-react";
 import { clsx } from "clsx";
 import { salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { formatDate } from "@/lib/utils";
 
-interface TransitItem {
-  id: string;
+// Transit Stock = QUANTITY currently out of the warehouse and not yet
+// delivered. Sourced entirely from SalesService.getTransitStock() — derived
+// server-side from IN_TRANSIT Delivery Challans, not a separate manual-entry
+// screen and not re-derived here client-side (that used to duplicate, and
+// disagree with, the backend's own party/warehouse/UOM resolution).
+interface TransitRow {
   challanId: string;
   challanNumber: string;
-  dispatchDate: string;
-  source: string;
-  destination: string;
+  sourceDocument: "SALES_INVOICE" | "DIRECT";
+  partyType: string;
+  partyName: string | null;
+  sourceWarehouseName: string | null;
   productName: string;
-  batchNumber: string;
+  batchNumber: string | null;
   quantity: number;
   unit: string;
+  dispatchDate: string;
+  vehicleNo: string | null;
+  driverName: string | null;
   status: string;
 }
 
 export default function TransitStockPage() {
-  const [items, setItems] = useState<TransitItem[]>([]);
+  const [rows, setRows] = useState<TransitRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const { showToast } = useToast();
 
   const fetchTransitStock = async () => {
     setLoading(true);
     try {
-      const res = await salesApi.getDeliveryChallans({ status: "OPEN" });
-      const challans = (res as any).data || [];
-
-      const flatItems: TransitItem[] = [];
-      challans.forEach((dc: any) => {
-        const destName = dc.customer?.name || dc.franchiseId || "Customer/Franchise";
-        const srcName = dc.sourceFranchiseId === "hq-001" ? "HQ / Main Warehouse" : (dc.sourceFranchiseId || "HQ / Main Warehouse");
-        
-        if (dc.items && Array.isArray(dc.items)) {
-          dc.items.forEach((it: any) => {
-            flatItems.push({
-              id: it.id,
-              challanId: dc.id,
-              challanNumber: dc.challanNumber || dc.challanNo || dc.id.substring(0, 8),
-              dispatchDate: dc.challanDate || dc.createdAt,
-              source: srcName,
-              destination: destName,
-              productName: it.productName,
-              batchNumber: it.batchNumber || "N/A",
-              quantity: it.quantity,
-              unit: it.unit || "NONE",
-              status: dc.status,
-            });
-          });
-        }
-      });
-      setItems(flatItems);
+      const res = await salesApi.getTransitStock();
+      setRows((res as any).data || []);
     } catch (e: any) {
       console.error(e);
       showToast("Failed to fetch transit stock", "error");
@@ -68,36 +53,74 @@ export default function TransitStockPage() {
     fetchTransitStock();
   }, []);
 
+  // Delivery completion has exactly ONE implementation across the whole
+  // Dispatch module (Delivery Challan list, this page, Dispatch Tracking) —
+  // SalesService.markChallanDelivered — so a repeat click from any of them
+  // is a safe no-op instead of a second, divergent delivery.
   const handleMarkDelivered = async (challanId: string) => {
-    if (!window.confirm("Mark this entire dispatch as Delivered? This will move stock to the destination.")) return;
-    
+    if (!window.confirm("Mark this challan as Delivered? Transit quantity will close and the challan status will update.")) return;
+    setMarkingId(challanId);
     try {
-      await salesApi.updateDeliveryChallan(challanId, { status: "CLOSED" });
+      await salesApi.markDeliveryChallanDelivered(challanId, {});
       showToast("Delivery completed successfully", "success");
       fetchTransitStock();
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Error marking as delivered", "error");
+    } finally {
+      setMarkingId(null);
     }
   };
 
-  const filteredItems = items.filter(it => 
-    !search || 
-    it.challanNumber.toLowerCase().includes(search.toLowerCase()) ||
-    it.productName.toLowerCase().includes(search.toLowerCase()) ||
-    it.destination.toLowerCase().includes(search.toLowerCase())
+  const filtered = rows.filter(r =>
+    !search ||
+    r.challanNumber.toLowerCase().includes(search.toLowerCase()) ||
+    (r.partyName || "").toLowerCase().includes(search.toLowerCase()) ||
+    r.productName.toLowerCase().includes(search.toLowerCase()) ||
+    (r.batchNumber || "").toLowerCase().includes(search.toLowerCase())
   );
+
+  // Every row here is already IN_TRANSIT by construction (getTransitStock
+  // only returns IN_TRANSIT challans) — cards reflect real record counts,
+  // not placeholder values. "Delayed" = past its expected delivery date;
+  // "Returned" isn't tracked at the transit-quantity level (a return only
+  // exists once goods are back at the warehouse, i.e. after delivery), so
+  // it's omitted rather than shown as a fake zero.
+  const stats = useMemo(() => {
+    const uniqueChallans = new Set(rows.map(r => r.challanId));
+    const now = new Date();
+    const delayedChallans = new Set(
+      rows.filter(r => (r as any).expectedDeliveryDate && new Date((r as any).expectedDeliveryDate) < now).map(r => r.challanId)
+    );
+    return {
+      activeTransit: uniqueChallans.size,
+      inTransitQty: rows.reduce((s, r) => s + r.quantity, 0),
+      delayed: delayedChallans.size,
+    };
+  }, [rows]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-slate-50/50">
-      <div className="px-6 py-5 border-b border-gray-200 bg-white shrink-0">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
-              <Truck size={20} />
-            </div>
+      <div className="px-6 py-5 border-b border-gray-200 bg-white shrink-0 space-y-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900 tracking-tight">Transit Stock</h1>
-              <p className="text-sm text-gray-500">Track dispatched items currently in transit.</p>
+              <p className="text-xs text-gray-500">Active Transit (Challans)</p>
+              <p className="text-lg font-bold text-blue-600">{stats.activeTransit}</p>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+            <div>
+              <p className="text-xs text-gray-500">In Transit Qty (all items)</p>
+              <p className="text-lg font-bold text-orange-600">{stats.inTransitQty}</p>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center gap-3">
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+            <div>
+              <p className="text-xs text-gray-500">Delayed (past expected delivery)</p>
+              <p className="text-lg font-bold text-rose-600">{stats.delayed}</p>
             </div>
           </div>
         </div>
@@ -108,16 +131,16 @@ export default function TransitStockPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by Challan, Product or Destination..."
+              placeholder="Search by Challan, Party, Product or Batch..."
               className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
             />
           </div>
-          <button 
-            onClick={fetchTransitStock} 
+          <button
+            onClick={fetchTransitStock}
             className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600"
             title="Refresh"
           >
-            <Clock size={16} />
+            <RefreshCw size={16} className={clsx(loading && "animate-spin")} />
           </button>
         </div>
       </div>
@@ -126,7 +149,7 @@ export default function TransitStockPage() {
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex justify-center items-center h-48 text-gray-400 text-sm">Loading Transit Stock...</div>
-          ) : filteredItems.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col justify-center items-center h-48 text-gray-400">
               <Truck size={32} className="mb-2 opacity-50" />
               <div className="text-sm">No items currently in transit</div>
@@ -136,10 +159,11 @@ export default function TransitStockPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    <th className="px-5 py-3 font-medium whitespace-nowrap">Dispatch Ref</th>
+                    <th className="px-5 py-3 font-medium whitespace-nowrap">DC No</th>
                     <th className="px-5 py-3 font-medium whitespace-nowrap">Date</th>
-                    <th className="px-5 py-3 font-medium whitespace-nowrap">Source</th>
-                    <th className="px-5 py-3 font-medium whitespace-nowrap">Destination</th>
+                    <th className="px-5 py-3 font-medium whitespace-nowrap">Source Warehouse</th>
+                    <th className="px-5 py-3 font-medium whitespace-nowrap">Party</th>
+                    <th className="px-5 py-3 font-medium whitespace-nowrap">Type</th>
                     <th className="px-5 py-3 font-medium whitespace-nowrap">Product</th>
                     <th className="px-5 py-3 font-medium whitespace-nowrap">Batch</th>
                     <th className="px-5 py-3 font-medium text-right whitespace-nowrap">Qty</th>
@@ -148,30 +172,32 @@ export default function TransitStockPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredItems.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-5 py-3 text-sm font-medium text-orange-600">#{item.challanNumber}</td>
-                      <td className="px-5 py-3 text-sm text-gray-600">
-                        {new Date(item.dispatchDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                  {filtered.map((r, i) => (
+                    <tr key={`${r.challanId}-${i}`} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3 text-sm font-medium text-orange-600">{r.challanNumber}</td>
+                      <td className="px-5 py-3 text-sm text-gray-600">{formatDate(r.dispatchDate)}</td>
+                      <td className="px-5 py-3 text-sm text-gray-700">{r.sourceWarehouseName || "—"}</td>
+                      <td className="px-5 py-3 text-sm text-gray-700 font-medium">{r.partyName || "—"}</td>
+                      <td className="px-5 py-3">
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">{r.partyType}</span>
                       </td>
-                      <td className="px-5 py-3 text-sm text-gray-700">{item.source}</td>
-                      <td className="px-5 py-3 text-sm text-gray-700 font-medium">{item.destination}</td>
-                      <td className="px-5 py-3 text-sm text-gray-800">{item.productName}</td>
-                      <td className="px-5 py-3 text-sm font-mono text-gray-600">{item.batchNumber}</td>
+                      <td className="px-5 py-3 text-sm text-gray-800">{r.productName}</td>
+                      <td className="px-5 py-3 text-sm font-mono text-gray-600">{r.batchNumber || "—"}</td>
                       <td className="px-5 py-3 text-sm font-medium text-right">
-                        {item.quantity} <span className="text-xs text-gray-500 font-normal">{item.unit}</span>
+                        {r.quantity} <span className="text-xs text-gray-500 font-normal">{r.unit}</span>
                       </td>
                       <td className="px-5 py-3">
                         <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase bg-blue-50 text-blue-600 border border-blue-200">
-                          {item.status === 'OPEN' ? 'IN TRANSIT' : item.status}
+                          In Transit
                         </span>
                       </td>
                       <td className="px-5 py-3 text-center">
                         <button
-                          onClick={() => handleMarkDelivered(item.challanId)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors border border-emerald-200 shadow-sm"
+                          onClick={() => handleMarkDelivered(r.challanId)}
+                          disabled={markingId === r.challanId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors border border-emerald-200 shadow-sm disabled:opacity-50"
                         >
-                          <CheckCircle size={14} /> Delivered
+                          <CheckCircle size={14} /> {markingId === r.challanId ? "..." : "Delivered"}
                         </button>
                       </td>
                     </tr>

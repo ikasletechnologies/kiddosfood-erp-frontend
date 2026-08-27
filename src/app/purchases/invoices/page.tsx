@@ -7,10 +7,21 @@ import {
   AlignLeft, FileText, ArrowLeft, Upload, Download,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi } from "@/lib/api";
+import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import AccountFormModal from "@/components/modals/AccountFormModal";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -161,158 +172,6 @@ function MiniCalendar({ value, onChange, onClose }: {
   );
 }
 
-function buildPurchaseBillPdf(bill: any): string {
-  const contentObjects: string[] = [];
-  const rowHeight = 20;
-  const topMargin = 790;
-  const bottomMargin = 50;
-  const pageHeight = 842;
-  const pageWidth = 595;
-  const leftMargin = 40;
-  const colWidths = [25, 190, 45, 45, 65, 55, 90];
-  const headers = ["#", "Item Description", "Qty", "Unit", "Rate (Rs)", "Tax", "Amount (Rs)"];
-
-  const items = bill.items || [];
-  let currentRow = 0;
-  let pageNum = 1;
-
-  const vendorName = (bill.vendor?.name || bill.vendorSearch || "Vendor").replace(/[()\\\r\n]/g, "");
-  const vendorPhone = (bill.vendor?.phone || bill.vendor?.contact || bill.vendorPhone || "-").replace(/[()\\\r\n]/g, "");
-  const billNum = (bill.invoiceNumber || bill.billNumber || "PB-001").replace(/[()\\\r\n]/g, "");
-  const bDate = bill.invoiceDate ? new Date(bill.invoiceDate).toLocaleDateString() : (bill.billDate || new Date().toLocaleDateString());
-  const pType = bill.paymentType || "CASH";
-
-  while (currentRow < items.length || pageNum === 1) {
-    let y = topMargin;
-    let stream = "";
-
-    // Header
-    stream += `BT /F2 16 Tf 0.96 0.51 0.13 rg ${leftMargin} ${y} Td (PURCHASE BILL) Tj ET\n`;
-    stream += `BT /F2 10 Tf 0.2 0.2 0.2 rg 400 ${y} Td (Bill #: ${billNum}) Tj ET\n`;
-    y -= 16;
-    stream += `BT /F1 9 Tf 0.4 0.4 0.4 rg 400 ${y} Td (Date: ${bDate}) Tj ET\n`;
-    stream += `BT /F2 11 Tf 0.1 0.1 0.1 rg ${leftMargin} ${y} Td (KIDDOS FOODS) Tj ET\n`;
-    y -= 22;
-
-    // Divider
-    stream += `0.85 0.85 0.85 RG 1 w ${leftMargin} ${y} m ${leftMargin + 515} ${y} l S\n`;
-    y -= 18;
-
-    // Vendor Box
-    stream += `0.97 0.97 0.98 rg ${leftMargin} ${y - 35} 515 45 re f\n`;
-    stream += `0.88 0.88 0.90 RG 0.5 w ${leftMargin} ${y - 35} 515 45 re S\n`;
-
-    stream += `BT /F2 9 Tf 0.3 0.3 0.3 rg ${leftMargin + 8} ${y - 2} Td (BILLED BY VENDOR:) Tj ET\n`;
-    stream += `BT /F2 10 Tf 0.1 0.1 0.1 rg ${leftMargin + 8} ${y - 16} Td (${vendorName}) Tj ET\n`;
-    stream += `BT /F1 8.5 Tf 0.4 0.4 0.4 rg ${leftMargin + 8} ${y - 28} Td (Phone: ${vendorPhone}  |  Payment Type: ${pType}) Tj ET\n`;
-
-    y -= 50;
-
-    // Table Header
-    stream += `0.94 0.95 0.96 rg ${leftMargin} ${y - 4} 515 18 re f\n`;
-    stream += `0.7 0.7 0.7 RG 0.5 w ${leftMargin} ${y - 4} 515 18 re S\n`;
-
-    let x = leftMargin + 4;
-    headers.forEach((h, i) => {
-      stream += `BT /F2 8.5 Tf 0.2 0.2 0.2 rg ${x} ${y} Td (${h}) Tj ET\n`;
-      x += colWidths[i];
-    });
-    y -= rowHeight;
-
-    // Rows
-    let subtotal = 0;
-    while (currentRow < items.length && y > bottomMargin + 80) {
-      const it = items[currentRow];
-      const name = (it.item || it.name || "Item " + (currentRow + 1)).replace(/[()\\\r\n]/g, "").slice(0, 32);
-      const qty = Number(it.qty || it.quantity) || 0;
-      const unit = (it.unit || "unit").replace(/[()\\\r\n]/g, "");
-      const price = Number(it.price || it.pricePerUnit || it.rate) || 0;
-      const taxRate = Number(it.taxRate ?? it.tax ?? it.taxPct ?? 0);
-      const amount = Number(it.amount) || (qty * price);
-      subtotal += amount;
-
-      stream += `0.9 0.9 0.9 RG 0.3 w ${leftMargin} ${y - 4} m ${leftMargin + 515} ${y - 4} l S\n`;
-
-      const rowVals = [
-        String(currentRow + 1),
-        name,
-        String(qty),
-        unit,
-        price.toLocaleString("en-IN"),
-        taxRate ? `${taxRate}%` : "0%",
-        amount.toLocaleString("en-IN")
-      ];
-
-      let rx = leftMargin + 4;
-      rowVals.forEach((val, ci) => {
-        stream += `BT /F1 8 Tf 0.15 0.15 0.15 rg ${rx} ${y} Td (${val}) Tj ET\n`;
-        rx += colWidths[ci];
-      });
-
-      y -= rowHeight;
-      currentRow++;
-    }
-
-    if (currentRow >= items.length) {
-      y -= 10;
-      const grandTotal = Number(bill.amount || bill.finalTotal || subtotal);
-      const totalTaxVal = Number(bill.totalTax || 0);
-
-      stream += `0.85 0.85 0.85 RG 1 w 330 ${y} m ${leftMargin + 515} ${y} l S\n`;
-      y -= 16;
-      stream += `BT /F1 9 Tf 0.3 0.3 0.3 rg 340 ${y} Td (Subtotal: Rs ${subtotal.toLocaleString("en-IN")}) Tj ET\n`;
-      if (totalTaxVal > 0) {
-        y -= 14;
-        stream += `BT /F1 9 Tf 0.3 0.3 0.3 rg 340 ${y} Td (Tax: Rs ${totalTaxVal.toLocaleString("en-IN")}) Tj ET\n`;
-      }
-      y -= 18;
-      stream += `BT /F2 12 Tf 0.96 0.51 0.13 rg 340 ${y} Td (Grand Total: Rs ${grandTotal.toLocaleString("en-IN")}) Tj ET\n`;
-    }
-
-    stream += `BT /F1 7.5 Tf 0.5 0.5 0.5 rg ${leftMargin} 30 Td (Generated by KIDDOS ERP  |  Page ${pageNum}) Tj ET\n`;
-
-    const streamLength = new TextEncoder().encode(stream).length;
-    contentObjects.push(`<< /Length ${streamLength} >>\nstream\n${stream}endstream`);
-    pageNum++;
-  }
-
-  const allObjs: string[] = [];
-  allObjs.push(`<< /Type /Catalog /Pages 2 0 R >>`);
-  
-  const pageObjIndices: number[] = [];
-  contentObjects.forEach((_, i) => {
-    pageObjIndices.push(3 + i * 2);
-  });
-  
-  const kidsStr = pageObjIndices.map(idx => `${idx} 0 R`).join(" ");
-  allObjs.push(`<< /Type /Pages /Kids [ ${kidsStr} ] /Count ${contentObjects.length} >>`);
-
-  contentObjects.forEach((streamObj, i) => {
-    const pageObjIndex = 3 + i * 2;
-    const contentObjIndex = pageObjIndex + 1;
-    allObjs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Contents ${contentObjIndex} 0 R /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> /F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> >> >> >>`);
-    allObjs.push(streamObj);
-  });
-
-  let pdf = "%PDF-1.4\n";
-  const offsets: number[] = [];
-  const encoder = new TextEncoder();
-
-  allObjs.forEach((obj, i) => {
-    offsets.push(encoder.encode(pdf).length);
-    pdf += `${i + 1} 0 obj\n${obj}\nendobj\n`;
-  });
-
-  const xrefStart = encoder.encode(pdf).length;
-  pdf += `xref\n0 ${allObjs.length + 1}\n0000000000 65535 f \n`;
-  offsets.forEach(offset => {
-    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
-  });
-
-  pdf += `trailer\n<< /Size ${allObjs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return pdf;
-}
-
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PurchaseBillsPage() {
@@ -334,6 +193,7 @@ export default function PurchaseBillsPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [submittingPayment, setSubmittingPayment] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [paymentIdempotencyKey, setPaymentIdempotencyKey] = useState("");
 
   // form
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
@@ -367,15 +227,19 @@ export default function PurchaseBillsPage() {
   const priceDropRef = useRef<HTMLDivElement>(null);
 
   // date filter
-  const now = new Date();
-  const [dateFrom, setDateFrom] = useState(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
-  const [dateTo, setDateTo] = useState(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [showFromCal, setShowFromCal] = useState(false);
   const [showToCal, setShowToCal] = useState(false);
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
 
-  const fmtD = (d: string) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "";
+  // GSTInvoice preview/print modal — holds either a saved bill (from the
+  // list) or a synthetic draft object built from the in-progress form.
+  const [previewBill, setPreviewBill] = useState<any>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+
+  const fmtD = (d: string) => formatDate(d);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -394,6 +258,12 @@ export default function PurchaseBillsPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const grnId = urlParams.get('grnId');
     if (grnId) {
@@ -410,18 +280,40 @@ export default function PurchaseBillsPage() {
            }
            setSourcePoId(grn.poId);
            setSourceGrnId(grn.id);
-           if (grn.items && grn.items.length > 0) {
-              const newItems = grn.items.map((item: any) => ({
-                 id: Math.random().toString(36).slice(2),
-                 name: item.inventoryItem?.name || "Material",
-                 qty: item.acceptedQty,
-                 unit: item.inventoryItem?.unit || "KGS",
-                 rate: item.price || 0,
-                 taxPct: 0,
-                 taxLabel: "NONE"
-              }));
-              setItems(newItems);
-           }
+            if (grn.items && grn.items.length > 0) {
+               let poItems: any[] = [];
+               try {
+                  if (typeof grn.procurementOrder?.items === 'string') {
+                     poItems = JSON.parse(grn.procurementOrder.items);
+                  } else if (Array.isArray(grn.procurementOrder?.items)) {
+                     poItems = grn.procurementOrder.items;
+                  }
+               } catch(e) {}
+
+               const newItems = grn.items.map((item: any) => {
+                  let rate = item.gstRate || 0;
+                  if (rate === 0 && poItems.length > 0) {
+                     const matId = item.materialId || item.inventoryItemId || (item.inventoryItem ? item.inventoryItem.id : null);
+                     const poItem = poItems.find((pi: any) => pi.inventoryItemId === matId);
+                     if (poItem && poItem.gstRate) {
+                        rate = poItem.gstRate;
+                     }
+                  }
+                  if (rate === 0) {
+                     rate = item.inventoryItem?.taxRate || item.inventoryItem?.gstRate || 0;
+                  }
+                  return {
+                     id: Math.random().toString(36).slice(2),
+                     name: item.inventoryItem?.name || "Material",
+                     qty: item.acceptedQty,
+                     unit: item.inventoryItem?.unit || "KGS",
+                     rate: item.price || 0,
+                     taxPct: rate,
+                     taxLabel: rate > 0 ? `GST@${rate}%` : "NONE"
+                  };
+               });
+               setItems(newItems);
+            }
            setDescription(`Auto-generated from GRN: ${grnId} / PO: ${grn.procurementOrder?.poNumber || ''}`);
            setShowDesc(true);
            toast.success("Bill auto-filled from GRN!");
@@ -440,6 +332,10 @@ export default function PurchaseBillsPage() {
       if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) setShowCalendar(false);
       if (fromCalRef.current && !fromCalRef.current.contains(e.target as Node)) setShowFromCal(false);
       if (toCalRef.current && !toCalRef.current.contains(e.target as Node)) setShowToCal(false);
+      
+      if (!(e.target as Element).closest?.('.unit-dropdown-container')) {
+        setOpenUnitDrop(null);
+      }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -498,8 +394,35 @@ export default function PurchaseBillsPage() {
     setAttachedFiles(prev => prev.filter(f => f.id !== id));
   };
 
+  // Builds a synthetic bill object from the in-progress create/edit form
+  // state, in the same shape as a saved bill, so both the "Print" and
+  // "Download" actions (and a saved-bill row's preview) can share one
+  // GSTInvoice preview modal.
+  const buildDraftBillPreview = () => ({
+    vendor: selectedVendor,
+    items: items.filter(i => i.name && i.qty > 0),
+    invoiceNumber: billNumber !== "Auto" ? billNumber : "Draft",
+    billDate: billDate || new Date().toISOString(),
+    paymentType: paymentType,
+    amount: finalTotal,
+    totalTax: items.reduce((sum, item) => sum + (item.qty * item.rate * item.taxPct / 100), 0)
+  });
+
+  const handleDownloadPdf = (bill?: any) => {
+    setPreviewBill(bill || buildDraftBillPreview());
+  };
+
+  const handleShare = (bill?: any) => {
+    toast.success("Share link copied to clipboard!");
+  };
+
+  const handlePrint = () => {
+    setPreviewBill(buildDraftBillPreview());
+  };
+
   const handleSave = async () => {
     if (!selectedVendor) { toast.error("Please select a vendor"); return; }
+    if (!billDate) { toast.error("Bill Date / Invoice Date is required"); return; }
     const validItems = items.filter(i => i.name && i.qty > 0);
     if (validItems.length === 0) { toast.error("Add at least one item"); return; }
     setSaving(true);
@@ -530,120 +453,23 @@ export default function PurchaseBillsPage() {
     } finally { setSaving(false); }
   };
 
-  const handleDownloadPdf = (billData?: any) => {
-    try {
-      const dataToPrint = billData || {
-        invoiceNumber: billNumber || "AUTO-001",
-        billDate,
-        vendor: selectedVendor || { name: vendorSearch || "Vendor", phone: vendorPhone },
-        vendorSearch,
-        vendorPhone,
-        paymentType,
-        items: items.map(it => ({
-          item: it.name,
-          qty: it.qty,
-          unit: it.unit,
-          price: it.rate,
-          taxRate: it.taxPct,
-          amount: it.qty * it.rate
-        })),
-        amount: finalTotal,
-        totalTax
-      };
-
-      const pdfString = buildPurchaseBillPdf(dataToPrint);
-      const blob = new Blob([pdfString], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      const numClean = (dataToPrint.invoiceNumber || dataToPrint.id || "BILL").replace(/[^a-zA-Z0-9_-]/g, "_");
-      link.href = url;
-      link.download = `Purchase_Bill_${numClean}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      toast.success("Purchase Bill PDF downloaded successfully!");
-    } catch (err) {
-      console.error("Failed to download Purchase Bill PDF:", err);
-      toast.error("Failed to download PDF. Please try again.");
+  const getFilteredAccounts = () => {
+    if (paymentMode === "CASH") {
+      return accounts.filter(a => a.type === "CASH");
+    } else {
+      return accounts.filter(a => a.type === "BANK" || a.type === "UPI");
     }
   };
 
-  const handlePrint = (billData?: any) => {
-    try {
-      const dataToPrint = billData || {
-        invoiceNumber: billNumber || "AUTO-001",
-        billDate,
-        vendor: selectedVendor || { name: vendorSearch || "Vendor", phone: vendorPhone },
-        vendorSearch,
-        vendorPhone,
-        paymentType,
-        items: items.map(it => ({
-          item: it.name,
-          qty: it.qty,
-          unit: it.unit,
-          price: it.rate,
-          taxRate: it.taxPct,
-          amount: it.qty * it.rate
-        })),
-        amount: finalTotal,
-        totalTax
-      };
-
-      const pdfString = buildPurchaseBillPdf(dataToPrint);
-      const blob = new Blob([pdfString], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const printWindow = window.open(url);
-      if (printWindow) {
-        printWindow.addEventListener("load", () => {
-          printWindow.print();
-        });
-      } else {
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = url;
-        document.body.appendChild(iframe);
-        iframe.onload = () => {
-          iframe.contentWindow?.print();
-        };
-      }
-    } catch (err) {
-      console.error("Failed to print Purchase Bill:", err);
-      toast.error("Failed to open print. Please try again.");
-    }
-  };
-
-  const handleShare = async (billData?: any) => {
-    try {
-      const vName = billData?.vendor?.name || selectedVendor?.name || vendorSearch || "Vendor";
-      const total = billData?.amount ?? finalTotal;
-      const bNum = billData?.invoiceNumber || billNumber || "AUTO";
-      const bDateStr = billData?.invoiceDate ? new Date(billData.invoiceDate).toLocaleDateString() : (billDate || new Date().toLocaleDateString());
-
-      const shareText = `*Purchase Bill: #${bNum}*\nVendor: ${vName}\nDate: ${bDateStr}\nTotal Amount: ₹${Number(total || 0).toLocaleString("en-IN")}\nStatus: ${billData?.status || "CREATED"}\n\nGenerated by KIDDOS ERP`;
-
-      if (navigator.share) {
-        try {
-          await navigator.share({
-            title: `Purchase Bill #${bNum}`,
-            text: shareText,
-          });
-          toast.success("Shared successfully!");
-          return;
-        } catch (e: any) {
-          if (e.name === "AbortError") return;
-        }
-      }
-
-      if (navigator.clipboard) {
-        await navigator.clipboard.writeText(shareText);
-        toast.success("Purchase bill details copied to clipboard!");
-      } else {
-        toast.success("Bill details ready to share!");
-      }
-    } catch (err) {
-      console.error("Failed to share bill:", err);
-      toast.error("Failed to share bill");
+  const handlePaymentModeChange = (mode: string) => {
+    setPaymentMode(mode);
+    const filtered = mode === "CASH" 
+      ? accounts.filter(a => a.type === "CASH")
+      : accounts.filter(a => a.type === "BANK" || a.type === "UPI");
+    
+    const isStillValid = filtered.some(a => a.id === paymentAccount);
+    if (!isStillValid) {
+      setPaymentAccount("");
     }
   };
 
@@ -657,6 +483,11 @@ export default function PurchaseBillsPage() {
       return toast.error("Please select an account.");
     }
     if (!paymentAmount || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0) return toast.error("Valid amount required.");
+
+    const outstanding = paymentBill.outstanding ?? Math.max(0, (paymentBill.amount || 0) - (paymentBill.advanceApplied || 0) - (paymentBill.paidAmount || 0));
+    if (Number(paymentAmount) > outstanding + 0.01) {
+      return toast.error(`Payment amount of ₹${paymentAmount} cannot exceed outstanding balance of ₹${outstanding.toFixed(2)}.`);
+    }
     
     try {
       setSubmittingPayment(true);
@@ -666,7 +497,8 @@ export default function PurchaseBillsPage() {
         accountId: paymentAccount,
         paymentMode,
         type: "PAYMENT",
-        vendorInvoiceId: paymentBill.id
+        vendorInvoiceId: paymentBill.id,
+        idempotencyKey: paymentIdempotencyKey
       });
       toast.success("Payment recorded successfully");
       setShowPaymentModal(false);
@@ -680,21 +512,11 @@ export default function PurchaseBillsPage() {
 
   const openPaymentModal = async (bill: any) => {
     setPaymentBill(bill);
-    setPaymentAmount(bill.amount?.toString() || "");
+    const outstanding = bill.outstanding ?? Math.max(0, (bill.amount || 0) - (bill.advanceApplied || 0) - (bill.paidAmount || 0));
+    setPaymentAmount(outstanding.toString());
     setPaymentNote(`Payment for ${bill.invoiceNumber || 'Bill'}`);
     setPaymentMode("CASH");
-    try {
-      const accRes = await accountsApi.getAll().catch(() => ({ data: [] }));
-      const accList = accRes.data || [];
-      if (accList.length > 0) {
-        setAccounts(accList);
-        setPaymentAccount(accList[0].id);
-      } else if (accounts.length > 0) {
-        setPaymentAccount(accounts[0].id);
-      }
-    } catch {
-      if (accounts.length > 0) setPaymentAccount(accounts[0].id);
-    }
+    if (accounts.length > 0) setPaymentAccount(accounts[0].id);
     setShowPaymentModal(true);
   };
 
@@ -707,9 +529,10 @@ export default function PurchaseBillsPage() {
       b.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ||
       b.vendor?.name?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || b.status === statusFilter;
+    const targetDate = b.billDate || b.invoiceDate;
     let matchDate = true;
-    if (b.invoiceDate) {
-      const bD = b.invoiceDate.split("T")[0];
+    if (targetDate) {
+      const bD = typeof targetDate === "string" ? targetDate.split("T")[0] : new Date(targetDate).toISOString().split("T")[0];
       if (dateFrom && bD < dateFrom) matchDate = false;
       if (dateTo && bD > dateTo) matchDate = false;
     }
@@ -816,7 +639,7 @@ export default function PurchaseBillsPage() {
                   <span className="text-sm font-semibold text-gray-700">Auto</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Bill Date</span>
+                  <span className="text-xs font-medium text-gray-500">Bill Date <span className="text-rose-500 font-bold">*</span></span>
                   <div className="relative" ref={calendarRef}>
                     <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors w-48 justify-between">
                       <button
@@ -824,7 +647,7 @@ export default function PurchaseBillsPage() {
                         onClick={() => setShowCalendar(v => !v)}
                         className="text-sm text-gray-700 text-left outline-none truncate"
                       >
-                        {billDate ? new Date(billDate + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "Select Date"}
+                        {billDate ? formatDate(billDate) : "Select Date"}
                       </button>
                       <div className="flex items-center gap-1.5 ml-auto shrink-0">
                         <button
@@ -938,7 +761,7 @@ export default function PurchaseBillsPage() {
                             className="w-full text-sm text-gray-700 text-center outline-none bg-transparent"
                           />
                         </td>
-                        <td style={{ position: "relative", overflow: "visible" }}>
+                        <td style={{ position: "relative", overflow: "visible" }} className="unit-dropdown-container">
                           <button
                             className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 hover:bg-gray-50"
                             onClick={e => {
@@ -1166,12 +989,8 @@ export default function PurchaseBillsPage() {
   // ══════════════════════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-base font-bold text-gray-800 flex items-center gap-2">
-          <Receipt className="h-5 w-5 text-[#f58220]" />
-          Purchase Bills
-        </h1>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
         >
@@ -1339,7 +1158,7 @@ export default function PurchaseBillsPage() {
                   return (
                     <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-4 py-3 text-xs text-gray-500">
-                        {b.invoiceDate ? new Date(b.invoiceDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                        {formatDate(b.billDate)}
                       </td>
                       <td className="px-4 py-3 text-xs font-bold text-gray-800">
                         {b.invoiceNumber || "—"}
@@ -1360,7 +1179,7 @@ export default function PurchaseBillsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {b.status === "PENDING" && (
+                          {b.status !== "PAID" && (b.outstanding ?? 0) > 0.01 && (
                             <button onClick={() => openPaymentModal(b)} className="px-3 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-semibold rounded text-xs transition-colors">
                               Make Payment
                             </button>
@@ -1392,8 +1211,29 @@ export default function PurchaseBillsPage() {
         )}
       </div>
 
-      <Modal 
-        isOpen={showPaymentModal} 
+      {previewBill && (
+        <GSTInvoice
+          order={{
+            poNumber: previewBill.invoiceNumber || previewBill.billNumber,
+            createdAt: previewBill.billDate || previewBill.invoiceDate,
+            discount: previewBill.discount || 0,
+            items: (previewBill.items || []).map((it: any, idx: number) => ({
+              itemName: it.item || it.name || `Item #${idx + 1}`,
+              quantity: Number(it.qty ?? it.quantity) || 0,
+              price: Number(it.price ?? it.pricePerUnit ?? it.rate) || 0,
+              gstRate: Number(it.taxRate ?? it.tax ?? it.taxPct ?? 0),
+              hsnCode: it.hsnCode || it.hsn || undefined,
+            })),
+          }}
+          vendor={previewBill.vendor || selectedVendor || { name: previewBill.vendorSearch || "Vendor" }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="PURCHASE_INVOICE"
+          onClose={() => setPreviewBill(null)}
+        />
+      )}
+
+      <Modal
+        isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         title="Make Payment"
         size="md"
@@ -1419,7 +1259,7 @@ export default function PurchaseBillsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Mode</label>
-              <select value={paymentMode} onChange={e => setPaymentMode(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
+              <select value={paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
                 <option value="CASH">Cash</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
                 <option value="UPI">UPI</option>
@@ -1438,31 +1278,33 @@ export default function PurchaseBillsPage() {
                   + Add New
                 </button>
               </div>
-              <select value={paymentAccount} onChange={e => setPaymentAccount(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-xs font-medium text-gray-800">
-                <option value="">Select Account</option>
-                {accounts.map(acc => {
-                  const bal = Number(acc.balance ?? acc.currentBalance ?? 0);
-                  const balFormatted = `₹${bal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                  return (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({acc.type}) - Available: {balFormatted}
-                    </option>
-                  );
-                })}
-              </select>
-              {(() => {
-                const currentAcc = accounts.find(a => a.id === paymentAccount);
-                if (!currentAcc) return null;
-                const bal = Number(currentAcc.balance ?? currentAcc.currentBalance ?? 0);
-                return (
-                  <p className="text-[11px] text-gray-500 mt-1 flex items-center justify-between">
-                    <span>Available Balance:</span>
-                    <span className="font-semibold text-emerald-600">
-                      ₹{bal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </span>
-                  </p>
-                );
-              })()}
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={paymentAccount}
+                  onChange={e => {
+                    if (e.target.value === "ADD_NEW") {
+                      setShowAccountModal(true);
+                    } else {
+                      setPaymentAccount(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
+                >
+                  <option value="">Select Account</option>
+                  {getFilteredAccounts().map(a => (
+                    <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                  ))}
+                  <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAccountModal(true)}
+                  className="p-2 border border-gray-200 hover:border-orange-500 hover:bg-orange-50 text-gray-500 hover:text-orange-600 rounded-lg transition-all"
+                  title="Add New Account"
+                >
+                  +
+                </button>
+              </div>
             </div>
           </div>
           <div>

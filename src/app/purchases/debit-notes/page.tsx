@@ -7,12 +7,37 @@ import {
   FileText, ArrowLeft,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { vendorsApi, purchaseReturnsApi } from "@/lib/api";
+import { vendorsApi, purchaseReturnsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
-interface Vendor { id: string; name: string; phone?: string; gst?: string; }
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
+
+interface Vendor { id: string; name: string; phone?: string; gst?: string; address?: string; gstin?: string; pan?: string; state?: string; }
+
+interface DebitNoteItem {
+  name?: string;
+  itemName?: string;
+  qty?: number | string;
+  quantity?: number | string;
+  unit?: string;
+  priceWithoutTax?: number | string;
+  rate?: number | string;
+  price?: number | string;
+  taxPercent?: number | string;
+  taxAmount?: number;
+  amount?: number;
+}
 
 interface DebitNote {
   id: string;
@@ -21,13 +46,14 @@ interface DebitNote {
   billDate?: string;
   billNumber?: string;
   vendorId: string;
-  vendor?: { name: string };
+  vendor?: Vendor | { name: string };
   reason?: string;
   total: number;
   receivedPaid?: number;
   balance?: number;
   type?: string;
   status?: string;
+  items?: DebitNoteItem[];
 }
 
 interface LineItem {
@@ -107,8 +133,7 @@ function MiniCalendar({ value, onChange, onClose }: { value: string; onChange: (
 
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function fmtDate(d: string) {
-  if (!d) return "—";
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return formatDate(d);
 }
 function newItem(): LineItem {
   return { id: Math.random().toString(36).slice(2), name: "", qty: "", unit: "NONE", priceWithoutTax: "", taxPercent: "0", taxAmount: 0, amount: 0 };
@@ -148,6 +173,10 @@ export default function DebitNotesPage() {
   const [noteText, setNoteText] = useState("");
   const [items, setItems] = useState<LineItem[]>([newItem(), newItem()]);
   const [showShareDrop, setShowShareDrop] = useState(false);
+
+  // document preview / company profile
+  const [viewingNote, setViewingNote] = useState<DebitNote | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   // date range filter
   const now = new Date();
@@ -201,6 +230,12 @@ export default function DebitNotesPage() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => { /* fall back to FALLBACK_COMPANY */ });
+  }, []);
 
   const updateItem = (id: string, field: keyof LineItem, val: string) =>
     setItems(prev => prev.map(it => it.id === id ? recalc({ ...it, [field]: val }) : it));
@@ -652,17 +687,8 @@ export default function DebitNotesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 -m-8">
-      {/* Page Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}>
-            <Undo2 size={16} className="text-white" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-gray-900">Purchase Returns</h1>
-            <p className="text-xs text-gray-400">Debit Notes & Purchase Returns</p>
-          </div>
-        </div>
+      {/* Page Header Toolbar */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
@@ -824,7 +850,11 @@ export default function DebitNotesPage() {
                           ₹{(n.balance ?? n.total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="px-4 py-3">
-                          <button className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg hover:bg-gray-100 transition-colors" title="Print">
+                          <button
+                            onClick={() => setViewingNote(n)}
+                            className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg hover:bg-gray-100 transition-colors"
+                            title="Print"
+                          >
                             <Printer size={13} />
                           </button>
                         </td>
@@ -845,6 +875,31 @@ export default function DebitNotesPage() {
           )}
         </div>
       </div>
+
+      {viewingNote && (
+        <GSTInvoice
+          order={{
+            poNumber: viewingNote.returnNo,
+            createdAt: viewingNote.date,
+            items: (viewingNote.items || []).map((it) => ({
+              itemName: it.name || it.itemName || "Item",
+              quantity: Number(it.qty ?? it.quantity) || 0,
+              price: Number(it.priceWithoutTax ?? it.rate ?? it.price) || 0,
+              gstRate: Number(it.taxPercent) || 0,
+            })),
+          }}
+          vendor={viewingNote.vendor ? {
+            name: (viewingNote.vendor as Vendor).name,
+            address: (viewingNote.vendor as Vendor).address,
+            gstin: (viewingNote.vendor as Vendor).gstin || (viewingNote.vendor as Vendor).gst,
+            pan: (viewingNote.vendor as Vendor).pan,
+            state: (viewingNote.vendor as Vendor).state,
+          } : { name: "Vendor" }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="DEBIT_NOTE"
+          onClose={() => setViewingNote(null)}
+        />
+      )}
     </div>
   );
 }

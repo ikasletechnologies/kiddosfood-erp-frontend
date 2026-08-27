@@ -8,10 +8,20 @@ import { X,
 import { clsx } from "clsx";
 import { inventoryApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
+
+const CATEGORY_OPTIONS = [
+  { value: "ALL", label: "All Items" },
+  { value: "RAW_MATERIAL", label: "Raw Materials" },
+  { value: "FINISHED_GOOD", label: "Finished Goods" },
+  { value: "PACKAGING", label: "Packaging" },
+  { value: "SEMI_FINISHED", label: "Other Material" },
+];
 
 export default function RawMaterialLedgerClient() {
   const [itemsList, setItemsList] = useState<any[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string>("ALL");
+  const [category, setCategory] = useState<string>("ALL");
   const [ledgerEntries, setLedgerEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -20,19 +30,20 @@ export default function RawMaterialLedgerClient() {
 
   const fetchItemsList = useCallback(async () => {
     try {
-      const res = await inventoryApi.getRawMaterialStockSummary();
+      const res = await inventoryApi.getRawMaterialStockSummary(undefined, undefined, category);
       setItemsList(res.data ?? []);
     } catch (e) {
-      console.error("Failed to fetch raw material stock list:", e);
+      console.error("Failed to fetch item stock list:", e);
     }
-  }, []);
+  }, [category]);
 
   const fetchLedger = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await inventoryApi.getRawMaterialLedger(
+      const res = await inventoryApi.getInventoryLedger(
         selectedItemId === "ALL" ? undefined : selectedItemId,
-        user?.franchiseId
+        user?.franchiseId,
+        category === "ALL" ? undefined : category
       );
       setLedgerEntries(res.data ?? []);
     } catch (e) {
@@ -40,9 +51,12 @@ export default function RawMaterialLedgerClient() {
     } finally {
       setLoading(false);
     }
-  }, [selectedItemId, user?.franchiseId]);
+  }, [selectedItemId, user?.franchiseId, category]);
 
   useEffect(() => {
+    // Item dropdown depends on category — reset the item selection so a
+    // stale item from a different category can't stay selected.
+    setSelectedItemId("ALL");
     fetchItemsList();
   }, [fetchItemsList]);
 
@@ -51,17 +65,22 @@ export default function RawMaterialLedgerClient() {
   }, [fetchLedger]);
 
   const downloadCSV = () => {
-    const headers = ["Date", "Item Name", "SKU", "Transaction Type", "Inward Qty", "Outward Qty", "Running Balance", "Unit", "Actor", "Notes"];
+    const headers = ["Date", "Item Name", "SKU", "Category", "Transaction Type", "Inward Qty", "Outward Qty", "Unit", "Running Balance", "Operator", "Reference", "Batch ID", "Warehouse", "Unit Cost", "Description"];
     const rows = filteredEntries.map(entry => [
-      new Date(entry.date).toLocaleDateString(),
+      formatDate(entry.date),
       entry.itemName || "",
       entry.sku || "",
+      entry.category || "",
       entry.transactionType || "",
       entry.inwardQty.toFixed(2),
       entry.outwardQty.toFixed(2),
-      entry.runningBalance.toFixed(2),
       entry.unit || "",
+      entry.runningBalance.toFixed(2),
       entry.actor || "",
+      entry.reference || "",
+      entry.batchNumber || entry.batchId || "",
+      entry.warehouseName || "",
+      (entry.unitCost || 0).toFixed(2),
       entry.notes || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
@@ -69,18 +88,22 @@ export default function RawMaterialLedgerClient() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `raw-material-ledger-${selectedItemId === "ALL" ? "all" : selectedItemId}-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `inventory-ledger-${selectedItemId === "ALL" ? "all" : selectedItemId}-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
+  // Search is scoped to Item Name / SKU only — it narrows *within* the
+  // selected category, it must not also match on notes/reference/actor text
+  // (e.g. searching "organic" inside Raw Materials should show only organic
+  // items, not any transaction whose note happens to mention "organic").
   const filteredEntries = ledgerEntries.filter((it) => {
-    const matchSearch = !search ||
-      it.itemName?.toLowerCase().includes(search.toLowerCase()) ||
-      it.sku?.toLowerCase().includes(search.toLowerCase()) ||
-      it.transactionType?.toLowerCase().includes(search.toLowerCase()) ||
-      it.notes?.toLowerCase().includes(search.toLowerCase());
-    return matchSearch;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      it.itemName?.toLowerCase().includes(q) ||
+      it.sku?.toLowerCase().includes(q)
+    );
   });
 
   // Calculate opening, inward, outward, closing for item summary card
@@ -105,7 +128,7 @@ export default function RawMaterialLedgerClient() {
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
-                Raw Material Ledger <span className="text-slate-400 font-medium ml-1 italic">& Statement</span>
+                Inventory Ledger <span className="text-slate-400 font-medium ml-1 italic">& Statement</span>
               </h1>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                 <BarChart3 size={12} className="text-orange-500" /> Chronological movement ledger & running balance
@@ -130,26 +153,40 @@ export default function RawMaterialLedgerClient() {
 
       {/* Filter and Item selection header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-white/5 p-4 rounded-[2rem] border border-slate-100 dark:border-white/5">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Filter Material:</label>
-          <select
-            value={selectedItemId}
-            onChange={(e) => setSelectedItemId(e.target.value)}
-            className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none cursor-pointer w-full md:w-80"
-          >
-            <option value="ALL">Show All Raw Materials</option>
-            {itemsList.map(item => (
-              <option key={item.id} value={item.id}>
-                {item.name} ({item.sku})
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Category:</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none cursor-pointer w-full sm:w-44"
+            >
+              {CATEGORY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Filter Item:</label>
+            <select
+              value={selectedItemId}
+              onChange={(e) => setSelectedItemId(e.target.value)}
+              className="px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none cursor-pointer w-full sm:w-80"
+            >
+              <option value="ALL">Show All Items</option>
+              {itemsList.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ({item.sku})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="relative group w-full md:w-80 px-2">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input
             type="text"
-            placeholder="Search transaction / notes..."
+            placeholder="Search item name or SKU..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-12 pr-6 py-3 bg-white dark:bg-slate-900 border-none rounded-xl outline-none text-xs font-bold shadow-sm"
@@ -210,22 +247,24 @@ export default function RawMaterialLedgerClient() {
           <table className="w-full text-left table-fixed">
             <thead className="bg-slate-50/50 dark:bg-white/[0.02] border-b border-slate-100 dark:border-white/5">
               <tr className="text-slate-400">
-                <th className="w-[12%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Date</th>
+                <th className="w-[9%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Date</th>
                 {selectedItemId === "ALL" && (
-                  <th className="w-[20%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Material</th>
+                  <th className="w-[15%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Item</th>
                 )}
-                <th className="w-[15%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Transaction Type</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Inward (+)</th>
-                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Outward (-)</th>
-                <th className="w-[15%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Running Balance</th>
-                <th className="w-[14%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Operator / Ref</th>
+                <th className="w-[12%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Transaction Type</th>
+                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Inward (+)</th>
+                <th className="w-[10%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Outward (-)</th>
+                <th className="w-[11%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Running Balance</th>
+                <th className="w-[11%] px-6 py-4 text-[9px] font-black uppercase tracking-widest">Batch / Warehouse</th>
+                <th className="w-[8%] px-6 py-4 text-[9px] font-black uppercase tracking-widest text-right">Unit Cost</th>
+                <th className="w-[14%] px-8 py-4 text-[9px] font-black uppercase tracking-widest">Operator / Reference</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 dark:divide-white/5">
               {filteredEntries.map((entry) => (
                 <tr key={entry.id} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
                   <td className="px-8 py-4 text-xs font-bold text-slate-600 dark:text-slate-400">
-                    {new Date(entry.date).toLocaleDateString(undefined, { dateStyle: "medium" })}
+                    {formatDate(entry.date)}
                   </td>
                   {selectedItemId === "ALL" && (
                     <td className="px-6 py-4">
@@ -269,9 +308,21 @@ export default function RawMaterialLedgerClient() {
                     {entry.runningBalance.toFixed(2)}
                     <span className="ml-1 text-[10px] text-slate-400 font-bold uppercase">{entry.unit}</span>
                   </td>
+                  <td className="px-6 py-4 text-xs font-medium text-slate-500 dark:text-slate-400">
+                    <p className="font-bold text-slate-700 dark:text-slate-300 truncate leading-none mb-1">{entry.batchNumber || entry.batchId || "—"}</p>
+                    <span className="text-[9px] text-slate-400 truncate block">{entry.warehouseName || "Unassigned"}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right text-xs font-bold text-slate-600 dark:text-slate-300">
+                    {entry.unitCost ? `₹${entry.unitCost.toFixed(2)}` : "—"}
+                  </td>
                   <td className="px-8 py-4 text-xs font-medium text-slate-500 dark:text-slate-400">
                     <p className="font-bold text-slate-700 dark:text-slate-300 leading-none mb-1">{entry.actor}</p>
-                    <span className="text-[9px] text-slate-400">{entry.notes || "N/A"}</span>
+                    {entry.reference && (
+                      <span className="inline-block text-[9px] font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-1.5 py-0.5 rounded mb-1">
+                        {entry.reference}
+                      </span>
+                    )}
+                    <span className="text-[9px] text-slate-400 block truncate" title={entry.notes || undefined}>{entry.notes || "N/A"}</span>
                   </td>
                 </tr>
               ))}

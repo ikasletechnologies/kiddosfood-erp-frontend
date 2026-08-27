@@ -21,16 +21,28 @@ import { X,
   Plus as PlusIcon,
   Scan as ScanIcon
 } from "lucide-react";
-import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi } from "@/lib/api";
+import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi, settingsApi } from "@/lib/api";
 import { clsx } from "clsx";
-import { formatERPNumber } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 interface POItem {
   id: string;
   inventoryItem: { id: string; name: string; unit: string };
   quantity: number;
   price: number;
+  gstRate?: number;
+  hsnCode?: string;
 }
 
 interface PO {
@@ -42,6 +54,7 @@ interface PO {
   totalAmount: number;
   createdAt: string;
   poItems: POItem[];
+  warehouseId?: string;
 }
 
 interface GRNItem {
@@ -68,12 +81,28 @@ export default function GRNPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnItems, setGrnItems] = useState<GRNItem[]>([]);
+  const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [poSearch, setPoSearch] = useState("");
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<string>("");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const [previewGRN, setPreviewGRN] = useState(false);
+
+  const formatDisplayDate = (dateStr: string | undefined | null) => {
+    if (!dateStr) return "DD/MM/YYYY";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dateStr;
+  };
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => setCompanyProfile(res.data))
+      .catch(() => { /* fall back to FALLBACK_COMPANY */ });
+  }, []);
 
   const handleSaveDraft = () => {
     toast.success("GRN Draft saved successfully (reference kept local).");
@@ -84,8 +113,7 @@ export default function GRNPage() {
   };
 
   const handlePrintGRN = () => {
-    toast.success("Preparing printable GRN layout...");
-    window.print();
+    setPreviewGRN(true);
   };
 
   // Fetch Warehouses on mount
@@ -127,6 +155,7 @@ export default function GRNPage() {
   const [scannedPO, setScannedPO] = useState<PO | null>(null);
   const [isScanProcessing, setIsScanProcessing] = useState(false);
   const [scanInput, setScanInput] = useState("");
+  const [viewingGRNDetails, setViewingGRNDetails] = useState<any>(null);
 
   // Fetch Pending POs or History based on view
   useEffect(() => {
@@ -149,7 +178,21 @@ export default function GRNPage() {
       }).finally(() => setLoading(false));
     } else {
       grnApi.getAll().then(r => {
-        setHistory(r.data || []);
+        const list = r.data || [];
+        setHistory(list);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const grnId = urlParams.get('grnId');
+        if (grnId) {
+          const matched = list.find((g: any) => g.id === grnId);
+          if (matched) {
+            setViewingGRNDetails(matched);
+          } else {
+            grnApi.getById(grnId).then(res => {
+              if (res.data) setViewingGRNDetails(res.data);
+            }).catch(console.error);
+          }
+        }
       }).finally(() => setLoading(false));
     }
   }, [view]);
@@ -168,7 +211,7 @@ export default function GRNPage() {
         mfgDate: "",
         expDate: "",
         lotNumber: "",
-        warehouseId: defaultWarehouseId || "",
+        warehouseId: po.warehouseId || defaultWarehouseId || "",
         inventoryItem: item.inventoryItem,
       }))
     );
@@ -178,15 +221,16 @@ export default function GRNPage() {
   const updateItem = (idx: number, field: keyof GRNItem, val: number) => {
     setGrnItems(prev => {
       const next = [...prev];
-      const currentItem = { ...next[idx], [field]: val };
+      const currentItem = { ...next[idx] };
+      const parsedVal = Math.max(0, val);
 
-      // Calculate Accepted = Received - Rejected
-      if (field === "receivedQty" || field === "rejectedQty") {
-        const received = field === "receivedQty" ? val : currentItem.receivedQty;
-        const rejected = field === "rejectedQty" ? val : currentItem.rejectedQty;
-        currentItem.acceptedQty = Math.max(0, received - rejected);
+      if (field === "receivedQty") {
+        currentItem.receivedQty = Math.min(currentItem.quantity, parsedVal);
+      } else if (field === "rejectedQty") {
+        currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
       }
 
+      currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
       next[idx] = currentItem;
       return next;
     });
@@ -203,6 +247,19 @@ export default function GRNPage() {
       next[idx] = currentItem;
       return next;
     });
+  };
+
+  const handleAutoBatch = async (idx: number) => {
+    setGeneratingLotIdx(idx);
+    try {
+      const res = await grnApi.generateLotNumber();
+      updateItemStr(idx, "lotNumber", res.data.lotNumber);
+    } catch (e) {
+      console.error("Failed to generate lot number", e);
+      toast.error("Failed to generate a batch number. Please try again.");
+    } finally {
+      setGeneratingLotIdx(null);
+    }
   };
 
   const handleCreateAndApprove = async () => {
@@ -230,6 +287,15 @@ export default function GRNPage() {
       return;
     }
 
+    // Verify that lot numbers are entered for all accepted items
+    const missingLot = itemsToSubmit.some(
+      item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
+    );
+    if (missingLot) {
+      toast.error("Please enter or generate a Lot Number for all accepted materials before approving.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       // 1. Create and Approve GRN (Impacts Inventory)
@@ -248,6 +314,7 @@ export default function GRNPage() {
           await purchaseReturnsApi.create({
             vendorId,
             reason: "AUTO-GENERATED FROM GRN REJECTION",
+            returnSource: "GRN_REJECTION",
             items: rejectedItems.map(item => ({
               itemName: item.inventoryItem?.name || "Unknown Material",
               quantity: item.rejectedQty,
@@ -308,13 +375,6 @@ export default function GRNPage() {
           >
             <ArrowLeftIcon className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <PackageIcon className="h-5 w-5 text-[#f58220]" />
-            <div>
-              <h1 className="text-base font-bold text-gray-800">Goods Receipt (GRN)</h1>
-              <p className="text-xs text-gray-500">Manage vendor shipment verification and stock reconciliation</p>
-            </div>
-          </div>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex p-1 bg-gray-100 rounded-lg border border-gray-200">
@@ -386,7 +446,7 @@ export default function GRNPage() {
                       {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {new Date(grn.receivedAt || grn.createdAt).toLocaleDateString()}
+                      {formatDate(grn.receivedAt || grn.createdAt)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
@@ -403,7 +463,13 @@ export default function GRNPage() {
                         {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 ml-1">+{grn.items.length - 2}</span>}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex justify-end gap-2">
+                      <button
+                        onClick={() => setViewingGRNDetails(grn)}
+                        className="px-2.5 py-1 bg-gray-100 text-gray-700 border border-gray-200 rounded text-xs font-bold hover:bg-gray-200 transition-colors"
+                      >
+                        View Details
+                      </button>
                       <button
                         onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
                         className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors"
@@ -459,7 +525,7 @@ export default function GRNPage() {
                       <span className="px-2 py-0.5 bg-orange-50 text-[#f58220] text-xs font-semibold rounded border border-orange-200">
                         {po.poNumber || "PO-PENDING"}
                       </span>
-                      <span className="text-xs text-gray-500">{new Date(po.createdAt).toLocaleDateString()}</span>
+                      <span className="text-xs text-gray-500">{formatDate(po.createdAt)}</span>
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-gray-800 group-hover:text-[#f58220] transition-colors truncate">
@@ -568,31 +634,63 @@ export default function GRNPage() {
                             <div className="text-[11px] text-gray-500 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="px-2 py-1 bg-orange-50 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold">
-                                Auto Batch
-                              </span>
-                              <input
-                                type="text"
-                                placeholder="Lot Number"
-                                value={item.lotNumber || ""}
-                                onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
-                                className="w-28 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800"
-                              />
-                              <input
-                                type="date"
-                                title="Mfg Date"
-                                value={item.mfgDate || ""}
-                                onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
-                              />
-                              <input
-                                type="date"
-                                title="Exp Date"
-                                value={item.expDate || ""}
-                                onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                                className="w-36 px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs outline-none text-gray-800 focus:border-[#f58220]"
-                              />
+                            <div className="space-y-1.5 min-w-[280px]">
+                              {/* Row 1: Lot / Batch Number */}
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  title="Generate a unique lot/batch number"
+                                  disabled={generatingLotIdx === idx}
+                                  onClick={() => handleAutoBatch(idx)}
+                                  className="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors shrink-0"
+                                >
+                                  {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
+                                </button>
+                                <input
+                                  type="text"
+                                  placeholder="Lot Number *"
+                                  value={item.lotNumber || ""}
+                                  onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
+                                  className={clsx(
+                                    "w-36 px-2.5 py-1 bg-white border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800",
+                                    item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim())
+                                      ? "border-amber-300 bg-amber-50/20"
+                                      : "border-gray-200"
+                                  )}
+                                />
+                              </div>
+
+                              {/* Row 2: Starting & Ending Dates with clear labels */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
+                                  <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
+                                    {formatDisplayDate(item.mfgDate)}
+                                    <CalendarIcon size={12} className="text-gray-400 ml-1" />
+                                  </span>
+                                  <input
+                                    type="date"
+                                    title="Manufacturing (Start) Date"
+                                    value={item.mfgDate || ""}
+                                    onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </div>
+                                <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
+                                  <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
+                                    {formatDisplayDate(item.expDate)}
+                                    <CalendarIcon size={12} className="text-gray-400 ml-1" />
+                                  </span>
+                                  <input
+                                    type="date"
+                                    title="Expiry (End) Date"
+                                    value={item.expDate || ""}
+                                    onChange={e => updateItemStr(idx, "expDate", e.target.value)}
+                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                  />
+                                </div>
+                              </div>
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -669,36 +767,53 @@ export default function GRNPage() {
             </div>
 
             {/* ── Bottom Actions Footer Bar ── */}
-            <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="text-xs text-gray-500">
-                <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{grnItems.reduce((s, i) => s + i.acceptedQty, 0)}</span> units
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleSubmitForReview}
-                  className="px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-semibold rounded-lg transition-colors"
-                >
-                  Submit
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePrintGRN}
-                  className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-sm font-semibold rounded-lg transition-colors"
-                >
-                  Print GRN
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCreateAndApprove}
-                  disabled={submitting}
-                  className="px-5 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold rounded-lg shadow-sm transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
-                  Approve & Sync
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const totalAccepted = grnItems.reduce((s, i) => s + (Number(i.acceptedQty) || 0), 0);
+              const isMissingLotNumber = grnItems.length === 0 || totalAccepted === 0 || grnItems.some(
+                item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
+              );
+              const isApproveDisabled = submitting || isMissingLotNumber;
+
+              return (
+                <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="text-xs text-gray-500 flex flex-wrap items-center gap-2">
+                    <span>
+                      <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{totalAccepted}</span> units
+                    </span>
+                    {isMissingLotNumber && totalAccepted > 0 && (
+                      <span className="text-[11px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded">
+                        ⚠ Lot Number required to approve
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+
+                    <button
+                      type="button"
+                      onClick={handlePrintGRN}
+                      className="px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 text-sm font-semibold rounded-lg transition-colors"
+                    >
+                      Print GRN
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCreateAndApprove}
+                      disabled={isApproveDisabled}
+                      title={isMissingLotNumber ? "Please enter or generate a Lot Number for all accepted materials to enable Approve & Sync" : "Approve GRN and synchronize stock"}
+                      className={clsx(
+                        "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
+                        isApproveDisabled
+                          ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed shadow-none"
+                          : "bg-[#f58220] hover:bg-[#e8740e] text-white active:scale-95"
+                      )}
+                    >
+                      {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
+                      Approve & Sync
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -861,9 +976,138 @@ export default function GRNPage() {
               </button>
             </div>
           )}
-
         </div>
       </div>
+      )}
+
+      {viewingGRNDetails && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-end bg-black/60 backdrop-blur-sm">
+          <div className="absolute inset-0" onClick={() => setViewingGRNDetails(null)} />
+          <div className="bg-white dark:bg-[#0f1117] w-full max-w-3xl h-full shadow-2xl relative flex flex-col animate-in slide-in-from-right duration-500">
+            {/* Header */}
+            <div className="p-8 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 shadow-lg shadow-orange-500/10">
+                  <ClipboardCheckIcon size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">
+                    {formatERPNumber("GRN", viewingGRNDetails.id, viewingGRNDetails.createdAt)}
+                  </h2>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">
+                    PO Reference: {viewingGRNDetails.procurementOrder ? formatERPNumber("PO", viewingGRNDetails.procurementOrder.poNumber || viewingGRNDetails.procurementOrder.id, viewingGRNDetails.procurementOrder.createdAt) : 'N/A'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setViewingGRNDetails(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-all">
+                <X size={20} className="text-slate-400" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">{viewingGRNDetails.procurementOrder?.vendor?.name || "—"}</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received Date</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">
+                    {formatDate(viewingGRNDetails.receivedAt || viewingGRNDetails.createdAt)}
+                  </p>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                    {viewingGRNDetails.status}
+                  </span>
+                </div>
+                <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received By</p>
+                  <p className="text-xs font-black text-gray-900 dark:text-white">{viewingGRNDetails.receivedBy || "System Operator"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-[11px] font-black text-gray-900 dark:text-white uppercase tracking-widest px-1">Received items</h3>
+                <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm">
+                  <table className="w-full text-left border-collapse bg-slate-50 dark:bg-[#0b0c14] text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-white/5 bg-slate-100 dark:bg-slate-900/50">
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Material</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Batch/Lot No</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Received</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Accepted</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Rejected</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Warehouse</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                      {viewingGRNDetails.items?.map((item: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
+                          <td className="px-4 py-3 font-bold text-slate-800 dark:text-white">
+                            {item.inventoryItem?.name}
+                            <span className="text-[10px] text-gray-400 font-normal block">Unit: {item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</span>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-slate-500">{item.lotNumber || item.vendorBatchNo || "—"}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300">{item.receivedQty}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-emerald-600">{item.acceptedQty}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-rose-600">{item.rejectedQty}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.warehouse?.name || (
+                            <span className="text-rose-500 italic font-medium">Update Warehouse</span>
+                          )}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer / Actions */}
+            <div className="p-8 border-t border-gray-100 dark:border-white/5 flex gap-4">
+              <button
+                onClick={() => {
+                  router.push(`/purchases/invoices?grnId=${viewingGRNDetails.id}`);
+                  setViewingGRNDetails(null);
+                }}
+                className="flex-1 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-center"
+              >
+                Generate Purchase Bill
+              </button>
+              <button
+                onClick={() => setViewingGRNDetails(null)}
+                className="flex-1 py-4 bg-slate-100 dark:bg-white/5 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewGRN && selectedPO && (
+        <GSTInvoice
+          order={{
+            poNumber: `GRN-${selectedPO.poNumber || selectedPO.id.slice(-6).toUpperCase()}`,
+            createdAt: new Date().toISOString(),
+            items: grnItems.map((item, idx) => {
+              const poItem: any = selectedPO.poItems?.[idx];
+              return {
+                itemName: item.inventoryItem?.name || poItem?.inventoryItem?.name || `Material #${idx + 1}`,
+                quantity: Number(item.receivedQty) || 0,
+                price: Number(item.price) || 0,
+                gstRate: Number(poItem?.gstRate) || 0,
+                hsnCode: poItem?.hsnCode,
+              };
+            }),
+          }}
+          vendor={selectedPO.vendor || { name: "Vendor" }}
+          companyDetails={companyProfile || FALLBACK_COMPANY}
+          documentType="GRN"
+          onClose={() => setPreviewGRN(false)}
+        />
       )}
     </div>
   );

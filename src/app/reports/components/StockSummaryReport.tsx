@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, 
+import { 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
-  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon 
+  AlertCircleIcon, PackageIcon, TrendingUpIcon, CalculatorIcon, X 
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { reportsApi } from "@/lib/api/accounting.api";
 
 interface StockRow {
@@ -16,31 +17,33 @@ interface StockRow {
   stockValue: number;
 }
 
+const CATEGORY_OPTIONS = [
+  { value: "ALL", label: "All Categories" },
+  { value: "RAW_MATERIAL", label: "Raw Material" },
+  { value: "SEMI_FINISHED", label: "Semi Finished" },
+  { value: "FINISHED_GOOD", label: "Finished Good" },
+  { value: "PACKAGING", label: "Packaging" },
+];
+
 export default function StockSummaryReport() {
   const [reportData, setReportData] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("All Categories");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("ALL");
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const params: any = {};
-        if (startDate) params.startDate = startDate;
-        if (endDate) params.endDate = endDate;
-        
         // Uses the newly registered endpoint /api/reports/stock-summary
-        const res = await reportsApi.getStockSummary(params);
+        const res = await reportsApi.getStockSummary();
         // Fallback to stock-summary service or fallback response
         const data = await res.data;
-        
+
         // If the return is not an array (e.g. wrapper), try to extract array
         const rows = Array.isArray(data) ? data : (data?.rows || []);
-        
+
         // Match the columns expected: Item Name, Sale Price, Purchase Price, Stock Qty, Stock Value
         const formatted = rows.map((r: any) => ({
           itemName: r.itemName || r.name || "—",
@@ -60,31 +63,23 @@ export default function StockSummaryReport() {
       }
     }
     fetchData();
-  }, [startDate, endDate]);
-
-  const CATEGORY_OPTIONS = [
-    "All Categories",
-    "Raw Material",
-    "Finished Goods",
-    "Packaging Material",
-    "Other Material"
-  ];
+  }, []);
 
   const filtered = reportData.filter(row => {
     const matchesSearch = row.itemName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesInStock = showInStockOnly ? row.stockQty > 0 : true;
     
     let matchesCategory = true;
-    if (selectedCategory !== "All Categories") {
+    if (selectedCategory !== "ALL") {
       const cat = row.category;
-      if (selectedCategory === "Raw Material") {
+      if (selectedCategory === "RAW_MATERIAL") {
         matchesCategory = cat === "RAW_MATERIAL" || cat.startsWith("RAW_");
-      } else if (selectedCategory === "Finished Goods") {
+      } else if (selectedCategory === "FINISHED_GOOD") {
         matchesCategory = cat === "FINISHED_GOOD" || cat.startsWith("FINISHED_");
-      } else if (selectedCategory === "Packaging Material") {
-        matchesCategory = cat === "PACKAGING_MATERIAL" || cat.startsWith("PACKAGING_");
-      } else if (selectedCategory === "Other Material") {
-        matchesCategory = !cat.startsWith("RAW_") && !cat.startsWith("FINISHED_") && !cat.startsWith("PACKAGING_");
+      } else if (selectedCategory === "PACKAGING") {
+        matchesCategory = cat === "PACKAGING" || cat.startsWith("PACKAGING_");
+      } else if (selectedCategory === "SEMI_FINISHED") {
+        matchesCategory = cat === "SEMI_FINISHED" || cat.startsWith("SEMI_FINISHED_");
       }
     }
 
@@ -98,20 +93,21 @@ export default function StockSummaryReport() {
     window.print();
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     const headers = ["Item Name", "Sale Price", "Purchase Price", "Stock Qty", "Stock Value"];
     const rows = filtered.map(r => [
-      `"${r.itemName.replace(/"/g, '""')}"`,
+      r.itemName,
       r.salePrice.toFixed(2),
       r.purchasePrice.toFixed(2),
       r.stockQty,
-      r.stockValue.toFixed(2)
+      r.stockValue
     ]);
-    const csvString = [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Stock_Summary_Report_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -127,30 +123,22 @@ export default function StockSummaryReport() {
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="appearance-none flex items-center gap-2 pl-4 pr-8 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
+              className="flex items-center gap-2 pl-4 pr-8 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700 outline-none cursor-pointer appearance-none"
             >
-              {CATEGORY_OPTIONS.map(c => (
-                <option key={c} value={c}>{c}</option>
+              {CATEGORY_OPTIONS.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-            <ChevronDownIcon size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+              <ChevronDownIcon size={10} />
+            </div>
           </div>
 
           {/* Date Filter */}
-          <div className="flex items-center gap-2">
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
-            />
-            <span className="text-xs font-bold text-slate-400">to</span>
-            <input 
-              type="date" 
-              value={endDate} 
-              onChange={(e) => setEndDate(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-orange-500"
-            />
+          <div className="relative">
+            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
+              Date Filter <ChevronDownIcon size={12} />
+            </button>
           </div>
 
           {/* Toggle */}
@@ -185,8 +173,8 @@ export default function StockSummaryReport() {
             )}
           </div>
 
-          <button 
-            onClick={handleExportCSV}
+          <button
+            onClick={handleExportExcel}
             className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50"
             title="Excel Export"
           >
@@ -203,7 +191,7 @@ export default function StockSummaryReport() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
           <div className="p-3.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-xl">
             <PackageIcon size={24} />
@@ -211,6 +199,16 @@ export default function StockSummaryReport() {
           <div>
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Items Listed</span>
             <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{filtered.length}</span>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
+          <div className="p-3.5 bg-sky-50 dark:bg-sky-950/20 text-sky-600 rounded-xl">
+            <TrendingUpIcon size={24} />
+          </div>
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Stock Qty</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{totalStockQty}</span>
           </div>
         </div>
 

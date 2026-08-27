@@ -14,7 +14,7 @@ export const vendorsApi = {
   getLedger: (id: string, params: any = {}) => api.get(`/api/vendors/${id}/ledger`, { params }),
   getAging: (id: string) => api.get(`/api/vendors/${id}/aging`),
   getNextPaymentNumber: (date?: string) => api.get('/api/vendors/next-payment-number', { params: { date } }),
-  recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string }) => api.post(`/api/vendors/${id}/payment`, data),
+  recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string; idempotencyKey?: string; allowOverpayment?: boolean; date?: string }) => api.post(`/api/vendors/${id}/payment`, data),
   recordAdjustment: (id: string, data: { amount: number; type: 'CREDIT' | 'DEBIT'; note: string; referenceType?: string, referenceId?: string }) => api.post(`/api/vendors/${id}/adjustment`, data),
 };
 
@@ -64,7 +64,7 @@ export const procurementApi = {
 // --- Purchase Returns ---
 export const purchaseReturnsApi = {
   getAll: (params: any = {}) => api.get('/api/purchase/returns', { params }),
-  create: (data: { vendorId: string; reason: string; items: any[] }) =>
+  create: (data: { vendorId: string; reason: string; items: any[]; returnSource?: string }) =>
     api.post('/api/purchase/returns', data),
   updateStatus: (id: string, status: string) =>
     api.patch(`/api/purchase/returns/${id}`, { status }),
@@ -74,6 +74,7 @@ export const purchaseReturnsApi = {
 export const grnApi = {
   getAll: (params: any = {}) => api.get('/api/grn', { params }),
   getById: (id: string) => api.get(`/api/grn/${id}`),
+  generateLotNumber: () => api.get('/api/grn/generate-lot-number'),
   createFromPO: (poId: string, data: { items: any[], receivedBy?: string }) => 
     api.post(`/api/grn/from-po/${poId}`, data),
   approve: (id: string) => api.patch(`/api/grn/${id}/approve`),

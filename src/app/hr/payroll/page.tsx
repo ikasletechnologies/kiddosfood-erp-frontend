@@ -76,15 +76,11 @@ export default function PayrollPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Payroll Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Process payroll and manage payslips</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           <Link href="/hr/payroll/components" className="border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-1"><Settings className="w-4 h-4" />Components</Link>
           <Link href="/hr/payroll/structures" className="border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Structures</Link>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
             <Plus className="w-4 h-4" /> New Payroll
           </button>
         </div>

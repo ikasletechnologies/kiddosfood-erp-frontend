@@ -1,37 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { X,
-  ChevronDown as ChevronDownIcon,
-  ChevronRight as ChevronRightIcon,
-  Download as DownloadIcon,
-  Calendar as CalendarIcon,
-  ExternalLink as ExternalLinkIcon,
-  FileText as FileTextIcon,
-  ShoppingCart as ShoppingCartIcon,
-  Plus as PlusIcon,
-  Search as SearchIcon,
-  Info as InfoIcon,
-  Crown as CrownIcon,
-  Users as UsersIcon,
-  Layers as LayersIcon,
-  Package as PackageIcon,
-  TrendingUp as TrendingUpIcon,
-  Calculator as CalculatorIcon,
-  Wallet as WalletIcon,
-  Landmark as LandmarkIcon,
-  Printer as PrinterIcon,
-  Share2 as ShareIcon,
-  MoreVertical as MoreVerticalIcon,
-  BarChart4 as ChartIcon,
-  FileSpreadsheet as ExcelIcon,
-  Loader2 as LoaderIcon,
-  AlertCircle as AlertCircleIcon,
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import {
+  Search,
+  ChevronDown,
+  Printer,
+  FileSpreadsheet,
+  RefreshCw,
+  Plus,
+  Receipt,
 } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import { reportsApi, accountingApi } from "@/lib/api/accounting.api";
-import { inventoryApi, productsFullApi } from "@/lib/api/inventory.api";
+import {
+  inventoryApi,
+  productsFullApi,
+  productionApi,
+  wasteApi,
+  recipesApi,
+  cartonApi,
+} from "@/lib/api/inventory.api";
+
+// ─── Child Report Components ──────────────────────────────────────────────────
 import CentralProfitLossReport from "./components/ProfitLossReport";
 import CentralBillWiseProfitReport from "./components/BillWiseProfitReport";
 import CentralCashFlowReport from "./components/CashFlowReport";
@@ -74,24 +67,25 @@ import CentralGSTR9Report from "./components/GSTR9Report";
 import CentralSaleSummaryByHSNReport from "./components/SaleSummaryByHSNReport";
 import CentralSACReport from "./components/SACReport";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
-interface ReportItem {
+interface ChildReportDef {
+  id: string;
   label: string;
-  isNew?: boolean;
-  isVip?: boolean;
+  category?: string;
+  description?: string;
 }
 
-interface ReportCategory {
-  title: string;
-  icon: any;
-  items: ReportItem[];
+interface ParentReportDef {
+  id: string;
+  label: string;
+  description: string;
+  subcategories?: string[];
+  children: ChildReportDef[];
 }
 
 interface ReportMeta {
   title: string;
-  addBtnLabel?: string;
-  addBtnColor?: string;
   kpiLabel: string;
   tableTitle: string;
   columns: { key: string; label: string }[];
@@ -104,6 +98,10 @@ interface ReportData {
   rows: Record<string, any>[];
   revenue?: number;
   cogs?: number;
+  purchase?: number;
+  tax?: number;
+  taxPayable?: number;
+  taxReceivable?: number;
   grossProfit?: number;
   expenses?: number;
   netProfit?: number;
@@ -113,114 +111,324 @@ interface ReportData {
   cashOut?: number;
   totalDebit?: number;
   totalCredit?: number;
+  openingBalance?: number;
+  closingBalance?: number;
 }
 
-// ─── Sidebar Categories ───────────────────────────────────────────────────────
+// ─── 5 Parent Definitions ─────────────────────────────────────────────────────
 
-const REPORT_CATEGORIES: ReportCategory[] = [
+const PARENT_REPORTS: ParentReportDef[] = [
   {
-    title: "Transaction report",
-    icon: FileTextIcon,
-    items: [
-      { label: "Sale" },
-      { label: "Purchase" },
-      { label: "Day book" },
-      { label: "All Transactions" },
-      { label: "Profit And Loss" },
-      { label: "Bill Wise Profit", },
-      { label: "Cash flow" },
-      { label: "Trial Balance Report", },
-      { label: "Balance Sheet", },
+    id: "production",
+    label: "Production",
+    description: "Batches, recipes, QC inspections and scrap logs.",
+    children: [
+      { id: "Batch Manufacturing History", label: "Batch Manufacturing History", description: "Batch runs, actual yield, status and duration." },
+      { id: "Production Planning", label: "Production Planning", description: "Scheduled manufacturing plans and output targets." },
+      { id: "QC & Inspection Report", label: "QC & Inspection Report", description: "Quality control inspection outcomes and notes." },
+      { id: "Material Consumption Report", label: "Material Consumption", description: "Raw materials consumed across batches." },
+      { id: "Wastage & Scrap Report", label: "Wastage & Scrap", description: "Scrap quantities and damage reasons." },
+      { id: "Formulation & Recipe Costing", label: "Recipe Costing", description: "Recipe ingredients and estimated unit cost." },
+      { id: "Packaging", label: "Packaging", description: "Packaged goods log and batch records." },
     ],
   },
   {
-    title: "Party report",
-    icon: UsersIcon,
-    items: [
-      { label: "Party Statement" },
-      { label: "Party wise Profit & Loss",  },
-      { label: "All parties" },
-      { label: "Party Report By Item" },
-      { label: "Sale Purchase By Party" },
-      { label: "Sale Purchase By Party Group" },
+    id: "inventory",
+    label: "Inventory",
+    description: "Stock valuation, item P&L, stock movements and low stock alerts.",
+    children: [
+      { id: "Stock summary", label: "Stock Summary", description: "Current stock quantities, unit rates and warehouse valuation." },
+      { id: "Item Report By Party", label: "Item Report By Party", description: "Item-wise transactions by party." },
+      { id: "Item Wise Profit And Loss", label: "Item Wise Profit & Loss", description: "Gross margin and profit per catalog item." },
+      { id: "Item Category Wise Profit And Loss", label: "Item Category Wise Profit", description: "Profitability by product category." },
+      { id: "Low Stock Summary", label: "Low Stock Summary", description: "Items below minimum reorder point." },
+      { id: "Stock Detail", label: "Stock Detail", description: "Chronological inward and outward stock movements." },
+      { id: "Item Detail", label: "Item Detail", description: "Product catalog with SKUs, HSN codes and rates." },
+      { id: "Sale/ Purchase Report By Item Category", label: "Sale / Purchase Report By Item", description: "Category-wise sales and purchase volume." },
+      { id: "Stock Summary Report By Item Category", label: "Stock Summary Report By Item", description: "Category-level stock quantity and valuation." },
+      { id: "Item Wise Discount", label: "Item Wise Discount", description: "Discounts applied across catalog products." },
     ],
   },
   {
-    title: "GST reports",
-    icon: LayersIcon,
-    items: [
-      { label: "GSTR 1" },
-      { label: "GSTR 2" },
-      { label: "GSTR 3 B" },
-      { label: "GSTR 9" },
-      { label: "Sale Summary By HSN" },
-      { label: "SAC Report" },
+    id: "inventory-ledger",
+    label: "Inventory Ledger",
+    description: "Raw material logs, stock movement audits and adjustments.",
+    children: [
+      { id: "Raw Material Ledger", label: "Raw Material Ledger", description: "Item-wise ledger with Inward, Outward and Balance." },
+      { id: "Stock Movement History", label: "Stock Movement History", description: "Movement audit records across all items." },
+      { id: "Inward & GRN Movements", label: "Inward & GRN Movements", description: "Stock received from suppliers and purchase orders." },
+      { id: "Outward & Dispatch Movements", label: "Outward & Dispatch Movements", description: "Stock issued and dispatched." },
+      { id: "Stock Adjustments & Reconciliation", label: "Stock Adjustments", description: "Physical count adjustments and audit variances." },
+      { id: "Finished Goods Stock", label: "Finished Goods Stock", description: "Stock balance for finished catalog goods." },
     ],
   },
   {
-    title: "Item/ Stock report",
-    icon: PackageIcon,
-    items: [
-      { label: "Stock summary" },
-      { label: "Item Report By Party" },
-      { label: "Item Wise Profit And Loss" },
-      { label: "Item Category Wise Profit And Loss" },
-      { label: "Low Stock Summary" },
-      { label: "Stock Detail" },
-      { label: "Item Detail" },
-      { label: "Sale/ Purchase Report By Item Category" },
-      { label: "Stock Summary Report By Item Category" },
-      { label: "Item Wise Discount" },
+    id: "financial",
+    label: "Financial",
+    description: "Profit & Loss, Balance Sheet, GST returns, taxes and expenses.",
+    subcategories: [
+      "Statements & P&L",
+      "GST Reports",
+      "Taxes & Compliance",
+      "Expenses & Orders",
+      "Banking & Loans",
+    ],
+    children: [
+      // Statements & P&L
+      { id: "Profit And Loss", label: "Profit And Loss", category: "Statements & P&L", description: "Net Profit / Loss financial statement." },
+      { id: "Balance Sheet", label: "Balance Sheet", category: "Statements & P&L", description: "Assets, Liabilities and Equity balance." },
+      { id: "Cash flow", label: "Cash Flow", category: "Statements & P&L", description: "Operating cash inflows and outflows." },
+      { id: "Trial Balance Report", label: "Trial Balance Report", category: "Statements & P&L", description: "Debit and Credit account balances." },
+      { id: "Bill Wise Profit", label: "Bill Wise Profit", category: "Statements & P&L", description: "Profit margin achieved per invoice." },
+      { id: "Day book", label: "Day Book", category: "Statements & P&L", description: "Daily financial transaction entries." },
+      { id: "Sale", label: "Sale Invoices", category: "Statements & P&L", description: "Sales invoice records and dues." },
+      { id: "Purchase", label: "Purchase Orders", category: "Statements & P&L", description: "Vendor purchase orders and billed values." },
+      { id: "All Transactions", label: "All Transactions", category: "Statements & P&L", description: "Master transaction log." },
+
+      // GST Reports
+      { id: "GSTR 1", label: "GSTR 1", category: "GST Reports", description: "Outward supply return statement." },
+      { id: "GSTR 2", label: "GSTR 2", category: "GST Reports", description: "Inward supply and purchase input credits." },
+      { id: "GSTR 3 B", label: "GSTR 3B", category: "GST Reports", description: "Monthly GST self-declaration return." },
+      { id: "GSTR 9", label: "GSTR 9", category: "GST Reports", description: "Annual GST return summary." },
+      { id: "Sale Summary By HSN", label: "Sale Summary By HSN", category: "GST Reports", description: "HSN code sales and tax breakdown." },
+      { id: "SAC Report", label: "SAC Report", category: "GST Reports", description: "Service Accounting Code breakdown." },
+
+      // Taxes & Compliance
+      { id: "GST Report", label: "GST Report", category: "Taxes & Compliance", description: "GST collected and paid summary." },
+      { id: "GST Rate Report", label: "GST Rate Report", category: "Taxes & Compliance", description: "Rate-wise GST tax collection." },
+      { id: "Form No. 27EQ", label: "Form No. 27EQ", category: "Taxes & Compliance", description: "Quarterly TCS collected return." },
+      { id: "TCS Receivable", label: "TCS Receivable", category: "Taxes & Compliance", description: "TCS receivable statement." },
+      { id: "TDS Payable", label: "TDS Payable", category: "Taxes & Compliance", description: "TDS payable to authorities." },
+      { id: "TDS Receivable", label: "TDS Receivable", category: "Taxes & Compliance", description: "TDS withheld by clients." },
+
+      // Expenses & Orders
+      { id: "Expense", label: "Expense Report", category: "Expenses & Orders", description: "Operational expenditures." },
+      { id: "Expense Category Report", label: "Expense Category Report", category: "Expenses & Orders", description: "Category-wise expense breakdown." },
+      { id: "Expense Item Report", label: "Expense Item Report", category: "Expenses & Orders", description: "Itemized expense details." },
+      { id: "Sale Orders", label: "Sale Orders", category: "Expenses & Orders", description: "Booked sales order fulfillment." },
+      { id: "Sale Order Item", label: "Sale Order Item", category: "Expenses & Orders", description: "Item-wise ordered quantities." },
+
+      // Banking & Loans
+      { id: "Bank Statement", label: "Bank Statement", category: "Banking & Loans", description: "Bank transactions and balance." },
+      { id: "Discount Report", label: "Discount Report", category: "Banking & Loans", description: "Discounts allowed on invoices." },
+      { id: "Loan Statement", label: "Loan Statement", category: "Banking & Loans", description: "Loan accounts, EMI and interest." },
     ],
   },
   {
-    title: "Business Status",
-    icon: TrendingUpIcon,
-    items: [{ label: "Bank Statement" }, { label: "Discount Report" }],
-  },
-  {
-    title: "Taxes",
-    icon: CalculatorIcon,
-    items: [
-      { label: "GST Report" },
-      { label: "GST Rate Report" },
-      { label: "Form No. 27EQ" },
-      { label: "TCS Receivable" },
-      { label: "TDS Payable" },
-      { label: "TDS Receivable" },
+    id: "franchise",
+    label: "Franchise",
+    description: "Party statements, branch performance and party-wise P&L.",
+    children: [
+      { id: "Party Statement", label: "Party Statement", description: "Party ledger statement." },
+      { id: "Party wise Profit & Loss", label: "Party wise Profit & Loss", description: "Profitability per party relationship." },
+      { id: "All parties", label: "All Parties", description: "Party directory with live balances." },
+      { id: "Party Report By Item", label: "Party Report By Item", description: "Item-wise sales per party." },
+      { id: "Sale Purchase By Party", label: "Sale Purchase By Party", description: "Sales vs. purchases comparison." },
+      { id: "Sale Purchase By Party Group", label: "Sale Purchase By Party Group", description: "Transactions grouped by customer tier." },
+      { id: "Franchise Dues & Balances", label: "Franchise Dues & Balances", description: "Branch dues and outstanding limits." },
+      { id: "Franchise Performance Summary", label: "Franchise Performance", description: "Branch revenue and operating metrics." },
     ],
-  },
-  {
-    title: "Expense report",
-    icon: WalletIcon,
-    items: [
-      { label: "Expense" },
-      { label: "Expense Category Report" },
-      { label: "Expense Item Report" },
-    ],
-  },
-  {
-    title: "Sale Order report",
-    icon: ShoppingCartIcon,
-    items: [{ label: "Sale Orders" }, { label: "Sale Order Item" }],
-  },
-  {
-    title: "Loan Accounts",
-    icon: LandmarkIcon,
-    items: [{ label: "Loan Statement" }],
   },
 ];
 
-// ─── Static Report Metadata (columns, titles — no data) ──────────────────────
+// ─── Static Report Metadata ───────────────────────────────────────────────────
 
 const REPORT_METADATA: Record<string, ReportMeta> = {
-  // Transaction Reports
+  "Batch Manufacturing History": {
+    title: "Batch Manufacturing History",
+    kpiLabel: "Total Batches",
+    tableTitle: "Production Batches",
+    columns: [
+      { key: "batchNumber", label: "Batch No" },
+      { key: "productName", label: "Product / Recipe" },
+      { key: "targetYield", label: "Target Yield" },
+      { key: "actualYield", label: "Actual Yield" },
+      { key: "status", label: "Status" },
+      { key: "stage", label: "Stage" },
+      { key: "date", label: "Date" },
+    ],
+  },
+  "Production Planning": {
+    title: "Production Planning Summary",
+    kpiLabel: "Planned Batches",
+    tableTitle: "Production Plan Queue",
+    columns: [
+      { key: "planNo", label: "Plan No" },
+      { key: "product", label: "Product" },
+      { key: "quantity", label: "Target Quantity" },
+      { key: "startDate", label: "Scheduled Start" },
+      { key: "status", label: "Status" },
+      { key: "priority", label: "Priority" },
+    ],
+  },
+  "QC & Inspection Report": {
+    title: "QC & Inspection Report",
+    kpiLabel: "Inspections",
+    tableTitle: "Inspection Records",
+    columns: [
+      { key: "batchNo", label: "Batch No" },
+      { key: "product", label: "Product" },
+      { key: "inspector", label: "Inspector" },
+      { key: "result", label: "QC Result" },
+      { key: "score", label: "Score" },
+      { key: "date", label: "Inspection Date" },
+    ],
+  },
+  "Material Consumption Report": {
+    title: "Material Consumption Report",
+    kpiLabel: "Total Materials",
+    tableTitle: "Raw Material Consumption",
+    columns: [
+      { key: "materialName", label: "Raw Material" },
+      { key: "sku", label: "SKU" },
+      { key: "consumedQty", label: "Quantity Consumed" },
+      { key: "unit", label: "Unit" },
+      { key: "totalCost", label: "Estimated Cost" },
+    ],
+  },
+  "Wastage & Scrap Report": {
+    title: "Wastage & Scrap Report",
+    kpiLabel: "Scrap Total",
+    tableTitle: "Scrap & Wastage Entries",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "item", label: "Item / Material" },
+      { key: "quantity", label: "Scrap Qty" },
+      { key: "reason", label: "Reason" },
+      { key: "note", label: "Notes" },
+    ],
+  },
+  "Formulation & Recipe Costing": {
+    title: "Formulation & Recipe Costing",
+    kpiLabel: "Active Recipes",
+    tableTitle: "Recipe Master & Unit Costs",
+    columns: [
+      { key: "recipeName", label: "Recipe Name" },
+      { key: "productName", label: "Product" },
+      { key: "batchSize", label: "Batch Size" },
+      { key: "ingredientsCount", label: "Ingredients" },
+      { key: "costPerUnit", label: "Cost / Unit" },
+    ],
+  },
+  "Packaging & Cartons": {
+    title: "Packaging & Cartons Report",
+    kpiLabel: "Cartons Packaged",
+    tableTitle: "Packaged Cartons Log",
+    columns: [
+      { key: "cartonNo", label: "Carton No" },
+      { key: "batchNo", label: "Batch No" },
+      { key: "size", label: "Carton Size" },
+      { key: "units", label: "Units / Carton" },
+      { key: "date", label: "Packaged Date" },
+    ],
+  },
+  "Raw Material Ledger": {
+    title: "Raw Material Stock Ledger",
+    kpiLabel: "Ledger Entries",
+    tableTitle: "Raw Material Ledger Entries",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "itemName", label: "Item Name" },
+      { key: "sku", label: "SKU" },
+      { key: "transactionType", label: "Transaction Type" },
+      { key: "inwardQty", label: "Inward (+)" },
+      { key: "outwardQty", label: "Outward (-)" },
+      { key: "runningBalance", label: "Balance" },
+      { key: "unit", label: "Unit" },
+      { key: "actor", label: "Actor" },
+    ],
+  },
+  "Stock Movement History": {
+    title: "Stock Movement History",
+    kpiLabel: "Total Movements",
+    tableTitle: "Movement Audit Records",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "itemName", label: "Item Name" },
+      { key: "type", label: "Type" },
+      { key: "reference", label: "Reference" },
+      { key: "quantityIn", label: "Qty In" },
+      { key: "quantityOut", label: "Qty Out" },
+      { key: "balance", label: "Balance" },
+    ],
+  },
+  "Inward & GRN Movements": {
+    title: "Inward & GRN Movements",
+    kpiLabel: "Total Receipts",
+    tableTitle: "Inward Receipts (PO & GRN)",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "itemName", label: "Item Name" },
+      { key: "reference", label: "PO / GRN No" },
+      { key: "quantityIn", label: "Quantity In" },
+      { key: "balance", label: "Stock After" },
+    ],
+  },
+  "Outward & Dispatch Movements": {
+    title: "Outward & Dispatch Movements",
+    kpiLabel: "Total Dispatches",
+    tableTitle: "Stock Issued & Dispatched",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "itemName", label: "Item Name" },
+      { key: "reference", label: "Order / Issue No" },
+      { key: "quantityOut", label: "Quantity Out" },
+      { key: "balance", label: "Stock After" },
+    ],
+  },
+  "Stock Adjustments & Reconciliation": {
+    title: "Stock Adjustments & Reconciliation",
+    kpiLabel: "Adjustments",
+    tableTitle: "Stock Adjustments Log",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "itemName", label: "Item Name" },
+      { key: "type", label: "Reason" },
+      { key: "quantityIn", label: "Adjustment" },
+      { key: "balance", label: "Reconciled Balance" },
+    ],
+  },
+  "Finished Goods Stock": {
+    title: "Finished Goods Stock",
+    kpiLabel: "Finished Goods Value",
+    tableTitle: "Finished Goods Inventory",
+    columns: [
+      { key: "itemName", label: "Item Name" },
+      { key: "category", label: "Category" },
+      { key: "inStock", label: "In Stock" },
+      { key: "minStock", label: "Reorder Point" },
+      { key: "rate", label: "Unit Rate" },
+      { key: "value", label: "Valuation" },
+    ],
+  },
+  "Franchise Dues & Balances": {
+    title: "Franchise Dues & Balances",
+    kpiLabel: "Total Outstanding",
+    tableTitle: "Outstanding Accounts",
+    columns: [
+      { key: "name", label: "Franchise / Party" },
+      { key: "phone", label: "Phone" },
+      { key: "gst", label: "GST No" },
+      { key: "state", label: "Location" },
+      { key: "balance", label: "Outstanding Dues" },
+      { key: "creditLimit", label: "Credit Limit" },
+    ],
+  },
+  "Franchise Performance Summary": {
+    title: "Franchise Performance Summary",
+    kpiLabel: "Branch Sales",
+    tableTitle: "Branch Performance Ledger",
+    columns: [
+      { key: "partyName", label: "Franchise Name" },
+      { key: "totalSale", label: "Total Sales" },
+      { key: "totalPurchase", label: "Total Purchases" },
+      { key: "net", label: "Net Volume" },
+    ],
+  },
   Sale: {
     title: "Sale Invoices",
-    addBtnLabel: "+ Add Sale",
-    addBtnColor: "bg-orange-500 hover:bg-orange-600 focus:ring-orange-500 shadow-sm shadow-orange-500/10",
-    kpiLabel: "Total Sales Amount",
-    tableTitle: "Transactions",
+    kpiLabel: "Total Sales",
+    tableTitle: "Sales Invoices",
     columns: [
       { key: "date", label: "Date" },
       { key: "invoiceNo", label: "Invoice No" },
@@ -233,9 +441,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   Purchase: {
     title: "Purchase Orders",
-    addBtnLabel: "+ Add Purchase",
-    addBtnColor: "bg-orange-500 hover:bg-orange-600 focus:ring-orange-500 shadow-sm shadow-orange-500/10",
-    kpiLabel: "Total Purchases Value",
+    kpiLabel: "Total Purchases",
     tableTitle: "Purchase Orders",
     columns: [
       { key: "date", label: "Date" },
@@ -249,10 +455,10 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Day book": {
     title: "Day Book Ledger",
-    kpiLabel: "Daily Net Cash Flow",
+    kpiLabel: "Daily Net Flow",
     tableTitle: "Daily Ledger Entries",
     columns: [
-      { key: "time", label: "Time" },
+      { key: "time", label: "Date / Time" },
       { key: "particulars", label: "Particulars" },
       { key: "voucherType", label: "Voucher Type" },
       { key: "voucherNo", label: "Voucher No" },
@@ -262,11 +468,11 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "All Transactions": {
     title: "All Account Transactions",
-    kpiLabel: "Total Transaction Volume",
+    kpiLabel: "Total Volume",
     tableTitle: "Account Transactions",
     columns: [
       { key: "date", label: "Date" },
-      { key: "refNo", label: "Reference No" },
+      { key: "refNo", label: "Ref No" },
       { key: "particulars", label: "Particulars" },
       { key: "type", label: "Type" },
       { key: "amount", label: "Amount" },
@@ -333,7 +539,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "notes", label: "Notes" },
     ],
   },
-  // Party Reports
   "Party Statement": {
     title: "Party Statement",
     kpiLabel: "Closing Balance",
@@ -374,7 +579,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Party Report By Item": {
     title: "Party Report By Item",
-    kpiLabel: "Total Items Sold",
+    kpiLabel: "Items Sold",
     tableTitle: "Item-wise Party Transactions",
     columns: [
       { key: "partyName", label: "Party Name" },
@@ -386,7 +591,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Sale Purchase By Party": {
     title: "Sale & Purchase By Party",
-    kpiLabel: "Total Transactions",
+    kpiLabel: "Transactions",
     tableTitle: "Party Transactions Summary",
     columns: [
       { key: "partyName", label: "Party Name" },
@@ -406,10 +611,9 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "net", label: "Net" },
     ],
   },
-  // GST Reports
   "GSTR 1": {
     title: "GSTR 1 – Outward Supplies",
-    kpiLabel: "Total Output GST",
+    kpiLabel: "Output GST",
     tableTitle: "Outward Supply Details",
     columns: [
       { key: "date", label: "Date" },
@@ -425,7 +629,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "GSTR 2": {
     title: "GSTR 2 – Inward Supplies",
-    kpiLabel: "Total Input GST",
+    kpiLabel: "Input GST",
     tableTitle: "Inward Supply Details",
     columns: [
       { key: "date", label: "Date" },
@@ -467,7 +671,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Sale Summary By HSN": {
     title: "Sale Summary By HSN",
-    kpiLabel: "Total Taxable Value",
+    kpiLabel: "Taxable Value",
     tableTitle: "HSN-wise Sale Summary",
     columns: [
       { key: "hsn", label: "HSN Code" },
@@ -481,7 +685,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "SAC Report": {
     title: "SAC Report",
-    kpiLabel: "Total Service Value",
+    kpiLabel: "Service Value",
     tableTitle: "SAC-wise Summary",
     columns: [
       { key: "sac", label: "SAC Code" },
@@ -491,7 +695,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "totalTax", label: "Total Tax" },
     ],
   },
-  // Item / Stock Reports
   "Stock summary": {
     title: "Stock Summary",
     kpiLabel: "Total Stock Value",
@@ -520,7 +723,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Item Wise Profit And Loss": {
     title: "Item Wise Profit & Loss",
-    kpiLabel: "Total Item Profit",
+    kpiLabel: "Item Profit",
     tableTitle: "Item Profitability",
     columns: [
       { key: "itemName", label: "Item Name" },
@@ -533,7 +736,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Item Category Wise Profit And Loss": {
     title: "Item Category Wise Profit & Loss",
-    kpiLabel: "Total Category Profit",
+    kpiLabel: "Category Profit",
     tableTitle: "Category Profitability",
     columns: [
       { key: "category", label: "Category" },
@@ -546,7 +749,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Low Stock Summary": {
     title: "Low Stock Summary",
-    kpiLabel: "Items Below Minimum",
+    kpiLabel: "Low Stock Items",
     tableTitle: "Low Stock Items",
     columns: [
       { key: "itemName", label: "Item Name" },
@@ -560,7 +763,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Stock Detail": {
     title: "Stock Detail",
-    kpiLabel: "Total Movements",
+    kpiLabel: "Movements",
     tableTitle: "Stock Movement History",
     columns: [
       { key: "date", label: "Date" },
@@ -600,7 +803,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Stock Summary Report By Item Category": {
     title: "Stock Summary By Category",
-    kpiLabel: "Total Stock Value",
+    kpiLabel: "Category Valuation",
     tableTitle: "Category Stock",
     columns: [
       { key: "category", label: "Category" },
@@ -611,7 +814,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Item Wise Discount": {
     title: "Item Wise Discount",
-    kpiLabel: "Total Discount Given",
+    kpiLabel: "Total Discount",
     tableTitle: "Item Discount Details",
     columns: [
       { key: "itemName", label: "Item Name" },
@@ -621,7 +824,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "netAmount", label: "Net Amount" },
     ],
   },
-  // Business Status
   "Bank Statement": {
     title: "Bank Statement",
     kpiLabel: "Closing Balance",
@@ -648,7 +850,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "netAmount", label: "Net Amount" },
     ],
   },
-  // Taxes
   "GST Report": {
     title: "GST Report",
     kpiLabel: "Net GST",
@@ -664,7 +865,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "GST Rate Report": {
     title: "GST Rate Report",
-    kpiLabel: "Total Tax Collected",
+    kpiLabel: "Tax Collected",
     tableTitle: "Rate-wise GST Summary",
     columns: [
       { key: "gstRate", label: "GST Rate" },
@@ -690,7 +891,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "TCS Receivable": {
     title: "TCS Receivable",
-    kpiLabel: "Total TCS Receivable",
+    kpiLabel: "TCS Receivable",
     tableTitle: "TCS Receivable Details",
     columns: [
       { key: "date", label: "Date" },
@@ -703,7 +904,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "TDS Payable": {
     title: "TDS Payable",
-    kpiLabel: "Total TDS Payable",
+    kpiLabel: "TDS Payable",
     tableTitle: "TDS Payable Details",
     columns: [
       { key: "date", label: "Date" },
@@ -716,7 +917,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "TDS Receivable": {
     title: "TDS Receivable",
-    kpiLabel: "Total TDS Receivable",
+    kpiLabel: "TDS Receivable",
     tableTitle: "TDS Receivable Details",
     columns: [
       { key: "date", label: "Date" },
@@ -727,7 +928,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "tdsAmount", label: "TDS Amount" },
     ],
   },
-  // Expense Reports
   Expense: {
     title: "Expense Report",
     kpiLabel: "Total Expenses",
@@ -754,7 +954,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Expense Item Report": {
     title: "Expense Item Report",
-    kpiLabel: "Total Expense Items",
+    kpiLabel: "Expense Items",
     tableTitle: "Expense Item Details",
     columns: [
       { key: "date", label: "Date" },
@@ -765,10 +965,9 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "amount", label: "Amount" },
     ],
   },
-  // Sale Order Report
   "Sale Orders": {
     title: "Sale Orders Report",
-    kpiLabel: "Total Sale Orders Value",
+    kpiLabel: "Sale Orders",
     tableTitle: "Sale Orders",
     columns: [
       { key: "date", label: "Date" },
@@ -779,7 +978,19 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "status", label: "Status" },
     ],
   },
-  // Loan
+  "Sale Order Item": {
+    title: "Sale Order Items",
+    kpiLabel: "Items Ordered",
+    tableTitle: "Sale Order Item Details",
+    columns: [
+      { key: "date", label: "Date" },
+      { key: "orderNo", label: "Order No" },
+      { key: "customer", label: "Customer" },
+      { key: "item", label: "Item Name" },
+      { key: "quantity", label: "Ordered Qty" },
+      { key: "amount", label: "Total Amount" },
+    ],
+  },
   "Loan Statement": {
     title: "Loan Statement",
     kpiLabel: "Outstanding Loan",
@@ -842,13 +1053,18 @@ function getDateRange(
   return { from: iso(start), to: iso(end) };
 }
 
+function formatCategory(cat: any): string {
+  if (!cat) return "—";
+  const name = typeof cat === "object" ? (cat.name || cat.label || "") : String(cat);
+  if (!name || name === "null" || name === "undefined") return "—";
+  return name.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+}
+
 function fmtDisplayDate(iso: string): string {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 }
-
-// ─── Data Helpers ─────────────────────────────────────────────────────────────
 
 function fmtCurrency(val: any): string {
   const num = Number(val) || 0;
@@ -858,7 +1074,7 @@ function fmtCurrency(val: any): string {
 function fmtDate(val: any): string {
   if (!val) return "—";
   try {
-    return new Date(val).toLocaleDateString("en-IN");
+    return formatDate(val);
   } catch {
     return String(val);
   }
@@ -866,7 +1082,19 @@ function fmtDate(val: any): string {
 
 function toArr(data: any): any[] {
   if (Array.isArray(data)) return data;
-  for (const key of ["data", "items", "invoices", "orders", "entries", "transactions", "expenses", "accounts", "results"]) {
+  for (const key of [
+    "data",
+    "items",
+    "invoices",
+    "orders",
+    "entries",
+    "transactions",
+    "expenses",
+    "accounts",
+    "results",
+    "batches",
+    "cartons",
+  ]) {
     if (data?.[key] && Array.isArray(data[key])) return data[key];
   }
   return [];
@@ -880,7 +1108,7 @@ function transformSales(data: any): ReportData {
   const received = rows.reduce((s: number, r: any) => s + (Number(r.paidAmount) || Number(r.paid) || 0), 0);
   return {
     kpiValue: fmtCurrency(total),
-    kpiSubText: `Received: ${fmtCurrency(received)}  Balance: ${fmtCurrency(total - received)}`,
+    kpiSubText: `Received: ${fmtCurrency(received)} • Balance: ${fmtCurrency(total - received)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.createdAt),
       invoiceNo: r.invoiceNumber || r.orderNumber || r.referenceNumber || r._id?.slice(-6) || "—",
@@ -899,7 +1127,7 @@ function transformPurchases(data: any): ReportData {
   const paid = rows.reduce((s: number, r: any) => s + (Number(r.advancePaid) || Number(r.paidAmount) || 0), 0);
   return {
     kpiValue: fmtCurrency(total),
-    kpiSubText: `Paid: ${fmtCurrency(paid)}  Balance: ${fmtCurrency(total - paid)}`,
+    kpiSubText: `Paid: ${fmtCurrency(paid)} • Balance: ${fmtCurrency(total - paid)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.createdAt || r.date),
       poNo: r.poNumber || r.referenceNumber || r._id?.slice(-6) || "—",
@@ -914,15 +1142,25 @@ function transformPurchases(data: any): ReportData {
 
 function transformDayBook(data: any): ReportData {
   const entries = toArr(data);
-  const cashIn = entries.filter((e: any) => e.type === "DEBIT" || e.side === "IN" || e.direction === "IN").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
-  const cashOut = entries.filter((e: any) => e.type === "CREDIT" || e.side === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  // Prefer the backend's full-range aggregates over summing just the
+  // (possibly paginated) `entries` page, so Net Cash Flow stays correct
+  // once a period has more rows than one page.
+  const hasBackendTotals = data && (data.openingBalance !== undefined || data.closingBalance !== undefined);
+  const cashIn = hasBackendTotals
+    ? Number(data.totalDebit) || 0
+    : entries.filter((e: any) => e.type === "DEBIT" || e.side === "IN" || e.direction === "IN").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const cashOut = hasBackendTotals
+    ? Number(data.totalCredit) || 0
+    : entries.filter((e: any) => e.type === "CREDIT" || e.side === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0);
+  const openingBalance = Number(data?.openingBalance) || 0;
+  const closingBalance = hasBackendTotals ? Number(data.closingBalance) || 0 : openingBalance + cashIn - cashOut;
   return {
     kpiValue: fmtCurrency(cashIn - cashOut),
-    kpiSubText: `Cash In: ${fmtCurrency(cashIn)}  Cash Out: ${fmtCurrency(cashOut)}`,
+    kpiSubText: `Cash In: ${fmtCurrency(cashIn)} • Cash Out: ${fmtCurrency(cashOut)}`,
     rows: entries.map((e: any) => {
       const isIn = e.type === "DEBIT" || e.side === "IN" || e.direction === "IN";
       return {
-        time: e.time || fmtDate(e.createdAt),
+        time: e.time ? `${fmtDate(e.createdAt)} ${e.time}` : fmtDate(e.createdAt),
         particulars: e.particulars || e.description || e.narration || "—",
         voucherType: e.voucherType || e.type || "—",
         voucherNo: e.voucherNo || e.referenceNumber || e._id?.slice(-6) || "—",
@@ -930,16 +1168,27 @@ function transformDayBook(data: any): ReportData {
         credit: !isIn ? fmtCurrency(e.amount) : "—",
       };
     }),
+    totalDebit: cashIn,
+    totalCredit: cashOut,
+    openingBalance,
+    closingBalance,
   };
 }
 
 function transformTransactions(data: any): ReportData {
   const rows = toArr(data);
-  const totalDebit = rows.filter((r: any) => r.type === "DEBIT" || r.side === "IN").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
-  const totalCredit = rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  // Prefer the backend's full-range aggregates over summing just the
+  // (possibly paginated) `rows` page.
+  const hasBackendTotals = data && (data.totalDebit !== undefined || data.totalCredit !== undefined);
+  const totalDebit = hasBackendTotals
+    ? Number(data.totalDebit) || 0
+    : rows.filter((r: any) => r.type === "DEBIT" || r.side === "IN").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  const totalCredit = hasBackendTotals
+    ? Number(data.totalCredit) || 0
+    : rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
   return {
     kpiValue: `${rows.length} Transactions`,
-    kpiSubText: `Debit Total: ${fmtCurrency(totalDebit)}  Credit Total: ${fmtCurrency(totalCredit)}`,
+    kpiSubText: `Debit: ${fmtCurrency(totalDebit)} • Credit: ${fmtCurrency(totalCredit)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.createdAt),
       refNo: r.referenceNumber || r.refNo || r._id?.slice(-6) || "—",
@@ -948,6 +1197,8 @@ function transformTransactions(data: any): ReportData {
       amount: fmtCurrency(r.amount),
       status: r.status || "—",
     })),
+    totalDebit,
+    totalCredit,
   };
 }
 
@@ -956,16 +1207,23 @@ function transformProfitLoss(data: any): ReportData {
   const revenue = Number(data?.totalRevenue || data?.revenue || 0);
   const expenses = Number(data?.totalExpenses || data?.expenses || 0);
   const cogs = Number(data?.cogs || 0);
-  const grossProfit = Number(data?.grossProfit || (revenue - cogs));
+  const grossProfit = Number(data?.grossProfit || revenue - cogs);
+  const purchase = Number(data?.purchase || 0);
+  const taxPayable = Number(data?.taxPayable ?? data?.tax ?? 0);
+  const taxReceivable = Number(data?.taxReceivable || 0);
   return {
     kpiValue: fmtCurrency(netProfit),
-    kpiSubText: `Revenue: ${fmtCurrency(revenue)}  Expenses: ${fmtCurrency(expenses)}`,
+    kpiSubText: `Revenue: ${fmtCurrency(revenue)} • Expenses: ${fmtCurrency(expenses)}`,
     rows: [],
     revenue,
     cogs,
+    purchase,
+    tax: taxPayable,
+    taxPayable,
+    taxReceivable,
     grossProfit,
     expenses,
-    netProfit
+    netProfit,
   };
 }
 
@@ -975,7 +1233,7 @@ function transformBillWiseProfit(data: any): ReportData {
   const totalSales = rows.reduce((s: number, r: any) => s + (Number(r.total) || Number(r.saleAmount) || 0), 0);
   return {
     kpiValue: fmtCurrency(totalProfit),
-    kpiSubText: `Bills: ${rows.length}  Avg Margin: ${totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) + "%" : "—"}`,
+    kpiSubText: `Bills: ${rows.length} • Margin: ${totalSales > 0 ? ((totalProfit / totalSales) * 100).toFixed(1) + "%" : "—"}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.createdAt),
       invoiceNo: r.invoiceNumber || r.billNo || r._id?.slice(-6) || "—",
@@ -984,11 +1242,9 @@ function transformBillWiseProfit(data: any): ReportData {
       costAmount: fmtCurrency(r.cost || r.costAmount),
       profit: fmtCurrency(r.profit),
       margin: r.margin ? `${Number(r.margin).toFixed(1)}%` : "—",
-      rawSale: Number(r.total || r.saleAmount || 0),
-      rawProfit: Number(r.profit || 0),
     })),
     totalSales,
-    totalProfit
+    totalProfit,
   };
 }
 
@@ -998,7 +1254,7 @@ function transformCashFlow(data: any): ReportData {
   const cashOut = Number(data?.totalOutflow || data?.cashOut || entries.filter((e: any) => e.type === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0));
   return {
     kpiValue: fmtCurrency(cashIn - cashOut),
-    kpiSubText: `Inflow: ${fmtCurrency(cashIn)}  Outflow: ${fmtCurrency(cashOut)}`,
+    kpiSubText: `Inflow: ${fmtCurrency(cashIn)} • Outflow: ${fmtCurrency(cashOut)}`,
     rows: entries.map((e: any) => ({
       date: fmtDate(e.date || e.createdAt),
       refNo: e.refNo || e.invoiceNumber || e.billNo || e._id?.slice(-6) || "—",
@@ -1007,10 +1263,10 @@ function transformCashFlow(data: any): ReportData {
       type: e.type || e.direction || "—",
       cashIn: e.type === "IN" || e.direction === "IN" ? Number(e.amount || 0) : 0,
       cashOut: e.type === "OUT" || e.direction === "OUT" ? Number(e.amount || 0) : 0,
-      runningCash: Number(e.runningBalance || e.balance || 0)
+      runningCash: Number(e.runningBalance || e.balance || 0),
     })),
     cashIn,
-    cashOut
+    cashOut,
   };
 }
 
@@ -1027,7 +1283,7 @@ function transformTrialBalance(data: any): ReportData {
       credit: Number(r.credit || 0),
     })),
     totalDebit,
-    totalCredit
+    totalCredit,
   };
 }
 
@@ -1042,7 +1298,7 @@ function transformBalanceSheet(data: any): ReportData {
   const totalLiabilities = liabilities.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
   return {
     kpiValue: fmtCurrency(totalAssets),
-    kpiSubText: `Assets: ${fmtCurrency(totalAssets)}  Liabilities + Equity: ${fmtCurrency(totalLiabilities)}`,
+    kpiSubText: `Assets: ${fmtCurrency(totalAssets)} • Liabilities: ${fmtCurrency(totalLiabilities)}`,
     rows: allRows.map((r: any) => ({
       category: r._side,
       accountName: r.name || r.accountName || "—",
@@ -1058,7 +1314,7 @@ function transformPartyStatement(data: any): ReportData {
   const opening = Number(data?.openingBalance || 0);
   return {
     kpiValue: fmtCurrency(closing),
-    kpiSubText: `Opening: ${fmtCurrency(opening)}  Closing: ${fmtCurrency(closing)}`,
+    kpiSubText: `Opening: ${fmtCurrency(opening)} • Closing: ${fmtCurrency(closing)}`,
     rows: entries.map((e: any) => ({
       date: fmtDate(e.date || e.createdAt),
       particular: e.particular || e.description || "—",
@@ -1076,7 +1332,7 @@ function transformAllParties(data: any): ReportData {
   const vendors = rows.filter((r: any) => r.type === "VENDOR").length;
   return {
     kpiValue: `${rows.length} Parties`,
-    kpiSubText: `Customers: ${customers}  Vendors: ${vendors}`,
+    kpiSubText: `Customers: ${customers} • Vendors: ${vendors}`,
     rows: rows.map((r: any) => ({
       name: r.name || "—",
       phone: r.phone || r.mobile || "—",
@@ -1094,7 +1350,7 @@ function transformGstr(data: any): ReportData {
   const totalTaxable = rows.reduce((s: number, r: any) => s + (Number(r.taxableAmount) || Number(r.amount) || 0), 0);
   return {
     kpiValue: fmtCurrency(totalTax),
-    kpiSubText: `Taxable: ${fmtCurrency(totalTaxable)}  Tax: ${fmtCurrency(totalTax)}`,
+    kpiSubText: `Taxable: ${fmtCurrency(totalTaxable)} • Tax: ${fmtCurrency(totalTax)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.invoiceDate || r.createdAt),
       invoiceNo: r.invoiceNo || r.billNo || r._id?.slice(-6) || "—",
@@ -1118,10 +1374,10 @@ function transformStockSummary(data: any): ReportData {
   );
   return {
     kpiValue: fmtCurrency(totalValue),
-    kpiSubText: `Items: ${rows.length}  Total Units: ${rows.reduce((s: number, r: any) => s + (Number(r.quantity || r.currentStock) || 0), 0)}`,
+    kpiSubText: `Items: ${rows.length} • Total Units: ${rows.reduce((s: number, r: any) => s + (Number(r.quantity || r.currentStock) || 0), 0)}`,
     rows: rows.map((r: any) => ({
       itemName: r.name || r.itemName || "—",
-      category: r.category?.name || r.categoryName || r.group || "—",
+      category: formatCategory(r.category || r.categoryName || r.group),
       unit: r.unit || r.unitOfMeasure || "—",
       inStock: String(Number(r.quantity || r.currentStock || 0)),
       minStock: String(Number(r.minQuantity || r.reorderPoint || 0)),
@@ -1135,14 +1391,14 @@ function transformLowStock(data: any): ReportData {
   const rows = toArr(data?.alerts || data);
   return {
     kpiValue: `${rows.length} Items`,
-    kpiSubText: rows.length > 0 ? "Requires immediate reorder" : "All stock levels healthy",
+    kpiSubText: rows.length > 0 ? "Requires reorder" : "Stock healthy",
     rows: rows.map((r: any) => ({
       itemName: r.item?.name || r.name || r.itemName || "—",
-      category: r.item?.category || r.category || "—",
+      category: formatCategory(r.item?.category || r.category),
       unit: r.unit || r.item?.unit || "—",
       currentStock: String(Number(r.currentStock || r.quantity || r.stock || 0)),
       minStock: String(Number(r.minQuantity || r.reorderPoint || r.threshold || 0)),
-      shortfall: String(Math.max(0, (Number(r.minQuantity || r.reorderPoint || 0)) - (Number(r.currentStock || r.quantity || 0)))),
+      shortfall: String(Math.max(0, Number(r.minQuantity || r.reorderPoint || 0) - Number(r.currentStock || r.quantity || 0))),
       status: r.status || "Low",
     })),
   };
@@ -1154,7 +1410,7 @@ function transformStockDetail(data: any): ReportData {
   const totalOut = rows.filter((r: any) => r.type === "OUT" || r.direction === "OUT").reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
   return {
     kpiValue: `${rows.length} Movements`,
-    kpiSubText: `Total In: ${totalIn}  Total Out: ${totalOut}`,
+    kpiSubText: `In: ${totalIn} • Out: ${totalOut}`,
     rows: rows.map((r: any) => {
       const isIn = r.type === "IN" || r.direction === "IN";
       return {
@@ -1193,7 +1449,7 @@ function transformExpenses(data: any): ReportData {
   const paid = rows.filter((r: any) => r.status === "PAID").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
   return {
     kpiValue: fmtCurrency(total),
-    kpiSubText: `Paid: ${fmtCurrency(paid)}  Pending: ${fmtCurrency(total - paid)}`,
+    kpiSubText: `Paid: ${fmtCurrency(paid)} • Pending: ${fmtCurrency(total - paid)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.createdAt),
       category: r.category?.name || r.categoryName || r.category || "—",
@@ -1211,7 +1467,7 @@ function transformSaleOrders(data: any): ReportData {
   const total = rows.reduce((s: number, r: any) => s + (Number(r.total) || Number(r.totalAmount) || 0), 0);
   return {
     kpiValue: fmtCurrency(total),
-    kpiSubText: `Total: ${rows.length}  Pending: ${pending}  Completed: ${rows.length - pending}`,
+    kpiSubText: `Orders: ${rows.length} • Pending: ${pending}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.createdAt || r.date),
       orderNo: r.orderNumber || r._id?.slice(-6) || "—",
@@ -1229,8 +1485,8 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
     return s + (Number(r.amount || r.total || r.value || r.netAmount) || 0);
   }, 0);
   return {
-    kpiValue: rows.length > 0 ? fmtCurrency(totalAmount) : "—",
-    kpiSubText: rows.length > 0 ? `${rows.length} records` : "No data for selected period",
+    kpiValue: rows.length > 0 ? (totalAmount > 0 ? fmtCurrency(totalAmount) : `${rows.length} Records`) : "—",
+    kpiSubText: rows.length > 0 ? `${rows.length} records found` : "No records found",
     rows: rows.map((r: any) => {
       if (meta?.columns) {
         const row: Record<string, any> = {};
@@ -1240,8 +1496,8 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
             row[col.key] = val;
           } else if (col.key === "date") {
             row[col.key] = fmtDate(r.date || r.createdAt);
-          } else if (["amount", "total", "value"].some((k) => col.key.toLowerCase().includes(k))) {
-            row[col.key] = fmtCurrency(r[col.key] || r.amount);
+          } else if (["amount", "total", "value", "cost"].some((k) => col.key.toLowerCase().includes(k))) {
+            row[col.key] = fmtCurrency(r[col.key] || r.amount || 0);
           } else {
             row[col.key] = r[col.key] || "—";
           }
@@ -1258,57 +1514,164 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
   };
 }
 
-// ─── Main Fetch Dispatcher ────────────────────────────────────────────────────
+// ─── Fetch Dispatcher ─────────────────────────────────────────────────────────
 
 async function fetchReport(
   label: string,
-  params: { startDate: string; endDate: string }
+  params: { startDate: string; endDate: string; search?: string }
 ): Promise<ReportData> {
   const meta = REPORT_METADATA[label];
   try {
     switch (label) {
-      case "Sale":
-        return transformSales((await reportsApi.getSales(params)).data);
-      case "Purchase":
-        return transformPurchases((await reportsApi.getPurchases(params)).data);
-      case "Day book":
-        return transformDayBook((await reportsApi.getDayBook(params)).data);
-      case "All Transactions":
-        return transformTransactions((await reportsApi.getAllTransactions(params)).data);
-      case "Profit And Loss":
-        return transformProfitLoss((await reportsApi.getProfit(params)).data);
-      case "Bill Wise Profit":
-        return transformBillWiseProfit((await reportsApi.getBillWiseProfit(params)).data);
-      case "Cash flow":
-        return transformCashFlow((await reportsApi.getCashFlow(params)).data);
-      case "Trial Balance Report":
-        return transformTrialBalance((await reportsApi.getTrialBalance(params)).data);
-      case "Balance Sheet":
-        return transformBalanceSheet((await reportsApi.getBalanceSheet(params)).data);
-      case "Party Statement":
-        return transformPartyStatement((await reportsApi.getPartyStatement(params)).data);
-      case "Party wise Profit & Loss":
-        return transformGeneric((await reportsApi.getPartyProfitLoss(params)).data, meta);
-      case "All parties":
-        return transformAllParties((await reportsApi.getAllParties()).data);
-      case "Party Report By Item":
-        return transformGeneric((await reportsApi.getPartyByItem(params)).data, meta);
-      case "Sale Purchase By Party":
-        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
-      case "Sale Purchase By Party Group":
-        return transformGeneric((await reportsApi.getSalePurchaseByPartyGroup(params)).data, meta);
-      case "GSTR 1":
-        return transformGstr((await reportsApi.getGstr("1", params)).data);
-      case "GSTR 2":
-        return transformGstr((await reportsApi.getGstr("2", params)).data);
-      case "GSTR 3 B":
-        return transformGstr((await reportsApi.getGstr("3b", params)).data);
-      case "GSTR 9":
-        return transformGstr((await reportsApi.getGstr("9", params)).data);
-      case "Sale Summary By HSN":
-        return transformGeneric((await reportsApi.getHsnSummary(params)).data, meta);
-      case "SAC Report":
-        return transformGeneric((await reportsApi.getSacReport(params)).data, meta);
+      // Production
+      case "Batch Manufacturing History": {
+        const res = await productionApi.getAllBatches();
+        const batches = toArr(res.data);
+        return {
+          kpiValue: `${batches.length} Batches`,
+          kpiSubText: `Completed: ${batches.filter((b: any) => b.status === "COMPLETED").length} • Active: ${batches.filter((b: any) => b.status === "IN_PROGRESS").length}`,
+          rows: batches.map((b: any) => ({
+            batchNumber: b.batchNumber || b._id?.slice(-6) || "—",
+            productName: b.recipe?.name || b.product?.name || b.productName || "—",
+            targetYield: `${b.targetYield || b.batchSize || 0} units`,
+            actualYield: b.actualYield ? `${b.actualYield} units` : "Pending",
+            status: b.status || "SCHEDULED",
+            stage: b.stage || "PLANNED",
+            date: fmtDate(b.startDate || b.createdAt),
+          })),
+        };
+      }
+      case "Production Planning": {
+        const res = await productionApi.getHistory();
+        return transformGeneric(res.data, meta);
+      }
+      case "QC & Inspection Report": {
+        const res = await productionApi.getPendingQC();
+        const items = toArr(res.data);
+        return {
+          kpiValue: `${items.length} Pending QC`,
+          kpiSubText: "Quality inspection audits",
+          rows: items.map((q: any) => ({
+            batchNo: q.batchNumber || q._id?.slice(-6) || "—",
+            product: q.product?.name || q.recipe?.name || "—",
+            inspector: q.inspector?.name || "QA Staff",
+            result: q.qcStatus || "PENDING",
+            score: q.qcScore ? `${q.qcScore}%` : "—",
+            date: fmtDate(q.createdAt),
+          })),
+        };
+      }
+      case "Material Consumption Report": {
+        const res = await inventoryApi.getRawMaterialConsumption();
+        return transformGeneric(res.data, meta);
+      }
+      case "Wastage & Scrap Report": {
+        const res = await wasteApi.getAll();
+        const wasteRows = toArr(res.data);
+        const totalQty = wasteRows.reduce((s: number, w: any) => s + (Number(w.quantity) || 0), 0);
+        return {
+          kpiValue: `${totalQty} Units Waste`,
+          kpiSubText: `${wasteRows.length} scrap entries recorded`,
+          rows: wasteRows.map((w: any) => ({
+            date: fmtDate(w.createdAt || w.date),
+            item: w.item?.name || w.itemName || "—",
+            quantity: String(w.quantity || 0),
+            reason: w.reason || "Damaged / Spoiled",
+            note: w.note || "—",
+          })),
+        };
+      }
+      case "Formulation & Recipe Costing": {
+        const res = await recipesApi.getAll();
+        const recipes = toArr(res.data);
+        return {
+          kpiValue: `${recipes.length} Recipes`,
+          kpiSubText: "Standard recipe master formulations",
+          rows: recipes.map((rec: any) => ({
+            recipeName: rec.name || "—",
+            productName: rec.product?.name || rec.category || "—",
+            batchSize: `${rec.batchSize || 1} units`,
+            ingredientsCount: `${rec.ingredients?.length || 0} items`,
+            costPerUnit: fmtCurrency(rec.costPerUnit || rec.estimatedCost || 0),
+          })),
+        };
+      }
+      case "Packaging & Cartons": {
+        const res = await cartonApi.getAll();
+        const cartons = toArr(res.data);
+        return {
+          kpiValue: `${cartons.length} Cartons`,
+          kpiSubText: `Packaged box records`,
+          rows: cartons.map((c: any) => ({
+            cartonNo: c.cartonNumber || c._id?.slice(-6) || "—",
+            batchNo: c.batch?.batchNumber || c.batchId || "—",
+            size: c.cartonSize || "Standard",
+            units: String(c.unitsPerCarton || 0),
+            date: fmtDate(c.createdAt),
+          })),
+        };
+      }
+
+      // Inventory Ledger
+      case "Raw Material Ledger": {
+        const res = await inventoryApi.getRawMaterialLedger(undefined);
+        const entries = toArr(res.data);
+        return {
+          kpiValue: `${entries.length} Ledger Entries`,
+          kpiSubText: "Raw material movements and balances",
+          rows: entries.map((e: any) => ({
+            date: fmtDate(e.date || e.createdAt),
+            itemName: e.itemName || e.item?.name || "—",
+            sku: e.sku || e.item?.sku || "—",
+            transactionType: e.transactionType || e.type || "—",
+            inwardQty: e.inwardQty ? String(Number(e.inwardQty).toFixed(2)) : "—",
+            outwardQty: e.outwardQty ? String(Number(e.outwardQty).toFixed(2)) : "—",
+            runningBalance: String(Number(e.runningBalance || 0).toFixed(2)),
+            unit: e.unit || e.item?.unit || "—",
+            actor: e.actor || e.actorName || "System",
+          })),
+        };
+      }
+      case "Stock Movement History":
+        return transformStockDetail((await inventoryApi.getMovements(params)).data);
+      case "Inward & GRN Movements": {
+        const res = await inventoryApi.getMovements({ ...params, type: "IN" });
+        const rows = toArr(res.data).filter((r: any) => r.type === "IN" || r.direction === "IN");
+        return {
+          kpiValue: `${rows.length} Receipts`,
+          kpiSubText: "Inward stock receipts",
+          rows: rows.map((r: any) => ({
+            date: fmtDate(r.date || r.createdAt),
+            itemName: r.item?.name || r.itemName || "—",
+            reference: r.reference || r.referenceNo || "GRN",
+            quantityIn: String(Number(r.quantity || 0)),
+            balance: String(Number(r.runningBalance || r.stockAfter || 0)),
+          })),
+        };
+      }
+      case "Outward & Dispatch Movements": {
+        const res = await inventoryApi.getMovements({ ...params, type: "OUT" });
+        const rows = toArr(res.data).filter((r: any) => r.type === "OUT" || r.direction === "OUT");
+        return {
+          kpiValue: `${rows.length} Dispatches`,
+          kpiSubText: "Stock issues and dispatches",
+          rows: rows.map((r: any) => ({
+            date: fmtDate(r.date || r.createdAt),
+            itemName: r.item?.name || r.itemName || "—",
+            reference: r.reference || r.referenceNo || "DISPATCH",
+            quantityOut: String(Number(r.quantity || 0)),
+            balance: String(Number(r.runningBalance || r.stockAfter || 0)),
+          })),
+        };
+      }
+      case "Stock Adjustments & Reconciliation": {
+        const res = await inventoryApi.getMovements({ ...params, type: "ADJUSTMENT" });
+        return transformStockDetail(res.data);
+      }
+      case "Finished Goods Stock":
+        return transformStockSummary((await inventoryApi.getInventory()).data);
+
+      // Inventory
       case "Stock summary":
         return transformStockSummary((await inventoryApi.getInventory()).data);
       case "Item Report By Party":
@@ -1329,10 +1692,40 @@ async function fetchReport(
         return transformGeneric((await reportsApi.getStockByCategory(params)).data, meta);
       case "Item Wise Discount":
         return transformGeneric((await reportsApi.getItemDiscount(params)).data, meta);
-      case "Bank Statement":
-        return transformGeneric((await reportsApi.getBankStatement(params)).data, meta);
-      case "Discount Report":
-        return transformGeneric((await reportsApi.getDiscountReport(params)).data, meta);
+
+      // Financial - Statements & P&L
+      case "Sale":
+        return transformSales((await reportsApi.getSales(params)).data);
+      case "Purchase":
+        return transformPurchases((await reportsApi.getPurchases(params)).data);
+      case "Day book":
+        return transformDayBook((await reportsApi.getDayBook(params)).data);
+      case "All Transactions":
+        return transformTransactions((await reportsApi.getAllTransactions(params)).data);
+      case "Profit And Loss":
+        return transformProfitLoss((await reportsApi.getProfit(params)).data);
+      case "Bill Wise Profit":
+        return transformBillWiseProfit((await reportsApi.getBillWiseProfit(params)).data);
+      case "Cash flow":
+        return transformCashFlow((await reportsApi.getCashFlow(params)).data);
+      case "Trial Balance Report":
+        return transformTrialBalance((await reportsApi.getTrialBalance(params)).data);
+      case "Balance Sheet":
+        return transformBalanceSheet((await reportsApi.getBalanceSheet(params)).data);
+
+      // Financial - GST & Taxes
+      case "GSTR 1":
+        return transformGstr((await reportsApi.getGstr("1", params)).data);
+      case "GSTR 2":
+        return transformGstr((await reportsApi.getGstr("2", params)).data);
+      case "GSTR 3 B":
+        return transformGstr((await reportsApi.getGstr("3b", params)).data);
+      case "GSTR 9":
+        return transformGstr((await reportsApi.getGstr("9", params)).data);
+      case "Sale Summary By HSN":
+        return transformGeneric((await reportsApi.getHsnSummary(params)).data, meta);
+      case "SAC Report":
+        return transformGeneric((await reportsApi.getSacReport(params)).data, meta);
       case "GST Report":
         return transformGeneric((await reportsApi.getGstReport(params)).data, meta);
       case "GST Rate Report":
@@ -1345,6 +1738,8 @@ async function fetchReport(
         return transformGeneric((await reportsApi.getTdsPayable(params)).data, meta);
       case "TDS Receivable":
         return transformGeneric((await reportsApi.getTdsReceivable(params)).data, meta);
+
+      // Financial - Expenses & Orders & Banking
       case "Expense":
         return transformExpenses((await accountingApi.getExpenses(params)).data);
       case "Expense Category Report":
@@ -1353,93 +1748,61 @@ async function fetchReport(
         return transformGeneric((await reportsApi.getExpenseItem(params)).data, meta);
       case "Sale Orders":
         return transformSaleOrders((await reportsApi.getSaleOrders(params)).data);
+      case "Sale Order Item":
+        return transformGeneric((await reportsApi.getSaleOrders(params)).data, meta);
+      case "Bank Statement":
+        return transformGeneric((await reportsApi.getBankStatement(params)).data, meta);
+      case "Discount Report":
+        return transformGeneric((await reportsApi.getDiscountReport(params)).data, meta);
       case "Loan Statement":
         return transformGeneric((await reportsApi.getLoanStatement(params)).data, meta);
+
+      // Franchise
+      case "Party Statement":
+        return transformPartyStatement((await reportsApi.getPartyStatement(params)).data);
+      case "Party wise Profit & Loss":
+        return transformGeneric((await reportsApi.getPartyProfitLoss(params)).data, meta);
+      case "All parties":
+        return transformAllParties((await reportsApi.getAllParties()).data);
+      case "Party Report By Item":
+        return transformGeneric((await reportsApi.getPartyByItem(params)).data, meta);
+      case "Sale Purchase By Party":
+        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
+      case "Sale Purchase By Party Group":
+        return transformGeneric((await reportsApi.getSalePurchaseByPartyGroup(params)).data, meta);
+      case "Franchise Dues & Balances":
+        return transformAllParties((await reportsApi.getAllParties()).data);
+      case "Franchise Performance Summary":
+        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
+
       default:
-        return { kpiValue: "—", kpiSubText: "Report coming soon", rows: [] };
+        return { kpiValue: "—", kpiSubText: "Report ready", rows: [] };
     }
   } catch {
-    return { kpiValue: "—", kpiSubText: "No data for selected period", rows: [] };
+    return { kpiValue: "—", kpiSubText: "No records found for selected period", rows: [] };
   }
 }
 
-// ─── Navigation href map ──────────────────────────────────────────────────────
+// ─── Inner Reports Component (Uses useSearchParams) ───────────────────────────
 
-function getReportHref(label: string): string {
-  switch (label) {
-    case "Sale":
-    case "Sale Summary By HSN":
-      return "/sales/invoices";
-    case "Purchase":
-      return "/purchases/orders";
-    case "Day book":
-    case "All Transactions":
-    case "Profit And Loss":
-    case "Bill Wise Profit":
-    case "Trial Balance Report":
-    case "Balance Sheet":
-    case "Cash flow":
-      return "/accounting/profit-loss";
-    case "Party Statement":
-      return "/franchise/performance";
-    case "All parties":
-      return "/franchise/dues";
-    case "Sale Orders":
-    case "Sale Purchase By Party":
-    case "Sale Purchase By Party Group":
-      return "/sales/orders";
-    case "Stock summary":
-    case "Item Report By Party":
-    case "Stock Detail":
-    case "Item Detail":
-    case "Sale/ Purchase Report By Item Category":
-    case "Stock Summary Report By Item Category":
-      return "/inventory/stock-value";
-    case "Item Wise Profit And Loss":
-    case "Item Category Wise Profit And Loss":
-    case "Item Wise Discount":
-      return "/inventory/product-pnl";
-    case "Low Stock Summary":
-      return "/inventory/forecast";
-    case "Expense":
-    case "Expense Category Report":
-    case "Expense Item Report":
-    case "GST Report":
-    case "GST Rate Report":
-    case "Form No. 27EQ":
-    case "TCS Receivable":
-    case "TDS Payable":
-    case "TDS Receivable":
-    case "GSTR 1":
-    case "GSTR 2":
-    case "GSTR 3 B":
-    case "GSTR 9":
-    case "SAC Report":
-      return "/accounting/expenses";
-    case "Bank Statement":
-    case "Loan Statement":
-      return "/accounting/ledgers";
-    case "Discount Report":
-    case "Party wise Profit & Loss":
-      return "/accounting/profit-loss";
-    default:
-      return "/reports";
-  }
-}
+function ReportsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export default function CentralReports() {
   const [mounted, setMounted] = useState(false);
-  const [selectedReport, setSelectedReport] = useState("Sale");
-  const [sidebarSearchTerm, setSidebarSearchTerm] = useState("");
+  const [selectedParentId, setSelectedParentId] = useState<string>("production");
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
+  const [selectedFinancialCategory, setSelectedFinancialCategory] = useState<string>("All");
   const [tableSearchTerm, setTableSearchTerm] = useState("");
+
   const [dateFilter, setDateFilter] = useState("This Month");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [plViewType, setPlViewType] = useState<'vyapar' | 'accounting'>('vyapar');
+
+  // Profit Loss special subview state
+  const [plViewType, setPlViewType] = useState<"vyapar" | "accounting">("vyapar");
   const [plExpanded, setPlExpanded] = useState({
     directExpenses: true,
     taxPayable: true,
@@ -1447,43 +1810,118 @@ export default function CentralReports() {
     indirectExpenses: true,
   });
 
+  // Sync state from URL search params
   useEffect(() => {
     setMounted(true);
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const r = params.get("report");
-      if (r) {
-        setSelectedReport(r);
+    const parentParam = searchParams.get("parent");
+    const reportParam = searchParams.get("report");
+
+    let resolvedParent = "production";
+    if (parentParam) {
+      const foundParent = PARENT_REPORTS.find(
+        (p) => p.id.toLowerCase() === parentParam.toLowerCase()
+      );
+      if (foundParent) {
+        resolvedParent = foundParent.id;
       }
     }
-  }, []);
 
-  // Reload whenever report or date range changes
+    setSelectedParentId(resolvedParent);
+
+    const parentDef = PARENT_REPORTS.find((p) => p.id === resolvedParent) || PARENT_REPORTS[0];
+
+    if (reportParam) {
+      const foundChild = parentDef.children.find(
+        (c) =>
+          c.id.toLowerCase() === reportParam.toLowerCase() ||
+          c.label.toLowerCase() === reportParam.toLowerCase()
+      );
+      setSelectedChildId(foundChild ? foundChild.id : parentDef.children[0].id);
+    } else {
+      setSelectedChildId((prev) => {
+        // If current child belongs to this parent, preserve it; otherwise default to first child
+        const exists = parentDef.children.find((c) => c.id === prev);
+        return exists ? prev : parentDef.children[0].id;
+      });
+    }
+  }, [searchParams]);
+
+  // Update browser URL query
+  const updateUrl = useCallback(
+    (parentId: string, childId: string | null) => {
+      const params = new URLSearchParams();
+      params.set("parent", parentId);
+      if (childId) {
+        params.set("report", childId);
+      }
+      const qs = params.toString();
+      router.push(`/reports?${qs}`);
+    },
+    [router]
+  );
+
+  // Handle child selection
+  const handleSelectChild = (childId: string) => {
+    setSelectedChildId(childId);
+    setTableSearchTerm("");
+    updateUrl(selectedParentId, childId);
+  };
+
+  // Active Parent & Child definitions
+  const activeParent = useMemo(() => {
+    return PARENT_REPORTS.find((p) => p.id === selectedParentId) || PARENT_REPORTS[0];
+  }, [selectedParentId]);
+
+  const activeChild = useMemo(() => {
+    if (!activeParent) return null;
+    return (
+      activeParent.children.find((c) => c.id === selectedChildId) ||
+      activeParent.children[0]
+    );
+  }, [activeParent, selectedChildId]);
+
+  // Filtered children for active parent
+  const filteredChildren = useMemo(() => {
+    if (!activeParent) return [];
+    return activeParent.children.filter((child) => {
+      const matchesFinancialCat =
+        activeParent.id !== "financial" ||
+        selectedFinancialCategory === "All" ||
+        child.category === selectedFinancialCategory;
+      return matchesFinancialCat;
+    });
+  }, [activeParent, selectedFinancialCategory]);
+
+  // Fetch report data when active child or date changes
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || !activeChild) {
+      setReportData(null);
+      return;
+    }
     let cancelled = false;
     const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
     setLoading(true);
     setReportData(null);
-    fetchReport(selectedReport, { startDate: from, endDate: to })
-      .then((d) => { if (!cancelled) setReportData(d); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [mounted, selectedReport, dateFilter, customStartDate, customEndDate]);
 
-  if (!mounted) return <div className="min-h-screen bg-slate-50 dark:bg-[#020617]" />;
+    fetchReport(activeChild.id, { startDate: from, endDate: to })
+      .then((d) => {
+        if (!cancelled) setReportData(d);
+      })
+      .catch(() => {
+        if (!cancelled) setReportData(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const currentMeta = REPORT_METADATA[selectedReport] ?? DEFAULT_META;
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate]);
+
+  const currentMeta = activeChild ? REPORT_METADATA[activeChild.id] ?? DEFAULT_META : DEFAULT_META;
   const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
-  const displayRange = `${fmtDisplayDate(from)} To ${fmtDisplayDate(to)}`;
-
-  // Filter sidebar
-  const filteredCategories = REPORT_CATEGORIES.map((category) => ({
-    ...category,
-    items: category.items.filter((item) =>
-      item.label.toLowerCase().includes(sidebarSearchTerm.toLowerCase())
-    ),
-  })).filter((c) => c.items.length > 0);
+  const displayRange = `${fmtDisplayDate(from)} to ${fmtDisplayDate(to)}`;
 
   // Filter table rows
   const filteredRows = (reportData?.rows ?? []).filter((row) =>
@@ -1492,9 +1930,63 @@ export default function CentralReports() {
     )
   );
 
+  // Print & CSV Export
   const handlePrint = () => {
     toast.success(`Preparing print layout for ${currentMeta.title}...`);
     window.print();
+  };
+
+  // Row-level print: isolates just the clicked record instead of reusing
+  // handlePrint (which prints the whole current report view).
+  const handlePrintRow = (row: Record<string, any>) => {
+    const cols = currentMeta.columns;
+    const rowsHtml = cols
+      .map((c) => `<tr><td style="padding:6px 14px;font-weight:600;color:#475569;white-space:nowrap;">${c.label}</td><td style="padding:6px 14px;">${row[c.key] ?? "—"}</td></tr>`)
+      .join("");
+    const win = window.open("", "_blank", "width=480,height=640");
+    if (!win) {
+      toast.error("Please allow pop-ups to print");
+      return;
+    }
+    win.document.write(`
+      <html>
+        <head>
+          <title>${currentMeta.title} — ${row[cols[0]?.key] ?? ""}</title>
+          <style>
+            body { font-family: Arial, Helvetica, sans-serif; padding: 24px; color: #0f172a; }
+            h2 { font-size: 16px; margin-bottom: 16px; }
+            table { border-collapse: collapse; width: 100%; }
+            td { border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+          </style>
+        </head>
+        <body>
+          <h2>${currentMeta.title}</h2>
+          <table>${rowsHtml}</table>
+        </body>
+      </html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const handleShareRow = async (row: Record<string, any>) => {
+    const cols = currentMeta.columns;
+    const text = [currentMeta.title, ...cols.map((c) => `${c.label}: ${row[c.key] ?? "—"}`)].join("\n");
+    if (typeof navigator !== "undefined" && (navigator as any).share) {
+      try {
+        await (navigator as any).share({ title: currentMeta.title, text });
+      } catch {
+        // user cancelled the share sheet — no-op
+      }
+      return;
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      await navigator.clipboard.writeText(text);
+      toast.success("Details copied to clipboard");
+      return;
+    }
+    toast.error("Sharing is not supported in this browser");
   };
 
   const handleExportCSV = () => {
@@ -1512,7 +2004,10 @@ export default function CentralReports() {
       const csvContent = "data:text/csv;charset=utf-8," + [header, ...rowLines].join("\n");
       const link = document.createElement("a");
       link.setAttribute("href", encodeURI(csvContent));
-      link.setAttribute("download", `${selectedReport.replace(/\s+/g, "_").toLowerCase()}_${from}_${to}.csv`);
+      link.setAttribute(
+        "download",
+        `${(activeChild?.label || "report").replace(/\s+/g, "_").toLowerCase()}_${from}_${to}.csv`
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1522,500 +2017,294 @@ export default function CentralReports() {
     }
   };
 
-  const handleOpen = (itemLabel: string) => {
-    const href = getReportHref(itemLabel);
-    window.location.href = href;
-  };
-
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-slate-50 dark:bg-[#020617] -m-8">
-      {/* Left Sidebar */}
-      <div className="w-[280px] shrink-0 border-r border-slate-200 dark:border-slate-800 flex flex-col h-full bg-white dark:bg-slate-900/50">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
-          <div className="relative">
-            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search reports..."
-              value={sidebarSearchTerm}
-              onChange={(e) => setSidebarSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500 transition-colors"
-            />
-            {sidebarSearchTerm && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSidebarSearchTerm("")} 
-              />
-            )}
+    <div className="flex flex-col min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
+      {/* ── Top Header / Breadcrumb Bar ── */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-orange-50 text-[#f58220] rounded-lg">
+            <Receipt className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+              <span>Reports</span>
+              <span>/</span>
+              <span className="text-gray-900 font-semibold">{activeParent.label}</span>
+            </div>
+            <h1 className="text-lg font-bold text-gray-900 tracking-tight">
+              {activeParent.label} — {activeChild?.label || "Report"}
+            </h1>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {filteredCategories.map((category, catIdx) => (
-            <div key={catIdx} className="mb-4">
-              <div className="bg-slate-100 dark:bg-slate-800/80 px-4 py-2 text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-2 select-none">
-                <category.icon size={12} className="text-orange-500" />
-                {category.title}
-              </div>
-              <div className="divide-y divide-[#F9F7F9]/10">
-                {category.items.map((item, itemIdx) => {
-                  const isActive = selectedReport === item.label;
-                  return (
-                    <div
-                      key={itemIdx}
-                      onClick={() => {
-                        setSelectedReport(item.label);
-                        setTableSearchTerm("");
-                      }}
-                      className={clsx(
-                        "px-4 py-2.5 text-[13px] font-semibold flex items-center justify-between cursor-pointer transition-all duration-150 border-l-4 select-none group/item",
-                        isActive
-                          ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border-l-orange-500 font-bold"
-                          : "text-[#555] dark:text-slate-300 hover:bg-[#F2F0F2] dark:hover:bg-slate-800/50 border-l-transparent"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="truncate">{item.label}</span>
-                        {item.isNew && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
-                        )}
-                        {item.isVip && (
-                          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-50 dark:bg-orange-950/40 text-orange-500 dark:text-orange-400 shrink-0">
-                            <CrownIcon size={10} className="fill-current" />
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 ml-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleOpen(item.label); }}
-                          className="text-slate-400 hover:text-orange-500 dark:hover:text-orange-400 p-0.5 transition-colors"
-                          title="Open Page"
-                        >
-                          <ExternalLinkIcon size={13} className="stroke-[2.5]" />
-                        </button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleExportCSV(); }}
-                          className="text-slate-400 hover:text-orange-500 dark:hover:text-orange-400 p-0.5 transition-colors"
-                          title="Export CSV"
-                        >
-                          <DownloadIcon size={13} className="stroke-[2.5]" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push("/sales/invoices/new")}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Invoice</span>
+          </button>
         </div>
       </div>
 
-      {/* Right Content Pane */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-white dark:bg-[#090D1A]">
-        {/* Top Control Header */}
-        <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/40 flex flex-wrap items-center justify-between gap-4 shrink-0">
-          <div className="relative w-64 max-w-full">
-            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder={`Search ${currentMeta.title}...`}
-              value={tableSearchTerm}
-              onChange={(e) => setTableSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500 transition-colors"
-            />
-            {tableSearchTerm && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setTableSearchTerm("")} 
-              />
-            )}
+      <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+        {/* ── Horizontal Navigation Tabs (Pill style) ── */}
+        <div className="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {filteredChildren.map((child) => {
+            const isActive = selectedChildId === child.id;
+            return (
+              <button
+                key={child.id}
+                onClick={() => handleSelectChild(child.id)}
+                className={clsx(
+                  "px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2",
+                  isActive
+                    ? "bg-[#f58220] text-white shadow-sm"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/80"
+                )}
+              >
+                <span>{child.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ── Top Summary / KPI Cards ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50" />
+            <div>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                {currentMeta.kpiLabel}
+              </div>
+              <div className="text-xl font-bold text-gray-900 mt-0.5">
+                {loading ? "..." : reportData?.kpiValue || "0"}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => window.location.href = "/sales/invoices"}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-black text-white bg-orange-500 hover:bg-orange-600 active:bg-orange-700 transition-colors uppercase tracking-wider shadow-sm shadow-orange-500/10"
-            >
-              + Add Sale
-            </button>
-            <button
-              onClick={() => window.location.href = "/purchases/orders"}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-black text-orange-600 bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/20 dark:text-orange-400 transition-colors uppercase tracking-wider border border-orange-200 dark:border-orange-900/30"
-            >
-              + Add Purchase
-            </button>
-            <button
-              onClick={() => window.location.href = getReportHref(selectedReport)}
-              className="p-2 rounded-lg text-white bg-orange-500 hover:bg-orange-600 transition-colors shadow-sm"
-            >
-              <PlusIcon size={14} className="stroke-[2.5]" />
-            </button>
+
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+            <div>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Summary Details
+              </div>
+              <div className="text-sm font-semibold text-emerald-700 mt-0.5">
+                {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50" />
+            <div>
+              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                Current Period
+              </div>
+              <div className="text-sm font-semibold text-gray-700 mt-0.5">
+                {displayRange}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Scrollable Viewport */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Title */}
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              {currentMeta.title}
-            </h1>
-            {currentMeta.addBtnLabel && (
-              <button
-                onClick={() => window.location.href = getReportHref(selectedReport)}
-                className={clsx(
-                  "px-4 py-2 rounded-xl text-xs font-bold text-white shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2",
-                  currentMeta.addBtnColor || "bg-[#f97316] hover:bg-purple-700"
-                )}
-              >
-                {currentMeta.addBtnLabel}
-              </button>
-            )}
+        {/* ── Filters Row ── */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search in table..."
+              value={tableSearchTerm}
+              onChange={(e) => setTableSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-[#f58220]"
+            />
           </div>
 
-          {/* Filter Bar */}
-          {selectedReport !== "Stock summary" && (
-            <div className="flex flex-wrap items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Filter by:</span>
-              <div className="relative">
-                <select
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                  className="appearance-none pl-3 pr-8 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 outline-none cursor-pointer focus:border-orange-500"
-                >
-                  <option>This Month</option>
-                  <option>Today</option>
-                  <option>Yesterday</option>
-                  <option>Last 7 Days</option>
-                  <option>This Year</option>
-                  <option>Custom</option>
-                </select>
-                <ChevronDownIcon size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
+          {/* Date Preset Filter */}
+          <div className="relative">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="appearance-none pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 outline-none cursor-pointer focus:border-[#f58220]"
+            >
+              <option>This Month</option>
+              <option>Today</option>
+              <option>Yesterday</option>
+              <option>Last 7 Days</option>
+              <option>This Year</option>
+              <option>Custom</option>
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          </div>
 
-            {dateFilter === "Custom" ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500"
-                />
-                <span className="text-slate-400 font-bold">To</span>
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500"
-                />
+          {/* Custom Date Pickers */}
+          {dateFilter === "Custom" && (
+            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="text-xs text-gray-700 outline-none"
+              />
+              <span className="text-gray-400 text-xs">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="text-xs text-gray-700 outline-none"
+              />
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* CSV Export & Print */}
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-2xs"
+            title="Export CSV"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            <span>CSV</span>
+          </button>
+
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-2xs"
+            title="Print"
+          >
+            <Printer className="h-4 w-4 text-gray-500" />
+            <span>Print</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+              if (activeChild) {
+                setLoading(true);
+                fetchReport(activeChild.id, { startDate: from, endDate: to })
+                  .then((d) => setReportData(d))
+                  .finally(() => setLoading(false));
+              }
+            }}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
+          </button>
+        </div>
+
+        {/* ── Unified Clean Data Table ── */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+              {currentMeta.tableTitle}
+            </span>
+            <span className="text-xs font-medium text-gray-400">
+              {filteredRows.length} entries
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            {loading ? (
+              <div className="py-16 flex justify-center items-center">
+                <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-lg font-bold text-slate-700 dark:text-slate-200">
-                <CalendarIcon size={12} className="text-slate-400" />
-                <span>{displayRange}</span>
-              </div>
-            )}
-
-            {loading && (
-              <div className="flex items-center gap-1.5 text-slate-400">
-                <LoaderIcon size={12} className="animate-spin" />
-                <span className="text-[11px] font-semibold">Loading...</span>
-              </div>
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-gray-50/80 text-gray-500 text-[11px] font-bold border-b border-gray-200 uppercase tracking-wider">
+                    {currentMeta.columns.map((col, idx) => (
+                      <th
+                        key={idx}
+                        className="px-5 py-3.5 font-bold text-gray-500"
+                      >
+                        {col.label}
+                      </th>
+                    ))}
+                    <th className="px-5 py-3.5 text-right font-bold text-gray-500">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-xs font-medium">
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row, rowIdx) => (
+                      <tr
+                        key={rowIdx}
+                        className="hover:bg-orange-50/20 transition-colors"
+                      >
+                        {currentMeta.columns.map((col, colIdx) => (
+                          <td
+                            key={colIdx}
+                            className="px-5 py-3.5 text-gray-700"
+                          >
+                            {col.key === "status" || col.key === "result" ? (
+                              <span
+                                className={clsx(
+                                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
+                                  String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED"
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : String(row[col.key]).toUpperCase().includes("PROGRESS")
+                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                    : String(row[col.key]).toUpperCase().includes("REJECT")
+                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                )}
+                              >
+                                {row[col.key]}
+                              </span>
+                            ) : (
+                              row[col.key] ?? "—"
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={() => handlePrintRow(row)}
+                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors inline-flex items-center"
+                            title="Print Single Record"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={currentMeta.columns.length + 1}
+                        className="px-5 py-16 text-center text-gray-400 text-xs"
+                      >
+                        {tableSearchTerm
+                          ? `No entries match "${tableSearchTerm}".`
+                          : "No data records found for the selected period."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             )}
           </div>
-          )}
-
-          {selectedReport === "Profit And Loss" ? (
-            <CentralProfitLossReport 
-              reportData={reportData}
-              loading={loading}
-              viewType={plViewType}
-              setViewType={setPlViewType}
-              expanded={plExpanded}
-              setExpanded={setPlExpanded}
-            />
-          ) : selectedReport === "Bill Wise Profit" ? (
-            <CentralBillWiseProfitReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Cash flow" ? (
-            <CentralCashFlowReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Trial Balance Report" ? (
-            <CentralTrialBalanceReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Balance Sheet" ? (
-            <CentralBalanceSheetReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Party Statement" ? (
-            <CentralPartyStatementReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Party wise Profit & Loss" ? (
-            <CentralPartyProfitLossReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "All parties" ? (
-            <CentralAllPartiesReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Party Report By Item" ? (
-            <CentralPartyReportByItem 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Sale Purchase By Party" ? (
-            <CentralSalePurchaseByParty 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Sale Purchase By Party Group" ? (
-            <CentralSalePurchaseByPartyGroup 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Loan Statement" ? (
-            <CentralLoanStatementReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Sale Orders" ? (
-            <CentralSaleOrdersReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Sale Order Item" ? (
-            <CentralSaleOrderItemReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Expense" ? (
-            <CentralExpenseReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Expense Category Report" ? (
-            <CentralExpenseCategoryReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Expense Item Report" ? (
-            <CentralExpenseItemReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "GSTR 1" ? (
-            <CentralGSTR1Report />
-          ) : selectedReport === "GSTR 2" ? (
-            <CentralGSTR2Report />
-          ) : selectedReport === "GSTR 3 B" ? (
-            <CentralGSTR3BReport />
-          ) : selectedReport === "GSTR 9" ? (
-            <CentralGSTR9Report />
-          ) : selectedReport === "Sale Summary By HSN" ? (
-            <CentralSaleSummaryByHSNReport />
-          ) : selectedReport === "SAC Report" ? (
-            <CentralSACReport />
-          ) : selectedReport === "GST Report" ? (
-            <CentralGSTReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "GST Rate Report" ? (
-            <CentralGSTRateReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "TCS Receivable" ? (
-            <CentralTCSReceivableReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Form No. 27EQ" ? (
-            <CentralForm27eqReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "TDS Payable" ? (
-            <CentralTDSPayableReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "TDS Receivable" ? (
-            <CentralTDSReceivableReport 
-              reportData={reportData}
-              loading={loading}
-            />
-          ) : selectedReport === "Bank Statement" ? (
-            <CentralBankStatementReport />
-          ) : selectedReport === "Discount Report" ? (
-            <CentralDiscountReport />
-          ) : selectedReport === "Stock summary" ? (
-            <CentralStockSummaryReport />
-          ) : selectedReport === "Item Report By Party" ? (
-            <CentralItemReportByParty />
-          ) : selectedReport === "Item Wise Profit And Loss" ? (
-            <CentralItemWiseProfitLossReport />
-          ) : selectedReport === "Item Category Wise Profit And Loss" ? (
-            <CentralItemCategoryWiseProfitLossReport />
-          ) : selectedReport === "Low Stock Summary" ? (
-            <CentralLowStockSummaryReport />
-          ) : selectedReport === "Stock Detail" ? (
-            <CentralStockDetailReport />
-          ) : selectedReport === "Item Detail" ? (
-            <CentralItemDetailReport />
-          ) : selectedReport === "Sale/ Purchase Report By Item Category" ? (
-            <CentralSalePurchaseByCategoryReport />
-          ) : selectedReport === "Stock Summary Report By Item Category" ? (
-            <CentralStockSummaryByCategoryReport />
-          ) : selectedReport === "Item Wise Discount" ? (
-            <CentralItemWiseDiscountReport />
-          ) : (
-            <>
-              {/* KPI Card */}
-              <div className="max-w-md">
-                <div className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-[#12141c] rounded-2xl p-5 shadow-sm space-y-3 relative group overflow-hidden">
-                  <div className="absolute -right-8 -top-8 w-16 h-16 rounded-full bg-[#f97316]/5 blur-xl group-hover:bg-[#f97316]/10 transition-all duration-300" />
-                  {loading ? (
-                    <div className="space-y-3 animate-pulse">
-                      <div className="h-3 w-32 bg-slate-200 dark:bg-slate-700 rounded" />
-                      <div className="h-8 w-40 bg-slate-200 dark:bg-slate-700 rounded" />
-                      <div className="h-3 w-56 bg-slate-200 dark:bg-slate-700 rounded" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-0.5">
-                          <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
-                            {currentMeta.kpiLabel}
-                          </span>
-                          <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-                            {reportData?.kpiValue ?? "—"}
-                          </p>
-                        </div>
-                        {reportData?.kpiTrend && (
-                          <span className="px-2 py-1 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase rounded-lg shadow-sm">
-                            {reportData.kpiTrend}
-                          </span>
-                        )}
-                      </div>
-                      <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
-                        <span>{reportData?.kpiSubText ?? "—"}</span>
-                        <InfoIcon size={12} className="opacity-60 cursor-pointer hover:opacity-100" />
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="bg-white dark:bg-[#12141c] border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
-                  <h2 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
-                    {currentMeta.tableTitle}
-                  </h2>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <button className="p-1.5 hover:text-slate-600 dark:hover:text-slate-200 transition-colors" title="Search">
-                      <SearchIcon size={14} className="stroke-[2.5]" />
-                    </button>
-                    <button className="p-1.5 hover:text-orange-500 transition-colors" title="Analytics View">
-                      <ChartIcon size={14} className="stroke-[2.5]" />
-                    </button>
-                    <button onClick={handleExportCSV} className="p-1.5 hover:text-emerald-600 transition-colors" title="Export CSV">
-                      <ExcelIcon size={14} className="stroke-[2.5]" />
-                    </button>
-                    <button onClick={handlePrint} className="p-1.5 hover:text-orange-500 transition-colors" title="Print">
-                      <PrinterIcon size={14} className="stroke-[2.5]" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  {loading ? (
-                    <div className="p-6 space-y-3 animate-pulse">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg" />
-                      ))}
-                    </div>
-                  ) : (
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="bg-slate-50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
-                          {currentMeta.columns.map((col, idx) => (
-                            <th key={idx} className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest select-none">
-                              <div className="flex items-center gap-1">
-                                {col.label}
-                                <ChevronDownIcon size={10} className="opacity-60" />
-                              </div>
-                            </th>
-                          ))}
-                          <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">
-                            Actions
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredRows.length > 0 ? (
-                          filteredRows.map((row, rowIdx) => (
-                            <tr
-                              key={rowIdx}
-                              className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors"
-                            >
-                              {currentMeta.columns.map((col, colIdx) => (
-                                <td key={colIdx} className="px-5 py-4 text-xs font-semibold text-slate-700 dark:text-slate-350">
-                                  {row[col.key] ?? "—"}
-                                </td>
-                              ))}
-                              <td className="px-5 py-4 text-right">
-                                <div className="inline-flex items-center gap-2.5 text-slate-400">
-                                  <button onClick={handlePrint} className="p-1 hover:text-orange-500 transition-colors" title="Print">
-                                    <PrinterIcon size={12} />
-                                  </button>
-                                  <button className="p-1 hover:text-orange-500 transition-colors" title="Share">
-                                    <ShareIcon size={12} />
-                                  </button>
-                                  <button className="p-1 hover:text-slate-600 dark:hover:text-slate-300">
-                                    <MoreVerticalIcon size={12} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
-                        ) : (
-                          <tr>
-                            <td colSpan={currentMeta.columns.length + 1} className="px-5 py-12 text-center">
-                              <div className="flex flex-col items-center gap-2 text-slate-400">
-                                <AlertCircleIcon size={24} className="opacity-40" />
-                                <span className="text-xs font-bold">
-                                  {tableSearchTerm ? "No entries match your search." : "No data for the selected period."}
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>
   );
 }
 
+export default function ReportsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-gray-50">
+          <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
+        </div>
+      }
+    >
+      <ReportsContent />
+    </Suspense>
+  );
+}

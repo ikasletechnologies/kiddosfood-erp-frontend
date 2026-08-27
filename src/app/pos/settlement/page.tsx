@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { 
-  ArrowLeft as ArrowLeftIcon, 
-  Banknote as BanknoteIcon, 
-  CreditCard as CreditCardIcon, 
-  QrCode as QrCodeIcon, 
-  CheckCircle2 as CheckCircle2Icon, 
+import {
+  ArrowLeft as ArrowLeftIcon,
+  Banknote as BanknoteIcon,
+  CreditCard as CreditCardIcon,
+  QrCode as QrCodeIcon,
+  CheckCircle2 as CheckCircle2Icon,
   Calendar as CalendarIcon,
-  Clock as ClockIcon,
-  LayoutDashboard as LayoutDashboardIcon,
   Printer as PrinterIcon,
   History as HistoryIcon,
   ShieldCheck as ShieldCheckIcon,
-  Zap as ZapIcon
+  Zap as ZapIcon,
+  Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { posApi, posSettlementApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface SettlementStats {
   cash: number;
@@ -63,20 +63,23 @@ export default function SettlementPage() {
     setLoading(true);
     try {
       const res = await posApi.getOrders({
-        date: new Date().toISOString().split('T')[0],
-        status: 'COMPLETED'
+        date: new Date().toISOString().split("T")[0],
+        status: "COMPLETED",
       });
       const orders = res.data?.data || res.data || [];
 
-      const newStats = orders.reduce((acc: SettlementStats, order: any) => {
-        const amt = order.totalAmount || 0;
-        if (order.paymentMode === 'CASH') acc.cash += amt;
-        else if (order.paymentMode === 'UPI') acc.upi += amt;
-        else if (order.paymentMode === 'CARD') acc.card += amt;
-        acc.total += amt;
-        acc.orderCount += 1;
-        return acc;
-      }, { cash: 0, upi: 0, card: 0, total: 0, orderCount: 0 });
+      const newStats = orders.reduce(
+        (acc: SettlementStats, order: any) => {
+          const amt = order.totalAmount || 0;
+          if (order.paymentMode === "CASH") acc.cash += amt;
+          else if (order.paymentMode === "UPI") acc.upi += amt;
+          else if (order.paymentMode === "CARD") acc.card += amt;
+          acc.total += amt;
+          acc.orderCount += 1;
+          return acc;
+        },
+        { cash: 0, upi: 0, card: 0, total: 0, orderCount: 0 }
+      );
 
       setStats(newStats);
     } catch (e) {
@@ -121,180 +124,259 @@ export default function SettlementPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in duration-700">
-      {/* Header */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 py-6 border-b border-slate-200/60 dark:border-white/5">
-        <div>
-          <div className="flex items-center gap-3">
-            <Link href="/pos" className="p-3 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl hover:bg-slate-50 transition-all">
-              <ArrowLeftIcon size={18} className="text-slate-500" />
-            </Link>
-            <div className="p-3 bg-indigo-500 rounded-2xl shadow-xl shadow-indigo-500/20">
-              <ShieldCheckIcon size={24} className="text-white" />
-            </div>
-            <h1 className="text-4xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
-              End of Day <span className="text-slate-400 font-medium ml-1 tracking-tighter italic">Settlement</span>
-            </h1>
-          </div>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium ml-28 uppercase tracking-widest text-[10px]">
-            Finalize your terminal collection and reconcile with business accounts
-          </p>
+    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0">
+      {/* Header Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div className="flex items-center gap-3">
+          <Link
+            href="/pos"
+            className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 transition-all text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+          >
+            <ArrowLeftIcon size={14} />
+            <span>Back to POS</span>
+          </Link>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="bg-white dark:bg-white/5 px-6 py-3 rounded-2xl border border-slate-200 dark:border-white/10 flex items-center gap-3">
-            <CalendarIcon size={16} className="text-indigo-500" />
-            <div>
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Business Date</p>
-              <p className="text-xs font-black text-slate-700 dark:text-slate-300">
-                {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-              </p>
+        {/* Actions / Info */}
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 shadow-sm">
+            <div className="flex items-center px-2 text-slate-400">
+              <CalendarIcon size={14} />
+            </div>
+            <div className="flex items-center gap-1 text-xs sm:text-sm font-semibold px-2">
+              <span className="text-slate-400 text-[11px] uppercase tracking-wider select-none">
+                Business Date
+              </span>
+              <span className="text-slate-700 dark:text-slate-200 pl-1">
+                {formatDate(new Date())}
+              </span>
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Collection Breakdown */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { label: "Cash Collection", value: stats.cash, icon: BanknoteIcon, color: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-              { label: "UPI Collection", value: stats.upi, icon: QrCodeIcon, color: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-              { label: "Card Payments", value: stats.card, icon: CreditCardIcon, color: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20" },
-            ].map((item, i) => (
-              <div key={i} className={clsx("bg-white dark:bg-card/40 p-6 rounded-[32px] border shadow-xl shadow-black/[0.02] flex flex-col items-center text-center group hover:scale-[1.02] transition-all", item.border)}>
-                <div className={clsx("w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-all group-hover:rotate-6", item.bg, item.color)}>
-                  <item.icon size={28} />
-                </div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{item.label}</p>
-                <div className={clsx("text-3xl font-black tabular-nums tracking-tight", item.color)}>₹{item.value.toLocaleString()}</div>
+      {/* Stats Summary Row */}
+      <div className="flex flex-col lg:flex-row gap-4 print:hidden">
+        <div className="flex items-center gap-3 flex-1 flex-wrap">
+          {[
+            {
+              label: "Cash Collection",
+              value: stats.cash,
+              icon: BanknoteIcon,
+              color: "text-emerald-600",
+              bg: "bg-emerald-50 dark:bg-emerald-950/20",
+              borderColor: "border-emerald-200 dark:border-emerald-900/30",
+            },
+            {
+              label: "UPI Collection",
+              value: stats.upi,
+              icon: QrCodeIcon,
+              color: "text-blue-600",
+              bg: "bg-blue-50 dark:bg-blue-950/20",
+              borderColor: "border-blue-200 dark:border-blue-900/30",
+            },
+            {
+              label: "Card Payments",
+              value: stats.card,
+              icon: CreditCardIcon,
+              color: "text-violet-600",
+              bg: "bg-violet-50 dark:bg-violet-950/20",
+              borderColor: "border-violet-200 dark:border-violet-900/30",
+            },
+            {
+              label: "Total Orders",
+              value: stats.orderCount,
+              icon: HistoryIcon,
+              color: "text-indigo-600",
+              bg: "bg-indigo-50 dark:bg-indigo-950/20",
+              borderColor: "border-indigo-200 dark:border-indigo-900/30",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className={clsx(
+                "flex items-center gap-3 px-4 py-3 rounded-xl border shadow-sm bg-white dark:bg-slate-800 flex-1 min-w-[200px]",
+                s.borderColor
+              )}
+            >
+              <div className={clsx("p-2 rounded-lg", s.bg)}>
+                <s.icon size={16} className={s.color} />
               </div>
-            ))}
-          </div>
-
-          {/* Today's Sales Summary */}
-          <div className="bg-white dark:bg-card/40 rounded-[40px] border border-slate-100 dark:border-white/5 overflow-hidden shadow-2xl shadow-black/[0.03]">
-            <div className="p-8 border-b border-slate-50 dark:border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
-                  <HistoryIcon size={24} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Today's Sales Breakdown</h3>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Live transaction summary for current session</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Orders</p>
-                <p className="text-2xl font-black text-slate-900 dark:text-white">{stats.orderCount}</p>
+              <div>
+                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  {s.label}
+                </p>
+                <p className="text-lg font-black text-slate-900 dark:text-white tabular-nums leading-tight">
+                  {s.label === "Total Orders"
+                    ? s.value
+                    : `₹${s.value.toLocaleString()}`}
+                </p>
               </div>
             </div>
+          ))}
+        </div>
+      </div>
 
-            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-3xl space-y-4">
-                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Cash</span>
-                    <span className="text-slate-900 dark:text-white font-black">₹{stats.cash.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500" /> UPI</span>
-                    <span className="text-slate-900 dark:text-white font-black">₹{stats.upi.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-widest">
-                    <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-violet-500" /> Card</span>
-                    <span className="text-slate-900 dark:text-white font-black">₹{stats.card.toLocaleString()}</span>
-                  </div>
-                  <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex justify-between items-center">
-                    <span className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">Gross Total</span>
-                    <span className="text-2xl font-black text-indigo-500">₹{stats.total.toLocaleString()}</span>
-                  </div>
+      {/* Main Content: Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Today's Sales Summary */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Today's Sales Breakdown
+              </h3>
+              <span className="text-[11px] font-semibold text-slate-400">
+                Live transaction summary
+              </span>
+            </div>
+            <div className="p-5 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <span className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" /> Cash
+                  </span>
+                  <span className="text-slate-900 dark:text-white font-bold tabular-nums">
+                    ₹{stats.cash.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <span className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" /> UPI
+                  </span>
+                  <span className="text-slate-900 dark:text-white font-bold tabular-nums">
+                    ₹{stats.upi.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <span className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-violet-500" /> Card
+                  </span>
+                  <span className="text-slate-900 dark:text-white font-bold tabular-nums">
+                    ₹{stats.card.toLocaleString()}
+                  </span>
+                </div>
+                <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Gross Total
+                  </span>
+                  <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                    ₹{stats.total.toLocaleString()}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex flex-col items-center justify-center p-8 bg-indigo-500 rounded-3xl text-white shadow-xl shadow-indigo-500/20 text-center space-y-4">
-                <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
-                  <ZapIcon size={32} />
+              <div className="flex flex-col items-center justify-center p-6 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/30 rounded-xl text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/50 flex items-center justify-center text-orange-600 dark:text-orange-400">
+                  <ZapIcon size={24} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Estimated Collection</p>
-                  <h4 className="text-4xl font-black tracking-tighter">₹{stats.total.toLocaleString()}</h4>
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-orange-600/70 dark:text-orange-400/70">
+                    Estimated Collection
+                  </p>
+                  <h4 className="text-3xl font-black tracking-tight text-orange-600 dark:text-orange-400 mt-1 tabular-nums">
+                    ₹{stats.total.toLocaleString()}
+                  </h4>
                 </div>
-                <p className="text-[10px] font-medium opacity-60 max-w-[200px]">
-                  Ensure physical cash in drawer matches the cash collection figure before settling.
+                <p className="text-[11px] font-medium text-orange-600/60 dark:text-orange-400/60 max-w-[200px]">
+                  Ensure physical cash matches before settling.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Action Panel */}
+        {/* Settlement Action */}
         <div className="space-y-6">
-          <div className="bg-white dark:bg-card/40 p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-black/[0.03] sticky top-8">
-            <h3 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight mb-6">Settlement Action</h3>
-            
-            <div className="space-y-4 mb-8">
-              <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400">1</div>
-                <p>Verify physical cash in drawer</p>
-              </div>
-              <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400">2</div>
-                <p>Check all UPI/Card slips</p>
-              </div>
-              <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
-                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/5 flex items-center justify-center text-slate-400">3</div>
-                <p>Confirm final EOD settlement</p>
-              </div>
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden sticky top-8">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900/50">
+              <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                Settlement Action
+              </h3>
             </div>
+            <div className="p-5 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">
+                    1
+                  </div>
+                  <p>Verify physical cash in drawer</p>
+                </div>
+                <div className="flex items-center gap-3 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">
+                    2
+                  </div>
+                  <p>Check all UPI/Card slips</p>
+                </div>
+                <div className="flex items-center gap-3 text-sm font-semibold text-slate-600 dark:text-slate-300">
+                  <div className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs text-slate-500 dark:text-slate-400">
+                    3
+                  </div>
+                  <p>Confirm final EOD settlement</p>
+                </div>
+              </div>
 
-            {settled ? (
-              <div className="p-6 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-3xl text-center space-y-4">
-                <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20">
-                  <CheckCircle2Icon size={24} />
+              {settled ? (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-center space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                    <CheckCircle2Icon size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-emerald-700 dark:text-emerald-400 font-bold text-sm">
+                      Settled Successfully
+                    </h4>
+                    <p className="text-[11px] font-semibold text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">
+                      Terminal Closed
+                    </p>
+                  </div>
+                  <button className="w-full py-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                    <PrinterIcon size={14} /> Print Report
+                  </button>
                 </div>
-                <div>
-                  <h4 className="text-emerald-700 dark:text-emerald-400 font-black text-sm uppercase tracking-tight">Settled Successfully</h4>
-                  <p className="text-[10px] font-bold text-emerald-600/60 uppercase tracking-widest mt-1">Terminal Closed</p>
-                </div>
-                <button className="w-full py-4 bg-white dark:bg-white/5 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all">
-                  <PrinterIcon size={16} /> Print EOD Report
+              ) : (
+                <button
+                  onClick={handleSettle}
+                  disabled={settling || stats.total === 0}
+                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
+                >
+                  {settling ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Settling...
+                    </>
+                  ) : (
+                    <>
+                      Perform Day Settle <ArrowLeftIcon className="rotate-180" size={16} />
+                    </>
+                  )}
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleSettle}
-                disabled={settling || stats.total === 0}
-                className="w-full py-6 bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-100 dark:disabled:bg-white/5 disabled:text-slate-400 text-white rounded-[32px] font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-indigo-500/20 transition-all hover:translate-y-[-2px] active:translate-y-0 flex items-center justify-center gap-3"
-              >
-                {settling ? (
-                  <>
-                    <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin" />
-                    Settling...
-                  </>
-                ) : (
-                  <>Perform Day Settle <ArrowLeftIcon className="rotate-180" size={18} /></>
-                )}
-              </button>
-            )}
-
-            <div className="mt-8 pt-8 border-t border-slate-100 dark:border-white/5 space-y-4">
-              <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <span>Last Settlement</span>
-                <span className="text-slate-600 dark:text-slate-300">
-                  {latestSettlement
-                    ? `${new Date(latestSettlement.businessDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} · ${new Date(latestSettlement.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
-                    : "Never"}
-                </span>
-              </div>
-              {latestSettlement?.closedBy && (
-                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  <span>Closed By</span>
-                  <span className="text-slate-600 dark:text-slate-300">{latestSettlement.closedBy}</span>
-                </div>
               )}
+
+              <div className="pt-5 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Last Settlement
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                    {latestSettlement
+                      ? `${formatDate(latestSettlement.businessDate)} · ${new Date(latestSettlement.createdAt).toLocaleTimeString(
+                          "en-IN",
+                          { hour: "2-digit", minute: "2-digit" }
+                        )}`
+                      : "Never"}
+                  </span>
+                </div>
+                {latestSettlement?.closedBy && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Closed By
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                      {latestSettlement.closedBy}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

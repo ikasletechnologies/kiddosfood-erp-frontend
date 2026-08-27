@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Plus, Search, FileText, CheckCircle2, XCircle, X } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
@@ -70,12 +71,8 @@ export default function PurchaseRequestsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Purchase Requests</h1>
-          <p className="text-sm text-gray-500 mt-1">Internal departmental requests for materials</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+      <div className="flex items-center justify-end">
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors">
           <Plus className="w-4 h-4" /> New PR
         </button>
       </div>
@@ -129,7 +126,7 @@ export default function PurchaseRequestsPage() {
                 <td className="px-4 py-3">
                    <div className="text-gray-900 font-medium">{r.items?.length || 0} items</div>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</td>
+                <td className="px-4 py-3 text-gray-500">{formatDate(r.createdAt)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status] || ""}`}>{r.status.replace("_", " ")}</span>
                 </td>

@@ -26,6 +26,7 @@ import {
 import { clsx } from "clsx";
 import { chequesApi, franchiseApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 export default function ChequeRegistryPage() {
   const [cheques, setCheques] = useState<any[]>([]);
@@ -93,9 +94,14 @@ export default function ChequeRegistryPage() {
   const fetchFranchises = async () => {
     try {
       const res = await franchiseApi.getAll();
-      setFranchises(res.data);
-      if (res.data.length > 0) {
-        setFormData(prev => ({ ...prev, franchiseId: res.data[0].id }));
+      const list = res.data || [];
+      setFranchises(list);
+      if (list.length > 0) {
+        // Deterministic default: open at HQ if one is configured, rather
+        // than whichever franchise the DB happened to return first.
+        const hq = list.find((f: any) => f.isHQ);
+        const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
+        setFormData(prev => ({ ...prev, franchiseId: (hq || fallback).id }));
       }
     } catch (error) {}
   };
@@ -118,7 +124,7 @@ export default function ChequeRegistryPage() {
         issueDate: new Date().toISOString().split('T')[0],
         dueDate: new Date().toISOString().split('T')[0],
         notes: "",
-        franchiseId: franchises[0]?.id || ""
+        franchiseId: (franchises.find((f: any) => f.isHQ) || [...franchises].sort((a: any, b: any) => a.name.localeCompare(b.name))[0])?.id || ""
       });
     } catch (error: any) {
       toast.error(error.response?.data?.error || "Failed to record cheque");
@@ -314,11 +320,11 @@ export default function ChequeRegistryPage() {
                         <div className="space-y-1.5">
                           <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
                             <Calendar size={12} className="text-slate-300" />
-                            Issued: {new Date(cheque.issueDate).toLocaleDateString()}
+                            Issued: {formatDate(cheque.issueDate)}
                           </div>
                           <div className="flex items-center gap-2 text-[10px] font-black text-orange-600 dark:text-orange-400 uppercase tracking-widest">
                             <Clock size={12} />
-                            Due: {new Date(cheque.dueDate).toLocaleDateString()}
+                            Due: {formatDate(cheque.dueDate)}
                           </div>
                         </div>
                       </td>

@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/Modal";
+import { formatDate } from "@/lib/utils";
 
 const formatCurrency = (n: number) => "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -53,7 +54,7 @@ export default function RecipesPage() {
     category: "",
     name: "",
     yieldQty: 1,
-    yieldUnit: "units",
+    yieldUnit: "",
     unitWeight: 1,
     weightUnit: "kg",
     instructions: "",
@@ -66,7 +67,7 @@ export default function RecipesPage() {
       const [rRes, pRes, mRes, cRes] = await Promise.all([
         recipesApi.getAll(),
         productsFullApi.getAll(),
-        rawMaterialsApi.getAll(),
+        rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
         recipesApi.getCategories()
       ]);
       setRecipes(rRes.data ?? []);
@@ -104,7 +105,7 @@ export default function RecipesPage() {
       category: "",
       name: "",
       yieldQty: 1,
-      yieldUnit: "units",
+      yieldUnit: "",
       unitWeight: 1,
       weightUnit: "kg",
       instructions: "",
@@ -128,7 +129,7 @@ export default function RecipesPage() {
       category: recipe.category || "",
       name: recipe.name,
       yieldQty: recipe.yieldQty,
-      yieldUnit: recipe.yieldUnit || "units",
+      yieldUnit: recipe.yieldUnit || "",
       unitWeight: unitWeightMatch ? Number(unitWeightMatch[1]) : 1,
       weightUnit: weightUnitMatch ? weightUnitMatch[1] : "kg",
       instructions: instructions.replace(/\[unitWeight:[\d.]+\]/, "").replace(/\[weightUnit:\w+\]/, "").trim(),
@@ -145,6 +146,10 @@ export default function RecipesPage() {
   const handleSave = async () => {
     if (!formData.name || formData.items.length === 0) {
       showToast("Please provide a recipe name and add at least one material", "error");
+      return;
+    }
+    if (!formData.yieldUnit) {
+      showToast("Select the recipe's yield unit (e.g. KG, L, Pcs)", "error");
       return;
     }
     const payload = {
@@ -339,7 +344,7 @@ export default function RecipesPage() {
               <h1>${recipe.name}</h1>
               <div class="product">Finished Product: ${recipe.product?.name || 'N/A'}</div>
             </div>
-            <div class="date">Generated: ${new Date().toLocaleDateString()}</div>
+            <div class="date">Generated: ${formatDate(new Date())}</div>
           </div>
           
           <div class="stats">
@@ -426,16 +431,8 @@ export default function RecipesPage() {
   return (
     <>
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-              Recipe Management
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1 font-medium">
-              Manage your formulas, ingredient ratios, and production standards
-            </p>
-          </div>
+        {/* Action Toolbar */}
+        <div className="flex items-center justify-end gap-2 pb-2 border-b border-slate-200 dark:border-white/10">
           <div className="flex gap-2">
             <button onClick={fetchAll} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
               <RefreshCw size={18} className="text-gray-400" />
@@ -684,11 +681,14 @@ export default function RecipesPage() {
                     onChange={(e) => setFormData({ ...formData, yieldUnit: e.target.value })}
                     className="flex-1 h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white uppercase"
                   >
-                    <option value="units">Units</option>
+                    <option value="" disabled>Select...</option>
                     <option value="kg">KG</option>
                     <option value="g">G</option>
+                    <option value="L">L</option>
+                    <option value="ml">ML</option>
                     <option value="pcs">Pcs</option>
                     <option value="pkts">Pkts</option>
+                    <option value="units">Units</option>
                   </select>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -66,7 +66,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="flex h-screen overflow-hidden bg-background text-foreground">
-        <Sidebar />
+        <Suspense fallback={<div className="w-64 bg-sidebar shrink-0" />}>
+          <Sidebar />
+        </Suspense>
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <RefrensHeader />
           <main className="flex-1 overflow-y-auto bg-background custom-scrollbar p-4 md:p-6">

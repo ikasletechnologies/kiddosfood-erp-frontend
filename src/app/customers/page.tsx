@@ -1,18 +1,52 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  Search, Filter, ChevronDown, Plus, Settings, MoreVertical, 
-  Edit3, MessageSquare, Phone as PhoneIcon, Clock, 
+import {
+  Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
+  Edit3, MessageSquare, Phone as PhoneIcon, Clock,
   Printer, FileText as ExcelIcon, MoreHorizontal, BookOpen,
   X, Info, SlidersHorizontal
 } from "lucide-react";
-import { Setting07Icon } from "hugeicons-react";
 import { toast } from "react-hot-toast";
 import AddPartyModal from "@/components/modals/AddPartyModal";
-import { customersApi } from "@/lib/api";
+import { customersApi, franchiseApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 export default function PartiesPage() {
+  const { user } = useAuth();
+  const isSuper = user?.role === "SUPER_ADMIN";
+
+  // HQ / Franchise scope — Super Admin only. Franchise Admin is always
+  // implicitly scoped to their own franchiseId (see effectiveFranchiseId below).
+  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
+  const [franchises, setFranchises] = useState<any[]>([]);
+  const [franchisesLoading, setFranchisesLoading] = useState(true);
+  const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
+
+  useEffect(() => {
+    if (!isSuper) {
+      setFranchisesLoading(false);
+      return;
+    }
+    setFranchisesLoading(true);
+    franchiseApi.getAll()
+      .then((res) => setFranchises(res.data ?? []))
+      .catch((err) => console.error("Failed to load franchises list", err))
+      .finally(() => setFranchisesLoading(false));
+  }, [isSuper]);
+
+  // HQ is resolved from the real Franchise row where isHQ === true — never a
+  // hardcoded id or name.
+  const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
+  const effectiveFranchiseId = isSuper
+    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
+    : (user as any)?.franchiseId;
+
+  const scopeLabel = isSuper
+    ? (scope === "HQ"
+        ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
+        : (selectedFranchiseId ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected"))
+    : undefined;
   const [activeTab, setActiveTab] = useState("Transactions");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
@@ -91,17 +125,12 @@ export default function PartiesPage() {
     field3Print: false,
   });
 
-  const transactions = [
-    { type: "Purchase", number: "", date: "22/05/2026", total: "0.00", balance: "0.00" },
-    { type: "Lite Sale", number: "1", date: "20/05/2026", total: "350.00", balance: "350.00" },
-    { type: "Delivery Challan", number: "1", date: "20/05/2026", total: "35.00", balance: "" },
-    { type: "Sale Order", number: "1", date: "20/05/2026", total: "35.00", balance: "35.00" },
-  ];
+  const transactions: any[] = [];
 
-  const fetchCustomers = async () => {
+  const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
     try {
-      const res = await customersApi.getAll();
+      const res = await customersApi.getAll(franchiseId ? { franchiseId } : {});
       const data = res.data || [];
       setCustomers(data);
       if (!selectedCustomerId && data.length > 0) {
@@ -116,8 +145,20 @@ export default function PartiesPage() {
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    if (isSuper && franchisesLoading) return;
+    
+    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
+    if (isSuper && scope === "HQ" && !hqFranchiseId) {
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
+    fetchCustomers(effectiveFranchiseId);
+  }, [isSuper, scope, selectedFranchiseId, hqFranchiseId, franchisesLoading, effectiveFranchiseId]);
 
   useEffect(() => {
     const fetchCustomerDetail = async () => {
@@ -153,7 +194,7 @@ export default function PartiesPage() {
       balanceMatch = (filters.toReceive && bal > 0) || (filters.toPay && bal < 0);
     }
 
-    if (!checkStatus && !checkBalance) return false;
+    if (!checkStatus && !checkBalance) return true;
 
     return statusMatch && balanceMatch;
   });
@@ -164,12 +205,53 @@ export default function PartiesPage() {
       {/* Left Sidebar - Party List */}
       <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
         
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200">
-          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 hover:text-blue-600 transition-colors">
-            Parties <ChevronDown size={18} className="text-blue-500" />
-          </button>
-        </div>
+
+
+        {/* HQ / Franchise Scope Selector — Super Admin only */}
+        {isSuper && (
+          <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+            <div className="flex gap-1 bg-slate-100 rounded-full p-1">
+              <button
+                type="button"
+                onClick={() => setScope("HQ")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                HQ
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("FRANCHISE")}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+              >
+                Franchise
+              </button>
+            </div>
+            {scope === "FRANCHISE" && (
+              <select
+                value={selectedFranchiseId}
+                onChange={(e) => setSelectedFranchiseId(e.target.value)}
+                className="w-full text-xs border border-slate-200 rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
+                disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
+              >
+                {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
+                  <option value="">No franchises available</option>
+                ) : (
+                  <>
+                    <option value="">Select Franchise</option>
+                    {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            )}
+            {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
+              <div className="w-full text-xs border border-rose-200 bg-rose-50 text-rose-600 rounded-full px-3 py-1.5 text-center font-medium">
+                HQ is not configured
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Search & List Headers */}
         <div className="px-3 py-2 border-b border-slate-200 space-y-2">
@@ -278,18 +360,7 @@ export default function PartiesPage() {
           )}
         </div>
 
-        {/* Bottom Promo Banner */}
-        <div className="p-3 bg-emerald-50 m-2 rounded-xl flex items-center justify-between border border-emerald-100 cursor-pointer hover:bg-emerald-100 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-white rounded-lg border border-emerald-200 text-emerald-500">
-              <BookOpen size={16} />
-            </div>
-            <div className="text-[10px] text-slate-600 leading-tight">
-              Use contacts from your Phone or <br/> Gmail to <span className="font-bold">quickly create parties.</span>
-            </div>
-          </div>
-          <ChevronDown size={14} className="text-emerald-500 -rotate-90" />
-        </div>
+
       </div>
 
       {/* Right Main Content */}
@@ -297,8 +368,27 @@ export default function PartiesPage() {
         
         {/* Top Header Actions */}
         <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200">
-          <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white px-4 py-1.5 rounded-full text-xs font-bold transition-colors">
-            <Plus size={14} /> Add Party
+          <button 
+            onClick={() => {
+              if (isSuper && franchisesLoading) return;
+              if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
+                toast.error("Select a franchise before adding a customer.");
+                return;
+              }
+              if (isSuper && scope === "HQ" && !hqFranchiseId) {
+                toast.error("HQ is not configured.");
+                return;
+              }
+              setIsAddModalOpen(true);
+            }} 
+            disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
+              (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 text-white"
+            }`}
+          >
+            <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Customer"}
           </button>
         </div>
 
@@ -314,7 +404,7 @@ export default function PartiesPage() {
                   </button>
                 </div>
                 <div className="flex items-center gap-4 text-slate-400">
-                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 transition-colors"><Setting07Icon size={18} /></button>
+                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 transition-colors"><Settings size={18} /></button>
                   <div className="relative filter-popover-container">
                     <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 transition-colors"><MoreVertical size={18} /></button>
                     {/* More Options Menu */}
@@ -340,7 +430,7 @@ export default function PartiesPage() {
               <div className="grid grid-cols-3 gap-6 max-w-3xl">
                 <div>
                   <p className="text-[11px] text-slate-400 mb-0.5">Phone Number</p>
-                  <p className="text-[13px] font-medium text-slate-700">{selectedCustomerDetail?.contact || selectedCustomer.contact || "—"}</p>
+                  <p className="text-[13px] font-medium text-slate-700">{selectedCustomerDetail?.phone || selectedCustomer.phone || "—"}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 mb-0.5">Email</p>
@@ -462,20 +552,28 @@ export default function PartiesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {transactions.map((t, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
-                    <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
-                    <td className="px-2 py-4 text-center">
-                      <button className="text-slate-300 hover:text-slate-500">
-                        <MoreVertical size={14} />
-                      </button>
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
+                      No transactions yet
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  transactions.map((t, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
+                      <td className="px-2 py-4 text-center">
+                        <button className="text-slate-300 hover:text-slate-500">
+                          <MoreVertical size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -593,7 +691,7 @@ export default function PartiesPage() {
             {/* Footer */}
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-2 text-slate-600">
-                <Setting07Icon size={16} />
+                <Settings size={16} />
                 <span className="text-sm font-semibold">More Settings</span>
               </div>
             </div>
@@ -607,37 +705,50 @@ export default function PartiesPage() {
         onClose={() => setIsAddModalOpen(false)} 
         onSave={async (data) => {
           try {
-            await customersApi.create({ ...data, phone: data.contact });
-            toast.success("Party added successfully!");
+            if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
+              toast.error("Select a franchise before adding a customer.");
+              return;
+            }
+            if (isSuper && scope === "HQ" && !hqFranchiseId) {
+              toast.error("HQ is not configured.");
+              return;
+            }
+            const payload = isSuper
+              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
+              : { ...data, phone: data.contact };
+            await customersApi.create(payload);
+            toast.success("Customer added successfully!");
             setIsAddModalOpen(false);
-            fetchCustomers();
+            fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
-            toast.error(error.response?.data?.error || "Failed to add party");
+            toast.error(error.response?.data?.error || "Failed to add customer");
             throw error;
           }
-        }} 
-        title="ADD PARTY"
+        }}
+        title="ADD CUSTOMER"
         partyType="customer"
+        scopeLabel={scopeLabel}
       />
 
-      <AddPartyModal 
-        isOpen={isEditModalOpen} 
-        onClose={() => setIsEditModalOpen(false)} 
+      <AddPartyModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
         initialData={selectedCustomerDetail}
         onSave={async (data) => {
           try {
             if (!selectedCustomerId) return;
             await customersApi.update(selectedCustomerId, { ...data, phone: data.contact });
-            toast.success("Party updated successfully!");
+            toast.success("Customer updated successfully!");
             setIsEditModalOpen(false);
-            fetchCustomers();
+            fetchCustomers(effectiveFranchiseId);
           } catch (error: any) {
-            toast.error(error.response?.data?.error || "Failed to update party");
+            toast.error(error.response?.data?.error || "Failed to update customer");
             throw error;
           }
-        }} 
-        title="EDIT PARTY"
+        }}
+        title="EDIT CUSTOMER"
         partyType="customer"
+        scopeLabel={scopeLabel}
       />
 
     </div>

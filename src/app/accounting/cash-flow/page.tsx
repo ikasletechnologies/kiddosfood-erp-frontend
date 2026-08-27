@@ -5,6 +5,7 @@ import { ArrowUpRight, ArrowDownRight, RefreshCw, Wallet, Building2, Smartphone,
 import { clsx } from "clsx";
 import { accountingApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
+import { formatDate } from "@/lib/utils";
 
 interface CashFlowSummary {
   accounts: any[];
@@ -62,167 +63,182 @@ export default function CashFlowPage() {
   const netCashFlow = totalInflows - totalOutflows;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 py-4 animate-in fade-in duration-700">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 border-b border-gray-100 pb-8">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-blue-500 rounded-full" />
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Cash Flow Overview</h1>
+    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 animate-in fade-in duration-500">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              <Wallet size={22} className="text-orange-500" />
+              Cash Flow Overview
+            </h1>
           </div>
-          <p className="text-sm font-medium text-slate-500">Track your business&apos;s liquidity and cash position in real-time.</p>
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+            Track your business&apos;s liquidity and cash position in real-time.
+          </p>
         </div>
         <button
           onClick={fetchCashFlow}
-          className="w-12 h-12 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all active:scale-90"
+          title="Refresh Overview"
+          className="p-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-150 active:scale-95"
         >
-          <RefreshCw size={18} className={clsx(loading && "animate-spin")} />
+          <RefreshCw size={16} className={clsx(loading && "animate-spin")} />
         </button>
       </div>
 
       {loading ? (
         <div className="py-40 flex flex-col items-center justify-center gap-6">
-          <div className="flex gap-1.5">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="w-2 h-2 rounded-full bg-slate-200 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
-            ))}
-          </div>
-          <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Loading Overview</p>
+          <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-semibold text-slate-500 animate-pulse">Loading Overview...</p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {/* Liquidity Section */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className="bg-slate-900 rounded-[2rem] p-8 text-white flex flex-col justify-between relative overflow-hidden shadow-xl shadow-slate-900/10">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl -mr-10 -mt-10" />
+        <div className="space-y-6">
+          {/* ── Liquidity Section ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-slate-900 dark:bg-slate-800 rounded-2xl p-5 text-white flex flex-col justify-between border border-slate-800 dark:border-slate-700 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-2xl -mr-8 -mt-8" />
               <div className="space-y-1 relative z-10">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Liquidity</p>
-                <p className="text-4xl font-black tabular-nums">₹{summary?.totalLiquidity.toLocaleString() || '0'}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Liquidity</p>
+                <p className="text-3xl font-black tabular-nums tracking-tight">₹{summary?.totalLiquidity.toLocaleString("en-IN") || '0'}</p>
               </div>
-              <div className="flex items-center gap-2 mt-6 text-slate-400">
-                <Wallet size={16} /> <span className="text-xs font-bold">Total Cash Equivalents</span>
+              <div className="flex items-center gap-2 mt-4 text-slate-400">
+                <Wallet size={16} /> <span className="text-xs font-semibold">Total Cash Equivalents</span>
               </div>
             </div>
             
-            <div className="bg-emerald-50 rounded-[2rem] p-8 flex flex-col justify-between border border-emerald-100">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Cash In Hand</p>
-                <p className="text-3xl font-black tabular-nums text-emerald-900">₹{summary?.breakdown?.cash.toLocaleString() || '0'}</p>
+            {[
+              {
+                label: "Cash In Hand",
+                val: summary?.breakdown?.cash || 0,
+                desc: "Physical Cash",
+                icon: DollarSign,
+                color: "text-emerald-700 dark:text-emerald-400",
+                bg: "bg-emerald-50 dark:bg-emerald-950/20",
+                border: "border-emerald-200 dark:border-emerald-900/30",
+              },
+              {
+                label: "Bank Balance",
+                val: summary?.breakdown?.bank || 0,
+                desc: "Bank Accounts",
+                icon: Building2,
+                color: "text-blue-700 dark:text-blue-400",
+                bg: "bg-blue-50 dark:bg-blue-950/20",
+                border: "border-blue-200 dark:border-blue-900/30",
+              },
+              {
+                label: "UPI / Wallets",
+                val: summary?.breakdown?.upi || 0,
+                desc: "Digital Wallets",
+                icon: Smartphone,
+                color: "text-indigo-700 dark:text-indigo-400",
+                bg: "bg-indigo-50 dark:bg-indigo-950/20",
+                border: "border-indigo-200 dark:border-indigo-900/30",
+              },
+            ].map((s, i) => (
+              <div key={i} className={clsx("rounded-2xl p-5 flex flex-col justify-between border shadow-sm", s.bg, s.border)}>
+                <div className="space-y-1">
+                  <p className={clsx("text-xs font-bold uppercase tracking-wider", s.color)}>{s.label}</p>
+                  <p className={clsx("text-2xl font-black tabular-nums tracking-tight", s.color)}>₹{s.val.toLocaleString("en-IN")}</p>
+                </div>
+                <div className={clsx("flex items-center gap-2 mt-4", s.color, "opacity-90")}>
+                  <s.icon size={16} /> <span className="text-xs font-semibold">{s.desc}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 mt-6 text-emerald-600">
-                <DollarSign size={16} /> <span className="text-xs font-bold">Physical Cash</span>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 rounded-[2rem] p-8 flex flex-col justify-between border border-blue-100">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Bank Balance</p>
-                <p className="text-3xl font-black tabular-nums text-blue-900">₹{summary?.breakdown?.bank.toLocaleString() || '0'}</p>
-              </div>
-              <div className="flex items-center gap-2 mt-6 text-blue-600">
-                <Building2 size={16} /> <span className="text-xs font-bold">Bank Accounts</span>
-              </div>
-            </div>
-
-            <div className="bg-purple-50 rounded-[2rem] p-8 flex flex-col justify-between border border-purple-100">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-purple-600 uppercase tracking-widest">UPI / Wallets</p>
-                <p className="text-3xl font-black tabular-nums text-purple-900">₹{summary?.breakdown?.upi.toLocaleString() || '0'}</p>
-              </div>
-              <div className="flex items-center gap-2 mt-6 text-purple-600">
-                <Smartphone size={16} /> <span className="text-xs font-bold">Digital Wallets</span>
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Operating Cash Flow Summary */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-white border border-slate-100 rounded-[2rem] p-8 space-y-6 shadow-sm flex flex-col justify-center items-center text-center">
-              <div className="p-4 rounded-full bg-emerald-50 text-emerald-500">
-                <TrendingUp size={32} />
+          {/* ── Operating Cash Flow Summary ── */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 shrink-0">
+                <TrendingUp size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Inflows</p>
-                <p className="text-3xl font-black tabular-nums text-slate-900">+₹{totalInflows.toLocaleString()}</p>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Inflows</p>
+                <p className="text-2xl font-black tabular-nums text-slate-900 dark:text-white leading-none">+₹{totalInflows.toLocaleString("en-IN")}</p>
               </div>
             </div>
 
-            <div className="bg-white border border-slate-100 rounded-[2rem] p-8 space-y-6 shadow-sm flex flex-col justify-center items-center text-center">
-              <div className="p-4 rounded-full bg-orange-50 text-orange-500">
-                <TrendingDown size={32} />
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 shrink-0">
+                <TrendingDown size={24} />
               </div>
               <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Outflows</p>
-                <p className="text-3xl font-black tabular-nums text-slate-900">-₹{totalOutflows.toLocaleString()}</p>
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">Total Outflows</p>
+                <p className="text-2xl font-black tabular-nums text-slate-900 dark:text-white leading-none">-₹{totalOutflows.toLocaleString("en-IN")}</p>
               </div>
             </div>
 
             <div className={clsx(
-              "border rounded-[2rem] p-8 space-y-6 shadow-sm flex flex-col justify-center items-center text-center",
-              netCashFlow >= 0 ? "bg-emerald-500 text-white border-emerald-600" : "bg-orange-500 text-white border-orange-600"
+              "border rounded-2xl p-6 shadow-sm flex flex-col justify-center",
+              netCashFlow >= 0 
+                ? "bg-emerald-600 text-white border-emerald-700 dark:border-emerald-800" 
+                : "bg-red-600 text-white border-red-700 dark:border-red-800"
             )}>
-              <div>
-                <p className="text-[10px] font-black text-white/80 uppercase tracking-widest mb-2">Net Cash Flow</p>
-                <p className="text-4xl font-black tabular-nums">
-                  {netCashFlow >= 0 ? '+' : ''}₹{netCashFlow.toLocaleString()}
-                </p>
-              </div>
-              <p className="text-xs font-bold text-white/80">Operating Period</p>
+              <p className="text-xs font-bold text-white/80 uppercase tracking-wider mb-1">Net Cash Flow (Period)</p>
+              <p className="text-3xl font-black tabular-nums leading-none tracking-tight">
+                {netCashFlow >= 0 ? '+' : ''}₹{netCashFlow.toLocaleString("en-IN")}
+              </p>
             </div>
           </div>
 
-          {/* Recent Flow Activity */}
-          <div className="bg-white border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm">
-            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-              <h2 className="text-lg font-black text-slate-900">Recent Cash Movements</h2>
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-white border border-slate-200 px-3 py-1.5 rounded-xl">Settled Transactions</span>
+          {/* ── Recent Flow Activity ── */}
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Recent Cash Movements</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-md">Settled Transactions</span>
             </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto min-w-full">
+              <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-8 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400">Date & Ref</th>
-                    <th className="px-8 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400">Description</th>
-                    <th className="px-8 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400">Flow</th>
-                    <th className="px-8 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400">Account</th>
-                    <th className="px-8 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400 text-right">Amount</th>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+                    <th className="px-6 py-3 text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Date & Ref</th>
+                    <th className="px-6 py-3 text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Description</th>
+                    <th className="px-6 py-3 text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Flow</th>
+                    <th className="px-6 py-3 text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">Account</th>
+                    <th className="px-6 py-3 text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400 text-right">Amount</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                   {payments.slice(0, 15).map((payment) => (
-                    <tr key={payment.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-8 py-4">
-                        <p className="text-xs font-black text-slate-900 uppercase">{payment.paymentNumber || "—"}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
-                          {new Date(payment.date).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                    <tr key={payment.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold text-slate-900 dark:text-white uppercase">{payment.paymentNumber || "—"}</p>
+                        <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mt-0.5">
+                          {formatDate(payment.date)}
                         </p>
                       </td>
-                      <td className="px-8 py-4">
-                        <p className="text-sm font-bold text-slate-900">{payment.entity || "—"}</p>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">{payment.entity || "—"}</p>
                       </td>
-                      <td className="px-8 py-4">
+                      <td className="px-6 py-4">
                         {payment.flow === "IN" ? (
-                          <div className="flex items-center gap-1.5 text-emerald-500"><ArrowDownRight size={14} strokeWidth={3} /><span className="text-[10px] font-black uppercase tracking-widest">Inflow</span></div>
+                          <div className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-md border border-emerald-100 dark:border-emerald-800/30 text-[10px] font-bold uppercase tracking-wider">
+                            <ArrowDownRight size={12} strokeWidth={2.5} /> Inflow
+                          </div>
                         ) : (
-                          <div className="flex items-center gap-1.5 text-orange-500"><ArrowUpRight size={14} strokeWidth={3} /><span className="text-[10px] font-black uppercase tracking-widest">Outflow</span></div>
+                          <div className="inline-flex items-center gap-1.5 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-md border border-red-100 dark:border-red-800/30 text-[10px] font-bold uppercase tracking-wider">
+                            <ArrowUpRight size={12} strokeWidth={2.5} /> Outflow
+                          </div>
                         )}
                       </td>
-                      <td className="px-8 py-4">
-                        <span className="px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest bg-slate-100 text-slate-600">
+                      <td className="px-6 py-4">
+                        <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
                           {payment.accountName || payment.method}
                         </span>
                       </td>
-                      <td className="px-8 py-4 text-right">
-                        <p className={clsx("text-sm font-black tabular-nums", payment.flow === "IN" ? "text-emerald-500" : "text-slate-900")}>
-                          {payment.flow === "IN" ? "+" : "-"}₹{payment.amount.toLocaleString()}
+                      <td className="px-6 py-4 text-right">
+                        <p className={clsx("text-sm font-bold tabular-nums", payment.flow === "IN" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-900 dark:text-white")}>
+                          {payment.flow === "IN" ? "+" : "-"}₹{payment.amount.toLocaleString("en-IN")}
                         </p>
                       </td>
                     </tr>
                   ))}
                   {payments.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-8 py-16 text-center">
-                        <p className="text-sm font-bold text-slate-400">No recent cash movements found.</p>
+                      <td colSpan={5} className="px-6 py-16 text-center">
+                        <p className="text-sm font-semibold text-slate-500">No recent cash movements found.</p>
                       </td>
                     </tr>
                   )}
@@ -230,8 +246,8 @@ export default function CashFlowPage() {
               </table>
             </div>
             {payments.length > 15 && (
-              <div className="p-4 text-center border-t border-slate-100 bg-slate-50/50">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Showing last 15 settled transactions</p>
+              <div className="p-3 text-center border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+                <p className="text-xs font-semibold text-slate-500">Showing last 15 settled transactions</p>
               </div>
             )}
           </div>

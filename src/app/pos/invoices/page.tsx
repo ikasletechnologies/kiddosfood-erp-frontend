@@ -25,6 +25,7 @@ import { clsx } from "clsx";
 import { posApi, salesApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { formatDate } from "@/lib/utils";
 
 interface Invoice {
   id: string;
@@ -127,21 +128,14 @@ export default function InvoicesPage() {
     <div className="max-w-[1400px] mx-auto h-[calc(100vh-100px)] flex flex-col space-y-6 py-6 px-4 animate-in fade-in duration-700">
       {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-card/40 p-8 rounded-[40px] border border-slate-100 dark:border-white/5 shadow-2xl shadow-black/[0.03]">
-        <div className="flex items-center gap-6">
-          <Link href="/pos" className="p-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl hover:bg-slate-100 transition-all">
-            <ArrowLeftIcon size={20} className="text-slate-500" />
+        <div className="flex items-center gap-3">
+          <Link
+            href="/pos"
+            className="p-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-100 transition-all text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
+          >
+            <ArrowLeftIcon size={14} className="text-slate-500" />
+            <span>Back to POS</span>
           </Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-orange-500 rounded-xl shadow-lg shadow-orange-500/20">
-                <ReceiptIcon size={20} className="text-white" />
-              </div>
-              <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
-                Sales <span className="text-slate-400 font-medium italic">Invoices</span>
-              </h1>
-            </div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-2 ml-14">Registry of all completed transactions and billing history</p>
-          </div>
         </div>
 
         <div className="flex items-center gap-4">
@@ -231,7 +225,7 @@ export default function InvoicesPage() {
                            <span className="text-sm font-black text-slate-900 dark:text-white">₹{invoice.totalAmount.toLocaleString()}</span>
                         </td>
                         <td className="px-8 py-5 text-slate-500 font-bold text-[11px]">
-                           {new Date(invoice.createdAt).toLocaleDateString()}
+                           {formatDate(invoice.createdAt)}
                         </td>
                         <td className="px-8 py-5 text-right">
                            <button className="p-2 text-slate-300 hover:text-orange-500 transition-all">
