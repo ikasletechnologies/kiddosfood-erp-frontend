@@ -22,7 +22,7 @@ interface LedgerEntry {
 export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; onClose: () => void }) {
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'ALL' | 'PAYMENTS' | 'PURCHASES'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PAYMENTS' | 'PURCHASES' | 'RETURNS'>('ALL');
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
@@ -45,7 +45,8 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
   const filteredLedger = ledger.filter(entry => {
     // 1. Type filter
     if (activeTab === 'PAYMENTS' && !(entry.referenceType === 'PAYMENT' || entry.referenceType === 'ADVANCE')) return false;
-    if (activeTab === 'PURCHASES' && entry.referenceType !== 'PO') return false;
+    if (activeTab === 'PURCHASES' && !(entry.referenceType === 'PO' || entry.referenceType === 'PURCHASE')) return false;
+    if (activeTab === 'RETURNS' && !(entry.referenceType === 'RETURN' || entry.referenceType === 'PURCHASE_RETURN')) return false;
 
     // 2. Date filter
     const entryDate = new Date(entry.createdAt).setHours(0,0,0,0);
@@ -135,7 +136,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
         <div className="px-8 py-5 bg-slate-50/70 border-b border-[#F0EAF0] flex flex-col gap-4 print:bg-white print:px-0 print:border-none">
           <div className="flex items-center justify-between print:hidden">
             <div className="flex bg-white p-1 rounded-xl border border-[#F0EAF0] shadow-sm">
-              {(['ALL', 'PURCHASES', 'PAYMENTS'] as const).map(tab => (
+              {(['ALL', 'PURCHASES', 'PAYMENTS', 'RETURNS'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -146,7 +147,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
                       : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  {tab === 'ALL' ? 'All' : tab}
+                  {tab === 'ALL' ? 'All' : tab === 'RETURNS' ? 'Returns' : tab}
                 </button>
               ))}
             </div>
@@ -256,14 +257,18 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
                       <div className="flex flex-col max-w-[250px]">
                         <span className="text-[10px] font-black text-[#7C3AED] uppercase tracking-widest flex items-center gap-1">
                           <Info className="w-3 h-3" />
-                          {entry.referenceType}
+                          {entry.referenceType === 'RETURN' ? 'Purchase Return' : entry.referenceType === 'PURCHASE' ? 'Purchase' : entry.referenceType === 'PAYMENT' ? 'Payment Out' : entry.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : entry.referenceType}
                           {entry.invoiceId && (
                              <span className="bg-purple-100 text-[#7C3AED] px-1.5 py-0.5 rounded ml-1">
                                 INV: {entry.invoice?.invoiceNumber || entry.invoiceId.substring(0, 6).toUpperCase()}
                              </span>
                           )}
                           {!entry.invoiceId && entry.referenceId && (
-                            <span className="text-[#CCC]">#{entry.referenceId.substring(0, 6).toUpperCase()}</span>
+                            <span className="text-slate-500 font-mono font-bold bg-slate-100 px-1.5 py-0.5 rounded ml-1">
+                              {entry.referenceId.startsWith('PR-') || entry.referenceId.startsWith('VPAY-') || entry.referenceId.startsWith('BILL-')
+                                ? entry.referenceId
+                                : `#${entry.referenceId.substring(0, 6).toUpperCase()}`}
+                            </span>
                           )}
                         </span>
                         <span className="text-sm text-[#444] font-medium truncate">{entry.note}</span>

@@ -138,10 +138,19 @@ export default function VendorsClient() {
   const [isBalanceFilterOpen, setIsBalanceFilterOpen] = useState(false);
   const [balanceFilter, setBalanceFilter] = useState({ category: 'Equal To', value: '', endValue: '' });
 
+  const formatReferenceType = (refType: string) => {
+    if (refType === 'PAYMENT') return 'Payment Out';
+    if (refType === 'PURCHASE') return 'Purchase';
+    if (refType === 'OPENING_BALANCE') return 'Opening Balance';
+    if (refType === 'RETURN' || refType === 'PURCHASE_RETURN') return 'Purchase Return';
+    if (refType === 'ADVANCE') return 'Advance Payment';
+    if (refType === 'ADJUSTMENT') return 'Adjustment';
+    return refType;
+  };
+
   const transactionTypes = [
-    "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note",
-    "Credit Note (e-Invoice)", "Debit Note", "Sale Order",
-    "Purchase Order", "Payment-In", "Payment-Out", "Estimate",
+    "Purchase Return", "Purchase", "Payment Out", "Opening Balance", "Credit Note",
+    "Debit Note", "Sale Order", "Purchase Order", "Payment-In", "Payment-Out", "Estimate",
     "Proforma Invoice", "Delivery Challan", "Receivable Opening Balance",
     "Payable Opening Balance", "Party to Party [Received]",
     "Party to Party [Paid]", "Sale FA", "Sale FA (e-Invoice)",
@@ -310,7 +319,7 @@ export default function VendorsClient() {
     // 6. Inline Type Filter (from table header popover)
     if (selectedTypes.length > 0) {
       result = result.filter(e => {
-        const cleanRefType = e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType;
+        const cleanRefType = formatReferenceType(e.referenceType);
         return selectedTypes.includes(cleanRefType);
       });
     }
@@ -408,11 +417,12 @@ export default function VendorsClient() {
 
     const rowsHtml = [...targetData].reverse().map(e => {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '—';
       return `
         <tr>
           <td>${formatDate(e.createdAt)}</td>
-          <td>${e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType}</td>
-          <td>${e.referenceId || '—'}</td>
+          <td>${formatReferenceType(e.referenceType)}</td>
+          <td>${refNo}</td>
           <td>${e.note || '—'}</td>
           <td class="text-right color-debit">${e.type === 'DEBIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
           <td class="text-right color-credit">${e.type === 'CREDIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
@@ -652,13 +662,14 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       const debitVal = e.type === 'DEBIT' ? Math.round(e.amount) : 0;
       const creditVal = e.type === 'CREDIT' ? Math.round(e.amount) : 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '';
       runningDebit += debitVal;
       runningCredit += creditVal;
       
       return [
         formatDate(e.createdAt),
-        e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
-        e.referenceId || '',
+        formatReferenceType(e.referenceType),
+        refNo,
         e.note || '',
         debitVal,
         creditVal,
@@ -736,13 +747,14 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       const debitVal = e.type === 'DEBIT' ? Math.round(e.amount) : 0;
       const creditVal = e.type === 'CREDIT' ? Math.round(e.amount) : 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '';
       runningDebit += debitVal;
       runningCredit += creditVal;
       
       return [
         formatDate(e.createdAt),
-        e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
-        e.referenceId || '',
+        formatReferenceType(e.referenceType),
+        refNo,
         e.note || '',
         debitVal,
         creditVal,
@@ -1484,6 +1496,7 @@ export default function VendorsClient() {
                           <option value="OPENING_BALANCE">Opening Balance</option>
                           <option value="PURCHASE">Purchase</option>
                           <option value="PAYMENT">Payment Out</option>
+                          <option value="RETURN">Purchase Return</option>
                         </select>
                       </div>
 
@@ -1791,14 +1804,15 @@ export default function VendorsClient() {
                       ) : (
                         filteredLedger.map(e => {
                           const balance = e.runningBalance || e.balanceAfterTransaction || 0;
-                          const cleanRefType = e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType;
+                          const cleanRefType = formatReferenceType(e.referenceType);
+                          const refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
                           return (
                             <tr key={e.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors group">
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 {cleanRefType}
                               </td>
                               <td className="px-6 py-4 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
-                                {e.paymentNumber || e.referenceId || "—"}
+                                {refNo}
                               </td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(e.createdAt)}</td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
@@ -1842,6 +1856,14 @@ export default function VendorsClient() {
                                           className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
                                         >
                                           <Copy size={13} /> Copy Reference ID
+                                        </button>
+                                      )}
+                                      {(e.referenceType === 'RETURN' || e.referenceType === 'PURCHASE_RETURN') && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/returns'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Returns
                                         </button>
                                       )}
                                       {e.referenceType === 'PURCHASE' && (
@@ -2111,8 +2133,8 @@ export default function VendorsClient() {
         {ledgerDetailEntry && (
           <div className="space-y-3 text-sm">
             {[
-              { label: "Type", value: ledgerDetailEntry.referenceType === 'PAYMENT' ? 'Payment Out' : ledgerDetailEntry.referenceType === 'PURCHASE' ? 'Purchase' : ledgerDetailEntry.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : ledgerDetailEntry.referenceType },
-              { label: "Reference", value: ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
+              { label: "Type", value: formatReferenceType(ledgerDetailEntry.referenceType) },
+              { label: "Reference", value: ledgerDetailEntry.returnNumber || ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
               { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
               { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
               { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
