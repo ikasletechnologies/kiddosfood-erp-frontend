@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { X, Minus } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface ModalProps {
@@ -14,6 +14,7 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
   hideHeader?: boolean;
   zIndex?: number;
+  onMinimize?: () => void;
 }
 
 const sizes = {
@@ -24,7 +25,7 @@ const sizes = {
   '2xl': 'max-w-2xl'
 };
 
-export function Modal({ isOpen, onClose, title, children, footer, size = 'md', hideHeader, zIndex }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, footer, size = 'md', hideHeader, zIndex, onMinimize }: ModalProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -71,12 +72,26 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md', h
         {!hideHeader && (
           <div className="px-8 py-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
             <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{title}</h2>
-            <button 
-              onClick={onClose}
-              className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95"
-            >
-              <X size={20} />
-            </button>
+            <div className="flex items-center gap-1.5">
+              {onMinimize && (
+                <button 
+                  type="button"
+                  onClick={onMinimize}
+                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
+                  title="Minimize"
+                >
+                  <Minus size={20} />
+                </button>
+              )}
+              <button 
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
         )}
 
