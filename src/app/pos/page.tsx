@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   Plus, Minus, Trash2, Search, CreditCard, Banknote, QrCode,
   User, X, Percent, ShoppingBag, ArrowRight, Tag,
@@ -11,6 +12,7 @@ import { customersApi, franchiseApi, accountsApi, posApi } from "@/lib/api";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,10 @@ interface ReceiptData {
 
 const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
 
+const UNIT_LABEL: Record<string, string> = { KG: "kg", G: "g", L: "L", ML: "ml", PCS: "pcs", PC: "pc" };
+const formatPackSize = (p?: { qty: number; unit: string } | null) =>
+  p ? `${p.qty % 1 === 0 ? p.qty : p.qty.toFixed(2)}${UNIT_LABEL[p.unit] || p.unit.toLowerCase()}` : null;
+
 export default function POSPage() {
   // Party
   const [partyType, setPartyType]         = useState<PartyType>("CUSTOMER");
@@ -78,6 +84,42 @@ export default function POSPage() {
   const [payMode, setPayMode]             = useState<"CASH" | "UPI" | "CARD">("CASH");
   const [accounts, setAccounts]           = useState<any[]>([]);
   const [accountId, setAccountId]         = useState("");
+  const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [newAccName, setNewAccName]       = useState("");
+  const [newAccType, setNewAccType]       = useState<"CASH" | "BANK" | "UPI">("CASH");
+  const [newAccBalance, setNewAccBalance] = useState("");
+  const [creatingAccount, setCreatingAccount] = useState(false);
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAccName.trim()) {
+      toast.error("Please enter account name");
+      return;
+    }
+    setCreatingAccount(true);
+    try {
+      const res = await accountsApi.create({
+        name: newAccName.trim(),
+        type: newAccType,
+        balance: newAccBalance ? Number(newAccBalance) : 0,
+      });
+      toast.success("Account created successfully");
+      setShowAddAccountModal(false);
+      setNewAccName("");
+      setNewAccBalance("");
+      await fetchAccounts();
+      if (res.data?.id) {
+        setAccountId(res.data.id);
+        if (newAccType === "CASH") setPayMode("CASH");
+        else if (newAccType === "UPI") setPayMode("UPI");
+        else if (newAccType === "BANK") setPayMode("CARD");
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to create account");
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
 
   // UI state
   const [loading, setLoading]             = useState(false);
@@ -113,6 +155,7 @@ export default function POSPage() {
           category: p.category || p.categoryName || "General",
           stock: p.currentStock ?? p.stock ?? null,
           noPrice: (p.inventoryBasePrice ?? p.basePrice ?? p.price ?? 0) <= 0,
+          packSize: p.packSize as { qty: number; unit: string } | null | undefined,
         }));
         setProducts(mapped);
         const cats = Array.from(new Set(mapped.map(p => p.category).filter(Boolean))) as string[];
@@ -486,7 +529,7 @@ export default function POSPage() {
               <p className="text-sm">No products found</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {filtered.map(p => {
                 const inCart = cart.find(i => i.id === p.id);
 
@@ -496,7 +539,7 @@ export default function POSPage() {
                     onClick={() => addToCart(p)}
                     style={inCart ? { borderColor: BRAND_ORANGE, borderWidth: "1.5px" } : {}}
                     className={clsx(
-                      "group relative bg-white border rounded-xl p-3 text-left transition-all hover:shadow-md active:scale-95",
+                      "group relative bg-white border rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95",
                       inCart ? "shadow-md" : "border-gray-200 hover:border-gray-300",
                       p.noPrice && "opacity-50 cursor-not-allowed"
                     )}
@@ -504,7 +547,7 @@ export default function POSPage() {
                     {/* Stock badge */}
                     {p.stock !== null && (
                       <div className={clsx(
-                        "absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full",
+                        "absolute top-2.5 right-2.5 text-[11px] font-bold px-2 py-1 rounded-full",
                         p.stock === 0 ? "bg-red-100 text-red-600" : p.stock <= 5 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
                       )}>
                         {p.stock === 0 ? "OUT" : `${p.stock}`}
@@ -513,14 +556,19 @@ export default function POSPage() {
 
                     {/* Cart qty badge */}
                     {inCart && (
-                      <div className="absolute -top-1.5 -left-1.5 w-5 h-5 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-sm" style={{ background: BRAND_ORANGE }}>
+                      <div className="absolute -top-2 -left-2 w-6 h-6 text-white text-xs font-black rounded-full flex items-center justify-center shadow-sm" style={{ background: BRAND_ORANGE }}>
                         {inCart.quantity}
                       </div>
                     )}
 
-                    <p className="text-xs font-semibold text-gray-800 leading-tight line-clamp-2 mb-1.5">{p.name}</p>
-                    <p className="text-sm font-bold mt-1" style={{ color: BRAND_ORANGE }}>₹{getPrice(p, partyType).toLocaleString()}</p>
-                    {p.taxPercent > 0 && <p className="text-[10px] text-gray-400 mt-0.5">GST {p.taxPercent}%</p>}
+                    <p className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2 mb-2">
+                      {p.name}
+                      {formatPackSize(p.packSize) && (
+                        <span className="ml-1 font-bold text-gray-400">· {formatPackSize(p.packSize)}</span>
+                      )}
+                    </p>
+                    <p className="text-base font-bold mt-1" style={{ color: BRAND_ORANGE }}>₹{getPrice(p, partyType).toLocaleString()}</p>
+                    {p.taxPercent > 0 && <p className="text-xs text-gray-400 mt-0.5">GST {p.taxPercent}%</p>}
                   </button>
                 );
               })}
@@ -733,27 +781,37 @@ export default function POSPage() {
               <p className="text-[10px] font-medium text-gray-400">SOURCE ACCOUNT</p>
               <button
                 onClick={() => fetchAccounts()}
-                className="text-[10px] text-blue-600 hover:text-blue-700 font-medium"
+                className="text-[10px] text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
               >
                 Refresh
               </button>
             </div>
-            <select
-              value={accountId}
-              onChange={e => {
-                setAccountId(e.target.value);
-                const acc = accounts.find(a => a.id === e.target.value);
-                if (acc?.type === "CASH") setPayMode("CASH");
-                else if (acc?.type === "UPI") setPayMode("UPI");
-                else if (acc?.type === "BANK") setPayMode("CARD");
-              }}
-              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 transition-colors"
-            >
-              {accounts.length === 0
-                ? <option>No accounts — set up in Finance</option>
-                : accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
-              }
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={accountId}
+                onChange={e => {
+                  setAccountId(e.target.value);
+                  const acc = accounts.find(a => a.id === e.target.value);
+                  if (acc?.type === "CASH") setPayMode("CASH");
+                  else if (acc?.type === "UPI") setPayMode("UPI");
+                  else if (acc?.type === "BANK") setPayMode("CARD");
+                }}
+                className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 transition-colors"
+              >
+                {accounts.length === 0
+                  ? <option>No accounts — set up in Finance</option>
+                  : accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
+                }
+              </select>
+              <button
+                type="button"
+                onClick={() => setShowAddAccountModal(true)}
+                className="p-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-2xs shrink-0 flex items-center justify-center cursor-pointer"
+                title="Add New Source Account"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Payment modes */}
@@ -901,6 +959,103 @@ export default function POSPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Create Financial Account Full-Height Side Panel */}
+      {showAddAccountModal && typeof window !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[9999] flex justify-end">
+          {/* Backdrop Overlay */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setShowAddAccountModal(false)}
+          />
+
+          {/* Full-Height Right Side Panel */}
+          <div className="relative w-full max-w-md bg-white dark:bg-[#020617] h-full shadow-2xl border-l border-slate-100 dark:border-slate-800 flex flex-col z-10 animate-in slide-in-from-right duration-300">
+            {/* Panel Header */}
+            <div className="px-6 py-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">CREATE FINANCIAL ACCOUNT</h2>
+                <p className="text-xs font-semibold text-slate-400 mt-0.5">Add a new payment account for Counter Billing</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddAccountModal(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all cursor-pointer"
+                title="Close Panel"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Panel Body Form */}
+            <form onSubmit={handleCreateAccount} className="flex-1 flex flex-col justify-between p-6 overflow-y-auto">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                    Account Name <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Counter Cash Box, HDFC Bank"
+                    value={newAccName}
+                    onChange={e => setNewAccName(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                    Account Type
+                  </label>
+                  <select
+                    value={newAccType}
+                    onChange={e => setNewAccType(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors cursor-pointer"
+                  >
+                    <option value="CASH">CASH</option>
+                    <option value="BANK">BANK</option>
+                    <option value="UPI">UPI</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                    Opening Balance (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={newAccBalance}
+                    onChange={e => setNewAccBalance(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Panel Footer */}
+              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddAccountModal(false)}
+                  className="px-6 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingAccount}
+                  className="px-6 py-3 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                >
+                  {creatingAccount ? "Saving..." : "Save Account"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

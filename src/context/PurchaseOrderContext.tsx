@@ -329,13 +329,17 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
-    const totalGst = items.reduce((acc, item) => acc + (item.quantity * item.price * (item.gstRate / 100)), 0);
+    const taxableAfterDiscount = Math.max(0, subtotal - discountAmount);
+    const ratio = subtotal > 0 ? taxableAfterDiscount / subtotal : 1;
+
+    const baseGst = items.reduce((acc, item) => acc + (item.quantity * item.price * (item.gstRate / 100)), 0);
+    const totalGst = discountAmount > 0 ? Math.round(baseGst * ratio * 100) / 100 : Math.round(baseGst * 100) / 100;
     
-    // CGST/SGST vs IGST split (simplified logic for now)
-    const cgst = totalGst / 2;
-    const sgst = totalGst / 2;
+    // CGST/SGST vs IGST split
+    const cgst = Math.round((totalGst / 2) * 100) / 100;
+    const sgst = Math.round((totalGst / 2) * 100) / 100;
     
-    const grandTotal = subtotal + totalGst - discountAmount + freightCost;
+    const grandTotal = taxableAfterDiscount + totalGst + freightCost;
     const roundoff = Math.round(grandTotal) - grandTotal;
     const finalTotal = grandTotal + roundoff;
 
@@ -348,6 +352,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     
     return {
       subtotal,
+      taxableAfterDiscount,
       totalGst,
       cgst,
       sgst,

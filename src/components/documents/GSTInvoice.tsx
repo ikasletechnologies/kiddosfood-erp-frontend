@@ -112,8 +112,8 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
       : vendorState.includes(companyState) || companyState.includes(vendorState);
 
   const taxableSubtotal = items.reduce((s: number, it: any) => s + safe(it.quantity) * safe(it.price), 0);
-  const discount = safe(order.discount || order.discountAmount || 0);
-  const freight = safe(order.freightCost || order.freight || order.shipmentPrice || 0);
+  const discount = safe(order.discount ?? order.discountAmount ?? 0);
+  const freightCost = safe(order.freightCost ?? order.shippingAmount ?? order.shipping ?? order.freight ?? 0);
   const taxableAfterDiscount = Math.max(0, taxableSubtotal - discount);
 
   const taxBreakdown = items.reduce(
@@ -145,7 +145,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
   }
 
   const totalTax = round(finalCgst + finalSgst + finalIgst);
-  const grandTotal = round(taxableAfterDiscount + totalTax + freight);
+  const grandTotal = round(taxableAfterDiscount + totalTax + freightCost);
 
   const invoiceNo =
     order.poNumber ||
@@ -495,6 +495,12 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">IGST</span>
                 <span className="font-semibold text-gray-900">₹{fmt(finalIgst)}</span>
+              </div>
+            )}
+            {freightCost > 0 && (
+              <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                <span className="text-gray-600">Freight / Shipping</span>
+                <span className="font-semibold text-gray-900">+ ₹{fmt(freightCost)}</span>
               </div>
             )}
             

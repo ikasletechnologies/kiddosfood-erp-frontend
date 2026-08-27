@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -8,7 +9,7 @@ import {
   Package, Search, RefreshCw, Send, Building2,
   Clock, Truck, CheckCircle2, AlertTriangle, ExternalLink,
   Layers, Filter, Eye, LayoutGrid, List, ArrowRight, ShieldCheck,
-  Upload, Download, Edit2
+  Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -19,6 +20,7 @@ import { toast } from "react-hot-toast";
 import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
 import BranchStockDrawer from "./BranchStockDrawer";
+import MinimizedImportWidget from "./MinimizedImportWidget";
 import { Modal } from "@/components/ui/Modal";
 import { generateSKU } from "@/lib/utils/erp";
 
@@ -167,8 +169,10 @@ export default function FinishedGoodsStockClient() {
   // Inventory Item Master editor).
   const importFileRef = useRef<HTMLInputElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [isImportMinimized, setIsImportMinimized] = useState(false);
   const [importRows, setImportRows] = useState<Array<{ category: string; name: string; size: string; unit: string; gstPercent: string; sellingPrice: string; error?: string }>>([]);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; percent: number }>({ current: 0, total: 0, percent: 0 });
   const [importResult, setImportResult] = useState<{ success: number; duplicates: number; invalid: number } | null>(null);
   const [importDuplicates, setImportDuplicates] = useState<Array<{ name: string; sku: string; reason: string }>>([]);
   const [importInvalid, setImportInvalid] = useState<Array<{ name: string; reason: string }>>([]);
@@ -251,21 +255,40 @@ export default function FinishedGoodsStockClient() {
     if (validRows.length === 0) return;
 
     setImporting(true);
+    const total = validRows.length;
+    setImportProgress({ current: 0, total, percent: 0 });
+
+    const BATCH_SIZE = 15;
+    let totalSuccess = 0;
+    let allDuplicates: Array<{ name: string; sku: string; reason: string }> = [];
+    let allInvalid: Array<{ name: string; reason: string }> = [];
+
     try {
-      const res = await productsFullApi.bulkImport(
-        validRows.map(row => ({
-          category: row.category || undefined,
-          name: row.name,
-          size: row.size || undefined,
-          unit: row.unit || undefined,
-          gstPercent: row.gstPercent ? Number(row.gstPercent) : undefined,
-          sellingPrice: row.sellingPrice ? Number(row.sellingPrice) : undefined,
-        }))
-      );
-      const data = res.data as { success: number; duplicates: Array<{ name: string; sku: string; reason: string }>; invalid: Array<{ name: string; reason: string }> };
-      setImportResult({ success: data.success, duplicates: data.duplicates.length, invalid: data.invalid.length });
-      setImportDuplicates(data.duplicates);
-      setImportInvalid(data.invalid);
+      for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+        const batch = validRows.slice(i, i + BATCH_SIZE);
+        const res = await productsFullApi.bulkImport(
+          batch.map(row => ({
+            category: row.category || undefined,
+            name: row.name,
+            size: row.size || undefined,
+            unit: row.unit || undefined,
+            gstPercent: row.gstPercent ? Number(row.gstPercent) : undefined,
+            sellingPrice: row.sellingPrice ? Number(row.sellingPrice) : undefined,
+          }))
+        );
+        const data = res.data as { success: number; duplicates: Array<{ name: string; sku: string; reason: string }>; invalid: Array<{ name: string; reason: string }> };
+        totalSuccess += data.success;
+        allDuplicates = [...allDuplicates, ...(data.duplicates || [])];
+        allInvalid = [...allInvalid, ...(data.invalid || [])];
+
+        const current = Math.min(i + batch.length, total);
+        const percent = Math.round((current / total) * 100);
+        setImportProgress({ current, total, percent });
+      }
+
+      setImportResult({ success: totalSuccess, duplicates: allDuplicates.length, invalid: allInvalid.length });
+      setImportDuplicates(allDuplicates);
+      setImportInvalid(allInvalid);
       fetchDemandData();
     } catch (e: any) {
       toast.error(e?.response?.data?.error || "Bulk import failed");
@@ -681,8 +704,8 @@ export default function FinishedGoodsStockClient() {
           {/* Bulk Import */}
           <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
           <button
-            onClick={() => importFileRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors"
+            onClick={() => setShowImportModal(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors cursor-pointer"
           >
             <Upload size={14} /> Bulk Import (Excel)
           </button>
@@ -963,45 +986,116 @@ export default function FinishedGoodsStockClient() {
 
       {/* ── Bulk Import from Excel ── */}
       <Modal
-        isOpen={showImportModal}
-        onClose={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
-        title="Import Finished Goods from Excel"
-        size="lg"
+        isOpen={showImportModal && !isImportMinimized}
+        onClose={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
+        onMinimize={() => setIsImportMinimized(true)}
+        title="IMPORT FINISHED GOODS FROM EXCEL"
+        size="xl"
         footer={
-          importResult ? (
+          importing ? (
+            <div className="flex items-center justify-between w-full text-xs font-bold text-slate-500 px-2">
+              <span className="flex items-center gap-2 text-[#f58220]">
+                <Loader2 size={15} className="animate-spin" />
+                Importing {importProgress.current} of {importProgress.total} items... ({importProgress.percent}%)
+              </span>
+              <button
+                type="button"
+                disabled
+                className="px-7 py-3 bg-[#e2e8f0] dark:bg-slate-800 text-[#94a3b8] dark:text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed"
+              >
+                Importing...
+              </button>
+            </div>
+          ) : importResult ? (
             <button
-              onClick={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
+              type="button"
+              onClick={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); setImportResult(null); setImportDuplicates([]); setImportInvalid([]); }}
               className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
             >
               Done
             </button>
           ) : (
-            <>
+            <div className="flex items-center justify-end gap-3 w-full">
               <button
-                onClick={() => { setShowImportModal(false); setImportRows([]); }}
-                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                type="button"
+                onClick={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); }}
+                className="px-6 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirmImport}
                 disabled={importing || importRows.filter(r => !r.error).length === 0}
-                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                className={clsx(
+                  "px-8 py-3 text-sm font-bold rounded-xl transition-all shadow-2xs cursor-pointer",
+                  importRows.filter(r => !r.error).length > 0 && !importing
+                    ? "bg-[#f58220] hover:bg-[#e8740e] text-white hover:shadow-md"
+                    : "bg-[#e2e8f0] dark:bg-slate-800 text-[#94a3b8] dark:text-slate-500 cursor-not-allowed"
+                )}
               >
-                {importing ? "Importing…" : `Import ${importRows.filter(r => !r.error).length} Item${importRows.filter(r => !r.error).length === 1 ? '' : 's'}`}
+                {`Import ${importRows.filter(r => !r.error).length} Items`}
               </button>
-            </>
+            </div>
           )
         }
       >
-        {importResult ? (
+        {importing ? (
+          <div className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            {/* Animated Ring Spinner & Icon */}
+            <div className="relative flex items-center justify-center w-24 h-24">
+              <div className="absolute inset-0 rounded-full border-4 border-orange-100 dark:border-orange-950/40" />
+              <div className="absolute inset-0 rounded-full border-4 border-[#f58220] border-t-transparent animate-spin" />
+              <div className="w-16 h-16 rounded-full bg-orange-500/10 text-[#f58220] flex items-center justify-center shadow-inner">
+                <UploadCloud size={30} className="animate-bounce" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 max-w-md">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                Importing Finished Goods...
+              </h3>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Please wait while we validate and process your catalog items into the database.
+              </p>
+            </div>
+
+            {/* Real-time Progress Bar & Counters */}
+            <div className="w-full max-w-lg space-y-3 bg-slate-50 dark:bg-slate-900/60 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-[#f58220]" />
+                  <span>{importProgress.current} of {importProgress.total} items imported</span>
+                </span>
+                <span className="text-[#f58220] font-black text-sm font-mono">
+                  {importProgress.percent}%
+                </span>
+              </div>
+
+              {/* Progress Track & Fill Bar */}
+              <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#f58220] to-[#ff9838] rounded-full transition-all duration-300 ease-out shadow-sm relative overflow-hidden"
+                  style={{ width: `${importProgress.percent}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-400 font-medium pt-0.5">
+                <span>Processing batch records...</span>
+                <span>Total: {importProgress.total} items</span>
+              </div>
+            </div>
+          </div>
+        ) : importResult ? (
           <div className="py-6 space-y-4">
             <div className="text-center space-y-3">
               <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
                 <CheckCircle2 size={32} />
               </div>
-              <p className="text-lg font-bold text-slate-800">
-                {importResult.success + importResult.duplicates + importResult.invalid} rows
+              <p className="text-lg font-bold text-slate-800 dark:text-white">
+                {importResult.success + importResult.duplicates + importResult.invalid} rows processed
               </p>
               <div className="flex items-center justify-center gap-4 text-sm font-semibold">
                 <span className="text-emerald-600">{importResult.success} Imported</span>
@@ -1060,53 +1154,106 @@ export default function FinishedGoodsStockClient() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                {importRows.length} row{importRows.length === 1 ? '' : 's'} found · {importRows.filter(r => r.error).length} with errors will be skipped.
+            <div className="flex items-center justify-between pb-1">
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                {importRows.length > 0 ? (
+                  <>{importRows.length} rows found · {importRows.filter(r => r.error).length} with errors will be skipped.</>
+                ) : (
+                  <>Select an Excel file (.xlsx, .csv) to preview finished goods before importing.</>
+                )}
               </p>
-              <button onClick={handleDownloadTemplate} className="flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:underline">
-                <Download size={14} /> Download Template
+              <button 
+                type="button"
+                onClick={handleDownloadTemplate} 
+                className="flex items-center gap-1.5 text-sm font-bold text-[#f58220] hover:underline cursor-pointer"
+              >
+                <Download size={15} /> Download Template
               </button>
             </div>
-            <div className="border border-slate-200 rounded-xl overflow-hidden max-h-[50vh] overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Category</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Name</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Size</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Unit</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">GST %</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Selling Price</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Auto SKU</th>
-                    <th className="px-3 py-2 text-left font-bold text-slate-500">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importRows.map((row, i) => (
-                    <tr key={i} className={clsx("border-t border-slate-100", row.error && "bg-rose-50/50")}>
-                      <td className="px-3 py-2 text-slate-600">{row.category || "—"}</td>
-                      <td className="px-3 py-2 font-semibold text-slate-800">{row.name || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.size || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.unit || "—"}</td>
-                      <td className="px-3 py-2 text-slate-600">{row.gstPercent || "5 (default)"}</td>
-                      <td className={clsx("px-3 py-2", row.sellingPrice ? "text-slate-600" : "text-amber-600 font-semibold")}>
-                        {row.sellingPrice ? `₹${row.sellingPrice}` : "₹0 (no price set)"}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 font-mono">{row.name ? previewSku(row.name, row.size, row.unit) : "—"}</td>
-                      <td className="px-3 py-2">
-                        {row.error
-                          ? <span className="text-rose-600 font-bold">{row.error}</span>
-                          : <span className="text-emerald-600 font-bold">Ready</span>}
-                      </td>
+
+            {importRows.length === 0 ? (
+              <div 
+                onClick={() => importFileRef.current?.click()}
+                className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-[#f58220] rounded-2xl p-10 text-center bg-slate-50/50 dark:bg-slate-900/50 hover:bg-orange-50/20 transition-all cursor-pointer group"
+              >
+                <UploadCloud size={44} className="mx-auto text-slate-400 group-hover:text-[#f58220] transition-colors mb-3" />
+                <p className="text-base font-bold text-slate-800 dark:text-slate-200 mb-1">Click to select or drag & drop an Excel file</p>
+                <p className="text-xs text-slate-400 mb-4">Supported formats: .xlsx, .xls, .csv</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); importFileRef.current?.click(); }}
+                  className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-bold rounded-xl shadow-2xs transition-all"
+                >
+                  Browse File
+                </button>
+              </div>
+            ) : (
+              <div className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden max-h-[50vh] overflow-y-auto shadow-2xs">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-900/90 sticky top-0 z-10 border-b border-slate-200/60 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4 text-left font-bold text-slate-500">Category</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">Name</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">Size</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">Unit</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">GST %</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">Selling Price</th>
+                      <th className="py-3 px-3 text-left font-bold text-slate-500">Auto SKU</th>
+                      <th className="py-3 px-4 text-left font-bold text-slate-500">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 bg-white dark:bg-slate-950">
+                    {importRows.map((row, i) => (
+                      <tr key={i} className={clsx(row.error && "bg-rose-50/40 dark:bg-rose-950/20")}>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{row.category || "—"}</td>
+                        <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">{row.name || "—"}</td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{row.size || "—"}</td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{row.unit || "—"}</td>
+                        <td className="py-3 px-3 text-slate-600 dark:text-slate-400">{row.gstPercent ? `${row.gstPercent}%` : "5 (default)"}</td>
+                        <td className="py-3 px-3">
+                          {row.sellingPrice ? (
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">₹{row.sellingPrice}</span>
+                          ) : (
+                            <span className="text-[#f58220] font-bold">₹0 (no price set)</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-slate-500 font-mono">{row.name ? previewSku(row.name, row.size, row.unit) : "—"}</td>
+                        <td className="py-3 px-4">
+                          {row.error ? (
+                            <span className="text-rose-500 dark:text-rose-400 font-bold">{row.error}</span>
+                          ) : (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">Ready</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </Modal>
+
+      {/* ── Minimized Floating Import Widget ── */}
+      {showImportModal && isImportMinimized && (
+        <MinimizedImportWidget
+          title="Import Finished Goods"
+          importing={importing}
+          importProgress={importProgress}
+          importResult={importResult}
+          importRowsCount={importRows.length}
+          onRestore={() => setIsImportMinimized(false)}
+          onClose={() => {
+            setShowImportModal(false);
+            setIsImportMinimized(false);
+            setImportRows([]);
+            setImportResult(null);
+            setImportDuplicates([]);
+            setImportInvalid([]);
+          }}
+        />
+      )}
     </div>
   );
 }

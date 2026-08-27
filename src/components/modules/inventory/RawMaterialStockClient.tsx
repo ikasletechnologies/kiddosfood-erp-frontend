@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import {
@@ -8,12 +9,13 @@ import {
   RefreshCw, Trash2, X,
   Edit2, Lock,
   Calculator, Package, BarChart3, Database,
-  Download, Flame, Wrench, Recycle, Upload
+  Download, Flame, Wrench, Recycle, Upload, Loader2, UploadCloud, Maximize2
 } from "lucide-react";
 import { clsx } from "clsx";
 import { rawMaterialsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Modal } from "@/components/ui/Modal";
+import MinimizedImportWidget from "./MinimizedImportWidget";
 import { toast } from "react-hot-toast";
 
 const WEIGHT_VOLUME_UNITS = new Set(['KG', 'G', 'GM', 'KGS', 'L', 'LTR', 'LITER', 'LITRE', 'ML']);
@@ -82,18 +84,23 @@ const formatMinStock = (minStockVal: number, unit: string, sku: string, category
       : (upperUnit.endsWith('S') ? upperUnit : `${upperUnit}s`);
     return `${minStockVal} ${displayUnit}`;
   }
-  // Finished goods: min stock is unit count
   return `${minStockVal} Units`;
 };
 
 export default function RawMaterialStockClient() {
+  const router = useRouter();
+  const { user } = useAuth();
+
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showInactive, setShowInactive] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
+  const [stockStatusFilter, setStockStatusFilter] = useState("ALL");
+  const [showInactive, setShowInactive] = useState(false);
 
-  const { user } = useAuth();
-  const router = useRouter();
+  // Edit / Action states
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const openEditPage = (item: any) => {
     router.push(`/inventory/stock/edit?id=${item.id}`);
@@ -102,8 +109,10 @@ export default function RawMaterialStockClient() {
   // Excel Bulk Import
   const importFileRef = useRef<HTMLInputElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [isImportMinimized, setIsImportMinimized] = useState(false);
   const [importRows, setImportRows] = useState<Array<{ name: string; unit: string; error?: string }>>([]);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number; percent: number }>({ current: 0, total: 0, percent: 0 });
   const [importResult, setImportResult] = useState<{ success: number; failed: number } | null>(null);
 
   const fetchItems = useCallback(async () => {
@@ -189,24 +198,25 @@ export default function RawMaterialStockClient() {
     if (validRows.length === 0) return;
 
     setImporting(true);
+    const total = validRows.length;
+    setImportProgress({ current: 0, total, percent: 0 });
+
     let success = 0, failed = 0;
-    for (const row of validRows) {
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
       try {
         await rawMaterialsApi.create({
           name: row.name,
           category: "RAW_MATERIAL",
           unit: row.unit,
-          // Omitted, not a hardcoded literal id — InventoryService.createItem
-          // treats "no franchiseId at all" as HQ-scoped (franchiseId: null),
-          // the one convention every module resolves HQ stock through. A
-          // hardcoded "hq-001" pointed at whatever id happened to exist when
-          // this was written; that id no longer exists as a real Franchise
-          // row, so this would fail its foreign key constraint outright.
         });
         success++;
       } catch {
         failed++;
       }
+      const current = i + 1;
+      const percent = Math.round((current / total) * 100);
+      setImportProgress({ current, total, percent });
     }
     setImporting(false);
     setImportResult({ success, failed });
@@ -231,8 +241,8 @@ export default function RawMaterialStockClient() {
       <div className="flex justify-end gap-3">
         <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
         <button
-          onClick={() => importFileRef.current?.click()}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-250 hover:bg-gray-50 rounded-lg text-xs font-bold text-slate-600 transition-colors"
+          onClick={() => setShowImportModal(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-250 hover:bg-gray-50 rounded-lg text-xs font-bold text-slate-600 transition-colors cursor-pointer"
         >
           <Upload size={14} /> Bulk Import (Excel)
         </button>
@@ -389,38 +399,109 @@ export default function RawMaterialStockClient() {
 
       {/* Bulk Import from Excel */}
       <Modal
-        isOpen={showImportModal}
-        onClose={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); }}
-        title="Import Raw Materials from Excel"
+        isOpen={showImportModal && !isImportMinimized}
+        onClose={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); setImportResult(null); }}
+        onMinimize={() => setIsImportMinimized(true)}
+        title="IMPORT RAW MATERIALS FROM EXCEL"
         size="lg"
         footer={
-          importResult ? (
+          importing ? (
+            <div className="flex items-center justify-between w-full text-xs font-bold text-slate-500 px-2">
+              <span className="flex items-center gap-2 text-[#f58220]">
+                <Loader2 size={15} className="animate-spin" />
+                Importing {importProgress.current} of {importProgress.total} items... ({importProgress.percent}%)
+              </span>
+              <button
+                type="button"
+                disabled
+                className="px-7 py-3 bg-[#e2e8f0] dark:bg-slate-800 text-[#94a3b8] dark:text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed"
+              >
+                Importing...
+              </button>
+            </div>
+          ) : importResult ? (
             <button
-              onClick={() => { setShowImportModal(false); setImportRows([]); setImportResult(null); }}
+              type="button"
+              onClick={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); setImportResult(null); }}
               className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-black transition-colors"
             >
               Done
             </button>
           ) : (
-            <>
+            <div className="flex items-center justify-end gap-3 w-full">
               <button
-                onClick={() => { setShowImportModal(false); setImportRows([]); }}
-                className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                type="button"
+                onClick={() => { setShowImportModal(false); setIsImportMinimized(false); setImportRows([]); }}
+                className="px-6 py-2.5 text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleConfirmImport}
                 disabled={importing || importRows.filter(r => !r.error).length === 0}
-                className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl text-sm font-bold shadow-sm transition-colors"
+                className={clsx(
+                  "px-8 py-3 text-sm font-bold rounded-xl transition-all shadow-2xs cursor-pointer",
+                  importRows.filter(r => !r.error).length > 0 && !importing
+                    ? "bg-[#f58220] hover:bg-[#e8740e] text-white hover:shadow-md"
+                    : "bg-[#e2e8f0] dark:bg-slate-800 text-[#94a3b8] dark:text-slate-500 cursor-not-allowed"
+                )}
               >
-                {importing ? "Importing…" : `Import ${importRows.filter(r => !r.error).length} Item${importRows.filter(r => !r.error).length === 1 ? '' : 's'}`}
+                {`Import ${importRows.filter(r => !r.error).length} Items`}
               </button>
-            </>
+            </div>
           )
         }
       >
-        {importResult ? (
+        {importing ? (
+          <div className="py-12 px-6 flex flex-col items-center justify-center text-center space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            {/* Animated Ring Spinner & Icon */}
+            <div className="relative flex items-center justify-center w-24 h-24">
+              <div className="absolute inset-0 rounded-full border-4 border-orange-100 dark:border-orange-950/40" />
+              <div className="absolute inset-0 rounded-full border-4 border-[#f58220] border-t-transparent animate-spin" />
+              <div className="w-16 h-16 rounded-full bg-orange-500/10 text-[#f58220] flex items-center justify-center shadow-inner">
+                <UploadCloud size={30} className="animate-bounce" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5 max-w-md">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                Importing Raw Materials...
+              </h3>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Please wait while we process your materials into the database.
+              </p>
+            </div>
+
+            {/* Real-time Progress Bar & Counters */}
+            <div className="w-full max-w-lg space-y-3 bg-slate-50 dark:bg-slate-900/60 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-bold">
+                <span className="text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                  <Loader2 size={14} className="animate-spin text-[#f58220]" />
+                  <span>{importProgress.current} of {importProgress.total} items imported</span>
+                </span>
+                <span className="text-[#f58220] font-black text-sm font-mono">
+                  {importProgress.percent}%
+                </span>
+              </div>
+
+              {/* Progress Track & Fill Bar */}
+              <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#f58220] to-[#ff9838] rounded-full transition-all duration-300 ease-out shadow-sm relative overflow-hidden"
+                  style={{ width: `${importProgress.percent}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center text-[11px] text-slate-400 font-medium pt-0.5">
+                <span>Processing material records...</span>
+                <span>Total: {importProgress.total} items</span>
+              </div>
+            </div>
+          </div>
+        ) : importResult ? (
           <div className="text-center py-6 space-y-3">
             <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
               <CheckCircle2 size={32} />
@@ -467,6 +548,24 @@ export default function RawMaterialStockClient() {
           </div>
         )}
       </Modal>
+
+      {/* Minimized Floating Import Widget */}
+      {showImportModal && isImportMinimized && (
+        <MinimizedImportWidget
+          title="Import Raw Materials"
+          importing={importing}
+          importProgress={importProgress}
+          importResult={importResult}
+          importRowsCount={importRows.length}
+          onRestore={() => setIsImportMinimized(false)}
+          onClose={() => {
+            setShowImportModal(false);
+            setIsImportMinimized(false);
+            setImportRows([]);
+            setImportResult(null);
+          }}
+        />
+      )}
     </div>
   );
 }
