@@ -5,9 +5,10 @@ import {
   Receipt, Plus, Search, RefreshCw, X,
   Printer, ChevronDown, Trash2, Share2, Calendar,
   AlignLeft, FileText, ArrowLeft, Upload, Download,
+  Tag, Truck,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { vendorsApi, vendorInvoicesApi, grnApi, accountsApi, settingsApi } from "@/lib/api";
+import { vendorsApi, vendorInvoicesApi, grnApi, purchaseOrdersApi, accountsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
@@ -84,10 +85,17 @@ function makeItem(): LineItem {
   return { id: Math.random().toString(36).slice(2), name: "", qty: 1, unit: "NONE", rate: 0, taxPct: 0, taxLabel: "NONE" };
 }
 
-function computeRow(item: LineItem) {
-  const base = item.qty * item.rate;
-  const taxAmt = parseFloat((base * item.taxPct / 100).toFixed(2));
-  return { taxAmt, amount: parseFloat((base + taxAmt).toFixed(2)) };
+function computeRow(item: LineItem, mode: "without_tax" | "with_tax" = "without_tax") {
+  if (mode === "with_tax") {
+    const gross = item.qty * item.rate;
+    const base = item.taxPct > 0 ? parseFloat((gross / (1 + item.taxPct / 100)).toFixed(2)) : gross;
+    const taxAmt = parseFloat((gross - base).toFixed(2));
+    return { base, taxAmt, amount: parseFloat(gross.toFixed(2)) };
+  } else {
+    const base = parseFloat((item.qty * item.rate).toFixed(2));
+    const taxAmt = parseFloat((base * item.taxPct / 100).toFixed(2));
+    return { base, taxAmt, amount: parseFloat((base + taxAmt).toFixed(2)) };
+  }
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -213,6 +221,8 @@ export default function PurchaseBillsPage() {
   const [termsText, setTermsText] = useState("");
   const [showDesc, setShowDesc] = useState(false);
   const [description, setDescription] = useState("");
+  const [discount, setDiscount] = useState<number>(0);
+  const [freight, setFreight] = useState<number>(0);
   const [roundOffEnabled, setRoundOffEnabled] = useState(true);
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -266,6 +276,8 @@ export default function PurchaseBillsPage() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const grnId = urlParams.get('grnId');
+    const poId = urlParams.get('poId');
+
     if (grnId) {
       grnApi.getById(grnId).then(res => {
         const grn = res.data;
@@ -287,6 +299,8 @@ export default function PurchaseBillsPage() {
                      poItems = JSON.parse(grn.procurementOrder.items);
                   } else if (Array.isArray(grn.procurementOrder?.items)) {
                      poItems = grn.procurementOrder.items;
+                  } else if (Array.isArray(grn.procurementOrder?.poItems)) {
+                     poItems = grn.procurementOrder.poItems;
                   }
                } catch(e) {}
 
@@ -294,7 +308,7 @@ export default function PurchaseBillsPage() {
                   let rate = item.gstRate || 0;
                   if (rate === 0 && poItems.length > 0) {
                      const matId = item.materialId || item.inventoryItemId || (item.inventoryItem ? item.inventoryItem.id : null);
-                     const poItem = poItems.find((pi: any) => pi.inventoryItemId === matId);
+                     const poItem = poItems.find((pi: any) => (pi.inventoryItemId === matId || pi.id === matId));
                      if (poItem && poItem.gstRate) {
                         rate = poItem.gstRate;
                      }
@@ -304,22 +318,82 @@ export default function PurchaseBillsPage() {
                   }
                   return {
                      id: Math.random().toString(36).slice(2),
-                     name: item.inventoryItem?.name || "Material",
-                     qty: item.acceptedQty,
-                     unit: item.inventoryItem?.unit || "KGS",
-                     rate: item.price || 0,
+                     name: item.inventoryItem?.name || item.itemName || "Material",
+                     qty: Number(item.acceptedQty ?? item.quantity) || 0,
+                     unit: item.inventoryItem?.unit || item.unit || "KGS",
+                     rate: Number(item.price) || 0,
                      taxPct: rate,
                      taxLabel: rate > 0 ? `GST@${rate}%` : "NONE"
                   };
                });
                setItems(newItems);
             }
+
+            // Fetch discount and freight from PO or GRN
+            let poDiscount = Number(grn.procurementOrder?.discountAmount) || 0;
+            let poFreight = Number(grn.procurementOrder?.freightCost) || Number(grn.freightCost) || 0;
+
+            const poSubtotal = Number(grn.procurementOrder?.subtotal) || 0;
+            const acceptedSubtotal = (grn.items || []).reduce((acc: number, it: any) => {
+              const qty = Number(it.acceptedQty ?? it.quantity ?? 0);
+              const price = Number(it.price ?? 0);
+              return acc + (qty * price);
+            }, 0);
+
+            if (poSubtotal > 0 && acceptedSubtotal > 0 && acceptedSubtotal < poSubtotal) {
+              const ratio = acceptedSubtotal / poSubtotal;
+              poDiscount = parseFloat((poDiscount * ratio).toFixed(2));
+              poFreight = parseFloat((poFreight * ratio).toFixed(2));
+            }
+
+            setDiscount(poDiscount);
+            setFreight(poFreight);
+
            setDescription(`Auto-generated from GRN: ${grnId} / PO: ${grn.procurementOrder?.poNumber || ''}`);
            setShowDesc(true);
            toast.success("Bill auto-filled from GRN!");
         }
       }).catch(err => {
          console.error("Failed to load GRN for auto-fill", err);
+      });
+    } else if (poId) {
+      purchaseOrdersApi.getById(poId).then(res => {
+        const po = res.data;
+        if (po) {
+          setView("create");
+          if (po.vendor) {
+            setSelectedVendor(po.vendor);
+            setVendorSearch(po.vendor.name);
+            setVendorPhone(po.vendor.contact || po.vendor.phone || "");
+            if (po.vendor.state) setStateOfSupply(po.vendor.state);
+          }
+          setSourcePoId(po.id);
+          const poItems = po.poItems || (typeof po.items === 'string' ? JSON.parse(po.items) : po.items) || [];
+          if (poItems.length > 0) {
+            const newItems = poItems.map((item: any) => {
+              const rate = item.gstRate ?? (item.inventoryItem?.taxRate || item.inventoryItem?.gstRate || 0);
+              return {
+                id: Math.random().toString(36).slice(2),
+                name: item.itemName || item.inventoryItem?.name || "Material",
+                qty: Number(item.quantity) || 1,
+                unit: item.unit || item.inventoryItem?.unit || "KGS",
+                rate: Number(item.price) || 0,
+                taxPct: rate,
+                taxLabel: rate > 0 ? `GST@${rate}%` : "NONE"
+              };
+            });
+            setItems(newItems);
+          }
+          const disc = Number(po.discountAmount) || 0;
+          const frt = Number(po.freightCost) || 0;
+          setDiscount(disc);
+          setFreight(frt);
+          setDescription(`Auto-generated from PO: ${po.poNumber || po.id}`);
+          setShowDesc(true);
+          toast.success("Bill auto-filled from PO!");
+        }
+      }).catch(err => {
+        console.error("Failed to load PO for auto-fill", err);
       });
     }
   }, []);
@@ -342,11 +416,14 @@ export default function PurchaseBillsPage() {
   }, []);
 
   // Computed
-  const rowData = items.map(item => ({ item, ...computeRow(item) }));
+  const rowData = items.map(item => ({ item, ...computeRow(item, priceMode) }));
+  const subtotal = parseFloat(rowData.reduce((s, r) => s + r.base, 0).toFixed(2));
   const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
-  const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
-  const finalTotal = parseFloat((totalAmount + roundOff).toFixed(2));
+  const safeDiscount = Math.max(0, Number(discount) || 0);
+  const safeFreight = Math.max(0, Number(freight) || 0);
+  const netAmount = parseFloat((subtotal + totalTax - safeDiscount + safeFreight).toFixed(2));
+  const roundOff = roundOffEnabled ? parseFloat((Math.round(netAmount) - netAmount).toFixed(2)) : 0;
+  const finalTotal = parseFloat((netAmount + roundOff).toFixed(2));
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) =>
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
@@ -359,6 +436,7 @@ export default function PurchaseBillsPage() {
     setBillDate(new Date().toISOString().split("T")[0]); setBillNumber("Auto");
     setStateOfSupply(""); setPaymentType("CASH");
     setItems([makeItem(), makeItem()]); setPriceMode("without_tax");
+    setDiscount(0); setFreight(0);
     setTermsText(""); setShowTerms(false); setDescription(""); setShowDesc(false);
     setAttachedFiles([]);
     setRoundOffEnabled(true); setView("create");
@@ -405,7 +483,12 @@ export default function PurchaseBillsPage() {
     billDate: billDate || new Date().toISOString(),
     paymentType: paymentType,
     amount: finalTotal,
-    totalTax: items.reduce((sum, item) => sum + (item.qty * item.rate * item.taxPct / 100), 0)
+    discount: safeDiscount,
+    discountAmount: safeDiscount,
+    freight: safeFreight,
+    freightCost: safeFreight,
+    subtotal: subtotal,
+    totalTax: totalTax
   });
 
   const handleDownloadPdf = (bill?: any) => {
@@ -436,10 +519,17 @@ export default function PurchaseBillsPage() {
         stateOfSupply: stateOfSupply || undefined,
         paymentType,
         amount: finalTotal,
-        items: validItems.map(i => ({
-          name: i.name, qty: i.qty, unit: i.unit,
-          rate: i.rate, taxPct: i.taxPct, taxAmount: computeRow(i).taxAmt, amount: computeRow(i).amount,
-        })),
+        subtotal: subtotal,
+        taxAmount: totalTax,
+        discountAmount: safeDiscount,
+        freightCost: safeFreight,
+        items: validItems.map(i => {
+          const row = computeRow(i, priceMode);
+          return {
+            name: i.name, qty: i.qty, unit: i.unit,
+            rate: i.rate, taxPct: i.taxPct, taxAmount: row.taxAmt, amount: row.amount,
+          };
+        }),
         termsAndConditions: termsText || undefined,
         description: description || undefined,
         attachments: attachedFiles.map(f => ({ name: f.name, size: f.size, type: f.type, url: f.url })),
@@ -741,7 +831,7 @@ export default function PurchaseBillsPage() {
                 </thead>
                 <tbody>
                   {items.map((item, idx) => {
-                    const { taxAmt, amount } = computeRow(item);
+                    const { taxAmt, amount } = computeRow(item, priceMode);
                     return (
                       <tr key={item.id} className="border-b border-gray-100 hover:bg-orange-50/30 group">
                         <td className="px-3 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
@@ -845,21 +935,41 @@ export default function PurchaseBillsPage() {
 
           {/* Notes + Summary */}
           <div className="flex gap-4 items-start pb-2">
-            <div className="flex-1 space-y-2">
-              {!showTerms ? (
-                <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
-                  <AlignLeft size={13} /> Add Terms &amp; Conditions
+            <div className="flex-1 space-y-2.5">
+              <div className="flex flex-wrap gap-2">
+                {!showTerms && (
+                  <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
+                    <AlignLeft size={13} /> Add Terms &amp; Conditions
+                  </button>
+                )}
+                {!showDesc && (
+                  <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
+                    <FileText size={13} /> Add Description
+                  </button>
+                )}
+                <button 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors cursor-pointer"
+                >
+                  <Upload size={13} /> Upload Bill
                 </button>
-              ) : (
-                <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+              </div>
+
+              {showTerms && (
+                <div className="relative">
+                  <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+                  <button type="button" onClick={() => { setTermsText(""); setShowTerms(false); }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={12} /></button>
+                </div>
               )}
-              {!showDesc ? (
-                <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
-                  <FileText size={13} /> Add Description
-                </button>
-              ) : (
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+
+              {showDesc && (
+                <div className="relative">
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+                  <button type="button" onClick={() => { setDescription(""); setShowDesc(false); }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={12} /></button>
+                </div>
               )}
+
               <div className="space-y-2">
                 <input
                   type="file"
@@ -869,15 +979,6 @@ export default function PurchaseBillsPage() {
                   accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
                   className="hidden"
                 />
-                <div className="flex gap-2">
-                  <button 
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors cursor-pointer"
-                  >
-                    <Upload size={13} /> Upload Bill
-                  </button>
-                </div>
 
                 {attachedFiles.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -907,27 +1008,43 @@ export default function PurchaseBillsPage() {
             </div>
 
             {/* Summary Panel */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 w-64 shrink-0 space-y-2">
-              <div className="flex justify-between text-sm text-gray-500">
-                <span>Subtotal</span>
-                <span>₹ {totalAmount.toFixed(2)}</span>
+            <div className="bg-white rounded-xl border border-gray-200 p-4.5 w-72 shrink-0 space-y-2.5 shadow-sm">
+              <div className="flex justify-between items-center text-sm text-gray-600">
+                <span className="font-medium">Subtotal</span>
+                <span className="font-semibold text-gray-900">₹ {subtotal.toFixed(2)}</span>
               </div>
-              {totalTax > 0 && (
-                <div className="flex justify-between text-sm text-gray-500">
-                  <span>Tax (GST)</span>
-                  <span>+ ₹ {totalTax.toFixed(2)}</span>
+
+              {safeDiscount > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600 font-medium">Discount</span>
+                  <span className="font-bold text-emerald-600">- ₹ {safeDiscount.toFixed(2)}</span>
                 </div>
               )}
+
+              {totalTax > 0 && (
+                <div className="flex justify-between items-center text-sm text-gray-600">
+                  <span className="font-medium">Tax (GST)</span>
+                  <span className="font-semibold text-gray-900">+ ₹ {totalTax.toFixed(2)}</span>
+                </div>
+              )}
+
+              {safeFreight > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-600 font-medium">Freight / Shipment</span>
+                  <span className="font-semibold text-gray-900">+ ₹ {safeFreight.toFixed(2)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between items-center text-sm text-gray-500 border-t border-gray-100 pt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" />
-                  <span className="text-xs">Round Off</span>
+                  <span className="text-xs font-medium">Round Off</span>
                 </label>
-                <span className="text-xs">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
+                <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center border-t border-gray-200 pt-2">
-                <span className="text-sm font-semibold text-gray-800">Total</span>
-                <span className="text-lg font-bold text-orange-500">₹ {finalTotal.toFixed(2)}</span>
+              <div className="flex justify-between items-center border-t border-gray-200 pt-2.5">
+                <span className="text-sm font-bold text-gray-800">Total</span>
+                <span className="text-xl font-black text-orange-500">₹ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -1216,7 +1333,10 @@ export default function PurchaseBillsPage() {
           order={{
             poNumber: previewBill.invoiceNumber || previewBill.billNumber,
             createdAt: previewBill.billDate || previewBill.invoiceDate,
-            discount: previewBill.discount || 0,
+            discount: previewBill.discount || previewBill.discountAmount || 0,
+            discountAmount: previewBill.discountAmount || previewBill.discount || 0,
+            freight: previewBill.freight || previewBill.freightCost || 0,
+            freightCost: previewBill.freightCost || previewBill.freight || 0,
             items: (previewBill.items || []).map((it: any, idx: number) => ({
               itemName: it.item || it.name || `Item #${idx + 1}`,
               quantity: Number(it.qty ?? it.quantity) || 0,
