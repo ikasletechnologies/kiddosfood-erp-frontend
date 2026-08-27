@@ -474,10 +474,10 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               <span className="text-gray-600">Taxable Amount</span>
               <span className="font-semibold text-gray-900">₹{fmt(taxableAfterDiscount)}</span>
             </div>
-            {freight > 0 && (
+            {freightCost > 0 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">Freight / Shipment</span>
-                <span className="font-semibold text-gray-900">+ ₹{fmt(freight)}</span>
+                <span className="font-semibold text-gray-900">+ ₹{fmt(freightCost)}</span>
               </div>
             )}
             {isSameState ? (
