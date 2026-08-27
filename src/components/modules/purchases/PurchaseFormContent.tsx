@@ -448,6 +448,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               gstRate: item.gstRate || 0,
               unit: item.unit || "unit"
             })),
+            discount: totals.discountAmount || 0,
+            discountAmount: totals.discountAmount || 0,
+            freightCost: totals.freightCost || 0,
+            shippingAmount: totals.freightCost || 0,
             advancePaid: totals.appliedAdvance || 0,
             paid: totals.appliedAdvance || 0
           }}
