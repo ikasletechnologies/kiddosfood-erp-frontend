@@ -8,3 +8,4 @@ export * from './accounting.api';
 export * from './user.api';
 export * from './dashboard.api';
 export * from './warehouse.api';
+export * from './setup.api';
