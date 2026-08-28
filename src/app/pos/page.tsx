@@ -400,8 +400,8 @@ export default function POSPage() {
 
   if (receipt) {
     return (
-      <div className="-m-6 flex h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50">
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 w-full max-w-sm mx-4 overflow-hidden">
+      <div className="-m-6 flex h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50 dark:bg-background">
+        <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-4 overflow-hidden">
           {/* Header */}
           <div className="px-6 py-5 text-center text-white" style={{ background: BRAND_ORANGE }}>
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -415,28 +415,28 @@ export default function POSPage() {
           {/* Details */}
           <div className="px-6 py-4 space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Bill No</span>
-              <span className="font-semibold text-gray-800">#{receipt.orderId.slice(-8).toUpperCase()}</span>
+              <span className="text-gray-500 dark:text-slate-400">Bill No</span>
+              <span className="font-semibold text-gray-800 dark:text-white">#{receipt.orderId.slice(-8).toUpperCase()}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">{receipt.partyType}</span>
-              <span className="font-semibold text-gray-800">{receipt.party?.name || "Walk-in"}</span>
+              <span className="text-gray-500 dark:text-slate-400">{receipt.partyType}</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{receipt.party?.name || "Walk-in"}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-500">Items</span>
-              <span className="font-semibold text-gray-800">{receipt.items.length} items · {receipt.items.reduce((s, i) => s + i.quantity, 0)} qty</span>
+              <span className="text-gray-500 dark:text-slate-400">Items</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{receipt.items.length} items · {receipt.items.reduce((s, i) => s + i.quantity, 0)} qty</span>
             </div>
-            <div className="border-t border-gray-100 pt-3 space-y-1">
-              <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span>{fmt(receipt.subtotal)}</span></div>
-              <div className="flex justify-between text-xs text-gray-500"><span>GST</span><span>{fmt(receipt.gst)}</span></div>
-              {receipt.discount > 0 && <div className="flex justify-between text-xs text-green-600"><span>Discount</span><span>-{fmt(receipt.discount)}</span></div>}
-              <div className="flex justify-between text-sm font-bold text-gray-800 pt-1 border-t border-gray-100"><span>Total</span><span>{fmt(receipt.total)}</span></div>
+            <div className="border-t border-gray-100 dark:border-white/5 pt-3 space-y-1">
+              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="dark:text-slate-200">{fmt(receipt.subtotal)}</span></div>
+              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>GST</span><span className="dark:text-slate-200">{fmt(receipt.gst)}</span></div>
+              {receipt.discount > 0 && <div className="flex justify-between text-xs text-green-600 dark:text-green-400"><span>Discount</span><span>-{fmt(receipt.discount)}</span></div>}
+              <div className="flex justify-between text-sm font-bold text-gray-800 dark:text-white pt-1 border-t border-gray-100 dark:border-white/5"><span>Total</span><span>{fmt(receipt.total)}</span></div>
             </div>
           </div>
 
           {/* Actions */}
           <div className="px-6 pb-6 flex gap-2">
-            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50 py-2.5 rounded-xl text-sm font-medium transition-colors">
+            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 py-2.5 rounded-xl text-sm font-medium transition-colors">
               <Printer size={15} /> Print
             </button>
             <button onClick={handleNewOrder} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
@@ -455,45 +455,45 @@ export default function POSPage() {
   const activeTab = PARTY_TABS.find(t => t.type === partyType)!;
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[#F5F6FA]">
+    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[#F5F6FA] dark:bg-background">
 
       {/* ── LEFT: Products ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Search bar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-3 shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 py-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
               <input
                 ref={searchRef}
                 type="text"
                 placeholder="Search products (Space to focus)..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800"
+                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
             </div>
             <button
               onClick={() => { setShowScanner(true); setScannedProduct(null); }}
-              className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:text-[#f58220] hover:bg-gray-50 transition-colors flex items-center gap-1.5 font-bold text-xs"
+              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-[#f58220] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs"
             >
               <Barcode size={15} /> Scan Barcode
             </button>
             <button
               onClick={handleReturnProduct}
-              className="p-2.5 border border-gray-200 rounded-xl text-gray-500 hover:text-red-500 hover:bg-gray-50 transition-colors flex items-center gap-1.5 font-bold text-xs"
+              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs"
             >
               <RotateCcw size={15} /> Return Product
             </button>
-            <button onClick={fetchProducts} className="p-2.5 border border-gray-200 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors">
+            <button onClick={fetchProducts} className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
               <RefreshCw size={15} className={productsLoading ? "animate-spin" : ""} />
             </button>
           </div>
@@ -508,7 +508,7 @@ export default function POSPage() {
                   "shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
                   activeCategory === cat
                     ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    : "bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-white/10"
                 )}
               >
                 {cat}
@@ -524,7 +524,7 @@ export default function POSPage() {
               <RefreshCw size={20} className="animate-spin text-blue-500" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400 dark:text-slate-500">
               <ShoppingBag size={32} strokeWidth={1} className="mb-2" />
               <p className="text-sm">No products found</p>
             </div>
@@ -539,8 +539,8 @@ export default function POSPage() {
                     onClick={() => addToCart(p)}
                     style={inCart ? { borderColor: BRAND_ORANGE, borderWidth: "1.5px" } : {}}
                     className={clsx(
-                      "group relative bg-white border rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95",
-                      inCart ? "shadow-md" : "border-gray-200 hover:border-gray-300",
+                      "group relative bg-white dark:bg-card border rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95",
+                      inCart ? "shadow-md" : "border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10",
                       p.noPrice && "opacity-50 cursor-not-allowed"
                     )}
                   >
@@ -548,7 +548,7 @@ export default function POSPage() {
                     {p.stock !== null && (
                       <div className={clsx(
                         "absolute top-2.5 right-2.5 text-[11px] font-bold px-2 py-1 rounded-full",
-                        p.stock === 0 ? "bg-red-100 text-red-600" : p.stock <= 5 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                        p.stock === 0 ? "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400" : p.stock <= 5 ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400"
                       )}>
                         {p.stock === 0 ? "OUT" : `${p.stock}`}
                       </div>
@@ -561,14 +561,14 @@ export default function POSPage() {
                       </div>
                     )}
 
-                    <p className="text-sm font-semibold text-gray-800 leading-tight line-clamp-2 mb-2">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white leading-tight line-clamp-2 mb-2">
                       {p.name}
                       {formatPackSize(p.packSize) && (
-                        <span className="ml-1 font-bold text-gray-400">· {formatPackSize(p.packSize)}</span>
+                        <span className="ml-1 font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
                       )}
                     </p>
                     <p className="text-base font-bold mt-1" style={{ color: BRAND_ORANGE }}>₹{getPrice(p, partyType).toLocaleString()}</p>
-                    {p.taxPercent > 0 && <p className="text-xs text-gray-400 mt-0.5">GST {p.taxPercent}%</p>}
+                    {p.taxPercent > 0 && <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">GST {p.taxPercent}%</p>}
                   </button>
                 );
               })}
@@ -577,19 +577,19 @@ export default function POSPage() {
         </div>
 
         {/* Bottom hint */}
-        <div className="bg-white border-t border-gray-100 px-4 py-2 flex items-center gap-4 text-[10px] text-gray-400 shrink-0">
-          <span><kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono">ESC</kbd> Clear</span>
-          <span><kbd className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500 font-mono">SPACE</kbd> Focus Search</span>
+        <div className="bg-white dark:bg-card border-t border-gray-100 dark:border-white/5 px-4 py-2 flex items-center gap-4 text-[10px] text-gray-400 dark:text-slate-500 shrink-0">
+          <span><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-400 font-mono">ESC</kbd> Clear</span>
+          <span><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-400 font-mono">SPACE</kbd> Focus Search</span>
           <span className="ml-auto">{cart.length} items · {fmt(total)}</span>
         </div>
       </div>
 
       {/* ── RIGHT: Order Panel ─────────────────────────────────────────────── */}
-      <div className="w-80 xl:w-96 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
+      <div className="w-80 xl:w-96 bg-white dark:bg-card border-l border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0">
 
         {/* Party type tabs */}
-        <div className="border-b border-gray-100 px-3 pt-3 pb-0 shrink-0">
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+        <div className="border-b border-gray-100 dark:border-white/5 px-3 pt-3 pb-0 shrink-0">
+          <div className="flex gap-1 bg-gray-100 dark:bg-white/5 p-1 rounded-xl">
             {PARTY_TABS.map(tab => {
               const Icon = tab.icon;
               const active = partyType === tab.type;
@@ -600,7 +600,7 @@ export default function POSPage() {
                   style={active ? { background: BRAND_ORANGE } : {}}
                   className={clsx(
                     "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold transition-all",
-                    active ? "text-white shadow-sm" : "text-gray-500 hover:text-gray-700"
+                    active ? "text-white shadow-sm" : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white"
                   )}
                 >
                   <Icon size={12} />
@@ -612,14 +612,14 @@ export default function POSPage() {
         </div>
 
         {/* Party search */}
-        <div className="px-3 py-2.5 border-b border-gray-100 shrink-0" ref={partyDropRef}>
+        <div className="px-3 py-2.5 border-b border-gray-100 dark:border-white/5 shrink-0" ref={partyDropRef}>
           {selectedParty ? (
-            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 border" style={{ background: "#fff8f2", borderColor: "#f9c89a" }}>
+            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 border dark:bg-orange-500/10 dark:border-orange-500/20" style={{ background: "#fff8f2", borderColor: "#f9c89a" }}>
               <div className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ background: BRAND_ORANGE }}>
                 {selectedParty.name?.[0]?.toUpperCase() || "?"}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">{selectedParty.name}</p>
+                <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{selectedParty.name}</p>
                 <p className="text-[10px]" style={{ color: BRAND_ORANGE }}>{selectedParty.phone || selectedParty.contactNum || selectedParty.location || partyType}</p>
               </div>
               <button onClick={() => { setSelectedParty(null); setPartySearch(""); }} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -628,43 +628,43 @@ export default function POSPage() {
             </div>
           ) : (
             <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
               <input
                 type="text"
                 placeholder={`Search ${activeTab.label}...`}
                 value={partySearch}
                 onChange={e => { setPartySearch(e.target.value); setShowPartyDrop(true); }}
                 onFocus={() => setShowPartyDrop(true)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors text-gray-800"
+                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
             {partySearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setPartySearch("")} 
               />
             )}
               {showPartyDrop && partyResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
                   {partyResults.map(p => (
                     <button
                       key={p.id}
                       onClick={() => { setSelectedParty(p); setPartySearch(p.name); setShowPartyDrop(false); setPartyResults([]); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 border-b border-gray-50 last:border-0 text-left transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left transition-colors"
                     >
-                      <div className="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center font-semibold text-xs text-gray-600 shrink-0">
+                      <div className="w-7 h-7 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-semibold text-xs text-gray-600 dark:text-slate-300 shrink-0">
                         {p.name?.[0]?.toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
-                        <p className="text-[10px] text-gray-400">{p.phone || p.contactNum || p.location || ""}</p>
+                        <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{p.name}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500">{p.phone || p.contactNum || p.location || ""}</p>
                       </div>
                     </button>
                   ))}
                 </div>
               )}
               {showPartyDrop && partySearch.length >= 2 && partyResults.length === 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-3 py-3 text-xs text-gray-400 text-center">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
                   No {activeTab.label.toLowerCase()} found
                 </div>
               )}
@@ -673,13 +673,13 @@ export default function POSPage() {
         </div>
 
         {/* Order header */}
-        <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between shrink-0">
+        <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between shrink-0">
           <div>
-            <p className="text-xs font-semibold text-gray-700">Active Order</p>
-            <p className="text-[10px] text-gray-400">{cart.length} items added</p>
+            <p className="text-xs font-semibold text-gray-700 dark:text-slate-200">Active Order</p>
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">{cart.length} items added</p>
           </div>
           {cart.length > 0 && (
-            <button onClick={() => setCart([])} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+            <button onClick={() => setCart([])} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors">
               <Trash2 size={14} />
             </button>
           )}
@@ -688,30 +688,30 @@ export default function POSPage() {
         {/* Cart items */}
         <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
           {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-300 py-8">
+            <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-slate-600 py-8">
               <ShoppingBag size={32} strokeWidth={1} className="mb-2" />
-              <p className="text-xs font-medium text-gray-400">Add products to start billing</p>
+              <p className="text-xs font-medium text-gray-400 dark:text-slate-500">Add products to start billing</p>
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.id} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 hover:border-blue-200 transition-colors">
+              <div key={item.id} className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl px-3 py-2.5 hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 truncate">{item.name}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">₹{item.price} {item.taxPercent > 0 && `· GST ${item.taxPercent}%`}</p>
+                  <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{item.name}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">₹{item.price} {item.taxPercent > 0 && `· GST ${item.taxPercent}%`}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 rounded-md border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                  <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 transition-colors">
                     <Minus size={10} strokeWidth={3} />
                   </button>
-                  <span className="w-6 text-center text-xs font-bold text-gray-800">{item.quantity}</span>
-                  <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded-md border border-gray-200 bg-white flex items-center justify-center text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                  <span className="w-6 text-center text-xs font-bold text-gray-800 dark:text-white">{item.quantity}</span>
+                  <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 transition-colors">
                     <Plus size={10} strokeWidth={3} />
                   </button>
                   <button onClick={() => removeItem(item.id)} className="w-6 h-6 ml-1 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors">
                     <X size={12} />
                   </button>
                 </div>
-                <div className="text-xs font-bold text-gray-800 w-14 text-right shrink-0">
+                <div className="text-xs font-bold text-gray-800 dark:text-white w-14 text-right shrink-0">
                   ₹{(item.price * item.quantity).toLocaleString()}
                 </div>
               </div>
@@ -720,68 +720,68 @@ export default function POSPage() {
         </div>
 
         {/* Billing panel */}
-        <div className="border-t border-gray-100 px-4 py-3 space-y-3 bg-gray-50/60 shrink-0">
+        <div className="border-t border-gray-100 dark:border-white/5 px-4 py-3 space-y-3 bg-gray-50/60 dark:bg-white/[0.02] shrink-0">
 
           {/* Paid & Change */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <p className="text-[10px] font-medium text-gray-400 mb-1">PAID AMOUNT</p>
+              <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500 mb-1">PAID AMOUNT</p>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-semibold">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-sm font-semibold">₹</span>
                 <input
                   type="number"
                   placeholder="0"
                   value={paidAmount}
                   onChange={e => setPaidAmount(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg pl-7 pr-2 py-2 text-sm font-bold outline-none focus:border-blue-500 transition-colors text-gray-800"
+                  className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg pl-7 pr-2 py-2 text-sm font-bold outline-none focus:border-blue-500 transition-colors text-gray-800 dark:text-white"
                 />
               </div>
             </div>
             <div className="text-right shrink-0">
               <p className="text-[10px] font-medium text-red-400 mb-1">CHANGE DUE</p>
-              <p className={clsx("text-xl font-black mt-1", changeDue >= 0 ? "text-green-600" : "text-red-500")}>
+              <p className={clsx("text-xl font-black mt-1", changeDue >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500")}>
                 ₹{Math.max(0, changeDue).toLocaleString()}
               </p>
             </div>
           </div>
 
           {/* Totals */}
-          <div className="bg-white border border-gray-100 rounded-xl px-3 py-2.5 space-y-1.5">
-            <div className="flex justify-between text-xs text-gray-500">
+          <div className="bg-white dark:bg-[#13151f] border border-gray-100 dark:border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400">
               <span className="flex items-center gap-1"><Percent size={10} className="text-blue-500" /> Subtotal</span>
-              <span className="font-medium text-gray-700">{fmt(subtotal)}</span>
+              <span className="font-medium text-gray-700 dark:text-slate-200">{fmt(subtotal)}</span>
             </div>
-            <div className="flex justify-between text-xs text-gray-500">
+            <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400">
               <span className="flex items-center gap-1"><Percent size={10} className="text-blue-500" /> Tax (GST)</span>
-              <span className="font-medium text-gray-700">{fmt(gst)}</span>
+              <span className="font-medium text-gray-700 dark:text-slate-200">{fmt(gst)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1 text-xs text-gray-500"><Tag size={10} className="text-green-500" /> Discount</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400"><Tag size={10} className="text-green-500" /> Discount</span>
               <div className="relative w-24">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
                 <input
                   type="number"
                   min="0"
                   placeholder="0"
                   value={discount}
                   onChange={e => setDiscount(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-100 rounded-lg pl-5 pr-2 py-1 text-xs font-semibold text-right outline-none focus:border-blue-400 transition-colors"
+                  className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-lg pl-5 pr-2 py-1 text-xs font-semibold text-right outline-none focus:border-blue-400 transition-colors text-gray-800 dark:text-white"
                 />
               </div>
             </div>
-            <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-              <span className="text-xs font-medium text-gray-500">PAYABLE TOTAL</span>
-              <span className="text-xl font-black text-gray-900">{fmt(total)}</span>
+            <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-white/10">
+              <span className="text-xs font-medium text-gray-500 dark:text-slate-400">PAYABLE TOTAL</span>
+              <span className="text-xl font-black text-gray-900 dark:text-white">{fmt(total)}</span>
             </div>
           </div>
 
           {/* Account */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[10px] font-medium text-gray-400">SOURCE ACCOUNT</p>
+              <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500">SOURCE ACCOUNT</p>
               <button
                 onClick={() => fetchAccounts()}
-                className="text-[10px] text-blue-600 hover:text-blue-700 font-medium cursor-pointer"
+                className="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium cursor-pointer"
               >
                 Refresh
               </button>
@@ -796,11 +796,11 @@ export default function POSPage() {
                   else if (acc?.type === "UPI") setPayMode("UPI");
                   else if (acc?.type === "BANK") setPayMode("CARD");
                 }}
-                className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 transition-colors"
+                className="flex-1 min-w-0 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-colors"
               >
                 {accounts.length === 0
                   ? <option>No accounts — set up in Finance</option>
-                  : accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
+                  : accounts.map(a => <option key={a.id} value={a.id} className="dark:bg-card">{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
                 }
               </select>
               <button
@@ -829,7 +829,7 @@ export default function POSPage() {
                       ? mode === "CASH" ? "bg-green-500 text-white border-green-500"
                         : mode === "UPI" ? "bg-blue-500 text-white border-blue-500"
                           : "bg-violet-500 text-white border-violet-500"
-                      : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                      : "bg-white dark:bg-white/5 text-gray-500 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
                   )}
                 >
                   <Icon size={16} />
@@ -843,7 +843,7 @@ export default function POSPage() {
           <button
             onClick={handleCheckout}
             disabled={cart.length === 0 || loading || !accountId}
-            className="w-full flex items-center justify-center gap-2 disabled:bg-gray-200 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold transition-all shadow-sm"
+            className="w-full flex items-center justify-center gap-2 disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold transition-all shadow-sm"
             style={cart.length > 0 && accountId ? { background: BRAND_ORANGE } : {}}
           >
             {loading ? (

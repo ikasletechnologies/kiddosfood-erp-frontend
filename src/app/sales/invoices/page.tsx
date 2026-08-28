@@ -69,12 +69,12 @@ const INDIAN_STATES = [
 ];
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:    { label: "Draft",    color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  SENT:     { label: "Sent",     color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  PAID:     { label: "Paid",     color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  PARTIAL:  { label: "Partial",  color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
-  OVERDUE:  { label: "Overdue",  color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200" },
-  CANCELLED:{ label: "Cancelled",color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
+  DRAFT:    { label: "Draft",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  SENT:     { label: "Sent",     color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  PAID:     { label: "Paid",     color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  PARTIAL:  { label: "Partial",  color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
+  OVERDUE:  { label: "Overdue",  color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
+  CANCELLED:{ label: "Cancelled",color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -836,32 +836,32 @@ export default function SalesInvoicesPage() {
     const balanceAmt = Math.max(0, (inv.totalAmount || 0) - paidAmt);
 
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100" style={{ height: 'calc(100vh - 104px)' }}>
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
                 setViewInvoice(null);
                 window.history.replaceState({}, "", window.location.pathname);
               }}
-              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
             >
               <ArrowLeft size={17} />
             </button>
             <div>
-              <h2 className="text-base font-semibold text-gray-800">Tax Invoice — {inv.invoiceNum || "—"}</h2>
+              <h2 className="text-base font-semibold text-gray-800 dark:text-white">Tax Invoice — {inv.invoiceNum || "—"}</h2>
               {inv.sourceProformaInvoiceId && (
-                <p className="text-xs text-gray-400 mt-0.5">Source Proforma: <span className="font-mono font-semibold text-orange-500">{inv.sourceProformaNumber || inv.sourceProformaInvoiceId}</span></p>
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Source Proforma: <span className="font-mono font-semibold text-orange-500">{inv.sourceProformaNumber || inv.sourceProformaInvoiceId}</span></p>
               )}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <span className={clsx(
               "inline-block px-3 py-1 rounded-full text-xs font-bold border",
-              invoice.status === "PAID" ? "text-emerald-600 bg-emerald-50 border-emerald-200"
-              : invoice.status === "PARTIAL" ? "text-amber-600 bg-amber-50 border-amber-200"
-              : "text-slate-600 bg-slate-50 border-slate-200"
+              invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
+              : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
+              : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
             )}>
               {invoice.status || inv.paymentStatus || "UNPAID"}
             </span>
@@ -870,14 +870,14 @@ export default function SalesInvoicesPage() {
                 onClick={() => router.push(
                   `/sales/payment-in?invoiceId=${invoice.id}&partyType=${inv.partyType || "CUSTOMER"}&partyId=${inv.partyId || inv.customerId || ""}`
                 )}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-lg transition-colors"
+                className="px-3 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-lg transition-colors cursor-pointer"
               >
                 Record Payment
               </button>
             )}
             <button
               onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.id}`)}
-              className="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors"
+              className="px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
             >
               Create Delivery Challan
             </button>
@@ -886,36 +886,36 @@ export default function SalesInvoicesPage() {
 
         <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
           {/* Party + Invoice Meta */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Party</p>
-                <p className="text-xs text-gray-500 font-medium">Type: <span className="text-gray-800">{inv.partyType || "CUSTOMER"}</span></p>
-                <p className="text-base font-bold text-gray-800">{customer.name || inv.customerName || "—"}</p>
-                {customer.contact && <p className="text-sm text-gray-500">{customer.contact}</p>}
-                {customer.phone && <p className="text-sm text-gray-500">{customer.phone}</p>}
-                {customer.email && <p className="text-xs text-gray-400">{customer.email}</p>}
-                {customer.gstNumber && <p className="text-xs text-gray-400">GSTIN: {customer.gstNumber}</p>}
+                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Party</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white">{inv.partyType || "CUSTOMER"}</span></p>
+                <p className="text-base font-bold text-gray-800 dark:text-white">{customer.name || inv.customerName || "—"}</p>
+                {customer.contact && <p className="text-sm text-gray-500 dark:text-slate-400">{customer.contact}</p>}
+                {customer.phone && <p className="text-sm text-gray-500 dark:text-slate-400">{customer.phone}</p>}
+                {customer.email && <p className="text-xs text-gray-400 dark:text-slate-500">{customer.email}</p>}
+                {customer.gstNumber && <p className="text-xs text-gray-400 dark:text-slate-500">GSTIN: {customer.gstNumber}</p>}
               </div>
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Invoice Details</p>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Invoice No.</span><span className="font-mono font-bold text-gray-800">{inv.invoiceNum || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Date</span><span className="text-gray-700">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
-                {inv.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500">State of Supply</span><span className="text-gray-700">{inv.stateOfSupply}</span></div>}
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Payment Type</span><span className="text-gray-700">{inv.paymentType || inv.paymentMode || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500">Order Type</span><span className="text-gray-700">{inv.orderType || "TAX_INVOICE"}</span></div>
+                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Invoice Details</p>
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-800 dark:text-white">{inv.invoiceNum || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Date</span><span className="text-gray-700 dark:text-slate-300">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
+                {inv.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">State of Supply</span><span className="text-gray-700 dark:text-slate-300">{inv.stateOfSupply}</span></div>}
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Payment Type</span><span className="text-gray-700 dark:text-slate-300">{inv.paymentType || inv.paymentMode || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Order Type</span><span className="text-gray-700 dark:text-slate-300">{inv.orderType || "TAX_INVOICE"}</span></div>
               </div>
             </div>
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                   <th className="px-4 py-2.5 text-left w-8">#</th>
                   <th className="px-4 py-2.5 text-left">Product</th>
                   <th className="px-4 py-2.5 text-center">Qty</th>
@@ -926,21 +926,21 @@ export default function SalesInvoicesPage() {
                   <th className="px-4 py-2.5 text-right">Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {items.map((it: any, idx: number) => (
-                  <tr key={it.id || idx} className="hover:bg-orange-50/30">
-                    <td className="px-4 py-2.5 text-xs text-gray-400">{idx + 1}</td>
+                  <tr key={it.id || idx} className="hover:bg-orange-50/30 dark:hover:bg-white/[0.02]">
+                    <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                     <td className="px-4 py-2.5">
-                      <div className="font-medium text-gray-800">{it.product?.name || it.productName || "—"}</div>
-                      {it.productId && <div className="text-[10px] text-gray-400 font-mono">{it.productId}</div>}
-                      {it.batchNumber && <div className="text-[10px] text-gray-500">Batch: {it.batchNumber}</div>}
+                      <div className="font-medium text-gray-800 dark:text-white">{it.product?.name || it.productName || "—"}</div>
+                      {it.productId && <div className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">{it.productId}</div>}
+                      {it.batchNumber && <div className="text-[10px] text-gray-500 dark:text-slate-400">Batch: {it.batchNumber}</div>}
                     </td>
-                    <td className="px-4 py-2.5 text-center">{it.quantity}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-500">{it.unit || "—"}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">₹{Number(it.price || 0).toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-500">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono font-semibold">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-center dark:text-slate-200">{it.quantity}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-mono dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-800 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -951,16 +951,16 @@ export default function SalesInvoicesPage() {
           <div className="flex gap-4 items-start">
             {/* Payment history */}
             {payments.length > 0 && (
-              <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Payment History</p>
+              <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4">
+                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Payment History</p>
                 <div className="space-y-1">
                   {payments.map((p: any, i: number) => (
                     <div key={i} className="flex justify-between text-sm">
-                      <span className={clsx("text-gray-500", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
+                      <span className={clsx("text-gray-500 dark:text-slate-400", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
                         {p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}
                         {p.isCancelled ? " (Cancelled)" : p.status !== "PAID" ? ` (${p.status})` : ""}
                       </span>
-                      <span className="font-mono font-semibold text-emerald-600">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
+                      <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -968,13 +968,13 @@ export default function SalesInvoicesPage() {
             )}
 
             {/* Summary */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 w-72 shrink-0 space-y-2 ml-auto">
-              <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span className="font-mono">₹{Number(inv.subTotal || 0).toFixed(2)}</span></div>
-              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Tax</span><span className="font-mono text-gray-600">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
-              {(inv.discountAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500">Discount</span><span className="font-mono text-red-500">-₹{Number(inv.discountAmount || 0).toFixed(2)}</span></div>}
-              <div className="pt-2 border-t border-gray-100 flex justify-between font-bold text-base"><span>Total</span><span className="font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-emerald-600">Paid</span><span className="font-mono text-emerald-600">₹{paidAmt.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm font-semibold"><span className={balanceAmt > 0 ? "text-rose-600" : "text-emerald-600"}>Balance</span><span className={clsx("font-mono", balanceAmt > 0 ? "text-rose-600" : "text-emerald-600")}>₹{balanceAmt.toFixed(2)}</span></div>
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-72 shrink-0 space-y-2 ml-auto">
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono text-gray-800 dark:text-slate-200">₹{Number(inv.subTotal || 0).toFixed(2)}</span></div>
+              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Tax</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
+              {(inv.discountAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Discount</span><span className="font-mono text-red-500 dark:text-red-400">-₹{Number(inv.discountAmount || 0).toFixed(2)}</span></div>}
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between font-bold text-base"><span className="dark:text-slate-200">Total</span><span className="font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400">Paid</span><span className="font-mono text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm font-semibold"><span className={balanceAmt > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>Balance</span><span className={clsx("font-mono", balanceAmt > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>₹{balanceAmt.toFixed(2)}</span></div>
             </div>
           </div>
         </div>
@@ -988,30 +988,30 @@ export default function SalesInvoicesPage() {
   if (view === "create") {
 
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100" style={{ height: 'calc(100vh - 104px)' }}>
 
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors cursor-pointer">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-white">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
           </div>
           <div className="flex items-center gap-4">
             {!isFranchiseUser && (
               <select
                 value={selectedFranchiseId}
                 onChange={e => setSelectedFranchiseId(e.target.value)}
-                className="text-xs font-semibold border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-gray-700"
+                className="text-xs font-semibold border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-1.5 outline-none bg-white dark:bg-[#13151f] text-gray-700 dark:text-slate-200"
               >
-                {franchises.length === 0 && <option value="">No branches found</option>}
+                {franchises.length === 0 && <option value="" className="dark:bg-card">No branches found</option>}
                 {franchises.map((f: any) => (
-                  <option key={f.id} value={f.id}>{f.name}</option>
+                  <option key={f.id} value={f.id} className="dark:bg-card">{f.name}</option>
                 ))}
               </select>
             )}
-            <span className="text-xs text-gray-400">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
+            <span className="text-xs text-gray-400 dark:text-slate-500">Invoice No: <span className="text-orange-500 font-semibold">{invoiceNumber || "Auto"}</span></span>
           </div>
         </div>
 
@@ -1019,23 +1019,23 @@ export default function SalesInvoicesPage() {
         <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
 
           {/* Customer + Invoice Details */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               {/* Left: Customer */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Customer *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Customer *</label>
                   <div className="relative" ref={customerDropRef}>
                     <div
                       className={clsx(
-                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-colors",
-                        showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 hover:border-gray-400"
+                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-colors",
+                        showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100 dark:ring-orange-500/20" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
                       )}
                       onClick={() => setShowCustomerDrop(v => !v)}
                     >
-                      <User size={14} className="text-gray-400 shrink-0" />
+                      <User size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       <input
-                        className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500"
                         placeholder="Search by Name/Phone"
                         value={customerSearch}
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
@@ -1044,16 +1044,16 @@ export default function SalesInvoicesPage() {
             {customerSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setCustomerSearch("")} 
               />
             )}
-                      <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                      <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
                     </div>
                     {showCustomerDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-medium"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 border-b border-gray-100 dark:border-white/5 font-medium"
                           onClick={() => {
                             const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
                             setNewParty(prev => ({
@@ -1069,20 +1069,20 @@ export default function SalesInvoicesPage() {
                         </button>
                         <div className="max-h-48 overflow-y-auto">
                           {filteredCustomers.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-400 text-center">No customers found</div>
+                            <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">No customers found</div>
                           ) : (
                             filteredCustomers.map(c => (
                               <button
                                 key={c.id}
-                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0"
                                 onClick={() => selectCustomer(c)}
                               >
                                 <div className="text-left">
-                                  <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                                  <div className="text-xs text-gray-400">{c.phone || "—"}</div>
+                                  <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
+                                  <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
                                 </div>
                                 {(c.balance !== undefined && c.balance !== 0) && (
-                                  <div className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">
+                                  <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded">
                                     {c.balance}<Check size={10} />
                                   </div>
                                 )}
@@ -1095,9 +1095,9 @@ export default function SalesInvoicesPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500 transition-colors"
                     placeholder="Phone Number"
                     value={customerPhone}
                     onChange={e => setCustomerPhone(e.target.value)}
@@ -1108,21 +1108,21 @@ export default function SalesInvoicesPage() {
               {/* Right: Invoice Details */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-1">
-                  <span className="text-xs font-medium text-gray-500">Invoice Number</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Invoice Number</span>
                   <input
                     type="text"
                     placeholder="Auto"
                     value={invoiceNumber}
                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="text-sm font-semibold text-gray-700 bg-transparent border-b border-dashed border-gray-300 outline-none w-24 text-right focus:border-orange-500"
+                    className="text-sm font-semibold text-gray-700 dark:text-white bg-transparent border-b border-dashed border-gray-300 dark:border-white/20 outline-none w-24 text-right focus:border-orange-500"
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Invoice Date</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Invoice Date</span>
                   <div className="relative" ref={calendarRef}>
                     <button
                       onClick={() => setShowCalendar(v => !v)}
-                      className="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors"
+                      className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-200 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-card hover:border-orange-400 transition-colors"
                     >
                       <Calendar size={13} className="text-orange-500 shrink-0" />
                       {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
@@ -1135,14 +1135,14 @@ export default function SalesInvoicesPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">State of Supply</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">State of Supply</span>
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-sm text-gray-700 outline-none focus:border-orange-400 w-44 transition-colors"
+                    className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-orange-400 w-44 transition-colors"
                   >
-                    <option value="">Select</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="" className="dark:bg-card">Select</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s} className="dark:bg-card">{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -1150,21 +1150,21 @@ export default function SalesInvoicesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <div className="relative" ref={priceDropRef}>
                 <button
                   onClick={() => setShowPriceDrop(v => !v)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 bg-white hover:border-gray-400 transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-card hover:border-gray-400 dark:hover:border-white/20 transition-colors"
                 >
                   Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
                   <ChevronDown size={11} />
                 </button>
                 {showPriceDrop && (
-                  <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg text-xs w-44 z-50">
-                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 text-gray-700" onClick={() => { setPriceMode("without_tax"); setShowPriceDrop(false); }}>Excl. Tax (Without Tax)</button>
-                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 text-gray-700" onClick={() => { setPriceMode("with_tax"); setShowPriceDrop(false); }}>Incl. Tax (With Tax)</button>
+                  <div className="absolute top-full right-0 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-xs w-44 z-50">
+                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("without_tax"); setShowPriceDrop(false); }}>Excl. Tax (Without Tax)</button>
+                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("with_tax"); setShowPriceDrop(false); }}>Incl. Tax (With Tax)</button>
                   </div>
                 )}
               </div>
@@ -1173,7 +1173,7 @@ export default function SalesInvoicesPage() {
             <div style={{ overflowX: "auto" }}>
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                     <th className="w-8 px-3 py-2.5 text-center">#</th>
                     <th className="px-3 py-2.5 text-left">Item</th>
                     <th className="w-28 px-2 py-2.5 text-center">Batch No.</th>
@@ -1186,7 +1186,7 @@ export default function SalesInvoicesPage() {
                     <th className="w-8" />
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((item, idx) => {
                     const { discAmt, taxAmt, amount } = computeRow(item, withTax);
                     const filtProd = products.filter(p =>
@@ -1194,13 +1194,13 @@ export default function SalesInvoicesPage() {
                     ).slice(0, 10);
 
                     return (
-                      <tr key={item.id} className="border-b border-gray-100 hover:bg-orange-50/30 group">
-                        <td className="px-3 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
+                      <tr key={item.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/30 dark:hover:bg-white/[0.02] group">
+                        <td className="px-3 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
 
                         {/* ITEM */}
                         <td className="px-3 py-2" style={{ position: "relative", overflow: "visible" }}>
                           <input
-                            className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500"
                             placeholder="Search item..."
                             value={item.itemSearch}
                             onChange={e => {
@@ -1217,13 +1217,13 @@ export default function SalesInvoicesPage() {
             {item.itemSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => updateItem(idx, "itemSearch", "")} 
               />
             )}
                           
                           {item.productId && (
-                            <div className="text-[10px] text-gray-500 mt-1 leading-tight">
+                            <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
                               {(() => {
                                 let req = item.qty;
                                 const u = String(item.unit).toUpperCase();
@@ -1242,7 +1242,7 @@ export default function SalesInvoicesPage() {
                                   <>
                                     Available: {item.availableStock || 0} {baseName}
                                     {req > 0 && ` | Req: ${req} ${baseName}`}
-                                    {isInsufficient && <span className="text-red-500 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
+                                    {isInsufficient && <span className="text-red-500 dark:text-red-400 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
                                   </>
                                 );
                               })()}
@@ -1251,11 +1251,11 @@ export default function SalesInvoicesPage() {
 
                           {openItemDrop === item.id && itemDropRect && (
                             <div
-                              className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+                              className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col"
                               style={{ position: "fixed", top: itemDropRect.top + 4, left: itemDropRect.left, width: itemDropRect.width, zIndex: 9999 }}
                             >
                               <button
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-semibold text-left transition-colors"
+                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 border-b border-gray-100 dark:border-white/5 font-semibold text-left transition-colors cursor-pointer"
                                 onMouseDown={(e) => { 
                                   e.preventDefault(); 
                                   setAddingItemIdx(idx);
@@ -1267,17 +1267,17 @@ export default function SalesInvoicesPage() {
                               </button>
                               <div className="max-h-48 overflow-y-auto">
                                 {filtProd.length === 0 ? (
-                                  <div className="px-3 py-4 text-xs text-gray-400 text-center">No matching products</div>
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No matching products</div>
                                 ) : (
                                   filtProd.map(p => (
                                     <button
                                       key={p.id}
-                                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-50 text-left border-b border-gray-50 last:border-0"
+                                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0"
                                       onMouseDown={() => selectProduct(idx, p)}
                                     >
                                       <div>
-                                        <div className="text-sm font-medium text-gray-800">{p.name}</div>
-                                        <div className="text-xs text-gray-400">₹{p.basePrice || p.price || 0}</div>
+                                        <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{p.basePrice || p.price || 0}</div>
                                       </div>
                                     </button>
                                   ))
@@ -1293,11 +1293,11 @@ export default function SalesInvoicesPage() {
                             <select
                               value={item.batchNumber || ""}
                               onChange={e => updateItem(idx, "batchNumber", e.target.value)}
-                              className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer border border-gray-200 rounded px-1 py-0.5"
+                              className="w-full text-xs text-gray-700 dark:text-slate-200 outline-none bg-transparent cursor-pointer border border-gray-200 dark:border-white/10 rounded px-1 py-0.5"
                             >
-                              <option value="">Select Batch</option>
+                              <option value="" className="dark:bg-card">Select Batch</option>
                               {item.batches.map((b: any) => (
-                                <option key={b.id} value={b.batchCode}>
+                                <option key={b.id} value={b.batchCode} className="dark:bg-card">
                                   {b.batchCode}
                                 </option>
                               ))}
@@ -1308,7 +1308,7 @@ export default function SalesInvoicesPage() {
                               placeholder="Batch No."
                               value={item.batchNumber || ""}
                               onChange={e => updateItem(idx, "batchNumber", e.target.value)}
-                              className="w-full text-xs text-gray-700 text-center outline-none bg-transparent placeholder-gray-400 border border-gray-200 rounded px-1 py-0.5"
+                              className="w-full text-xs text-gray-700 dark:text-white text-center outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 border border-gray-200 dark:border-white/10 rounded px-1 py-0.5"
                             />
                           )}
                         </td>
@@ -1319,14 +1319,14 @@ export default function SalesInvoicesPage() {
                             type="number" min={0}
                             value={item.qty}
                             onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 text-center outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent"
                           />
                         </td>
 
                         {/* UNIT */}
                         <td style={{ position: "relative", overflow: "visible" }}>
                           <button
-                            className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
                             onClick={e => {
                               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                               setUnitDropRect({ top: rect.bottom, left: rect.left });
@@ -1334,24 +1334,24 @@ export default function SalesInvoicesPage() {
                             }}
                           >
                             <span>{UNITS.find(u => u.code === item.unit)?.short ?? item.unit}</span>
-                            <ChevronDown size={9} className="text-gray-400 shrink-0" />
+                            <ChevronDown size={9} className="text-gray-400 dark:text-slate-500 shrink-0" />
                           </button>
                           {openUnitDrop === item.id && unitDropRect && (
                             <div
-                              className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-y-auto"
+                              className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-y-auto"
                               style={{ position: "fixed", top: unitDropRect.top + 2, left: unitDropRect.left, width: 180, maxHeight: 220, zIndex: 9999 }}
                             >
                               {UNITS.map(u => (
                                 <button
                                   key={u.code}
                                   className={clsx(
-                                    "w-full text-left px-3 py-2 text-xs border-b border-gray-50 last:border-0 hover:bg-orange-50",
-                                    item.unit === u.code ? "text-orange-600 font-semibold bg-orange-50" : "text-gray-700"
+                                    "w-full text-left px-3 py-2 text-xs border-b border-gray-50 dark:border-white/5 last:border-0 hover:bg-orange-50 dark:hover:bg-white/5",
+                                    item.unit === u.code ? "text-orange-600 dark:text-orange-400 font-semibold bg-orange-50 dark:bg-orange-500/10" : "text-gray-700 dark:text-slate-200"
                                   )}
                                   onMouseDown={() => { updateItem(idx, "unit", u.code); setOpenUnitDrop(null); }}
                                 >
                                   <span className="font-medium">{u.short}</span>
-                                  <span className="text-gray-400 ml-1">– {u.label}</span>
+                                  <span className="text-gray-400 dark:text-slate-500 ml-1">– {u.label}</span>
                                 </button>
                               ))}
                             </div>
@@ -1365,7 +1365,7 @@ export default function SalesInvoicesPage() {
                             value={item.rate || ""}
                             placeholder="0"
                             onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 text-right outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-right outline-none bg-transparent"
                           />
                         </td>
 
@@ -1376,7 +1376,7 @@ export default function SalesInvoicesPage() {
                             value={item.discountPct || ""}
                             placeholder="0"
                             onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 text-center outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent"
                           />
                         </td>
 
@@ -1391,14 +1391,14 @@ export default function SalesInvoicesPage() {
                               updateItem(idx, "taxLabel", label);
                               updateItem(idx, "taxPct", val);
                             }}
-                            className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer"
+                            className="w-full text-xs text-gray-700 dark:text-slate-200 outline-none bg-transparent cursor-pointer"
                           >
-                            {TAX_OPTIONS.map((t, index) => <option key={index} value={t.label}>{t.label}</option>)}
+                            {TAX_OPTIONS.map((t, index) => <option key={index} value={t.label} className="dark:bg-card">{t.label}</option>)}
                           </select>
                         </td>
 
                         {/* AMOUNT */}
-                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800">
+                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800 dark:text-white">
                           {amount > 0 ? amount.toFixed(2) : "—"}
                         </td>
 
@@ -1406,7 +1406,7 @@ export default function SalesInvoicesPage() {
                         <td className="pr-2">
                           <button
                             onClick={() => removeRow(idx)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-opacity p-1 cursor-pointer"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -1418,76 +1418,76 @@ export default function SalesInvoicesPage() {
               </table>
             </div>
 
-            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between bg-gray-50/40">
+            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.01]">
               <button
                 onClick={addRow}
-                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 dark:hover:border-orange-500/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
               >
                 <Plus size={13} /> Add Row
               </button>
-              <span className="text-xs text-gray-500">Total Qty: <span className="font-semibold text-gray-700">{totalQty}</span></span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">Total Qty: <span className="font-semibold text-gray-700 dark:text-slate-200">{totalQty}</span></span>
             </div>
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex justify-between items-start pt-4 px-4 pb-8 bg-gray-50/30">
+          <div className="flex justify-between items-start pt-4 px-4 pb-8 bg-gray-50/30 dark:bg-white/[0.01] rounded-xl border border-gray-200/50 dark:border-white/5">
             {/* Left: Terms and Conditions */}
             <div className="w-64">
               {!showTerms ? (
-                <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs font-bold text-gray-400 hover:text-gray-600 border border-gray-200 bg-gray-50 hover:bg-gray-100 rounded px-4 py-2 transition-colors uppercase w-full justify-center shadow-sm">
+                <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs font-bold text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded px-4 py-2 transition-colors uppercase w-full justify-center shadow-sm cursor-pointer">
                   <AlignLeft size={14} /> ADD TERMS AND CONDITIONS
                 </button>
               ) : (
-                <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none shadow-sm" />
+                <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none shadow-sm placeholder:text-gray-400 dark:placeholder:text-slate-500" />
               )}
             </div>
 
             {/* Middle: Payment Type and Attachments */}
             <div className="flex flex-col items-center gap-4">
               <div className="flex flex-col items-start w-32 relative mt-2">
-                <span className="text-[10px] text-gray-500 absolute -top-2 left-2 bg-gray-50 px-1 z-10">Payment Type</span>
+                <span className="text-[10px] text-gray-500 dark:text-slate-400 absolute -top-2 left-2 bg-gray-50 dark:bg-card px-1 z-10">Payment Type</span>
                 <select
                   value={paymentType}
                   onChange={e => setPaymentType(e.target.value as any)}
-                  className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs outline-none bg-transparent appearance-none"
+                  className="w-full border border-gray-200 dark:border-white/10 rounded px-2 py-1.5 text-xs outline-none bg-transparent appearance-none text-gray-800 dark:text-slate-200"
                 >
-                  <option value="CASH">Cash</option>
-                  <option value="CREDIT">Credit</option>
+                  <option value="CASH" className="dark:bg-card">Cash</option>
+                  <option value="CREDIT" className="dark:bg-card">Credit</option>
                 </select>
-                <ChevronDown size={12} className="absolute right-2 top-2 text-gray-400 pointer-events-none" />
-                <button className="text-[10px] text-blue-500 hover:text-blue-600 font-bold mt-1.5 self-start">+ Add Payment type</button>
+                <ChevronDown size={12} className="absolute right-2 top-2 text-gray-400 dark:text-slate-500 pointer-events-none" />
+                <button className="text-[10px] text-blue-500 dark:text-blue-400 hover:text-blue-600 font-bold mt-1.5 self-start cursor-pointer">+ Add Payment type</button>
               </div>
 
               <div className="flex flex-col gap-2 w-40">
                 {!showDesc ? (
-                  <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-[10px] font-bold text-gray-400 hover:text-gray-600 border border-gray-200 bg-gray-50 hover:bg-gray-100 rounded px-3 py-1.5 transition-colors uppercase justify-center w-full shadow-sm">
+                  <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-[10px] font-bold text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded px-3 py-1.5 transition-colors uppercase justify-center w-full shadow-sm cursor-pointer">
                     <FileText size={12} /> ADD DESCRIPTION
                   </button>
                 ) : (
-                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none shadow-sm" />
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none shadow-sm placeholder:text-gray-400 dark:placeholder:text-slate-500" />
                 )}
 
               </div>
             </div>
 
             {/* Right: Summary */}
-            <div className="w-72 flex flex-col items-end gap-2 text-xs font-semibold text-gray-700">
+            <div className="w-72 flex flex-col items-end gap-2 text-xs font-semibold text-gray-700 dark:text-slate-200">
               <div className="flex items-center gap-3 w-full justify-end">
                 <label className="flex items-center gap-1.5 cursor-pointer mr-2">
                   <input type="checkbox" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-blue-500" />
-                  <span className="text-[11px] text-gray-500">Round Off</span>
+                  <span className="text-[11px] text-gray-500 dark:text-slate-400">Round Off</span>
                 </label>
-                <input type="text" readOnly value={roundOff >= 0 ? roundOff.toFixed(2) : roundOff.toFixed(2)} className="w-16 border border-gray-200 rounded px-2 py-1 bg-white text-right text-[11px]" />
-                <span className="w-12 text-right text-gray-600">Total</span>
-                <input type="text" readOnly value={finalTotal.toFixed(2)} className="w-24 border border-gray-200 bg-gray-50 rounded px-2 py-1 text-right font-bold text-gray-800 shadow-inner" />
+                <input type="text" readOnly value={roundOff >= 0 ? roundOff.toFixed(2) : roundOff.toFixed(2)} className="w-16 border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-white dark:bg-[#13151f] text-right text-[11px] text-gray-800 dark:text-white" />
+                <span className="w-12 text-right text-gray-600 dark:text-slate-400">Total</span>
+                <input type="text" readOnly value={finalTotal.toFixed(2)} className="w-24 border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 rounded px-2 py-1 text-right font-bold text-gray-800 dark:text-white shadow-inner" />
               </div>
               <div className="flex items-center gap-3 w-full justify-end">
-                <span className="w-16 text-right text-gray-600">Received</span>
-                <input type="number" placeholder="0" className="w-24 border border-gray-200 rounded px-2 py-1 bg-white text-right outline-none focus:border-blue-400 shadow-sm" />
+                <span className="w-16 text-right text-gray-600 dark:text-slate-400">Received</span>
+                <input type="number" placeholder="0" className="w-24 border border-gray-200 dark:border-white/10 rounded px-2 py-1 bg-white dark:bg-[#13151f] text-right outline-none focus:border-blue-400 shadow-sm text-gray-800 dark:text-white" />
               </div>
               <div className="flex items-center gap-3 w-full justify-end pr-[104px] mt-1">
-                <span className="w-16 text-right text-gray-800 font-bold">Balance</span>
-                <span className="w-auto text-right font-bold text-gray-800">{finalTotal.toFixed(2)}</span>
+                <span className="w-16 text-right text-gray-800 dark:text-slate-300 font-bold">Balance</span>
+                <span className="w-auto text-right font-bold text-gray-800 dark:text-white">{finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -1495,17 +1495,17 @@ export default function SalesInvoicesPage() {
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
           <button
             onClick={() => handleSave(true)}
             disabled={saving}
-            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-60"
+            className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white disabled:opacity-60 cursor-pointer"
           >
             Save Draft
           </button>
           <button
             onClick={handleBack}
-            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg"
+            className="px-4 py-2 text-sm text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
           >
             Cancel
           </button>
@@ -1515,28 +1515,28 @@ export default function SalesInvoicesPage() {
             <div className="flex rounded-lg overflow-hidden">
               <button
                 onClick={() => showToast("Share feature coming soon", "info")}
-                className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-r border-orange-400"
+                className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-r border-orange-400 cursor-pointer"
               >
                 Share
               </button>
               <button
                 onClick={() => setShowShareDrop(v => !v)}
-                className="px-2 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600"
+                className="px-2 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 cursor-pointer"
               >
                 <ChevronDown size={14} />
               </button>
             </div>
             {showShareDrop && (
-              <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg text-sm min-w-[160px] z-50">
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700">Generate e-Invoice</button>
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+              <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-sm min-w-[160px] z-50">
+                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 cursor-pointer">Generate e-Invoice</button>
+                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2 cursor-pointer">
                   <Share2 size={13} /> Share
                 </button>
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2 cursor-pointer">
                   <Printer size={13} /> Print
                 </button>
                 <button
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 cursor-pointer"
                   onClick={async () => { setShowShareDrop(false); await handleSave(false); openCreate(); }}
                 >
                   Save &amp; New
@@ -1548,7 +1548,7 @@ export default function SalesInvoicesPage() {
           <button
             onClick={() => handleSave(false)}
             disabled={saving}
-            className="px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-60"
+            className="px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-60 cursor-pointer"
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -1581,7 +1581,7 @@ export default function SalesInvoicesPage() {
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <div className="fixed inset-0 z-[999] bg-white overflow-y-auto w-full h-full">
+        <div className="fixed inset-0 z-[999] bg-white dark:bg-background overflow-y-auto w-full h-full">
           <AddInventoryProductForm
             isModal={true}
             onCancel={() => {
@@ -1613,13 +1613,13 @@ export default function SalesInvoicesPage() {
   const balanceAmt   = totalAmt - receivedAmt;
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
-          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
+          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors cursor-pointer"
         >
           <Plus className="h-4 w-4" /> New Invoice
         </button>
@@ -1630,14 +1630,14 @@ export default function SalesInvoicesPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total Sales",   value: `₹${totalAmt.toLocaleString("en-IN")}`,     color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "Received",      value: `₹${receivedAmt.toLocaleString("en-IN")}`,  color: "text-emerald-600", dot: "bg-emerald-500" },
-            { label: "Balance Due",   value: `₹${balanceAmt.toLocaleString("en-IN")}`,   color: "text-rose-600",    dot: "bg-rose-500" },
+            { label: "Total Sales",   value: `₹${totalAmt.toLocaleString("en-IN")}`,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "Received",      value: `₹${receivedAmt.toLocaleString("en-IN")}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Balance Due",   value: `₹${balanceAmt.toLocaleString("en-IN")}`,   color: "text-rose-600 dark:text-rose-400",    dot: "bg-rose-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -1647,30 +1647,30 @@ export default function SalesInvoicesPage() {
         {/* ── Filters Row ── */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search invoice or customer..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "SENT", "PAID", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : s}
@@ -1678,9 +1678,9 @@ export default function SalesInvoicesPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 relative">
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowFromCal(v => !v)}>
-              <Calendar className="h-4 w-4 text-gray-400" />
+          <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 relative">
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowFromCal(v => !v)}>
+              <Calendar className="h-4 w-4 text-gray-400 dark:text-slate-500" />
               <span className="font-medium">{fmt(dateFrom)}</span>
             </div>
             {showFromCal && (
@@ -1688,10 +1688,10 @@ export default function SalesInvoicesPage() {
                 <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
               </div>
             )}
-            <span className="text-gray-300 px-1">to</span>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowToCal(v => !v)}>
+            <span className="text-gray-300 dark:text-slate-600 px-1">to</span>
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowToCal(v => !v)}>
               <span className="font-medium">{fmt(dateTo)}</span>
-              <Calendar className="h-4 w-4 text-gray-400" />
+              <Calendar className="h-4 w-4 text-gray-400 dark:text-slate-500" />
             </div>
             {showToCal && (
               <div className="absolute top-full right-0 mt-1 z-50" ref={toCalRef}>
@@ -1701,7 +1701,7 @@ export default function SalesInvoicesPage() {
           </div>
 
           <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={fetchData} className="p-2 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -1710,27 +1710,27 @@ export default function SalesInvoicesPage() {
         {loading ? (
           <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Receipt className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Invoices Found</p>
-              <p className="text-gray-500 text-sm mt-1">Create an invoice to start billing your customers.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Invoices Found</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Create an invoice to start billing your customers.</p>
             </div>
             <button
               onClick={openCreate}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors cursor-pointer"
             >
               Create Invoice
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">Invoice No</th>
                   <th className="text-left px-4 py-3">Party Name</th>
@@ -1741,7 +1741,7 @@ export default function SalesInvoicesPage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map((inv) => {
                   const isPaid   = inv.status === "PAID";
                   const isDraft  = inv.status === "DRAFT";
@@ -1752,45 +1752,39 @@ export default function SalesInvoicesPage() {
                       key={inv.id} 
                       className={clsx(
                         "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 cursor-pointer bg-orange-50/30" : "hover:bg-gray-50"
+                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
                       onClick={() => {
                         if (isDraft) loadDraft(inv);
                       }}
                     >
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(inv.createdAt)}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-white text-xs">
                         {inv.order?.invoiceNum
                           ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
                           : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium text-gray-800">
+                          <span className="font-medium text-gray-800 dark:text-white">
                             {inv.order?.customer?.name || "Walk-In Customer"}
                           </span>
                           {!isDraft && inv.order?.customer && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10">
                               {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : "UNKNOWN")}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
-                        {/* Source of truth is the order's own paymentType — `inv.paymentMode`
-                            isn't a field the Invoice API returns, so that half of the old check
-                            was always false. Falling through to "Credit" for a missing/unmapped
-                            value was also backwards: the Order schema's own default is CASH, so
-                            anything not explicitly CREDIT should read as Cash, not the other way
-                            around. */}
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800">
+                      <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
                         ₹ {(inv.finalAmount || 0).toLocaleString("en-IN")}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-rose-600">
+                      <td className="px-4 py-3 text-right font-medium text-rose-600 dark:text-rose-400">
                         {balance > 0 ? `₹ ${balance.toLocaleString("en-IN")}` : "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1803,7 +1797,7 @@ export default function SalesInvoicesPage() {
                           {isDraft ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}
-                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                               title="Delete Draft"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1813,24 +1807,23 @@ export default function SalesInvoicesPage() {
                               <button
                                 onClick={(e) => { 
                                   e.stopPropagation(); 
-                                  // Navigating to Delivery Challan using the underlying Order ID (which represents the Tax Invoice)
                                   router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
                                 }}
-                                className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
                                 title="Create Delivery Challan"
                               >
                                 <Truck className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handlePrint(inv); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Print"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Share"
                               >
                                 <Share2 className="h-4 w-4" />

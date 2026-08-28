@@ -179,7 +179,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   };
 
   return (
-    <div className="bg-gray-50 min-h-full">
+    <div className="bg-gray-50 dark:bg-background min-h-full text-slate-800 dark:text-foreground">
       <WarehouseFormSidebar
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}

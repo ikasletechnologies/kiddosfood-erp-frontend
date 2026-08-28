@@ -27,10 +27,10 @@ const FALLBACK_COMPANY = {
 // flow here by design (matches the confirmed chain: Estimate -> Sales Order
 // -> Proforma -> Tax Invoice, each step auto-fetching the one before it).
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:     { label: "Draft",     color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  SENT:      { label: "Sent",      color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  CONVERTED: { label: "Converted", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  CANCELLED: { label: "Cancelled", color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
+  DRAFT:     { label: "Draft",     color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  SENT:      { label: "Sent",      color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  CONVERTED: { label: "Converted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  CANCELLED: { label: "Cancelled", color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
 export default function ProformaInvoicePage() {
@@ -149,9 +149,9 @@ export default function ProformaInvoicePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* ── Page Content ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => {
             setInitialDraftData(null);
@@ -166,15 +166,15 @@ export default function ProformaInvoicePage() {
       <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total", value: stats.total, color: "text-gray-700", dot: "bg-gray-400" },
-            { label: "Draft", value: stats.draft, color: "text-slate-600", dot: "bg-slate-400" },
-            { label: "Sent", value: stats.sent, color: "text-blue-600", dot: "bg-blue-500" },
-            { label: "Converted", value: stats.converted, color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Total", value: stats.total, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+            { label: "Draft", value: stats.draft, color: "text-slate-600 dark:text-slate-400", dot: "bg-slate-400" },
+            { label: "Sent", value: stats.sent, color: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" },
+            { label: "Converted", value: stats.converted, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map((s) => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -188,17 +188,17 @@ export default function ProformaInvoicePage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search proforma or party..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "DRAFT", "SENT", "CONVERTED", "CANCELLED"].map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : STATUS_STYLES[s]?.label || s}
@@ -206,7 +206,7 @@ export default function ProformaInvoicePage() {
             ))}
           </div>
           <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -214,20 +214,20 @@ export default function ProformaInvoicePage() {
         {loading ? (
           <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <FileText className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Proforma Invoices</p>
-              <p className="text-gray-500 text-sm mt-1">Confirm a Sales Order and click "Create Proforma Invoice" to generate one.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Proforma Invoices</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Confirm a Sales Order and click "Create Proforma Invoice" to generate one.</p>
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">Proforma No.</th>
                   <th className="text-left px-4 py-3">Party</th>
@@ -236,26 +236,26 @@ export default function ProformaInvoicePage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map((p) => {
                   const style = STATUS_STYLES[p.status] || STATUS_STYLES.DRAFT;
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                    <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(p.createdAt)}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-slate-200 text-xs">
                         {p.proformaNumber}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1">
-                          <div className="font-medium text-gray-800 text-sm">{p.customer?.name || p.customerName || "—"}</div>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                          <div className="font-medium text-gray-800 dark:text-white text-sm">{p.customer?.name || p.customerName || "—"}</div>
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
                             {p.partyType || (p.customerId ? "CUSTOMER" : "UNKNOWN")}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm">
                         ₹{Number(p.totalAmount || 0).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -267,7 +267,7 @@ export default function ProformaInvoicePage() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setPreviewProforma(p)}
-                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                             title="Print"
                           >
                             <Printer className="h-4 w-4" />
@@ -276,7 +276,7 @@ export default function ProformaInvoicePage() {
                             <button
                               onClick={() => handleConvert(p)}
                               disabled={convertingId === p.id}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors disabled:opacity-50"
                             >
                               {convertingId === p.id ? "..." : "Convert to Tax Invoice"}
                             </button>
@@ -284,7 +284,7 @@ export default function ProformaInvoicePage() {
                           {p.status === "DRAFT" && (
                             <button
                               onClick={() => handleUpdateStatus(p.id, "SENT")}
-                              className="px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded transition-colors"
                             >
                               Mark as Sent
                             </button>
@@ -292,7 +292,7 @@ export default function ProformaInvoicePage() {
                           {(p.status === "DRAFT" || p.status === "SENT") && (
                             <button
                               onClick={() => handleUpdateStatus(p.id, "CANCELLED")}
-                              className="px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                             >
                               Cancel
                             </button>
@@ -300,7 +300,7 @@ export default function ProformaInvoicePage() {
                           {p.status === "CONVERTED" && (
                             <a
                               href={`/sales/invoices?id=${p.convertedInvoiceId}`}
-                              className="px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors flex items-center gap-1"
+                              className="px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors flex items-center gap-1"
                             >
                               <Check className="h-3 w-3" /> View Tax Invoice
                             </a>

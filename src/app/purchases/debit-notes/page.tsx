@@ -79,10 +79,10 @@ const PAYMENT_TYPES = ["Cash", "Bank Transfer", "UPI", "Cheque", "Card"];
 const NOTE_TYPES = ["All", "Debit Note", "Purchase Return"];
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  PENDING:  { label: "Pending",  color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
-  SETTLED:  { label: "Settled",  color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  PARTIAL:  { label: "Partial",  color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  REJECTED: { label: "Rejected", color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200" },
+  PENDING:  { label: "Pending",  color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-900/40" },
+  SETTLED:  { label: "Settled",  color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
+  PARTIAL:  { label: "Partial",  color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200 dark:border-blue-900/40" },
+  REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-950/30",    border: "border-rose-200 dark:border-rose-900/40" },
 };
 
 const MONTH_NAMES = ["January","February","March","April","May","June",
@@ -103,27 +103,27 @@ function MiniCalendar({ value, onChange, onClose }: { value: string; onChange: (
   const isSelected = (d: number) => selected.getFullYear() === viewYear && selected.getMonth() === viewMonth && selected.getDate() === d;
   const isToday = (d: number) => today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
   return (
-    <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-64 select-none">
+    <div className="bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-3 w-64 select-none">
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500"><ChevronDown size={14} className="rotate-90" /></button>
-        <span className="text-sm font-semibold text-gray-800">{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500"><ChevronDown size={14} className="-rotate-90" /></button>
+        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400"><ChevronDown size={14} className="rotate-90" /></button>
+        <span className="text-sm font-semibold text-gray-800 dark:text-white">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400"><ChevronDown size={14} className="-rotate-90" /></button>
       </div>
-      <div className="grid grid-cols-7 mb-1">{DAY_NAMES.map(d => <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-0.5">{d}</div>)}</div>
+      <div className="grid grid-cols-7 mb-1">{DAY_NAMES.map(d => <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-slate-500 py-0.5">{d}</div>)}</div>
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((d, i) => d === null ? <div key={i} /> : (
           <button key={i} onClick={() => { onChange(`${viewYear}-${String(viewMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`); onClose(); }}
             className={clsx("w-full aspect-square flex items-center justify-center text-xs rounded-lg font-medium transition-colors",
               isSelected(d) ? "bg-orange-500 text-white" :
-              isToday(d) ? "bg-orange-100 text-orange-600" :
-              "text-gray-700 hover:bg-gray-100"
+              isToday(d) ? "bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400" :
+              "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10"
             )}
           >{d}</button>
         ))}
       </div>
-      <div className="mt-2 flex justify-between items-center border-t border-gray-100 pt-2">
-        <button onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`); onClose(); }} className="text-[11px] font-semibold text-orange-500 hover:text-orange-700">Today</button>
-        <button onClick={onClose} className="text-[11px] text-gray-400 hover:text-gray-600">Close</button>
+      <div className="mt-2 flex justify-between items-center border-t border-gray-100 dark:border-white/10 pt-2">
+        <button onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`); onClose(); }} className="text-[11px] font-semibold text-orange-500 hover:text-orange-700 dark:hover:text-orange-400">Today</button>
+        <button onClick={onClose} className="text-[11px] text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white">Close</button>
       </div>
     </div>
   );
@@ -305,52 +305,52 @@ export default function DebitNotesPage() {
 
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50 -m-8" style={{ minHeight: "100vh" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground -m-8" style={{ minHeight: "100vh" }}>
         {/* Top Bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-3">
             <button
               onClick={() => { setView("list"); resetForm(); }}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400 transition-colors"
             >
               <ArrowLeft size={18} />
             </button>
             <div>
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Purchase</p>
-              <h1 className="text-sm font-bold text-gray-900 leading-tight">{noteType}</h1>
+              <p className="text-xs text-gray-400 dark:text-slate-500 font-medium uppercase tracking-wide">Purchase</p>
+              <h1 className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{noteType}</h1>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400 text-xs"># {returnNo}</span>
+            <span className="text-gray-400 dark:text-slate-500 text-xs"># {returnNo}</span>
             <select
               value={noteType}
               onChange={e => setNoteType(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700 outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
+              className="text-xs border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 bg-white dark:bg-card text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400"
             >
-              <option value="Debit Note">Debit Note</option>
-              <option value="Purchase Return">Purchase Return</option>
+              <option value="Debit Note" className="dark:bg-[#13151f]">Debit Note</option>
+              <option value="Purchase Return" className="dark:bg-[#13151f]">Purchase Return</option>
             </select>
           </div>
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           {/* Vendor + Meta Header */}
-          <div className="bg-white border-b border-gray-200 px-6 py-5">
+          <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-5 shadow-sm">
             <div className="flex flex-col lg:flex-row gap-6 justify-between">
               {/* Left: Vendor */}
               <div className="flex-1 max-w-sm">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Vendor / Party</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Vendor / Party</label>
                 <div className="relative" ref={vendorDropRef}>
                   <div
                     className={clsx(
-                      "flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white cursor-pointer transition-all",
-                      showVendorDrop ? "border-orange-400 ring-2 ring-orange-100" : "border-gray-200 hover:border-gray-300"
+                      "flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white dark:bg-white/5 cursor-pointer transition-all",
+                      showVendorDrop ? "border-orange-400 ring-2 ring-orange-100 dark:ring-orange-950/40" : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
                     )}
                     onClick={() => setShowVendorDrop(true)}
                   >
-                    <div className="w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                      <span className="text-orange-600 font-bold text-xs">
+                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
+                      <span className="text-orange-600 dark:text-orange-400 font-bold text-xs">
                         {selectedVendor ? selectedVendor.name[0].toUpperCase() : "V"}
                       </span>
                     </div>
@@ -359,36 +359,36 @@ export default function DebitNotesPage() {
                       onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
                       onFocus={() => setShowVendorDrop(true)}
                       placeholder="Search or select vendor..."
-                      className="flex-1 text-sm text-gray-800 outline-none bg-transparent placeholder-gray-400"
+                      className="flex-1 text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                     />
-            {showVendorDrop ? vendorSearch : (selectedVendor?.name || "") && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setVendorSearch("")} 
-              />
-            )}
+                    {showVendorDrop ? vendorSearch : (selectedVendor?.name || "") && (
+                      <X 
+                        size={14} 
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                        onClick={() => setVendorSearch("")} 
+                      />
+                    )}
                     {selectedVendor && (
-                      <button onClick={e => { e.stopPropagation(); setSelectedVendor(null); setVendorSearch(""); }} className="text-gray-300 hover:text-gray-500">
+                      <button onClick={e => { e.stopPropagation(); setSelectedVendor(null); setVendorSearch(""); }} className="text-gray-300 dark:text-slate-500 hover:text-gray-500 dark:hover:text-white">
                         <X size={13} />
                       </button>
                     )}
                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                   </div>
                   {showVendorDrop && (
-                    <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto">
+                    <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto custom-scrollbar">
                       {filteredVendors.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-400 text-center">No vendors found</div>
+                        <div className="px-4 py-3 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
                       ) : filteredVendors.map(v => (
                         <button key={v.id} onClick={() => { setSelectedVendor(v); setVendorSearch(""); setShowVendorDrop(false); }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-orange-50 text-sm transition-colors flex items-center gap-2"
+                          className="w-full text-left px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-sm transition-colors flex items-center gap-2"
                         >
-                          <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
-                            <span className="text-orange-600 font-bold text-[10px]">{v.name[0].toUpperCase()}</span>
+                          <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
+                            <span className="text-orange-600 dark:text-orange-400 font-bold text-[10px]">{v.name[0].toUpperCase()}</span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-800">{v.name}</p>
-                            {v.phone && <p className="text-xs text-gray-400">{v.phone}</p>}
+                            <p className="font-medium text-gray-800 dark:text-white">{v.name}</p>
+                            {v.phone && <p className="text-xs text-gray-400 dark:text-slate-500">{v.phone}</p>}
                           </div>
                         </button>
                       ))}
@@ -396,33 +396,33 @@ export default function DebitNotesPage() {
                   )}
                 </div>
                 {selectedVendor?.gst && (
-                  <p className="mt-1 text-xs text-gray-400">GST: {selectedVendor.gst}</p>
+                  <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">GST: {selectedVendor.gst}</p>
                 )}
               </div>
 
               {/* Right: Meta */}
               <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Return No.</p>
-                  <p className="font-semibold text-gray-800">{returnNo}</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-400 font-medium mb-1">Return No.</p>
+                  <p className="font-semibold text-gray-800 dark:text-slate-200">{returnNo}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Bill Number</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-400 font-medium mb-1">Bill Number</p>
                   <input
                     value={billNumber}
                     onChange={e => setBillNumber(e.target.value)}
                     placeholder="Enter bill no."
-                    className="border-b border-gray-200 focus:border-orange-400 outline-none text-sm text-gray-800 bg-transparent py-0.5 w-36 transition-colors"
+                    className="border-b border-gray-200 dark:border-white/10 focus:border-orange-400 outline-none text-sm text-gray-800 dark:text-white bg-transparent py-0.5 w-36 transition-colors"
                   />
                 </div>
                 <div className="relative" ref={billDateCalRef}>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Bill Date</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-400 font-medium mb-1">Bill Date</p>
                   <button
                     onClick={() => setShowBillDateCal(v => !v)}
-                    className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-orange-600 transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                   >
                     <Calendar size={13} className="text-orange-400" />
-                    {billDate ? fmtDate(billDate) : <span className="text-gray-300">DD MMM YYYY</span>}
+                    {billDate ? fmtDate(billDate) : <span className="text-gray-300 dark:text-slate-600">DD MMM YYYY</span>}
                   </button>
                   {showBillDateCal && (
                     <div className="absolute top-full left-0 mt-1 z-50">
@@ -431,10 +431,10 @@ export default function DebitNotesPage() {
                   )}
                 </div>
                 <div className="relative" ref={datCalRef}>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Return Date</p>
+                  <p className="text-xs text-gray-400 dark:text-slate-400 font-medium mb-1">Return Date</p>
                   <button
                     onClick={() => setShowDateCal(v => !v)}
-                    className="flex items-center gap-1.5 text-sm text-gray-700 hover:text-orange-600 transition-colors"
+                    className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-slate-300 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                   >
                     <Calendar size={13} className="text-orange-400" />
                     {fmtDate(date)}
@@ -450,18 +450,18 @@ export default function DebitNotesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="mx-6 my-4 bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="mx-6 my-4 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-8">#</th>
-                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Item</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Qty</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unit</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Price / Unit</th>
-                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Tax</th>
-                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Amount</th>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-8">#</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Item</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-20">Qty</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-24">Unit</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-32">Price / Unit</th>
+                    <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-32">Tax</th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-28">Amount</th>
                     <th className="px-3 py-3 w-8">
                       <button onClick={addRow} className="text-orange-500 hover:text-orange-700 transition-colors">
                         <Plus size={15} />
@@ -469,15 +469,15 @@ export default function DebitNotesPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-white/5">
                   {items.map((item, idx) => (
-                    <tr key={item.id} className="group hover:bg-orange-50/30 transition-colors">
-                      <td className="px-3 py-2.5 text-gray-300 text-center text-xs">{idx + 1}</td>
+                    <tr key={item.id} className="group hover:bg-orange-50/30 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-3 py-2.5 text-gray-300 dark:text-slate-600 text-center text-xs">{idx + 1}</td>
                       <td className="px-3 py-2.5">
                         <input
                           value={item.name}
                           onChange={e => updateItem(item.id, "name", e.target.value)}
-                          className="w-full outline-none bg-transparent text-gray-800 text-sm placeholder-gray-300"
+                          className="w-full outline-none bg-transparent text-gray-800 dark:text-white text-sm placeholder-gray-300 dark:placeholder-slate-500"
                           placeholder="Type item name..."
                         />
                       </td>
@@ -486,7 +486,7 @@ export default function DebitNotesPage() {
                           type="number"
                           value={item.qty}
                           onChange={e => updateItem(item.id, "qty", e.target.value)}
-                          className="w-full outline-none bg-transparent text-center text-sm text-gray-800"
+                          className="w-full outline-none bg-transparent text-center text-sm text-gray-800 dark:text-white"
                           min="0"
                           placeholder="0"
                         />
@@ -504,20 +504,20 @@ export default function DebitNotesPage() {
                               }
                               setOpenUnitRow(item.id);
                             }}
-                            className="flex items-center justify-between gap-1 border border-gray-200 rounded-lg px-2 py-1 w-full text-xs text-gray-700 hover:border-orange-300 transition-colors"
+                            className="flex items-center justify-between gap-1 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 w-full text-xs text-gray-700 dark:text-slate-300 hover:border-orange-300 transition-colors"
                           >
                             <span>{item.unit}</span>
                             <ChevronDown size={10} className="text-gray-400 shrink-0" />
                           </button>
                           {openUnitRow === item.id && (
                             <div
-                              className="fixed bg-white border border-gray-200 rounded-xl shadow-xl z-[9999] max-h-44 overflow-y-auto py-1"
+                              className="fixed bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-[9999] max-h-44 overflow-y-auto py-1 custom-scrollbar"
                               style={{ top: unitPortalPos.top, left: unitPortalPos.left, minWidth: unitPortalPos.width }}
                             >
                               {UNITS.map(u => (
                                 <button key={u} onClick={() => { updateItem(item.id, "unit", u); setOpenUnitRow(null); }}
-                                  className={clsx("w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 transition-colors",
-                                    item.unit === u ? "text-orange-600 font-semibold" : "text-gray-700"
+                                  className={clsx("w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 dark:hover:bg-white/5 transition-colors",
+                                    item.unit === u ? "text-orange-600 dark:text-orange-400 font-semibold" : "text-gray-700 dark:text-slate-300"
                                   )}
                                 >{u}</button>
                               ))}
@@ -530,7 +530,7 @@ export default function DebitNotesPage() {
                           type="number"
                           value={item.priceWithoutTax}
                           onChange={e => updateItem(item.id, "priceWithoutTax", e.target.value)}
-                          className="w-full outline-none bg-transparent text-center text-sm text-gray-800"
+                          className="w-full outline-none bg-transparent text-center text-sm text-gray-800 dark:text-white"
                           min="0"
                           placeholder="0.00"
                         />
@@ -539,18 +539,18 @@ export default function DebitNotesPage() {
                         <select
                           value={item.taxPercent}
                           onChange={e => updateItem(item.id, "taxPercent", e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 bg-white outline-none hover:border-orange-300 focus:border-orange-400 transition-colors"
+                          className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-white bg-white dark:bg-card outline-none hover:border-orange-300 focus:border-orange-400 transition-colors"
                         >
-                          {TAX_RATES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          {TAX_RATES.map(r => <option key={r.value} value={r.value} className="dark:bg-[#13151f]">{r.label}</option>)}
                         </select>
                       </td>
-                      <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800">
+                      <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800 dark:text-white">
                         {item.amount > 0 ? `₹${item.amount.toFixed(2)}` : "—"}
                       </td>
                       <td className="px-1 py-2.5">
                         {items.length > 1 && (
                           <button onClick={() => removeRow(item.id)}
-                            className="text-gray-200 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all"
+                            className="text-gray-200 dark:text-slate-600 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-all"
                           >
                             <X size={13} />
                           </button>
@@ -561,7 +561,7 @@ export default function DebitNotesPage() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t border-gray-50">
+            <div className="px-4 py-3 border-t border-gray-50 dark:border-white/5">
               <button onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-500 hover:text-orange-700 transition-colors">
                 <Plus size={13} /> Add Row
               </button>
@@ -572,51 +572,51 @@ export default function DebitNotesPage() {
           <div className="mx-6 mb-6 flex gap-4 flex-col lg:flex-row">
             {/* Left: Notes + Payment */}
             <div className="flex-1 space-y-3">
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Payment Type</p>
+              <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 shadow-sm">
+                <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Payment Type</p>
                 <select
                   value={paymentType}
                   onChange={e => setPaymentType(e.target.value)}
-                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white outline-none w-full focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
+                  className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white bg-white dark:bg-card outline-none w-full focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-950/40 focus:border-orange-400 transition-all"
                 >
-                  {PAYMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  {PAYMENT_TYPES.map(t => <option key={t} value={t} className="dark:bg-[#13151f]">{t}</option>)}
                 </select>
               </div>
               {!showNote ? (
-                <button onClick={() => setShowNote(true)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-orange-500 transition-colors">
+                <button onClick={() => setShowNote(true)} className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-slate-400 hover:text-orange-500 transition-colors">
                   <FileText size={13} /> Add note / description
                 </button>
               ) : (
-                <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 shadow-sm">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Note</p>
-                    <button onClick={() => { setShowNote(false); setNoteText(""); }} className="text-gray-300 hover:text-gray-500"><X size={13} /></button>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Note</p>
+                    <button onClick={() => { setShowNote(false); setNoteText(""); }} className="text-gray-300 dark:text-slate-500 hover:text-gray-500 dark:hover:text-white"><X size={13} /></button>
                   </div>
                   <textarea
                     value={noteText}
                     onChange={e => setNoteText(e.target.value)}
                     placeholder="Add a note or reason for this return..."
                     rows={3}
-                    className="w-full text-sm text-gray-700 outline-none resize-none placeholder-gray-300"
+                    className="w-full text-sm text-gray-700 dark:text-white outline-none resize-none placeholder-gray-300 dark:placeholder-slate-500 bg-transparent"
                   />
                 </div>
               )}
             </div>
 
             {/* Right: Summary */}
-            <div className="w-64 bg-white rounded-xl border border-gray-200 p-4 self-start">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Summary</p>
+            <div className="w-64 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 self-start shadow-sm">
+              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Summary</p>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-600 dark:text-slate-400">
                   <span>Subtotal</span>
-                  <span className="font-medium text-gray-800">₹{subtotal.toFixed(2)}</span>
+                  <span className="font-medium text-gray-800 dark:text-white">₹{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-gray-600 dark:text-slate-400">
                   <span>Tax</span>
-                  <span className="font-medium text-gray-800">₹{totalTax.toFixed(2)}</span>
+                  <span className="font-medium text-gray-800 dark:text-white">₹{totalTax.toFixed(2)}</span>
                 </div>
                 <div className="flex items-center justify-between pt-1">
-                  <label className="flex items-center gap-1.5 text-gray-600 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-gray-600 dark:text-slate-400 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={roundOff}
@@ -625,13 +625,13 @@ export default function DebitNotesPage() {
                     />
                     <span className="text-xs">Round off</span>
                   </label>
-                  <span className={clsx("text-sm font-medium", roundAmt >= 0 ? "text-emerald-600" : "text-rose-500")}>
+                  <span className={clsx("text-sm font-medium", roundAmt >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")}>
                     {roundAmt >= 0 ? "+" : ""}{roundAmt.toFixed(2)}
                   </span>
                 </div>
-                <div className="border-t border-gray-100 pt-2 flex justify-between items-center">
-                  <span className="font-bold text-gray-900">Total</span>
-                  <span className="text-lg font-bold" style={{ color: "#f58220" }}>
+                <div className="border-t border-gray-100 dark:border-white/10 pt-2 flex justify-between items-center">
+                  <span className="font-bold text-gray-900 dark:text-white">Total</span>
+                  <span className="text-lg font-bold text-orange-500">
                     ₹{grandTotal.toFixed(2)}
                   </span>
                 </div>
@@ -641,8 +641,8 @@ export default function DebitNotesPage() {
         </div>
 
         {/* Sticky Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between gap-3 sticky bottom-0 z-20">
-          <span className="text-xs text-gray-400">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between gap-3 sticky bottom-0 z-20">
+          <span className="text-xs text-gray-400 dark:text-slate-500">
             {selectedVendor ? `Vendor: ${selectedVendor.name}` : "No vendor selected"}
             {grandTotal > 0 && ` · ₹${grandTotal.toFixed(2)}`}
           </span>
@@ -650,15 +650,15 @@ export default function DebitNotesPage() {
             <div className="relative" ref={shareDropRef}>
               <button
                 onClick={() => setShowShareDrop(v => !v)}
-                className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
               >
                 <Share2 size={14} /> Share
                 <ChevronDown size={12} className="text-gray-400" />
               </button>
               {showShareDrop && (
-                <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1 min-w-[140px]">
+                <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 py-1 min-w-[140px] overflow-hidden">
                   {["WhatsApp", "Email", "PDF"].map(opt => (
-                    <button key={opt} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 transition-colors">{opt}</button>
+                    <button key={opt} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 transition-colors">{opt}</button>
                   ))}
                 </div>
               )}
@@ -666,7 +666,7 @@ export default function DebitNotesPage() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all"
+              className="flex items-center gap-2 px-6 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-all shadow-md shadow-orange-500/20"
               style={{ background: saving ? "#f5a050" : "linear-gradient(135deg, #f58220, #e8740e)" }}
             >
               {saving ? (
@@ -686,9 +686,9 @@ export default function DebitNotesPage() {
   // ── LIST VIEW ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 -m-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground -m-8">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white shadow-sm hover:shadow-md transition-all"
@@ -705,11 +705,11 @@ export default function DebitNotesPage() {
           { label: "Settled", value: `₹${totalSettled.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-emerald-400" },
           { label: "Balance", value: `₹${totalBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, dot: "bg-amber-400" },
         ].map(card => (
-          <div key={card.label} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+          <div key={card.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
             <div className={clsx("w-2 h-2 rounded-full shrink-0", card.dot)} />
             <div>
-              <p className="text-xs text-gray-400 font-medium">{card.label}</p>
-              <p className="text-base font-bold text-gray-900">{card.value}</p>
+              <p className="text-xs text-gray-400 dark:text-slate-400 font-medium">{card.label}</p>
+              <p className="text-base font-bold text-gray-900 dark:text-white">{card.value}</p>
             </div>
           </div>
         ))}
@@ -721,16 +721,16 @@ export default function DebitNotesPage() {
         <select
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white text-gray-700 outline-none focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
+          className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm bg-white dark:bg-card text-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-950/40 focus:border-orange-400 transition-all"
         >
-          {NOTE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          {NOTE_TYPES.map(t => <option key={t} value={t} className="dark:bg-[#13151f]">{t}</option>)}
         </select>
 
         {/* Date From */}
         <div className="relative" ref={fromCalRef}>
           <button
             onClick={() => setShowFromCal(v => !v)}
-            className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white text-gray-700 hover:border-orange-300 transition-colors"
+            className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm bg-white dark:bg-card text-gray-700 dark:text-slate-300 hover:border-orange-300 transition-colors"
           >
             <Calendar size={13} className="text-orange-400" />
             {fmtDate(dateFrom)}
@@ -741,11 +741,11 @@ export default function DebitNotesPage() {
             </div>
           )}
         </div>
-        <span className="text-gray-400 text-sm">to</span>
+        <span className="text-gray-400 dark:text-slate-500 text-sm">to</span>
         <div className="relative" ref={toCalRef}>
           <button
             onClick={() => setShowToCal(v => !v)}
-            className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white text-gray-700 hover:border-orange-300 transition-colors"
+            className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm bg-white dark:bg-card text-gray-700 dark:text-slate-300 hover:border-orange-300 transition-colors"
           >
             <Calendar size={13} className="text-orange-400" />
             {fmtDate(dateTo)}
@@ -764,20 +764,20 @@ export default function DebitNotesPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search vendor, ref no..."
-              className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 outline-none w-52 focus:ring-2 focus:ring-orange-100 focus:border-orange-400 transition-all"
+              className="pl-9 pr-4 py-2 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 outline-none w-52 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-950/40 focus:border-orange-400 transition-all"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
-          <button onClick={fetchData} className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-orange-500 hover:border-orange-300 bg-white transition-colors" title="Refresh">
+          <button onClick={fetchData} className="p-2 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-400 hover:text-orange-500 hover:border-orange-300 bg-white dark:bg-card transition-colors" title="Refresh">
             <RefreshCw size={15} />
           </button>
-          <button className="p-2 border border-gray-200 rounded-xl text-gray-500 hover:text-gray-700 bg-white transition-colors" title="Print">
+          <button className="p-2 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white bg-white dark:bg-card transition-colors" title="Print">
             <Printer size={15} />
           </button>
         </div>
@@ -785,26 +785,26 @@ export default function DebitNotesPage() {
 
       {/* Table */}
       <div className="px-6 pb-8">
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
           {loading ? (
             <div className="flex items-center justify-center py-24">
               <div className="flex flex-col items-center gap-3">
                 <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-gray-400">Loading returns...</p>
+                <p className="text-sm text-gray-400 dark:text-slate-500">Loading returns...</p>
               </div>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #fff7ed, #ffedd5)" }}>
-                <Undo2 size={28} style={{ color: "#f58220" }} />
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-orange-50 dark:bg-orange-950/30">
+                <Undo2 size={28} className="text-[#f58220]" />
               </div>
               <div className="text-center">
-                <p className="text-gray-700 font-semibold text-sm">No returns yet</p>
-                <p className="text-gray-400 text-xs mt-1 max-w-xs">Create a debit note or purchase return when goods are sent back to a vendor.</p>
+                <p className="text-gray-700 dark:text-white font-semibold text-sm">No returns yet</p>
+                <p className="text-gray-400 dark:text-slate-400 text-xs mt-1 max-w-xs">Create a debit note or purchase return when goods are sent back to a vendor.</p>
               </div>
               <button
                 onClick={openCreate}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-white transition-all shadow-md shadow-orange-500/20"
                 style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}
               >
                 <Plus size={14} /> New Return
@@ -814,24 +814,24 @@ export default function DebitNotesPage() {
             <>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
                     {["#", "Date", "Ref No.", "Vendor", "Type", "Status", "Total", "Settled", "Balance", ""].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {filtered.map((n, i) => {
                     const statusKey = (n.status || "PENDING").toUpperCase();
                     const s = STATUS_STYLES[statusKey] || STATUS_STYLES.PENDING;
                     return (
-                      <tr key={n.id} className="hover:bg-orange-50/30 transition-colors">
-                        <td className="px-4 py-3 text-gray-400 text-xs">{i + 1}</td>
-                        <td className="px-4 py-3 text-gray-600">{fmtDate(n.date)}</td>
-                        <td className="px-4 py-3 font-semibold" style={{ color: "#f58220" }}>{n.returnNo || `DN-${i + 1}`}</td>
-                        <td className="px-4 py-3 text-gray-800 font-medium">{n.vendor?.name || "—"}</td>
+                      <tr key={n.id} className="hover:bg-orange-50/30 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-gray-400 dark:text-slate-500 text-xs">{i + 1}</td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{fmtDate(n.date)}</td>
+                        <td className="px-4 py-3 font-semibold text-orange-600 dark:text-orange-400">{n.returnNo || `DN-${i + 1}`}</td>
+                        <td className="px-4 py-3 text-gray-800 dark:text-slate-200 font-medium">{n.vendor?.name || "—"}</td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-200">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40">
                             {n.type || "Debit Note"}
                           </span>
                         </td>
@@ -840,19 +840,19 @@ export default function DebitNotesPage() {
                             {s.label}
                           </span>
                         </td>
-                        <td className="px-4 py-3 font-semibold text-gray-900">
+                        <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
                           ₹{n.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="px-4 py-3 text-emerald-600 font-medium">
+                        <td className="px-4 py-3 text-emerald-600 dark:text-emerald-400 font-medium">
                           ₹{(n.receivedPaid || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="px-4 py-3 font-medium" style={{ color: "#f58220" }}>
+                        <td className="px-4 py-3 font-medium text-orange-600 dark:text-orange-400">
                           ₹{(n.balance ?? n.total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                         </td>
                         <td className="px-4 py-3">
                           <button
                             onClick={() => setViewingNote(n)}
-                            className="p-1.5 text-gray-300 hover:text-gray-500 rounded-lg hover:bg-gray-100 transition-colors"
+                            className="p-1.5 text-gray-300 dark:text-slate-500 hover:text-gray-500 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                             title="Print"
                           >
                             <Printer size={13} />
@@ -863,12 +863,10 @@ export default function DebitNotesPage() {
                   })}
                 </tbody>
               </table>
-              <div className="border-t border-gray-100 px-4 py-3 flex items-center justify-between text-sm bg-gray-50/50">
-                <span className="text-gray-500 text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
+              <div className="border-t border-gray-100 dark:border-white/5 px-4 py-3 flex items-center justify-between text-sm bg-gray-50/50 dark:bg-white/[0.01]">
+                <span className="text-gray-500 dark:text-slate-400 text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
                 <div className="flex items-center gap-6 text-xs font-semibold">
-                  <span className="text-gray-600">Total: <span className="text-gray-900">₹{totalAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></span>
-                  <span className="text-emerald-600">Settled: ₹{totalSettled.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
-                  <span style={{ color: "#f58220" }}>Balance: ₹{totalBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                  <span className="text-gray-600 dark:text-slate-400">Total: <span className="text-gray-900 dark:text-white">₹{totalAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></span>
                 </div>
               </div>
             </>

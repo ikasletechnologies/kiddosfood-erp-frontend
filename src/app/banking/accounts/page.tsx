@@ -86,9 +86,9 @@ export default function AccountsPage() {
   const cashDigital = accounts.filter(a => a.type !== 'BANK').reduce((acc, curr) => acc + curr.balance, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => setShowAddForm(true)}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -101,14 +101,14 @@ export default function AccountsPage() {
         {/* Summary Strip */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Liquidity", value: `₹${totalLiquidity.toLocaleString("en-IN")}`, color: "text-gray-700", dot: "bg-gray-400" },
-            { label: "Bank Holdings", value: `₹${bankHoldings.toLocaleString("en-IN")}`, sub: `${accounts.filter(a => a.type === 'BANK').length} accounts`, color: "text-blue-600", dot: "bg-blue-500" },
-            { label: "Cash & Digital", value: `₹${cashDigital.toLocaleString("en-IN")}`, sub: `${accounts.filter(a => a.type !== 'BANK').length} wallets`, color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Total Liquidity", value: `₹${totalLiquidity.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+            { label: "Bank Holdings", value: `₹${bankHoldings.toLocaleString("en-IN")}`, sub: `${accounts.filter(a => a.type === 'BANK').length} accounts`, color: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" },
+            { label: "Cash & Digital", value: `₹${cashDigital.toLocaleString("en-IN")}`, sub: `${accounts.filter(a => a.type !== 'BANK').length} wallets`, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}{s.sub ? ` · ${s.sub}` : ''}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}{s.sub ? ` · ${s.sub}` : ''}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -117,15 +117,15 @@ export default function AccountsPage() {
 
         {/* Accounts List */}
         {loading ? (
-          <div className="py-20 text-center text-sm text-gray-400">Loading accounts…</div>
+          <div className="py-20 text-center text-sm text-gray-400 dark:text-slate-500">Loading accounts…</div>
         ) : accounts.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Landmark className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Financial Accounts Found</p>
-              <p className="text-gray-500 text-sm mt-1">Create your first one to begin operations.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Financial Accounts Found</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Create your first one to begin operations.</p>
             </div>
           </div>
         ) : (
@@ -134,14 +134,14 @@ export default function AccountsPage() {
               <div
                 key={acc.id}
                 onClick={() => router.push(`/banking/accounts/${acc.id}`)}
-                className="bg-white border border-gray-200 rounded-lg p-5 space-y-4 hover:shadow-sm transition-shadow group cursor-pointer"
+                className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-5 space-y-4 hover:shadow-sm dark:hover:border-white/10 transition-all group cursor-pointer"
               >
                 <div className="flex items-start justify-between">
                   <div className={clsx(
                     "p-2.5 rounded-lg",
-                    acc.type === 'CASH' ? "bg-orange-50 text-[#f58220]" :
-                    acc.type === 'BANK' ? "bg-blue-50 text-blue-600" :
-                    "bg-indigo-50 text-indigo-600"
+                    acc.type === 'CASH' ? "bg-orange-50 dark:bg-orange-500/10 text-[#f58220]" :
+                    acc.type === 'BANK' ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                    "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
                   )}>
                     {acc.type === 'CASH' ? <Wallet size={18} /> :
                      acc.type === 'BANK' ? <Building2 size={18} /> :
@@ -150,13 +150,13 @@ export default function AccountsPage() {
                   <div className="flex items-center gap-2">
                     <span className={clsx(
                       "px-2 py-0.5 rounded-full text-[10px] font-semibold border",
-                      acc.status === 'ACTIVE' ? "bg-emerald-50 text-emerald-600 border-emerald-200" : "bg-rose-50 text-rose-600 border-rose-200"
+                      acc.status === 'ACTIVE' ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20" : "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
                     )}>
                       {acc.status}
                     </span>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(acc.id); }}
-                      className="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-colors"
+                      className="p-1.5 text-gray-300 dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -164,35 +164,35 @@ export default function AccountsPage() {
                 </div>
 
                 <div>
-                  <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{acc.accountCode}</span>
-                  <h3 className="text-base font-bold text-gray-800 mt-1.5">{acc.name}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-slate-400 bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded">{acc.accountCode}</span>
+                  <h3 className="text-base font-bold text-gray-800 dark:text-white mt-1.5">{acc.name}</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
                     {acc.type === 'BANK' ? 'Bank Account' : acc.type === 'CASH' ? 'Cash Drawer' : 'Digital Wallet'}
                   </p>
                 </div>
 
                 {/* Last Transaction Preview */}
-                <div className="p-3 bg-gray-50 rounded-lg space-y-1">
-                  <p className="text-[10px] text-gray-400">Last Activity</p>
+                <div className="p-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 rounded-lg space-y-1">
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500">Last Activity</p>
                   {acc.lastTransaction ? (
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-600 truncate max-w-[120px]">{acc.lastTransaction.note}</span>
+                      <span className="text-xs font-medium text-gray-600 dark:text-slate-300 truncate max-w-[120px]">{acc.lastTransaction.note}</span>
                       <span className={clsx(
                         "text-xs font-bold",
-                        acc.lastTransaction.type === 'INFLOW' ? "text-emerald-600" : "text-rose-600"
+                        acc.lastTransaction.type === 'INFLOW' ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                       )}>
                         {acc.lastTransaction.type === 'INFLOW' ? '+' : '-'}₹{acc.lastTransaction.amount.toLocaleString()}
                       </span>
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-400 italic">No recent activity</p>
+                    <p className="text-xs text-gray-400 dark:text-slate-500 italic">No recent activity</p>
                   )}
                 </div>
 
-                <div className="pt-3 border-t border-gray-100 flex items-end justify-between">
+                <div className="pt-3 border-t border-gray-100 dark:border-white/5 flex items-end justify-between">
                   <div>
-                    <p className="text-[10px] text-gray-400 mb-0.5">System Balance</p>
-                    <p className="text-lg font-bold text-gray-800">₹{acc.balance.toLocaleString()}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-0.5">System Balance</p>
+                    <p className="text-lg font-bold text-gray-800 dark:text-white">₹{acc.balance.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -208,34 +208,34 @@ export default function AccountsPage() {
         title="Create Financial Account"
       >
         <div className="space-y-6">
-          <p className="text-sm text-gray-500">Define a new money container for your business.</p>
+          <p className="text-sm text-gray-500 dark:text-slate-400">Define a new money container for your business.</p>
 
           <form onSubmit={handleCreate} className="space-y-5">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500">Account Name</label>
+              <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Account Name</label>
               <input
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., Main Operating Bank, Office Petty Cash"
-                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220] transition-colors"
+                className="w-full px-3 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500">Account Type</label>
+              <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Account Type</label>
               <select
                 value={formData.type}
                 onChange={e => setFormData({ ...formData, type: e.target.value })}
-                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220] appearance-none"
+                className="w-full px-3 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] appearance-none"
               >
-                <option value="BANK">Bank Account</option>
-                <option value="CASH">Cash Drawer</option>
-                <option value="UPI">Digital Wallet (UPI)</option>
+                <option value="BANK" className="dark:bg-card">Bank Account</option>
+                <option value="CASH" className="dark:bg-card">Cash Drawer</option>
+                <option value="UPI" className="dark:bg-card">Digital Wallet (UPI)</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500">Opening Balance</label>
+              <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Opening Balance</label>
               <input
                 type="number"
                 value={formData.balance}
@@ -243,7 +243,7 @@ export default function AccountsPage() {
                 placeholder="0.00"
                 min={-MAX_ACCOUNT_BALANCE}
                 max={MAX_ACCOUNT_BALANCE}
-                className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220] transition-colors"
+                className="w-full px-3 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
             </div>
 
@@ -251,7 +251,7 @@ export default function AccountsPage() {
               <button
                 type="button"
                 onClick={() => setShowAddForm(false)}
-                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
               >
                 Cancel
               </button>

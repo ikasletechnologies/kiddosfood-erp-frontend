@@ -77,11 +77,11 @@ const INDIAN_STATES = [
 ];
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:    { label: "Draft",    color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  SENT:     { label: "Sent",     color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  ACCEPTED: { label: "Accepted", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  REJECTED: { label: "Rejected", color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200" },
-  CONVERTED:{ label: "Converted",color: "text-orange-600",  bg: "bg-orange-50", border: "border-orange-200" },
+  DRAFT:    { label: "Draft",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  SENT:     { label: "Sent",     color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  ACCEPTED: { label: "Accepted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
+  CONVERTED:{ label: "Converted",color: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
 };
 
 // Proforma Invoice shares this exact Estimate/Quotation form and backend model —
@@ -265,19 +265,19 @@ function MiniCalendar({ value, onChange, onClose }: {
   const isToday = (d: number) => today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
 
   return (
-    <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-64 select-none">
+    <div className="bg-white dark:bg-card rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-3 w-64 select-none">
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="rotate-90" />
         </button>
-        <span className="text-sm font-semibold text-gray-800">{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <span className="text-sm font-semibold text-gray-800 dark:text-white">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="-rotate-90" />
         </button>
       </div>
       <div className="grid grid-cols-7 mb-1">
         {DAY_NAMES.map(d => (
-          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-0.5">{d}</div>
+          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-slate-500 py-0.5">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-y-0.5">
@@ -294,13 +294,13 @@ function MiniCalendar({ value, onChange, onClose }: {
             className={clsx(
               "w-full aspect-square flex items-center justify-center text-xs rounded-lg font-medium transition-colors",
               isSelected(d) && "bg-[#ff4d4f] text-white",
-              !isSelected(d) && isToday(d) && "bg-red-50 text-[#ff4d4f]",
-              !isSelected(d) && !isToday(d) && "text-gray-700 hover:bg-gray-100"
+              !isSelected(d) && isToday(d) && "bg-red-50 dark:bg-red-500/10 text-[#ff4d4f]",
+              !isSelected(d) && !isToday(d) && "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5"
             )}
           >{d}</button>
         ))}
       </div>
-      <div className="mt-2 flex justify-between items-center border-t border-gray-100 pt-2">
+      <div className="mt-2 flex justify-between items-center border-t border-gray-100 dark:border-white/5 pt-2">
         <button
           onClick={() => {
             const t = new Date();
@@ -308,9 +308,9 @@ function MiniCalendar({ value, onChange, onClose }: {
             onChange(iso);
             onClose();
           }}
-          className="text-[11px] font-semibold text-[#ff4d4f] hover:text-red-700"
+          className="text-[11px] font-semibold text-[#ff4d4f] hover:text-red-700 dark:hover:text-red-400"
         >Today</button>
-        <button onClick={onClose} className="text-[11px] text-gray-400 hover:text-gray-600">Close</button>
+        <button onClick={onClose} className="text-[11px] text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300">Close</button>
       </div>
     </div>
   );
@@ -858,29 +858,29 @@ export default function EstimationsPageClient({
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: 'calc(100vh - 104px)' }}>
 
         {/* ── Top bar ── */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
               <ArrowLeft size={18} />
             </button>
-            <h2 className="text-lg font-bold text-gray-800">{L.formHeading}</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">{L.formHeading}</h2>
           </div>
         </div>
 
         {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 p-5 space-y-4 custom-scrollbar">
 
           {/* Customer + Meta info */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               {/* Left: Party + Phone */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Party Type</label>
-                  <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white w-fit">
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party Type</label>
+                  <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card w-fit">
                     {PARTY_TYPES.map(pt => (
                       <button
                         key={pt.value}
@@ -888,7 +888,7 @@ export default function EstimationsPageClient({
                         onClick={() => handlePartyTypeChange(pt.value)}
                         className={clsx(
                           "px-3 py-1.5 text-xs font-semibold transition-colors",
-                          partyType === pt.value ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                          partyType === pt.value ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                         )}
                       >
                         {pt.label}
@@ -897,16 +897,16 @@ export default function EstimationsPageClient({
                   </div>
                 </div>
                 <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Party *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
                   <div
                     className={clsx(
-                      "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-all",
-                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 hover:border-gray-400"
+                      "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
+                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
                     )}
                     onClick={() => setShowCustomerDrop(v => !v)}
                   >
                     <input
-                      className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                      className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="Select or search party"
                       value={customerSearch}
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
@@ -915,18 +915,18 @@ export default function EstimationsPageClient({
             {customerSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setCustomerSearch("")} 
               />
             )}
-                    <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                    <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
 
                   {showCustomerDrop && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-[400px] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                    <div className="absolute top-full left-0 z-50 mt-1 w-[400px] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
                       {partyType === "CUSTOMER" && (
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100 font-medium"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-medium"
                           onClick={() => {
                             const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
                             setNewParty(prev => ({
@@ -938,25 +938,25 @@ export default function EstimationsPageClient({
                             setShowCustomerDrop(false);
                           }}
                         >
-                          <span className="w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
+                          <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
                           Add New Party
                         </button>
                       )}
-                      <div className="max-h-48 overflow-y-auto">
+                      <div className="max-h-48 overflow-y-auto custom-scrollbar">
                         {filteredCustomers.length === 0 ? (
-                          <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                          <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">
                             No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
                           </div>
                         ) : (
                           filteredCustomers.map((c: any) => (
                             <button
                               key={c.id}
-                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0"
                               onClick={() => selectCustomer(c)}
                             >
                               <div className="text-left">
-                                <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                                <div className="text-xs text-gray-400">{c.contact || c.phone || c.contactNum || "—"}</div>
+                                <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
+                                <div className="text-xs text-gray-400 dark:text-slate-500">{c.contact || c.phone || c.contactNum || "—"}</div>
                               </div>
                             </button>
                           ))
@@ -966,9 +966,9 @@ export default function EstimationsPageClient({
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Phone</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="Phone number"
                     value={customerPhone}
                     onChange={e => setCustomerPhone(e.target.value)}
@@ -979,27 +979,27 @@ export default function EstimationsPageClient({
               {/* Right: Ref No, Valid Until, State of Supply */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Ref No</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Ref No</label>
                   <input
                     type="text"
                     placeholder="Auto"
                     value={refNo}
                     onChange={e => setRefNo(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Valid Until</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Valid Until</label>
                   <div className="relative" ref={calendarRef}>
                     <button
                       type="button"
                       onClick={() => setShowCalendar(v => !v)}
-                      className="w-full flex items-center justify-between border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white hover:border-orange-400 transition-colors"
+                      className="w-full flex items-center justify-between border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] hover:border-orange-400 transition-colors"
                     >
-                      <span className="font-medium text-gray-700">
+                      <span className="font-medium text-gray-700 dark:text-white">
                         {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
                       </span>
-                      <Calendar size={14} className="text-gray-400 shrink-0" />
+                      <Calendar size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1.5 z-[200]">
@@ -1009,14 +1009,14 @@ export default function EstimationsPageClient({
                   </div>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">State of Supply</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">State of Supply</label>
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                   >
-                    <option value="">Select state</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="" className="dark:bg-card">Select state</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s} className="dark:bg-card">{s}</option>)}
                   </select>
                 </div>
               </div>
@@ -1024,20 +1024,20 @@ export default function EstimationsPageClient({
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <button
                 type="button"
                 onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
-                className="px-2.5 py-1 bg-white border border-gray-200 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 transition-colors"
+                className="px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 dark:text-slate-300 transition-colors"
               >
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs border-b border-gray-100">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5">
                   <th className="text-left px-4 py-2.5 w-10 font-medium">#</th>
                   <th className="text-left px-4 py-2.5 font-medium">Item</th>
                   <th className="text-center px-4 py-2.5 w-20 font-medium">Qty</th>
@@ -1048,7 +1048,7 @@ export default function EstimationsPageClient({
                   <th className="w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {items.map((item, idx) => {
                   const { taxAmt, amount } = computeRow(item, withTax);
                   const filtProd = products.filter(p =>
@@ -1057,15 +1057,15 @@ export default function EstimationsPageClient({
                     p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
                   ).slice(0, 10);
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5 text-center text-xs text-gray-400 align-top">
+                    <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                      <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
                         <div className="py-1.5">
                           {idx + 1}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 relative align-top">
                         <input
-                          className="w-full px-3 py-1.5 border border-gray-200 rounded-md text-sm outline-none focus:border-orange-400"
+                          className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                           placeholder="Search item..."
                           value={item.itemSearch}
                           onChange={e => {
@@ -1082,18 +1082,18 @@ export default function EstimationsPageClient({
             {item.itemSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => updateItem(idx, "itemSearch", "")} 
               />
             )}
                         {openItemDrop === item.id && itemDropRect && (
                           <div
-                            className="bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden flex flex-col item-dropdown-container"
+                            className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden flex flex-col item-dropdown-container"
                             style={{ position: "fixed", top: itemDropRect.top + 4, left: itemDropRect.left, width: itemDropRect.width, zIndex: 9999 }}
                           >
                             <button
                               type="button"
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 hover:bg-orange-50 border-b border-gray-100 font-semibold shrink-0"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
                               onMouseDown={(e) => {
                                 e.preventDefault();
                                 setActiveItemIdx(idx);
@@ -1101,22 +1101,22 @@ export default function EstimationsPageClient({
                                 setOpenItemDrop(null);
                               }}
                             >
-                              <span className="w-4 h-4 rounded-full bg-orange-100 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                              <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
                               Add New Product
                             </button>
-                            <div className="max-h-48 overflow-y-auto">
+                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
                               {filtProd.length === 0 ? (
-                                <div className="px-3 py-4 text-xs text-gray-400 text-center">No products found</div>
+                                <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
                               ) : (
                                 filtProd.map(p => (
                                   <button
                                     key={p.id}
-                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 text-left border-b border-gray-50 last:border-0"
+                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0"
                                     onMouseDown={() => selectProduct(idx, p)}
                                   >
                                     <div>
-                                      <div className="text-sm font-medium text-gray-800">{p.name}</div>
-                                      <div className="text-xs text-gray-400">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
+                                      <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                      <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
                                     </div>
                                   </button>
                                 ))
@@ -1131,27 +1131,27 @@ export default function EstimationsPageClient({
                           min={0}
                           value={item.qty === 0 ? "" : item.qty}
                           onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm text-center outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                         />
                       </td>
                       <td className="px-4 py-2.5 align-top">
                         <select
                           value={item.unit}
                           onChange={e => updateItem(idx, "unit", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
                         >
-                          {UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
+                          {UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-2.5 align-top">
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
                           <input
                             type="number"
                             min={0}
                             value={item.rate === 0 ? "" : item.rate}
                             onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 rounded-md text-sm text-right outline-none focus:border-orange-400"
+                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                           />
                         </div>
                       </td>
@@ -1165,15 +1165,15 @@ export default function EstimationsPageClient({
                             updateItem(idx, "taxLabel", label);
                             updateItem(idx, "taxPct", val);
                           }}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
                         >
                           {TAX_OPTIONS.map((o, index) => (
-                            <option key={index} value={o.label}>{o.label}</option>
+                            <option key={index} value={o.label} className="dark:bg-card">{o.label}</option>
                           ))}
                         </select>
-                        <div className="text-[10px] text-right text-gray-400 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
+                        <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
                       </td>
-                      <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 align-top">
+                      <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 dark:text-slate-200 align-top">
                         <div className="py-1.5">
                           {amount > 0 ? `₹${amount.toFixed(2)}` : "—"}
                         </div>
@@ -1182,7 +1182,7 @@ export default function EstimationsPageClient({
                         <div className="py-1">
                           <button
                             onClick={() => removeRow(idx)}
-                            className="p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition-colors"
+                            className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1193,23 +1193,23 @@ export default function EstimationsPageClient({
                 })}
               </tbody>
             </table>
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
               <button
                 onClick={addRow}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:border-orange-300 hover:bg-orange-50 rounded-lg text-xs font-semibold text-gray-600 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 transition-all"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Row
               </button>
-              <div className="flex items-center gap-5 text-xs text-gray-400">
-                <span>Qty: <strong className="text-gray-700">{totalQty}</strong></span>
-                <span>Tax: <strong className="text-gray-700 font-sans">₹{totalTax.toFixed(2)}</strong></span>
+              <div className="flex items-center gap-5 text-xs text-gray-400 dark:text-slate-500">
+                <span>Qty: <strong className="text-gray-700 dark:text-slate-200">{totalQty}</strong></span>
+                <span>Tax: <strong className="text-gray-700 dark:text-slate-200 font-sans">₹{totalTax.toFixed(2)}</strong></span>
               </div>
             </div>
           </div>
 
           {/* Notes + Summary */}
           <div className="flex gap-4 items-start">
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3">
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => {
@@ -1220,7 +1220,7 @@ export default function EstimationsPageClient({
                   }}
                   className={clsx(
                     "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showTerms ? "border-orange-400 bg-orange-50 text-orange-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    showTerms ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
                   <AlignLeft className="h-3.5 w-3.5" /> Terms & Conditions
@@ -1234,7 +1234,7 @@ export default function EstimationsPageClient({
                   }}
                   className={clsx(
                     "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showDesc ? "border-orange-400 bg-orange-50 text-orange-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    showDesc ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
                   <FileText className="h-3.5 w-3.5" /> Description
@@ -1243,56 +1243,56 @@ export default function EstimationsPageClient({
               </div>
               {showTerms && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Terms & Conditions</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Terms & Conditions</label>
                   <textarea
                     rows={3}
                     value={termsText}
                     onChange={e => setTermsText(e.target.value)}
                     placeholder="Add terms..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none resize-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
               {showDesc && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Description</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Description</label>
                   <textarea
                     rows={3}
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                     placeholder="Add description..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none resize-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-4 w-64 shrink-0 space-y-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Subtotal</span>
-                <span className="font-semibold text-gray-700">₹{totalAmount.toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
+                <span className="font-semibold text-gray-700 dark:text-white">₹{totalAmount.toFixed(2)}</span>
               </div>
               {totalTax > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Tax</span>
-                  <span className="text-gray-600">₹{totalTax.toFixed(2)}</span>
+                  <span className="text-gray-500 dark:text-slate-400">Tax</span>
+                  <span className="text-gray-600 dark:text-slate-300">₹{totalTax.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">
-                <label htmlFor="est_roundoff" className="flex items-center gap-1.5 text-gray-500 cursor-pointer">
+                <label htmlFor="est_roundoff" className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 cursor-pointer">
                   <input
                     type="checkbox"
                     id="est_roundoff"
                     checked={roundOffEnabled}
                     onChange={e => setRoundOffEnabled(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-gray-300 accent-orange-500"
                   />
                   Round Off
                 </label>
-                <span className="text-gray-500 text-xs">{roundOff >= 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-slate-400 text-xs">{roundOff >= 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span>
               </div>
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <span className="font-bold text-gray-800">Total</span>
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+                <span className="font-bold text-gray-800 dark:text-white">Total</span>
                 <span className="text-xl font-bold text-[#f58220]">₹{finalTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -1301,32 +1301,32 @@ export default function EstimationsPageClient({
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
           <button
             onClick={() => handleSave(true)}
             disabled={saving}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-700 dark:text-slate-300 transition-colors disabled:opacity-50"
           >
             Save Draft
           </button>
           <div className="relative" ref={shareDropRef}>
             <button
               onClick={() => setShowShareDrop(v => !v)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border border-orange-200 hover:bg-orange-50 rounded-lg text-[#f58220] transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-[#f58220] transition-colors"
             >
               <Share2 size={15} /> Share <ChevronDown size={13} />
             </button>
             {showShareDrop && (
-              <div className="absolute bottom-full mb-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg w-32 overflow-hidden text-sm z-50">
-                <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700">WhatsApp</button>
-                <button className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700">Email</button>
+              <div className="absolute bottom-full mb-2 right-0 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg w-32 overflow-hidden text-sm z-50">
+                <button className="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200">WhatsApp</button>
+                <button className="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200">Email</button>
               </div>
             )}
           </div>
           <button
             onClick={() => handleSave(false)}
             disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
           >
             <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save"}
           </button>
@@ -1359,12 +1359,12 @@ export default function EstimationsPageClient({
         />
 
         {showAddProduct && (
-          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 w-full max-w-5xl mx-4 min-h-[680px] max-h-[90vh] overflow-y-auto p-6 relative">
+          <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-card rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 w-full max-w-5xl mx-4 min-h-[680px] max-h-[90vh] overflow-y-auto custom-scrollbar p-6 relative">
               <button
                 type="button"
                 onClick={() => setShowAddProduct(false)}
-                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-lg bg-gray-50 border border-gray-200"
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 transition-colors p-2 rounded-lg bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10"
               >
                 <X size={18} />
               </button>
@@ -1394,10 +1394,10 @@ export default function EstimationsPageClient({
   const fmt = (d: string) => formatDate(d + "T00:00:00");
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -1411,14 +1411,14 @@ export default function EstimationsPageClient({
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-3 gap-4">
           {[
-            { label: L.statLabel, value: `₹${totalQuotations.toLocaleString("en-IN")}`, color: "text-gray-700", dot: "bg-gray-400" },
-            { label: "Converted",         value: `₹${totalConverted.toLocaleString("en-IN")}`,  color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: L.statLabel, value: `₹${totalQuotations.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+            { label: "Converted",         value: `₹${totalConverted.toLocaleString("en-IN")}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
             { label: "Open",              value: `₹${totalOpen.toLocaleString("en-IN")}`,       color: "text-[#f58220]",   dot: "bg-[#f58220]" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -1433,25 +1433,25 @@ export default function EstimationsPageClient({
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={L.searchPlaceholder}
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "SENT", "CONVERTED", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : s}
@@ -1459,9 +1459,9 @@ export default function EstimationsPageClient({
             ))}
           </div>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 relative">
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowFromCal(v => !v)}>
-              <Calendar className="h-4 w-4 text-gray-400" />
+          <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 relative">
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowFromCal(v => !v)}>
+              <Calendar className="h-4 w-4 text-gray-400 dark:text-slate-500" />
               <span className="font-medium">{fmt(dateFrom)}</span>
             </div>
             {showFromCal && (
@@ -1469,10 +1469,10 @@ export default function EstimationsPageClient({
                 <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
               </div>
             )}
-            <span className="text-gray-300 px-1">to</span>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowToCal(v => !v)}>
+            <span className="text-gray-300 dark:text-slate-600 px-1">to</span>
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowToCal(v => !v)}>
               <span className="font-medium">{fmt(dateTo)}</span>
-              <Calendar className="h-4 w-4 text-gray-400" />
+              <Calendar className="h-4 w-4 text-gray-400 dark:text-slate-500" />
             </div>
             {showToCal && (
               <div className="absolute top-full right-0 mt-1 z-50" ref={toCalRef}>
@@ -1482,7 +1482,7 @@ export default function EstimationsPageClient({
           </div>
 
           <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -1491,27 +1491,27 @@ export default function EstimationsPageClient({
         {loading ? (
           <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Calculator className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">{L.emptyTitle}</p>
-              <p className="text-gray-500 text-sm mt-1">{L.emptySubtitle}</p>
+              <p className="text-gray-800 dark:text-white font-semibold">{L.emptyTitle}</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">{L.emptySubtitle}</p>
             </div>
             <button
               onClick={openCreate}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
             >
               {L.emptyButton}
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">{L.noColumn}</th>
                   <th className="text-left px-4 py-3">Party Name</th>
@@ -1520,7 +1520,7 @@ export default function EstimationsPageClient({
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map((est) => {
                   const style = STATUS_STYLES[est.status] || STATUS_STYLES.DRAFT;
                   const isDraft = est.status === "DRAFT";
@@ -1529,36 +1529,36 @@ export default function EstimationsPageClient({
                       key={est.id} 
                       className={clsx(
                         "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 cursor-pointer bg-orange-50/30" : "hover:bg-gray-50"
+                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
                       onClick={() => {
                         if (isDraft) loadDraft(est);
                       }}
                     >
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(est.createdAt)}
                       </td>
-                      <td className="px-4 py-3 font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-200 text-xs">
                         <div>{est.quotationNumber}</div>
                         {est.status === "CONVERTED" && est.convertedOrderNumber && (
-                          <div className="text-[10px] text-green-600 font-bold mt-1 bg-green-50 px-1.5 py-0.5 rounded inline-block">
+                          <div className="text-[10px] text-green-600 dark:text-green-400 font-bold mt-1 bg-green-50 dark:bg-green-500/10 px-1.5 py-0.5 rounded inline-block">
                             Sales Order: {est.convertedOrderNumber}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium text-gray-800">
+                          <span className="font-medium text-gray-800 dark:text-white">
                             {est.customer?.name || est.customerName || "—"}
                           </span>
                           {!isDraft && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
                               {est.partyType || (est.customerId ? "CUSTOMER" : "UNKNOWN")}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800">
+                      <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
                         ₹ {(est.totalAmount || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1566,7 +1566,7 @@ export default function EstimationsPageClient({
                           {style.label}
                         </span>
                         {est.status === "CONVERTED" && (est.trackingNumber || est.courierName) && (
-                          <div className="text-[10px] text-gray-500 mt-1 font-medium">
+                          <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 font-medium">
                             {est.courierName ? `${est.courierName}: ` : ""}{est.trackingNumber || "No Tracking ID"}
                           </div>
                         )}
@@ -1577,7 +1577,7 @@ export default function EstimationsPageClient({
                              <a
                                href={`/sales/orders?id=${est.convertedOrderId}`}
                                onClick={(e) => e.stopPropagation()}
-                               className="px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-2"
+                               className="px-2 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-2"
                              >
                                View Sales Order
                              </a>
@@ -1586,7 +1586,7 @@ export default function EstimationsPageClient({
                              <button
                                onClick={(e) => { e.stopPropagation(); handleOpenConvertModal(est); }}
                                disabled={!!converting}
-                               className="px-2 py-1 bg-green-50 text-green-600 border border-green-200 rounded text-[10px] font-bold hover:bg-green-100 transition-colors mr-2"
+                               className="px-2 py-1 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20 rounded text-[10px] font-bold hover:bg-green-100 transition-colors mr-2"
                              >
                                {converting === est.id ? "..." : "Convert"}
                              </button>
@@ -1595,14 +1595,14 @@ export default function EstimationsPageClient({
                             <div className="flex items-center justify-end gap-1">
                               <button
                                 onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
-                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Edit Draft"
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDeleteDraft(est.id); }}
-                                className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                                 title="Delete Draft"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -1612,14 +1612,14 @@ export default function EstimationsPageClient({
                             <>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Print"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleDownloadEstimate(est); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Download"
                               >
                                 <Download className="h-4 w-4" />
@@ -1670,8 +1670,8 @@ export default function EstimationsPageClient({
 
       {/* Convert to Sales Order Modal */}
       {showConvertModal && selectedEstForConvert && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-150 w-full max-w-lg mx-4 overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-card rounded-2xl shadow-2xl border border-gray-150 dark:border-white/10 w-full max-w-lg mx-4 overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5">
             {/* Header */}
             <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-6 py-4 flex items-center justify-between text-white">
               <div>
@@ -1687,33 +1687,33 @@ export default function EstimationsPageClient({
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4 text-sm text-gray-700">
-              <div className="bg-orange-50/50 border border-orange-100 rounded-xl p-4 flex items-center justify-between">
+            <div className="p-6 space-y-4 text-sm text-gray-700 dark:text-slate-300">
+              <div className="bg-orange-50/50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/20 rounded-xl p-4 flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-orange-600 font-semibold uppercase tracking-wider">Total Payable</div>
-                  <div className="text-2xl font-bold text-gray-800 mt-0.5">₹ {(selectedEstForConvert.totalAmount || 0).toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wider">Total Payable</div>
+                  <div className="text-2xl font-bold text-gray-800 dark:text-white mt-0.5">₹ {(selectedEstForConvert.totalAmount || 0).toLocaleString("en-IN")}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-gray-400">Items</div>
-                  <div className="text-sm font-semibold text-gray-700 mt-0.5">{selectedEstForConvert.items?.length || 0} line items</div>
+                  <div className="text-xs text-gray-400 dark:text-slate-500">Items</div>
+                  <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5">{selectedEstForConvert.items?.length || 0} line items</div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                     <Calendar size={12} /> Delivery Date
                   </label>
                   <input
                     type="date"
                     value={deliveryDate}
                     onChange={e => setDeliveryDate(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                    className="px-3.5 py-2.5 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
                   />
                 </div>
 
                 <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                     <Truck size={12} /> Courier Name
                   </label>
                   <input
@@ -1721,13 +1721,13 @@ export default function EstimationsPageClient({
                     placeholder="e.g. Delhivery, BlueDart"
                     value={courierName}
                     onChange={e => setCourierName(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                    className="px-3.5 py-2.5 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               <div className="flex flex-col">
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                   <AlignLeft size={12} /> Tracking / Waybill Number
                 </label>
                 <input
@@ -1735,12 +1735,12 @@ export default function EstimationsPageClient({
                   placeholder="Enter Tracking ID / AWB Number"
                   value={trackingNumber}
                   onChange={e => setTrackingNumber(e.target.value)}
-                  className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                  className="px-3.5 py-2.5 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
                 />
               </div>
 
               <div className="flex flex-col">
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                   <FileText size={12} /> Delivery Address
                 </label>
                 <textarea
@@ -1748,16 +1748,16 @@ export default function EstimationsPageClient({
                   placeholder="Enter the shipping/delivery address..."
                   value={deliveryAddress}
                   onChange={e => setDeliveryAddress(e.target.value)}
-                  className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none"
+                  className="px-3.5 py-2.5 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
                 />
               </div>
             </div>
 
             {/* Footer */}
-            <div className="bg-gray-50 border-t border-gray-150 px-6 py-4 flex items-center justify-end gap-3">
+            <div className="bg-gray-50 dark:bg-white/[0.02] border-t border-gray-150 dark:border-white/10 px-6 py-4 flex items-center justify-end gap-3">
               <button
                 onClick={() => setShowConvertModal(false)}
-                className="px-4 py-2.5 text-xs font-black text-gray-500 uppercase tracking-widest hover:bg-white rounded-xl border border-gray-200 transition-all active:scale-95"
+                className="px-4 py-2.5 text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest hover:bg-white dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-all active:scale-95"
               >
                 Cancel
               </button>

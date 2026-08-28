@@ -72,14 +72,14 @@ function getPeriodDates(period: string): { start: string; end: string } {
 function EmptyIllustration() {
   return (
     <div className="w-28 h-28 mx-auto mb-4 relative">
-      <div className="absolute inset-0 rounded-full bg-orange-50 flex items-center justify-center">
-        <div className="w-20 h-16 rounded-lg bg-white border-2 border-blue-100 flex flex-col gap-1.5 items-start justify-center px-3 shadow-sm">
-          <div className="w-10 h-1.5 rounded bg-orange-200" />
-          <div className="w-6 h-1.5 rounded bg-orange-100" />
-          <div className="w-8 h-1.5 rounded bg-orange-100" />
+      <div className="absolute inset-0 rounded-full bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
+        <div className="w-20 h-16 rounded-lg bg-white dark:bg-card border-2 border-blue-100 dark:border-white/10 flex flex-col gap-1.5 items-start justify-center px-3 shadow-sm">
+          <div className="w-10 h-1.5 rounded bg-orange-200 dark:bg-orange-500/30" />
+          <div className="w-6 h-1.5 rounded bg-orange-100 dark:bg-orange-500/20" />
+          <div className="w-8 h-1.5 rounded bg-orange-100 dark:bg-orange-500/20" />
         </div>
-        <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-orange-100 border-2 border-orange-200 flex items-center justify-center">
-          <Wallet size={12} className="text-blue-400" />
+        <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-500/20 border-2 border-orange-200 dark:border-orange-500/30 flex items-center justify-center">
+          <Wallet size={12} className="text-blue-400 dark:text-blue-300" />
         </div>
       </div>
     </div>
@@ -114,19 +114,19 @@ function MiniCalendar({ value, onChange, onClose }: {
   const isToday = (d: number) => today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
 
   return (
-    <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-64 select-none">
+    <div className="bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-3 w-64 select-none">
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="rotate-90" />
         </button>
-        <span className="text-sm font-semibold text-gray-800">{MONTH_NAMES[viewMonth]} {viewYear}</span>
-        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <span className="text-sm font-semibold text-gray-800 dark:text-white">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="-rotate-90" />
         </button>
       </div>
       <div className="grid grid-cols-7 mb-1">
         {DAY_NAMES.map(d => (
-          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-0.5">{d}</div>
+          <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-slate-500 py-0.5">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7 gap-y-0.5">
@@ -143,8 +143,8 @@ function MiniCalendar({ value, onChange, onClose }: {
             className={clsx(
               "w-full aspect-square flex items-center justify-center text-xs rounded-lg font-medium transition-colors",
               isSelected(d) && "bg-[#ff4d4f] text-white",
-              !isSelected(d) && isToday(d) && "bg-red-50 text-[#ff4d4f]",
-              !isSelected(d) && !isToday(d) && "text-gray-700 hover:bg-gray-100"
+              !isSelected(d) && isToday(d) && "bg-red-50 dark:bg-red-500/10 text-[#ff4d4f]",
+              !isSelected(d) && !isToday(d) && "text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5"
             )}
           >{d}</button>
         ))}
@@ -528,18 +528,18 @@ export default function PaymentInPage() {
   // ── CREATE VIEW ────────────────────────────────────────────────────────────
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-[#f1f5f9] overflow-hidden text-slate-800" style={{ height: 'calc(100vh - 104px)' }}>
+      <div className="flex flex-col bg-[#f1f5f9] dark:bg-background overflow-hidden text-slate-800 dark:text-slate-100" style={{ height: 'calc(100vh - 104px)' }}>
 
         {/* Top bar */}
-        <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
+        <div className="bg-white dark:bg-card border-b border-slate-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-slate-800">Payment-In</h2>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Payment-In</h2>
           </div>
-          <span className="text-xs text-slate-500 font-mono">Receipt No: <strong className="text-[#f58220] font-bold">Auto</strong></span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Receipt No: <strong className="text-[#f58220] font-bold">Auto</strong></span>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
 
           {/* Party type toggle */}
           <div className="flex items-center gap-2">
@@ -558,7 +558,7 @@ export default function PaymentInPage() {
                   "px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors",
                   partyType === pt.value
                     ? "bg-[#f58220] text-white border-[#f58220]"
-                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                    : "bg-white dark:bg-card text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {pt.label}
@@ -567,21 +567,21 @@ export default function PaymentInPage() {
           </div>
 
           {/* Party + Date row */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-5 flex flex-wrap gap-4 items-start">
+          <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm px-6 py-5 flex flex-wrap gap-4 items-start">
 
             {/* Party dropdown */}
             <div className="relative" ref={customerDropRef}>
               <div
                 className={clsx(
-                  "flex items-center gap-1 min-w-[220px] bg-white border rounded px-3 py-2 cursor-pointer",
-                  showCustomerDrop ? "border-[#f58220]" : "border-slate-300"
+                  "flex items-center gap-1 min-w-[220px] bg-white dark:bg-[#13151f] border rounded px-3 py-2 cursor-pointer",
+                  showCustomerDrop ? "border-[#f58220]" : "border-slate-300 dark:border-white/10"
                 )}
                 onClick={() => setShowCustomerDrop(v => !v)}
               >
                 <div className="flex-1">
                   <div className="text-[10px] text-[#f58220] font-medium leading-none mb-0.5">Party *</div>
                   <input
-                    className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                    className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} by Name/Phone`}
                     value={customerSearch}
                     onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
@@ -590,32 +590,32 @@ export default function PaymentInPage() {
             {customerSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setCustomerSearch("")} 
               />
             )}
                 </div>
-                <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
               </div>
 
               {showCustomerDrop && (
-                <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-white border border-gray-200 rounded shadow-lg max-h-56 overflow-y-auto">
+                <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded shadow-lg max-h-56 overflow-y-auto custom-scrollbar">
                   {filteredParties.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-gray-400 text-center">
+                    <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">
                       No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
                     </div>
                   ) : filteredParties.map((c: any) => (
                     <button
                       key={c.id}
-                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 border-b border-gray-50 last:border-0"
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0"
                       onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); setSelectedInvoiceId(""); setAmount(""); }}
                     >
                       <div className="text-left">
-                        <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                        <div className="text-xs text-gray-400">{c.phone || "—"}</div>
+                        <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
+                        <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
                       </div>
                       {c.balance > 0 && (
-                        <div className="flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2 py-0.5 rounded">
+                        <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded">
                           {c.balance} <Check size={10} />
                         </div>
                       )}
@@ -627,8 +627,8 @@ export default function PaymentInPage() {
 
             {/* Receipt No (auto) */}
             <div className="flex flex-col">
-              <div className="text-[10px] text-gray-500 mb-1">Receipt No</div>
-              <div className="bg-white border border-gray-300 rounded px-3 py-2 text-sm text-gray-400 min-w-[120px]">Auto</div>
+              <div className="text-[10px] text-gray-500 dark:text-slate-400 mb-1">Receipt No</div>
+              <div className="bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-400 dark:text-slate-500 min-w-[120px]">Auto</div>
             </div>
 
             {/* Spacer */}
@@ -636,33 +636,31 @@ export default function PaymentInPage() {
 
             {/* Date */}
             <div className="flex flex-col items-end">
-              <div className="text-[10px] text-gray-500 mb-1">Receipt Date</div>
-              <div className="flex items-center gap-1 border border-gray-300 rounded px-3 py-2 bg-white">
+              <div className="text-[10px] text-gray-500 dark:text-slate-400 mb-1">Receipt Date</div>
+              <div className="flex items-center gap-1 border border-gray-300 dark:border-white/10 rounded px-3 py-2 bg-white dark:bg-[#13151f]">
                 <input
                   type="date"
                   value={receiptDate}
                   onChange={e => setReceiptDate(e.target.value)}
-                  className="text-sm text-gray-700 outline-none bg-transparent"
+                  className="text-sm text-gray-700 dark:text-white outline-none bg-transparent"
                 />
                 <Calendar size={13} className="text-[#f58220] shrink-0" />
               </div>
             </div>
           </div>
 
-          {/* Invoice selection — a customer payment must be recorded
-              against a specific Tax Invoice so paid/outstanding can be
-              recomputed for it. */}
+          {/* Invoice selection */}
           {selectedCustomer && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-3">
-              <div className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Tax Invoice</div>
+            <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm p-6 space-y-3">
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Tax Invoice</div>
               {customerInvoices.length === 0 ? (
-                <p className="text-xs text-gray-400">No outstanding Tax Invoices found for {selectedCustomer.name}.</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding Tax Invoices found for {selectedCustomer.name}.</p>
               ) : (
                 <>
                   <select
                     value={selectedInvoiceId}
                     onChange={e => { setSelectedInvoiceId(e.target.value); setAmount(""); }}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 outline-none bg-white focus:border-[#f58220]"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] focus:border-[#f58220]"
                   >
                     <option value="" disabled>Select invoice...</option>
                     {customerInvoices.map((inv: any) => (
@@ -673,17 +671,17 @@ export default function PaymentInPage() {
                   </select>
                   {selectedInvoice && (
                     <div className="grid grid-cols-3 gap-3 pt-1 text-center">
-                      <div className="p-2 bg-gray-50 rounded-lg">
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold">Invoice Total</p>
-                        <p className="text-sm font-bold text-gray-800 mt-0.5">₹{selectedInvoice.finalAmount.toFixed(2)}</p>
+                      <div className="p-2 bg-gray-50 dark:bg-white/[0.02] rounded-lg">
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500 uppercase font-semibold">Invoice Total</p>
+                        <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">₹{selectedInvoice.finalAmount.toFixed(2)}</p>
                       </div>
-                      <div className="p-2 bg-emerald-50 rounded-lg">
-                        <p className="text-[10px] text-emerald-600 uppercase font-semibold">Already Paid</p>
-                        <p className="text-sm font-bold text-emerald-600 mt-0.5">₹{invoicePaidSoFar.toFixed(2)}</p>
+                      <div className="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg">
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold">Already Paid</p>
+                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">₹{invoicePaidSoFar.toFixed(2)}</p>
                       </div>
-                      <div className="p-2 bg-rose-50 rounded-lg">
-                        <p className="text-[10px] text-rose-600 uppercase font-semibold">Outstanding</p>
-                        <p className="text-sm font-bold text-rose-600 mt-0.5">₹{invoiceOutstanding.toFixed(2)}</p>
+                      <div className="p-2 bg-rose-50 dark:bg-rose-500/10 rounded-lg">
+                        <p className="text-[10px] text-rose-600 dark:text-rose-400 uppercase font-semibold">Outstanding</p>
+                        <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-0.5">₹{invoiceOutstanding.toFixed(2)}</p>
                       </div>
                     </div>
                   )}
@@ -693,15 +691,15 @@ export default function PaymentInPage() {
           )}
 
           {/* Amount + Mode */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
-            <div className="text-sm font-semibold text-gray-700 border-b border-gray-100 pb-2">Payment Details</div>
+          <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm p-6 space-y-4">
+            <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Payment Details</div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Amount */}
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Amount Received (₹) *</label>
-                <div className="flex items-center border border-gray-300 rounded bg-white overflow-hidden focus-within:border-[#f58220]">
-                  <span className="px-3 py-2 text-gray-400 text-sm border-r border-gray-200 bg-gray-50">₹</span>
+                <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Amount Received (₹) *</label>
+                <div className="flex items-center border border-gray-300 dark:border-white/10 rounded bg-white dark:bg-[#13151f] overflow-hidden focus-within:border-[#f58220]">
+                  <span className="px-3 py-2 text-gray-400 dark:text-slate-500 text-sm border-r border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5">₹</span>
                   <input
                     type="number"
                     min={0}
@@ -709,18 +707,18 @@ export default function PaymentInPage() {
                     placeholder="0.00"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
-                    className="flex-1 px-3 py-2 text-sm text-gray-800 outline-none font-semibold"
+                    className="flex-1 px-3 py-2 text-sm text-gray-800 dark:text-white outline-none font-semibold bg-transparent"
                   />
                 </div>
               </div>
 
               {/* Payment Mode */}
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Payment Mode</label>
+                <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Payment Mode</label>
                 <select
                   value={paymentMode}
                   onChange={e => setPaymentMode(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 outline-none bg-white focus:border-[#f58220]"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] focus:border-[#f58220]"
                 >
                   {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
@@ -729,26 +727,26 @@ export default function PaymentInPage() {
               {/* Cheque No (shown if Cheque mode) */}
               {paymentMode === "Cheque" && (
                 <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Cheque No.</label>
+                  <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Cheque No.</label>
                   <input
                     type="text"
                     placeholder="Enter cheque number"
                     value={chequeNo}
                     onChange={e => setChequeNo(e.target.value)}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220]"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                   />
                 </div>
               )}
 
               {/* Description */}
               <div className={paymentMode === "Cheque" ? "md:col-span-2" : ""}>
-                <label className="text-xs text-gray-500 mb-1 block">Description / Narration</label>
+                <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">Description / Narration</label>
                 <input
                   type="text"
                   placeholder="Optional note..."
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220]"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                 />
               </div>
             </div>
@@ -756,16 +754,16 @@ export default function PaymentInPage() {
 
           {/* Total display */}
           {amount && Number(amount) > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-4 flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-600">Amount to be Received</span>
+            <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm px-6 py-4 flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Amount to be Received</span>
               <span className="text-lg font-bold text-[#f58220]">₹{Number(amount).toFixed(2)}</span>
             </div>
           )}
         </div>
 
         {/* Bottom action bar */}
-        <div className="bg-white border-t border-slate-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-          <button onClick={() => { resetForm(); setView("list"); }} className="px-4 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+        <div className="bg-white dark:bg-card border-t border-slate-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+          <button onClick={() => { resetForm(); setView("list"); }} className="px-4 py-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">
             Cancel
           </button>
 
@@ -783,12 +781,12 @@ export default function PaymentInPage() {
               </button>
             </div>
             {showShareDrop && (
-              <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded shadow-lg text-sm min-w-[140px] z-50">
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2">
+              <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded shadow-lg text-sm min-w-[140px] z-50">
+                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2">
                   <Printer size={13} /> Print
                 </button>
                 <button
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200"
                   onClick={async () => { setShowShareDrop(false); await handleSave(); }}
                 >
                   Save &amp; New
@@ -800,14 +798,14 @@ export default function PaymentInPage() {
           <button
             onClick={() => handleSave(true)}
             disabled={saving}
-            className="px-4 py-1.5 text-sm font-semibold text-gray-600 hover:text-gray-800 bg-white border border-gray-200 rounded disabled:opacity-60"
+            className="px-4 py-1.5 text-sm font-semibold text-gray-600 dark:text-slate-300 hover:text-gray-800 dark:hover:text-white bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded disabled:opacity-60"
           >
             Save Draft
           </button>
           <button
             onClick={() => handleSave(false)}
             disabled={saving}
-            className="px-6 py-1.5 text-sm font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded disabled:opacity-60"
+            className="px-6 py-1.5 text-sm font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded disabled:opacity-60 shadow-sm"
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -820,10 +818,10 @@ export default function PaymentInPage() {
   const fmt = (d: string) => formatDate(d);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => setView("create")}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -837,13 +835,13 @@ export default function PaymentInPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-2 gap-4">
           {[
-            { label: "Total Amount Received", value: `₹${totalAmount.toLocaleString("en-IN")}`, color: "text-gray-700", dot: "bg-gray-400" },
-            { label: "Confirmed Payments",    value: `₹${totalReceived.toLocaleString("en-IN")}`,  color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Total Amount Received", value: `₹${totalAmount.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+            { label: "Confirmed Payments",    value: `₹${totalReceived.toLocaleString("en-IN")}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -858,25 +856,25 @@ export default function PaymentInPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search payment or customer..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "SUCCESS", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : s}
@@ -884,8 +882,8 @@ export default function PaymentInPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 relative">
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowFromCal(v => !v)}>
+          <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 relative">
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowFromCal(v => !v)}>
               <Calendar className="h-4 w-4 text-gray-400" />
               <span className="font-medium">{fmt(dateFrom)}</span>
             </div>
@@ -894,8 +892,8 @@ export default function PaymentInPage() {
                 <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
               </div>
             )}
-            <span className="text-gray-300 px-1">to</span>
-            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900" onClick={() => setShowToCal(v => !v)}>
+            <span className="text-gray-300 dark:text-slate-600 px-1">to</span>
+            <div className="flex items-center gap-1.5 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowToCal(v => !v)}>
               <span className="font-medium">{fmt(dateTo)}</span>
               <Calendar className="h-4 w-4 text-gray-400" />
             </div>
@@ -907,7 +905,7 @@ export default function PaymentInPage() {
           </div>
 
           <div className="flex-1" />
-          <button onClick={fetchPayments} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={fetchPayments} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -916,27 +914,27 @@ export default function PaymentInPage() {
         {loading ? (
           <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Wallet className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Payments Found</p>
-              <p className="text-gray-500 text-sm mt-1">Record a payment to track your cashflow.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Payments Found</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Record a payment to track your cashflow.</p>
             </div>
             <button
               onClick={() => setView("create")}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
             >
               Add Payment-In
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">Receipt No.</th>
                   <th className="text-left px-4 py-3">Party Name</th>
@@ -946,7 +944,7 @@ export default function PaymentInPage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map((p: any) => {
                   const isDraft = p.status === "DRAFT";
                   return (
@@ -954,51 +952,51 @@ export default function PaymentInPage() {
                       key={p.id} 
                       className={clsx(
                         "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 cursor-pointer bg-orange-50/30" : "hover:bg-gray-50"
+                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
                       onClick={() => {
                         if (isDraft) loadDraft(p);
                       }}
                     >
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(p.createdAt)}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-slate-200 text-xs">
                         {p.paymentNumber ? formatERPNumber("RCPT", p.paymentNumber, p.createdAt) : "—"}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium text-gray-800">
+                          <span className="font-medium text-gray-800 dark:text-white">
                             {(typeof p.entity === "string" ? p.entity : p.entity?.name) || p.entityId || "—"}
                           </span>
                           {!isDraft && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
                               {p.entityType || "UNKNOWN"}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
+                      <td className="px-4 py-3 text-gray-500 dark:text-slate-400 text-xs">
                         {p.paymentMode || "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800">
+                      <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
                         ₹ {(p.paidAmount || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {isDraft ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-yellow-50 text-yellow-700 border-yellow-200 uppercase">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-yellow-50 dark:bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/20 uppercase">
                             Draft
                           </span>
                         ) : p.isCancelled ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-slate-100 text-slate-500 border-slate-200 uppercase">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10 uppercase">
                             Cancelled
                           </span>
                         ) : p.status === "PAID" ? (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 uppercase">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 uppercase">
                             Paid
                           </span>
                         ) : (
-                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-amber-50 text-amber-700 border-amber-200 uppercase">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 uppercase">
                             {p.status || "Pending"}
                           </span>
                         )}
@@ -1008,7 +1006,7 @@ export default function PaymentInPage() {
                           {isDraft ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteDraft(p.id); }}
-                              className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
                               title="Delete Draft"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1016,13 +1014,13 @@ export default function PaymentInPage() {
                           ) : (
                             <>
                               <button
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Print"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
-                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Share"
                               >
                                 <Share2 className="h-4 w-4" />

@@ -194,17 +194,17 @@ export default function PackagingQueuePage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
 
         <select
           value={selectedFranchiseId}
           onChange={(e) => setSelectedFranchiseId(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 outline-none focus:border-[#f58220]"
+          className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
         >
           {franchises.map((f) => (
-            <option key={f.id} value={f.id}>
+            <option key={f.id} value={f.id} className="dark:bg-card">
               {f.name}
             </option>
           ))}
@@ -216,43 +216,43 @@ export default function PackagingQueuePage() {
 
           {/* Left 2 Columns: Batches list */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 bg-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
                   <Layers className="h-3.5 w-3.5 text-[#f58220]" />
                   Production Outputs Awaiting Conversion
                 </h3>
 
                 <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
                   <input
                     type="text"
                     placeholder="Search batches..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
+                  {searchQuery && (
+                    <X 
+                      size={14} 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                      onClick={() => setSearchQuery("")} 
+                    />
+                  )}
                 </div>
               </div>
 
               {loading ? (
                 <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
               ) : filteredBatches.length === 0 ? (
-                <div className="py-20 text-center text-sm text-gray-400">
+                <div className="py-20 text-center text-sm text-gray-400 dark:text-slate-500">
                   No production batches available for packaging.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                      <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                         <th className="text-left px-4 py-3">Batch Details</th>
                         <th className="text-center px-4 py-3">QC Status</th>
                         <th className="text-right px-4 py-3">Yield Qty</th>
@@ -261,7 +261,7 @@ export default function PackagingQueuePage() {
                         <th className="text-center px-4 py-3">Action</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                       {filteredBatches.map((batch) => {
                         const badge = getPackagingBadge(batch);
                         const isRecalled = batch.recall?.status === 'IN_PROGRESS';
@@ -274,10 +274,10 @@ export default function PackagingQueuePage() {
                         const canPackage = isEligibleQcStatus && !isRecalled && !isFullyPackaged;
 
                         return (
-                          <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
+                          <tr key={batch.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                             <td className="px-4 py-3">
-                              <div className="font-medium text-gray-800">{batch.product?.name}</div>
-                              <div className="flex gap-2 text-xs text-gray-400 mt-0.5">
+                              <div className="font-medium text-gray-800 dark:text-white">{batch.product?.name}</div>
+                              <div className="flex gap-2 text-xs text-gray-400 dark:text-slate-500 mt-0.5">
                                 <span>Code: {batch.batchCode}</span>
                                 <span>•</span>
                                 <span>Exp: {batch.expiryDate ? format(new Date(batch.expiryDate), 'dd/MM/yyyy') : 'N/A'}</span>
@@ -288,22 +288,22 @@ export default function PackagingQueuePage() {
                                 {badge.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right text-gray-700">
-                              {approvedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
+                              {approvedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.product?.unit || 'KG'}</span>
                             </td>
-                            <td className="px-4 py-3 text-right text-gray-700">
-                              {packagedQty} <span className="text-xs text-gray-400">{batch.product?.unit || 'KG'}</span>
+                            <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
+                              {packagedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.product?.unit || 'KG'}</span>
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-gray-800">
-                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 font-normal">{batch.product?.unit || 'KG'}</span>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white">
+                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{batch.product?.unit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
                               {isFullyPackaged ? (
-                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200">
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-white/10">
                                   Completed
                                 </span>
                               ) : isRecalled ? (
-                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-500 border border-red-200">
+                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-500/20">
                                   Recalled
                                 </span>
                               ) : (
@@ -343,11 +343,11 @@ export default function PackagingQueuePage() {
               const isFormEligible = !isRecalled && remaining > 0.001;
               return isFormEligible;
             })() ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-                <div className="flex justify-between items-start border-b border-gray-100 pb-3">
+              <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-5 space-y-4 shadow-sm">
+                <div className="flex justify-between items-start border-b border-gray-100 dark:border-white/5 pb-3">
                   <div>
                     <span className="text-xs font-semibold text-[#f58220]">Retail Conversion</span>
-                    <h3 className="text-sm font-bold text-gray-800 mt-0.5">
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">
                       {selectedBatch.product?.name}
                     </h3>
                   </div>
@@ -357,7 +357,7 @@ export default function PackagingQueuePage() {
                       setPacketSize("");
                       setSizeValue("");
                     }}
-                    className="text-xs font-semibold text-gray-400 hover:text-gray-600"
+                    className="text-xs font-semibold text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300"
                   >
                     Close
                   </button>
@@ -365,16 +365,16 @@ export default function PackagingQueuePage() {
 
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Available approved bulk</span>
+                    <span className="text-gray-500 dark:text-slate-400">Available approved bulk</span>
                     {/* approvedQty minus already packaged — never total produced quantity */}
-                    <span className="text-gray-800 font-semibold">{availableBulk} {selectedBatch.product?.unit || 'KG'}</span>
+                    <span className="text-gray-800 dark:text-white font-semibold">{availableBulk} {selectedBatch.product?.unit || 'KG'}</span>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-gray-500">Target Pack Size</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Target Pack Size</label>
                       {packetSize && (
-                        <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                        <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-500/20">
                           {sizeValue} {sizeUnit.toUpperCase()}
                         </span>
                       )}
@@ -403,7 +403,7 @@ export default function PackagingQueuePage() {
                               "px-2 py-1 text-[11px] font-semibold rounded border transition-all active:scale-95",
                               isSelected
                                 ? "bg-[#f58220] text-white border-[#f58220] shadow-xs"
-                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
+                                : "bg-white dark:bg-[#13151f] text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/20"
                             )}
                           >
                             {preset.label}
@@ -422,27 +422,27 @@ export default function PackagingQueuePage() {
                           placeholder="Enter size (e.g. 250)"
                           value={sizeValue}
                           onChange={(e) => handleSizeValueChange(e.target.value)}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-medium"
+                          className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-medium"
                         />
                       </div>
                       <select
                         value={sizeUnit}
                         onChange={(e) => handleSizeUnitChange(e.target.value)}
-                        className="w-32 border border-gray-200 rounded-lg px-2.5 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white font-semibold cursor-pointer"
+                        className="w-32 border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-semibold cursor-pointer"
                       >
-                        <option value="g">G (Grams)</option>
-                        <option value="kg">KG (Kilograms)</option>
-                        <option value="ml">ML (Milliliters)</option>
-                        <option value="l">L (Liters)</option>
-                        <option value="pcs">PCS (Pieces)</option>
-                        <option value="unit">Unit (Box/Pkt)</option>
+                        <option value="g" className="dark:bg-card">G (Grams)</option>
+                        <option value="kg" className="dark:bg-card">KG (Kilograms)</option>
+                        <option value="ml" className="dark:bg-card">ML (Milliliters)</option>
+                        <option value="l" className="dark:bg-card">L (Liters)</option>
+                        <option value="pcs" className="dark:bg-card">PCS (Pieces)</option>
+                        <option value="unit" className="dark:bg-card">Unit (Box/Pkt)</option>
                       </select>
                     </div>
                   </div>
 
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-gray-500">Quantity of Packets</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Quantity of Packets</label>
                       <button
                         type="button"
                         onClick={() => setQuantityPackets(Math.max(1, maxPackets))}
@@ -456,34 +456,32 @@ export default function PackagingQueuePage() {
                       min="1"
                       value={quantityPackets || ""}
                       onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                     />
-                    <p className="text-[11px] text-gray-400 mt-1">
+                    <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
                       Maximum possible with available bulk: {maxPackets} packets
                     </p>
                   </div>
 
-                  {/* Planned conversion — nothing here is applied yet. Bulk is only
-                      deducted and Finished Goods only created once this run is
-                      confirmed on the Confirm Packaging screen. */}
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between items-center text-xs font-semibold text-gray-500 border-b border-gray-200 pb-2">
+                  {/* Planned conversion */}
+                  <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center text-xs font-semibold text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-white/5 pb-2">
                       <span>Packaging Plan (Pending Confirmation)</span>
                       <Scale className="h-3.5 w-3.5 text-[#f58220]" />
                     </div>
 
                     <div className="space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Bulk Stock to Deduct on Confirm</span>
-                        <span className="text-rose-600 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-gray-500 dark:text-slate-400">Bulk Stock to Deduct on Confirm</span>
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Bulk Stock Remaining</span>
-                        <span className="text-gray-700 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-gray-500 dark:text-slate-400">Bulk Stock Remaining</span>
+                        <span className="text-gray-700 dark:text-slate-300 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Planned Packets</span>
-                        <span className="text-emerald-600 font-semibold">{quantityPackets} packets</span>
+                        <span className="text-gray-500 dark:text-slate-400">Planned Packets</span>
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{quantityPackets} packets</span>
                       </div>
                     </div>
                   </div>
@@ -498,14 +496,14 @@ export default function PackagingQueuePage() {
                   </button>
 
                   {!packetSize && (
-                    <div className="flex gap-2 text-xs text-amber-600 font-medium p-2.5 border border-amber-200 bg-amber-50 rounded-lg">
+                    <div className="flex gap-2 text-xs text-amber-600 dark:text-amber-400 font-medium p-2.5 border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 rounded-lg">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       <span>Select a target pack size to continue.</span>
                     </div>
                   )}
 
                   {packetSize && totalWeightNeeded > availableBulk && (
-                    <div className="flex gap-2 text-xs text-rose-600 font-medium p-2.5 border border-rose-200 bg-rose-50 rounded-lg">
+                    <div className="flex gap-2 text-xs text-rose-600 dark:text-rose-400 font-medium p-2.5 border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 rounded-lg">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                       <span>Insufficient bulk stock to fulfill this quantity of packs.</span>
                     </div>
@@ -513,9 +511,9 @@ export default function PackagingQueuePage() {
                 </div>
               </div>
             ) : (
-              <div className="hidden lg:flex flex-col items-center justify-center py-24 border border-dashed border-gray-200 rounded-lg text-center p-6 bg-white">
-                <Box className="h-8 w-8 text-gray-300 mb-3" />
-                <p className="text-sm text-gray-400">Select a batch to configure conversions</p>
+              <div className="hidden lg:flex flex-col items-center justify-center py-24 border border-dashed border-gray-200 dark:border-white/10 rounded-lg text-center p-6 bg-white dark:bg-card">
+                <Box className="h-8 w-8 text-gray-300 dark:text-slate-600 mb-3" />
+                <p className="text-sm text-gray-400 dark:text-slate-500">Select a batch to configure conversions</p>
               </div>
             )}
           </div>

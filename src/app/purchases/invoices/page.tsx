@@ -62,11 +62,11 @@ const INDIAN_STATES = [
 ];
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  PENDING:  { label: "Pending",  color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
-  MATCHED:  { label: "Matched",  color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  APPROVED: { label: "Approved", color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  MISMATCH: { label: "Mismatch", color: "text-rose-600",    bg: "bg-rose-50",    border: "border-rose-200" },
-  PAID:     { label: "Paid",     color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
+  PENDING:  { label: "Pending",  color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-900/40" },
+  MATCHED:  { label: "Matched",  color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200 dark:border-blue-900/40" },
+  APPROVED: { label: "Approved", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
+  MISMATCH: { label: "Mismatch", color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-950/30",    border: "border-rose-200 dark:border-rose-900/40" },
+  PAID:     { label: "Paid",     color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -128,37 +128,37 @@ function MiniCalendar({ value, onChange, onClose }: {
   const years = Array.from({ length: 30 }, (_, i) => currentYear - 15 + i);
 
   return (
-    <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 w-64 select-none">
+    <div className="bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-3 w-64 select-none">
       <div className="flex items-center justify-between mb-2 gap-1">
-        <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">
+        <button onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="rotate-90" />
         </button>
         <div className="flex items-center gap-1">
           <select
             value={viewMonth}
             onChange={e => setViewMonth(Number(e.target.value))}
-            className="text-xs font-semibold text-gray-800 bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600"
+            className="text-xs font-semibold text-gray-800 dark:text-white bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600 dark:hover:text-orange-400"
           >
             {MONTH_NAMES.map((m, idx) => (
-              <option key={m} value={idx}>{m}</option>
+              <option key={m} value={idx} className="dark:bg-[#13151f]">{m}</option>
             ))}
           </select>
           <select
             value={viewYear}
             onChange={e => setViewYear(Number(e.target.value))}
-            className="text-xs font-semibold text-gray-800 bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600"
+            className="text-xs font-semibold text-gray-800 dark:text-white bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600 dark:hover:text-orange-400"
           >
             {years.map(y => (
-              <option key={y} value={y}>{y}</option>
+              <option key={y} value={y} className="dark:bg-[#13151f]">{y}</option>
             ))}
           </select>
         </div>
-        <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 text-gray-500">
+        <button onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400">
           <ChevronDown size={14} className="-rotate-90" />
         </button>
       </div>
       <div className="grid grid-cols-7 mb-1">
-        {DAY_NAMES.map(d => <div key={d} className="text-center text-[10px] font-semibold text-gray-400 py-0.5">{d}</div>)}
+        {DAY_NAMES.map(d => <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-slate-500 py-0.5">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((d, i) => d === null ? <div key={i} /> : (
@@ -166,15 +166,15 @@ function MiniCalendar({ value, onChange, onClose }: {
             onClick={() => { onChange(`${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`); onClose(); }}
             className={clsx("w-full aspect-square flex items-center justify-center text-xs rounded-lg font-medium transition-colors",
               isSelected(d) && "bg-orange-500 text-white",
-              !isSelected(d) && isToday(d) && "bg-orange-100 text-orange-600",
-              !isSelected(d) && !isToday(d) && "text-gray-700 hover:bg-gray-100"
+              !isSelected(d) && isToday(d) && "bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400",
+              !isSelected(d) && !isToday(d) && "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10"
             )}
           >{d}</button>
         ))}
       </div>
-      <div className="mt-2 flex justify-between items-center border-t border-gray-100 pt-2">
-        <button onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`); onClose(); }} className="text-[11px] font-semibold text-orange-500 hover:text-orange-700">Today</button>
-        <button onClick={onClose} className="text-[11px] text-gray-400 hover:text-gray-600">Close</button>
+      <div className="mt-2 flex justify-between items-center border-t border-gray-100 dark:border-white/10 pt-2">
+        <button onClick={() => { const t = new Date(); onChange(`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,"0")}-${String(t.getDate()).padStart(2,"0")}`); onClose(); }} className="text-[11px] font-semibold text-orange-500 hover:text-orange-700 dark:hover:text-orange-400">Today</button>
+        <button onClick={onClose} className="text-[11px] text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white">Close</button>
       </div>
     </div>
   );
@@ -638,38 +638,38 @@ export default function PurchaseBillsPage() {
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground" style={{ height: "calc(100vh - 104px)" }}>
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <button onClick={() => setView("list")} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+            <button onClick={() => setView("list")} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">New Purchase Bill</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-white">New Purchase Bill</h2>
           </div>
-          <span className="text-xs text-gray-400">Bill No: <span className="text-orange-500 font-semibold">Auto</span></span>
+          <span className="text-xs text-gray-400 dark:text-slate-500">Bill No: <span className="text-orange-500 font-semibold">Auto</span></span>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4 custom-scrollbar">
 
           {/* Vendor + Bill Details */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5 shadow-sm">
             <div className="grid grid-cols-2 gap-8">
               {/* Left: Vendor */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Vendor / Party *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vendor / Party *</label>
                   <div className="relative" ref={vendorDropRef}>
                     <div
                       className={clsx(
-                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-colors",
-                        showVendorDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 hover:border-gray-400"
+                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-white/5 transition-colors",
+                        showVendorDrop ? "border-orange-400 ring-1 ring-orange-100 dark:ring-orange-950/40" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
                       )}
                       onClick={() => setShowVendorDrop(v => !v)}
                     >
                       <input
-                        className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                         placeholder="Search by vendor name..."
                         value={vendorSearch}
                         onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
@@ -678,20 +678,20 @@ export default function PurchaseBillsPage() {
                       {vendorSearch && (
                         <X 
                           size={14} 
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                           onClick={(e) => { e.stopPropagation(); setVendorSearch(""); setSelectedVendor(null); }} 
                         />
                       )}
                       <ChevronDown size={13} className="text-gray-400 shrink-0" />
                     </div>
                     {showVendorDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                        <div className="max-h-48 overflow-y-auto">
+                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
                           {filteredVendors.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-400 text-center">No vendors found</div>
+                            <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
                           ) : filteredVendors.map(v => (
                             <button key={v.id}
-                              className="w-full flex items-start px-3 py-2 hover:bg-orange-50/50 border-b border-gray-50 last:border-0 text-left"
+                              className="w-full flex items-start px-3 py-2 hover:bg-orange-50/50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left"
                               onClick={() => { 
                                 setSelectedVendor(v); 
                                 setVendorSearch(v.name); 
@@ -701,8 +701,8 @@ export default function PurchaseBillsPage() {
                               }}
                             >
                               <div>
-                                <div className="text-sm font-medium text-gray-800">{v.name}</div>
-                                <div className="text-xs text-gray-400">{v.contact || v.phone || "—"}</div>
+                                <div className="text-sm font-medium text-gray-800 dark:text-white">{v.name}</div>
+                                <div className="text-xs text-gray-400 dark:text-slate-500">{v.contact || v.phone || "—"}</div>
                               </div>
                             </button>
                           ))}
@@ -712,9 +712,9 @@ export default function PurchaseBillsPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                     placeholder="Phone Number"
                     value={vendorPhone}
                     onChange={e => setVendorPhone(e.target.value)}
@@ -725,17 +725,17 @@ export default function PurchaseBillsPage() {
               {/* Right: Bill Details */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between py-1">
-                  <span className="text-xs font-medium text-gray-500">Bill Number</span>
-                  <span className="text-sm font-semibold text-gray-700">Auto</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Bill Number</span>
+                  <span className="text-sm font-semibold text-gray-700 dark:text-slate-200">Auto</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Bill Date <span className="text-rose-500 font-bold">*</span></span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Bill Date <span className="text-rose-500 font-bold">*</span></span>
                   <div className="relative" ref={calendarRef}>
-                    <div className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 bg-white hover:border-orange-400 transition-colors w-48 justify-between">
+                    <div className="flex items-center gap-2 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-white/5 hover:border-orange-400 transition-colors w-48 justify-between">
                       <button
                         type="button"
                         onClick={() => setShowCalendar(v => !v)}
-                        className="text-sm text-gray-700 text-left outline-none truncate"
+                        className="text-sm text-gray-700 dark:text-white text-left outline-none truncate"
                       >
                         {billDate ? formatDate(billDate) : "Select Date"}
                       </button>
@@ -752,7 +752,7 @@ export default function PurchaseBillsPage() {
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setBillDate(""); }}
                           className={clsx(
-                            "text-gray-400 hover:text-gray-600 transition-all",
+                            "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all",
                             billDate ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
                           )}
                           title="Clear Date"
@@ -769,23 +769,23 @@ export default function PurchaseBillsPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">State of Supply</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">State of Supply</span>
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-sm text-gray-700 outline-none focus:border-orange-400 w-44 transition-colors"
+                    className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-white/5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44 transition-colors"
                   >
-                    <option value="">Select</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    <option value="" className="dark:bg-[#13151f]">Select</option>
+                    {INDIAN_STATES.map(s => <option key={s} value={s} className="dark:bg-[#13151f]">{s}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Payment Type</span>
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Payment Type</span>
                   <div className="flex gap-2">
                     {(["CASH", "CREDIT"] as const).map(pt => (
                       <button key={pt} onClick={() => setPaymentType(pt)}
                         className={clsx("px-3 py-1 rounded-lg text-xs font-semibold border transition-colors",
-                          paymentType === pt ? "bg-orange-500 text-white border-orange-500" : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
+                          paymentType === pt ? "bg-orange-500 text-white border-orange-500" : "bg-white dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
                         )}
                       >{pt}</button>
                     ))}
@@ -796,20 +796,20 @@ export default function PurchaseBillsPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <div className="relative" ref={priceDropRef}>
                 <button onClick={() => setShowPriceDrop(v => !v)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 bg-white hover:border-gray-400 transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-white/5 hover:border-gray-400 dark:hover:border-white/20 transition-colors"
                 >
                   Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
                   <ChevronDown size={11} />
                 </button>
                 {showPriceDrop && (
-                  <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg text-xs w-44 z-50">
-                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 text-gray-700" onClick={() => { setPriceMode("without_tax"); setShowPriceDrop(false); }}>Excl. Tax (Without Tax)</button>
-                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 text-gray-700" onClick={() => { setPriceMode("with_tax"); setShowPriceDrop(false); }}>Incl. Tax (With Tax)</button>
+                  <div className="absolute top-full right-0 mt-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-xs w-44 z-50 overflow-hidden">
+                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("without_tax"); setShowPriceDrop(false); }}>Excl. Tax (Without Tax)</button>
+                    <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("with_tax"); setShowPriceDrop(false); }}>Incl. Tax (With Tax)</button>
                   </div>
                 )}
               </div>
@@ -818,7 +818,7 @@ export default function PurchaseBillsPage() {
             <div style={{ overflowX: "auto" }}>
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                     <th className="w-8 px-3 py-2.5 text-center">#</th>
                     <th className="px-3 py-2.5 text-left">Item / Description</th>
                     <th className="w-16 px-2 py-2.5 text-center">Qty</th>
@@ -829,15 +829,15 @@ export default function PurchaseBillsPage() {
                     <th className="w-8" />
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((item, idx) => {
-                    const { taxAmt, amount } = computeRow(item, priceMode);
+                    const { amount } = computeRow(item, priceMode);
                     return (
-                      <tr key={item.id} className="border-b border-gray-100 hover:bg-orange-50/30 group">
-                        <td className="px-3 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
+                      <tr key={item.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/30 dark:hover:bg-white/[0.02] group">
+                        <td className="px-3 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                         <td className="px-3 py-2">
                           <input
-                            className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                             placeholder="Enter item name..."
                             value={item.name}
                             onChange={e => updateItem(idx, "name", e.target.value)}
@@ -848,12 +848,12 @@ export default function PurchaseBillsPage() {
                             type="number" min={0}
                             value={item.qty}
                             onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 text-center outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent"
                           />
                         </td>
                         <td style={{ position: "relative", overflow: "visible" }} className="unit-dropdown-container">
                           <button
-                            className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 hover:bg-gray-50"
+                            className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                             onClick={e => {
                               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                               setUnitDropRect({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
@@ -864,18 +864,18 @@ export default function PurchaseBillsPage() {
                             <ChevronDown size={9} className="text-gray-400 shrink-0" />
                           </button>
                           {openUnitDrop === item.id && unitDropRect && (
-                            <div className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-y-auto"
+                            <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-y-auto"
                               style={{ position: "fixed", top: unitDropRect.top + 2, left: unitDropRect.left, width: 180, maxHeight: 220, zIndex: 9999 }}
                             >
                               {UNITS.map(u => (
                                 <button key={u.code}
-                                  className={clsx("w-full text-left px-3 py-2 text-xs border-b border-gray-50 last:border-0 hover:bg-orange-50",
-                                    item.unit === u.code ? "text-orange-600 font-semibold bg-orange-50" : "text-gray-700"
+                                  className={clsx("w-full text-left px-3 py-2 text-xs border-b border-gray-50 dark:border-white/5 last:border-0 hover:bg-orange-50 dark:hover:bg-white/5",
+                                    item.unit === u.code ? "text-orange-600 dark:text-orange-400 font-semibold bg-orange-50 dark:bg-white/5" : "text-gray-700 dark:text-slate-300"
                                   )}
                                   onMouseDown={() => { updateItem(idx, "unit", u.code); setOpenUnitDrop(null); }}
                                 >
                                   <span className="font-medium">{u.short}</span>
-                                  <span className="text-gray-400 ml-1">– {u.label}</span>
+                                  <span className="text-gray-400 dark:text-slate-500 ml-1">– {u.label}</span>
                                 </button>
                               ))}
                             </div>
@@ -887,7 +887,7 @@ export default function PurchaseBillsPage() {
                             value={item.rate || ""}
                             placeholder="0"
                             onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 text-right outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-right outline-none bg-transparent"
                           />
                         </td>
                         <td className="px-2 py-2.5">
@@ -899,12 +899,12 @@ export default function PurchaseBillsPage() {
                               updateItem(idx, "taxLabel", label);
                               updateItem(idx, "taxPct", opt?.value ?? 0);
                             }}
-                            className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer"
+                            className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer"
                           >
-                            {TAX_OPTIONS.map((t, i) => <option key={i} value={t.label}>{t.label}</option>)}
+                            {TAX_OPTIONS.map((t, i) => <option key={i} value={t.label} className="dark:bg-[#13151f]">{t.label}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800">
+                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800 dark:text-white">
                           {amount > 0 ? amount.toFixed(2) : "—"}
                         </td>
                         <td className="pr-2">
@@ -921,14 +921,14 @@ export default function PurchaseBillsPage() {
               </table>
             </div>
 
-            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between bg-gray-50/40">
+            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.01]">
               <button onClick={addRow}
-                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-900/40 px-3 py-1.5 rounded-lg transition-colors"
               >
                 <Plus size={13} /> Add Row
               </button>
-              <span className="text-xs text-gray-500">
-                Total Tax: <span className="font-semibold text-gray-700">₹ {totalTax.toFixed(2)}</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                Total Tax: <span className="font-semibold text-gray-700 dark:text-slate-200">₹ {totalTax.toFixed(2)}</span>
               </span>
             </div>
           </div>
@@ -938,19 +938,19 @@ export default function PurchaseBillsPage() {
             <div className="flex-1 space-y-2.5">
               <div className="flex flex-wrap gap-2">
                 {!showTerms && (
-                  <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
+                  <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 transition-colors">
                     <AlignLeft size={13} /> Add Terms &amp; Conditions
                   </button>
                 )}
                 {!showDesc && (
-                  <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors">
+                  <button onClick={() => setShowDesc(true)} className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 transition-colors">
                     <FileText size={13} /> Add Description
                   </button>
                 )}
                 <button 
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 transition-colors cursor-pointer"
+                  className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 transition-colors cursor-pointer"
                 >
                   <Upload size={13} /> Upload Bill
                 </button>
@@ -958,14 +958,14 @@ export default function PurchaseBillsPage() {
 
               {showTerms && (
                 <div className="relative">
-                  <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+                  <textarea value={termsText} onChange={e => setTermsText(e.target.value)} rows={3} placeholder="Terms and conditions..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 outline-none resize-none" />
                   <button type="button" onClick={() => { setTermsText(""); setShowTerms(false); }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={12} /></button>
                 </div>
               )}
 
               {showDesc && (
                 <div className="relative">
-                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="Description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 outline-none resize-none" />
                   <button type="button" onClick={() => { setDescription(""); setShowDesc(false); }} className="absolute top-2 right-2 text-gray-400 hover:text-red-500"><X size={12} /></button>
                 </div>
               )}
@@ -985,12 +985,12 @@ export default function PurchaseBillsPage() {
                     {attachedFiles.map((file) => (
                       <div
                         key={file.id}
-                        className="flex items-center gap-2 px-2.5 py-1.5 bg-orange-50/60 border border-orange-200/80 rounded-lg text-xs text-gray-700 shadow-sm"
+                        className="flex items-center gap-2 px-2.5 py-1.5 bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200/80 dark:border-orange-900/40 rounded-lg text-xs text-gray-700 dark:text-slate-200 shadow-sm"
                       >
                         <FileText size={14} className="text-orange-500 shrink-0" />
                         <div className="flex flex-col">
                           <span className="font-medium max-w-[180px] truncate">{file.name}</span>
-                          <span className="text-[10px] text-gray-400">{file.size}</span>
+                          <span className="text-[10px] text-gray-400 dark:text-slate-500">{file.size}</span>
                         </div>
                         <button
                           type="button"
@@ -1008,42 +1008,42 @@ export default function PurchaseBillsPage() {
             </div>
 
             {/* Summary Panel */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4.5 w-72 shrink-0 space-y-2.5 shadow-sm">
-              <div className="flex justify-between items-center text-sm text-gray-600">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4.5 w-72 shrink-0 space-y-2.5 shadow-sm">
+              <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-300">
                 <span className="font-medium">Subtotal</span>
-                <span className="font-semibold text-gray-900">₹ {subtotal.toFixed(2)}</span>
+                <span className="font-semibold text-gray-900 dark:text-white">₹ {subtotal.toFixed(2)}</span>
               </div>
 
               {safeDiscount > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600 font-medium">Discount</span>
-                  <span className="font-bold text-emerald-600">- ₹ {safeDiscount.toFixed(2)}</span>
+                  <span className="text-gray-600 dark:text-slate-300 font-medium">Discount</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">- ₹ {safeDiscount.toFixed(2)}</span>
                 </div>
               )}
 
               {totalTax > 0 && (
-                <div className="flex justify-between items-center text-sm text-gray-600">
+                <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-300">
                   <span className="font-medium">Tax (GST)</span>
-                  <span className="font-semibold text-gray-900">+ ₹ {totalTax.toFixed(2)}</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">+ ₹ {totalTax.toFixed(2)}</span>
                 </div>
               )}
 
               {safeFreight > 0 && (
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-gray-600 font-medium">Freight / Shipment</span>
-                  <span className="font-semibold text-gray-900">+ ₹ {safeFreight.toFixed(2)}</span>
+                  <span className="text-gray-600 dark:text-slate-300 font-medium">Freight / Shipment</span>
+                  <span className="font-semibold text-gray-900 dark:text-white">+ ₹ {safeFreight.toFixed(2)}</span>
                 </div>
               )}
 
-              <div className="flex justify-between items-center text-sm text-gray-500 border-t border-gray-100 pt-2">
+              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input type="checkbox" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" />
                   <span className="text-xs font-medium">Round Off</span>
                 </label>
                 <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center border-t border-gray-200 pt-2.5">
-                <span className="text-sm font-bold text-gray-800">Total</span>
+              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/10 pt-2.5">
+                <span className="text-sm font-bold text-gray-800 dark:text-white">Total</span>
                 <span className="text-xl font-black text-orange-500">₹ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -1051,8 +1051,8 @@ export default function PurchaseBillsPage() {
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
-          <button onClick={() => setView("list")} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+          <button onClick={() => setView("list")} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 rounded-lg">
             Cancel
           </button>
           <div className="relative" ref={shareDropRef}>
@@ -1073,18 +1073,18 @@ export default function PurchaseBillsPage() {
               </button>
             </div>
             {showShareDrop && (
-              <div className="absolute bottom-full right-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg text-sm min-w-[160px] z-50 py-1">
+              <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-sm min-w-[160px] z-50 py-1 overflow-hidden">
                 <button 
                   type="button"
                   onClick={() => { setShowShareDrop(false); handlePrint(); }} 
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"
                 >
                   <Printer size={13} /> Print
                 </button>
                 <button 
                   type="button"
                   onClick={() => { setShowShareDrop(false); handleDownloadPdf(); }} 
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 text-gray-700 flex items-center gap-2"
+                  className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"
                 >
                   <Download size={13} /> Download
                 </button>
@@ -1105,9 +1105,9 @@ export default function PurchaseBillsPage() {
   // LIST VIEW
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
         >
@@ -1119,14 +1119,14 @@ export default function PurchaseBillsPage() {
         {/* KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Purchases",  value: `₹ ${totalBillAmt.toLocaleString("en-IN")}`,  dot: "bg-blue-500",    color: "text-gray-900" },
-            { label: "Paid",             value: `₹ ${totalPaid.toLocaleString("en-IN")}`,     dot: "bg-emerald-500", color: "text-emerald-700" },
-            { label: "Pending Payment",  value: `₹ ${totalPending.toLocaleString("en-IN")}`,  dot: "bg-amber-500",   color: "text-amber-700" },
+            { label: "Total Purchases",  value: `₹ ${totalBillAmt.toLocaleString("en-IN")}`,  dot: "bg-blue-500",    color: "text-gray-900 dark:text-white" },
+            { label: "Paid",             value: `₹ ${totalPaid.toLocaleString("en-IN")}`,     dot: "bg-emerald-500", color: "text-emerald-700 dark:text-emerald-400" },
+            { label: "Pending Payment",  value: `₹ ${totalPending.toLocaleString("en-IN")}`,  dot: "bg-amber-500",   color: "text-amber-700 dark:text-amber-400" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -1139,22 +1139,22 @@ export default function PurchaseBillsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search bill no. or vendor..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center bg-white border border-gray-200 rounded-lg p-1 text-xs gap-1">
+          <div className="flex items-center bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg p-1 text-xs gap-1">
             {["ALL", "PENDING", "PAID"].map(st => (
               <button key={st} onClick={() => setStatusFilter(st)}
                 className={clsx("px-3 py-1 rounded font-semibold transition-colors",
-                  statusFilter === st ? "bg-[#f58220] text-white" : "text-gray-600 hover:text-gray-900"
+                  statusFilter === st ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >{st === "ALL" ? "All" : st.charAt(0) + st.slice(1).toLowerCase()}</button>
             ))}
@@ -1162,7 +1162,7 @@ export default function PurchaseBillsPage() {
 
           <div className="flex items-center gap-2">
             <div className="relative" ref={fromCalRef}>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-[#f58220] transition-colors">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
                 <button
                   type="button"
                   onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
@@ -1183,7 +1183,7 @@ export default function PurchaseBillsPage() {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setDateFrom(""); }}
                     className={clsx(
-                      "text-gray-400 hover:text-gray-600 transition-all",
+                      "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all",
                       dateFrom ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
                     )}
                     title="Clear from date"
@@ -1198,9 +1198,9 @@ export default function PurchaseBillsPage() {
                 </div>
               )}
             </div>
-            <span className="text-xs text-gray-400">to</span>
+            <span className="text-xs text-gray-400 dark:text-slate-500">to</span>
             <div className="relative" ref={toCalRef}>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700 hover:border-[#f58220] transition-colors">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
                 <button
                   type="button"
                   onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
@@ -1221,7 +1221,7 @@ export default function PurchaseBillsPage() {
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setDateTo(""); }}
                     className={clsx(
-                      "text-gray-400 hover:text-gray-600 transition-all",
+                      "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all",
                       dateTo ? "opacity-100 cursor-pointer" : "opacity-0 pointer-events-none"
                     )}
                     title="Clear to date"
@@ -1238,28 +1238,28 @@ export default function PurchaseBillsPage() {
             </div>
           </div>
 
-          <button onClick={fetchData} className="p-2 border border-gray-200 bg-white rounded-lg text-gray-400 hover:text-gray-600 transition-colors ml-auto" title="Refresh">
+          <button onClick={fetchData} className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors ml-auto" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
 
         {/* Table */}
         {loading ? (
-          <div className="p-12 text-center text-sm text-gray-400">Loading bills...</div>
+          <div className="p-12 text-center text-sm text-gray-400 dark:text-slate-500">Loading bills...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <Receipt className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-600 mb-1">No Purchase Bills Found</p>
-            <p className="text-xs text-gray-400 mb-4">Create your first bill to get started.</p>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-12 text-center shadow-sm">
+            <Receipt className="h-10 w-10 text-gray-300 dark:text-slate-600 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-1">No Purchase Bills Found</p>
+            <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">Create your first bill to get started.</p>
             <button onClick={openCreate} className="inline-flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-xs font-bold transition-all">
               <Plus className="h-4 w-4" /> Add Purchase Bill
             </button>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50/50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <tr className="border-b border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02] text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Bill No.</th>
                   <th className="px-4 py-3">Vendor</th>
@@ -1269,24 +1269,24 @@ export default function PurchaseBillsPage() {
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map(b => {
-                  const style = STATUS_STYLES[b.status] || { label: b.status, color: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" };
+                  const style = STATUS_STYLES[b.status] || { label: b.status, color: "text-gray-600 dark:text-slate-400", bg: "bg-gray-50 dark:bg-white/5", border: "border-gray-200 dark:border-white/10" };
                   return (
-                    <tr key={b.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-500">
+                    <tr key={b.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
                         {formatDate(b.billDate)}
                       </td>
-                      <td className="px-4 py-3 text-xs font-bold text-gray-800">
+                      <td className="px-4 py-3 text-xs font-bold text-gray-800 dark:text-white">
                         {b.invoiceNumber || "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">
                         {b.vendor?.name || "—"}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {b.paymentType || "Cash"}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800">
+                      <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
                         ₹ {(b.amount || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1297,14 +1297,14 @@ export default function PurchaseBillsPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {b.status !== "PAID" && (b.outstanding ?? 0) > 0.01 && (
-                            <button onClick={() => openPaymentModal(b)} className="px-3 py-1 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-semibold rounded text-xs transition-colors">
+                            <button onClick={() => openPaymentModal(b)} className="px-3 py-1 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 font-semibold rounded text-xs transition-colors">
                               Make Payment
                             </button>
                           )}
                           <button 
                             type="button"
                             onClick={() => handleDownloadPdf(b)} 
-                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" 
+                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors" 
                             title="Download PDF"
                           >
                             <Printer className="h-4 w-4" />
@@ -1312,7 +1312,7 @@ export default function PurchaseBillsPage() {
                           <button 
                             type="button"
                             onClick={() => handleShare(b)} 
-                            className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors" 
+                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors" 
                             title="Share Purchase Bill"
                           >
                             <Share2 className="h-4 w-4" />
@@ -1359,7 +1359,7 @@ export default function PurchaseBillsPage() {
         size="md"
         footer={
           <>
-            <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+            <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg">Cancel</button>
             <button onClick={handleMakePayment} disabled={submittingPayment} className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg shadow disabled:opacity-50">
               {submittingPayment ? "Processing..." : "Save Payment"}
             </button>
@@ -1368,28 +1368,28 @@ export default function PurchaseBillsPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Amount</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-1">Payment Amount</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">₹</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-slate-400 font-medium">₹</span>
               <input type="number" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)}
-                className="w-full pl-8 pr-4 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50"
+                className="w-full pl-8 pr-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg outline-none focus:border-orange-500 bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-white"
               />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Mode</label>
-              <select value={paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50">
-                <option value="CASH">Cash</option>
-                <option value="BANK_TRANSFER">Bank Transfer</option>
-                <option value="UPI">UPI</option>
-                <option value="CARD">Card</option>
-                <option value="CHEQUE">Cheque</option>
+              <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-1">Payment Mode</label>
+              <select value={paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg outline-none focus:border-orange-500 bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-white">
+                <option value="CASH" className="dark:bg-[#13151f]">Cash</option>
+                <option value="BANK_TRANSFER" className="dark:bg-[#13151f]">Bank Transfer</option>
+                <option value="UPI" className="dark:bg-[#13151f]">UPI</option>
+                <option value="CARD" className="dark:bg-[#13151f]">Card</option>
+                <option value="CHEQUE" className="dark:bg-[#13151f]">Cheque</option>
               </select>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-gray-500 uppercase">Source Account</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">Source Account</label>
                 <button
                   type="button"
                   onClick={() => setShowAccountModal(true)}
@@ -1408,18 +1408,18 @@ export default function PurchaseBillsPage() {
                       setPaymentAccount(e.target.value);
                     }
                   }}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50 text-sm font-medium text-gray-700"
+                  className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg outline-none focus:border-orange-500 bg-gray-50 dark:bg-white/5 text-sm font-medium text-gray-700 dark:text-white"
                 >
-                  <option value="">Select Account</option>
+                  <option value="" className="dark:bg-[#13151f]">Select Account</option>
                   {getFilteredAccounts().map(a => (
-                    <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    <option key={a.id} value={a.id} className="dark:bg-[#13151f]">{a.name} ({a.type})</option>
                   ))}
-                  <option value="ADD_NEW" className="font-bold text-orange-600">+ Add New Account...</option>
+                  <option value="ADD_NEW" className="font-bold text-orange-600 dark:bg-[#13151f]">+ Add New Account...</option>
                 </select>
                 <button
                   type="button"
                   onClick={() => setShowAccountModal(true)}
-                  className="p-2 border border-gray-200 hover:border-orange-500 hover:bg-orange-50 text-gray-500 hover:text-orange-600 rounded-lg transition-all"
+                  className="p-2 border border-gray-200 dark:border-white/10 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400 hover:text-orange-600 rounded-lg transition-all"
                   title="Add New Account"
                 >
                   +
@@ -1428,9 +1428,9 @@ export default function PurchaseBillsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Payment Note</label>
+            <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-1">Payment Note</label>
             <input type="text" value={paymentNote} onChange={e => setPaymentNote(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:border-orange-500 bg-gray-50"
+              className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg outline-none focus:border-orange-500 bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-white"
               placeholder="e.g. Cleared via Cheque #1234"
             />
           </div>

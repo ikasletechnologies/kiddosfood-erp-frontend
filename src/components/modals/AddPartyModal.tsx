@@ -394,25 +394,24 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div 
-        className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[90vh]"
+        className="bg-white dark:bg-[#13151f] rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[90vh] border border-slate-200 dark:border-white/10"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200">
-          <h2 className="text-base font-semibold text-gray-800">{displayTitle}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f]">
+          <h2 className="text-base font-semibold text-gray-800 dark:text-white">{displayTitle}</h2>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
 
-          {/* Target Scope — read-only, driven entirely by the parent page's
-              existing HQ/Franchise selector. No independent scope picker here. */}
+          {/* Target Scope — read-only */}
           {scopeLabel && (
             <div>
               <label className={sectionLabelClass}>Target Scope</label>
-              <div className="w-full border border-orange-200 bg-orange-50 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700">
+              <div className="w-full border border-orange-200 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-950/30 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-400">
                 {scopeLabel}
               </div>
             </div>
@@ -423,24 +422,24 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
             <label className={sectionLabelClass}>Basic Information</label>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">{nameLabel} *</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">{nameLabel} *</label>
                 <input
                   placeholder="Enter name..."
                   value={form.name}
                   onChange={(e) => setForm({...form, name: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Contact Number</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Contact Number</label>
                 <input
                   placeholder="10 digits..."
                   value={form.contact}
                   maxLength={10}
                   onChange={(e) => setForm({...form, contact: e.target.value.replace(/\D/g, "")})}
                   className={clsx(
-                    "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors",
-                    contactError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                    "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5",
+                    contactError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
                 {contactError && (
@@ -448,14 +447,14 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Email Address</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Email Address</label>
                 <input
                   placeholder="optional@gmail.com"
                   value={form.email}
                   onChange={(e) => setForm({...form, email: e.target.value})}
                   className={clsx(
-                    "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors",
-                    emailError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                    "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5",
+                    emailError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
                 {emailError && (
@@ -465,37 +464,37 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               {partyType === 'vendor' && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Material Category</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Material Category</label>
                     <input
                       placeholder="e.g. Raw Material, Packaging"
                       value={form.category}
                       onChange={(e) => setForm({...form, category: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Credit Period (Payment Terms)</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Credit Period (Payment Terms)</label>
                     <select
                       value={form.paymentTerms}
                       onChange={(e) => setForm({...form, paymentTerms: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                     >
-                      <option value="IMMEDIATE">Immediate (0 Days)</option>
-                      <option value="NET_7">7 Days (Net 7)</option>
-                      <option value="NET_30">30 Days (Net 30)</option>
-                      <option value="ADVANCE">Advance Payment</option>
+                      <option value="IMMEDIATE" className="dark:bg-[#13151f]">Immediate (0 Days)</option>
+                      <option value="NET_7" className="dark:bg-[#13151f]">7 Days (Net 7)</option>
+                      <option value="NET_30" className="dark:bg-[#13151f]">30 Days (Net 30)</option>
+                      <option value="ADVANCE" className="dark:bg-[#13151f]">Advance Payment</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Status</label>
                     <select
                       value={form.status}
                       onChange={(e) => setForm({...form, status: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                     >
-                      <option value="ACTIVE">Active</option>
-                      <option value="BLOCKED">Blocked</option>
-                      <option value="BLACKLISTED">Blacklisted</option>
+                      <option value="ACTIVE" className="dark:bg-[#13151f]">Active</option>
+                      <option value="BLOCKED" className="dark:bg-[#13151f]">Blocked</option>
+                      <option value="BLACKLISTED" className="dark:bg-[#13151f]">Blacklisted</option>
                     </select>
                   </div>
                 </>
@@ -510,7 +509,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               <div>
                 <label className="block text-xs font-semibold text-orange-500 mb-1.5 flex items-center gap-1">
                   GST Number
-                  <span className="text-[10px] bg-orange-100 text-[#f58220] px-1.5 py-0.5 rounded font-normal font-sans">Priority</span>
+                  <span className="text-[10px] bg-orange-100 dark:bg-orange-900/30 text-[#f58220] px-1.5 py-0.5 rounded font-normal font-sans">Priority</span>
                 </label>
                 <div className="relative">
                   <input
@@ -525,14 +524,14 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       }
                     }}
                     className={clsx(
-                      "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 outline-none transition-colors uppercase font-mono pr-12",
-                      gstError ? "border-rose-500 focus:border-rose-500 bg-white placeholder-gray-400" : "border-gray-300 focus:border-orange-400 bg-white placeholder-gray-400"
+                      "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors uppercase font-mono pr-12 dark:bg-white/5",
+                      gstError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                     )}
                   />
                   {fetchingGst ? (
                     <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 animate-spin" />
                   ) : (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-medium">{form.gstNumber.length}/15</span>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 dark:text-slate-500 font-medium">{form.gstNumber.length}/15</span>
                   )}
                 </div>
                 {gstError && (
@@ -540,15 +539,15 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 )}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">GST Type</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">GST Type</label>
                 <select
                   value={form.gstType}
                   onChange={(e) => setForm({...form, gstType: e.target.value})}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                 >
-                  <option>Unregistered/Consumer</option>
-                  <option>Registered Business</option>
-                  <option>Composition Scheme</option>
+                  <option className="dark:bg-[#13151f]">Unregistered/Consumer</option>
+                  <option className="dark:bg-[#13151f]">Registered Business</option>
+                  <option className="dark:bg-[#13151f]">Composition Scheme</option>
                 </select>
               </div>
             </div>
@@ -561,22 +560,22 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               {/* Left Column */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Billing Address *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Billing Address *</label>
                   <textarea
                     rows={3}
                     placeholder="Address..."
                     value={form.billingAddress}
                     onChange={(e) => setForm({...form, billingAddress: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors resize-none h-[88px]"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none h-[88px]"
                   />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-medium text-gray-500">Shipping Address *</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Shipping Address *</label>
                     <button
                       type="button"
                       onClick={() => setForm(prev => ({ ...prev, shippingAddress: prev.billingAddress }))}
-                      className="text-[11px] text-orange-600 hover:text-orange-700 font-medium hover:underline"
+                      className="text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 font-medium hover:underline"
                     >
                       Same as Billing Address
                     </button>
@@ -586,7 +585,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     placeholder="Shipping Address..."
                     value={form.shippingAddress}
                     onChange={(e) => setForm({...form, shippingAddress: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors resize-none h-[88px]"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none h-[88px]"
                   />
                 </div>
               </div>
@@ -594,7 +593,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               {/* Right Column */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Pincode *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Pincode *</label>
                   <input
                     placeholder="6-digit Pincode"
                     value={form.pincode}
@@ -603,38 +602,38 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       setForm({...form, pincode: val});
                     }}
                     maxLength={6}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">State</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">State</label>
                     <input
                       placeholder="State"
                       value={form.state}
                       onChange={(e) => setForm({...form, state: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">City</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">City</label>
                     <input
                       placeholder="City"
                       value={form.city}
                       onChange={(e) => setForm({...form, city: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">District</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">District</label>
                   <input
                     placeholder="District"
                     value={form.district}
                     onChange={(e) => setForm({...form, district: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                   />
                 </div>
               </div>
@@ -654,16 +653,16 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       placeholder="0.00"
                       value={form.openingBalance}
                       onChange={(e) => setForm({...form, openingBalance: e.target.value})}
-                      className="w-full border-2 border-blue-500 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:ring-4 ring-blue-500/10 bg-white placeholder-gray-400 transition-colors"
+                      className="w-full border-2 border-blue-500 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:ring-4 ring-blue-500/10 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">As Of Date</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">As Of Date</label>
                     <input
                       type="date"
                       value={form.asOfDate}
                       onChange={(e) => setForm({...form, asOfDate: e.target.value})}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
                     />
                   </div>
                 </div>
@@ -672,7 +671,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <div className={clsx(
                       "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      form.openingBalanceType === "pay" ? "border-blue-500" : "border-gray-300 group-hover:border-blue-300"
+                      form.openingBalanceType === "pay" ? "border-blue-500" : "border-gray-300 dark:border-white/20 group-hover:border-blue-300"
                     )}>
                       {form.openingBalanceType === "pay" && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
                     </div>
@@ -683,13 +682,13 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       checked={form.openingBalanceType === "pay"}
                       onChange={() => setForm({...form, openingBalanceType: "pay"})}
                     />
-                    <span className="text-sm font-medium text-gray-700">To Pay</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Pay</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <div className={clsx(
                       "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      form.openingBalanceType === "receive" ? "border-emerald-500" : "border-gray-300 group-hover:border-emerald-300"
+                      form.openingBalanceType === "receive" ? "border-emerald-500" : "border-gray-300 dark:border-white/20 group-hover:border-emerald-300"
                     )}>
                       {form.openingBalanceType === "receive" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
                     </div>
@@ -700,24 +699,24 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       checked={form.openingBalanceType === "receive"}
                       onChange={() => setForm({...form, openingBalanceType: "receive"})}
                     />
-                    <span className="text-sm font-medium text-gray-700">To Receive</span>
+                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Receive</span>
                   </label>
                 </div>
 
-                <div className="border border-gray-200 rounded-xl p-4 space-y-2">
+                <div className="border border-gray-200 dark:border-white/10 rounded-xl p-4 space-y-2 bg-slate-50/50 dark:bg-white/[0.02]">
                   <div className="flex items-center gap-1">
-                    <label className="block text-xs font-medium text-gray-500">Credit Limit</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Credit Limit</label>
                     <Info size={12} className="text-gray-400" />
                   </div>
                   <div className="flex items-center gap-3 pt-1">
                     <span className={clsx("text-sm transition-colors", form.noCreditLimit ? "text-blue-500 font-medium" : "text-gray-400")}>No Limit</span>
                     <button
                       onClick={() => setForm({...form, noCreditLimit: !form.noCreditLimit})}
-                      className={clsx("w-9 h-5 rounded-full relative transition-colors", form.noCreditLimit ? "bg-blue-500" : "bg-gray-300")}
+                      className={clsx("w-9 h-5 rounded-full relative transition-colors", form.noCreditLimit ? "bg-blue-500" : "bg-gray-300 dark:bg-white/20")}
                     >
                       <div className={clsx("w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm", form.noCreditLimit ? "left-5" : "left-1")} />
                     </button>
-                    <span className={clsx("text-sm transition-colors", !form.noCreditLimit ? "text-gray-700 font-medium" : "text-gray-400")}>Custom Limit</span>
+                    <span className={clsx("text-sm transition-colors", !form.noCreditLimit ? "text-gray-700 dark:text-slate-300 font-medium" : "text-gray-400")}>Custom Limit</span>
                   </div>
 
                   {!form.noCreditLimit && (
@@ -727,7 +726,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                         placeholder="Enter limit amount..."
                         value={form.customCreditLimit}
                         onChange={(e) => setForm({...form, customCreditLimit: e.target.value})}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                       />
                     </div>
                   )}
@@ -739,10 +738,10 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 bg-gray-50">
+        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017]">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white transition-colors"
           >
             Cancel
           </button>

@@ -319,32 +319,32 @@ export default function BatchRecallPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" />
-          <p className="text-xs text-gray-400">Loading batch registry...</p>
+          <p className="text-xs text-gray-400 dark:text-slate-500">Loading batch registry...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
         <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
           <input
             type="text"
             placeholder="Search batch code or product..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
           />
             {searchQuery && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearchQuery("")} 
               />
             )}
@@ -353,8 +353,8 @@ export default function BatchRecallPage() {
 
       <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
         {/* Recall Workflow Steps */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Recall Workflow Pipeline</h3>
+        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
+          <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Recall Workflow Pipeline</h3>
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
             {STEPS.map((step, idx) => {
               const Icon = step.icon;
@@ -367,17 +367,17 @@ export default function BatchRecallPage() {
                   <div
                     className={clsx(
                       "flex items-center gap-2 px-3 py-2 rounded-lg border w-full lg:w-auto transition-all text-xs font-medium",
-                      isFailed && "bg-rose-50 border-rose-200 text-rose-600",
-                      !isFailed && isDone && "bg-emerald-50 border-emerald-200 text-emerald-600",
-                      !isFailed && isCurrent && "bg-orange-50 border-orange-200 text-[#f58220]",
-                      !isFailed && !isDone && !isCurrent && "bg-gray-50 border-gray-200 text-gray-400"
+                      isFailed && "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400",
+                      !isFailed && isDone && "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                      !isFailed && isCurrent && "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-[#f58220]",
+                      !isFailed && !isDone && !isCurrent && "bg-gray-50 dark:bg-white/[0.02] border-gray-200 dark:border-white/5 text-gray-400 dark:text-slate-500"
                     )}
                   >
                     {isFailed ? <XCircle className="h-3.5 w-3.5" /> : isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : isRunning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
                     <span>{step.label}</span>
                   </div>
                   {idx < STEPS.length - 1 && (
-                    <ArrowRight className="text-gray-300 rotate-90 lg:rotate-0 shrink-0 h-3.5 w-3.5" />
+                    <ArrowRight className="text-gray-300 dark:text-slate-600 rotate-90 lg:rotate-0 shrink-0 h-3.5 w-3.5" />
                   )}
                 </div>
               );
@@ -387,18 +387,18 @@ export default function BatchRecallPage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
           {/* Batch Selection List */}
-          <div className="xl:col-span-5 bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+          <div className="xl:col-span-5 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02]">
+              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
                 <Package className="h-3.5 w-3.5 text-[#f58220]" /> Batch Registry
               </h3>
-              <p className="text-xs text-gray-400 mt-1">{filtered.length} batches found</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">{filtered.length} batches found</p>
             </div>
-            <div className="max-h-[500px] overflow-y-auto divide-y divide-gray-100">
+            <div className="max-h-[500px] overflow-y-auto divide-y divide-gray-100 dark:divide-white/5">
               {filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <AlertTriangle className="h-8 w-8 text-gray-300 mb-3" />
-                  <p className="text-sm text-gray-400">No batches found</p>
+                  <AlertTriangle className="h-8 w-8 text-gray-300 dark:text-slate-600 mb-3" />
+                  <p className="text-sm text-gray-400 dark:text-slate-500">No batches found</p>
                 </div>
               ) : (
                 filtered.map((batch) => {
@@ -412,13 +412,13 @@ export default function BatchRecallPage() {
                       onClick={() => selectBatch(batch.id)}
                       className={clsx(
                         "w-full p-3 text-left transition-colors flex items-center justify-between gap-3",
-                        selectedBatchId === batch.id ? "bg-orange-50" : "hover:bg-gray-50"
+                        selectedBatchId === batch.id ? "bg-orange-50 dark:bg-orange-500/10" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
                     >
                       <div className="space-y-0.5 min-w-0">
-                        <p className="text-xs font-mono font-semibold text-gray-800 truncate">{batch.batchCode}</p>
-                        <p className="text-sm font-medium text-gray-700 truncate">{batch.productName}</p>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs font-mono font-semibold text-gray-800 dark:text-white truncate">{batch.batchCode}</p>
+                        <p className="text-sm font-medium text-gray-700 dark:text-slate-300 truncate">{batch.productName}</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500">
                           Approved: {batch.approvedQty} {batch.unit} • {formatDate(batch.productionDate)}
                         </p>
                       </div>
@@ -426,7 +426,7 @@ export default function BatchRecallPage() {
                         <span className={clsx("px-2 py-0.5 rounded text-[11px] font-semibold border", badge.color, badge.bg, badge.border)}>
                           {badgeLabel}
                         </span>
-                        <ChevronRight className="h-3.5 w-3.5 text-gray-300" />
+                        <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-slate-600" />
                       </div>
                     </button>
                   );
@@ -440,15 +440,15 @@ export default function BatchRecallPage() {
             {selectedBatch ? (
               <>
                 {/* Batch Detail Card */}
-                <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
                     <div>
-                      <h3 className="text-sm font-bold text-gray-800">{selectedBatch.batchCode}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{selectedBatch.productName}</p>
+                      <h3 className="text-sm font-bold text-gray-800 dark:text-white">{selectedBatch.batchCode}</h3>
+                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{selectedBatch.productName}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       {recall?.status === "COMPLETED" ? (
-                        <span className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-xs font-semibold">
+                        <span className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold">
                           <ShieldAlert className="h-3.5 w-3.5" /> Recalled
                         </span>
                       ) : isActive ? (
@@ -456,7 +456,7 @@ export default function BatchRecallPage() {
                           <button
                             onClick={cancelRecall}
                             disabled={!!runningAction}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-rose-300 hover:text-rose-600 text-gray-500 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
+                            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:border-rose-300 dark:hover:border-rose-500/30 hover:text-rose-600 dark:hover:text-rose-400 text-gray-500 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
                           >
                             <Undo2 className="h-3.5 w-3.5" /> Cancel
                           </button>
@@ -490,11 +490,11 @@ export default function BatchRecallPage() {
                     </div>
                   </div>
 
-                  {/* Ineligibility reasons — always visible, never just a disabled button */}
+                  {/* Ineligibility reasons */}
                   {!recall && eligibility && !eligibility.eligible && (
-                    <div className="flex items-start gap-2 bg-rose-50 border border-rose-200 rounded-lg p-3">
-                      <Ban className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-                      <div className="text-xs text-rose-700 space-y-1">
+                    <div className="flex items-start gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-3">
+                      <Ban className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
+                      <div className="text-xs text-rose-700 dark:text-rose-300 space-y-1">
                         {eligibility.reasons.map((r, i) => <p key={i}>{r}</p>)}
                       </div>
                     </div>
@@ -508,40 +508,35 @@ export default function BatchRecallPage() {
                       { label: "Production Date", value: formatDate(selectedBatch.productionDate) },
                       { label: "Rejected Qty", value: `${eligibility?.batch.rejectedQty ?? selectedBatch.rejectedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
                       { label: "Packed Qty", value: `${eligibility?.batch.packagedQty ?? selectedBatch.packagedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      // Wasted (damage/spoilage write-off) is tracked separately from
-                      // Dispatched (a genuine sale/transfer) — a waste write-off is
-                      // destroyed, not something that can ever be "returned," so
-                      // showing it next to Dispatched/Returned makes that distinction
-                      // visible instead of folding it silently into one number.
                       { label: "Wasted Qty", value: eligibility ? `${eligibility.batch.wastedQty} ${eligibility.batch.unit}` : "—" },
                       { label: "Dispatched Qty", value: eligibility ? `${eligibility.batch.distributedQty} ${eligibility.batch.unit}` : "—" },
                       { label: "Available (Warehouse)", value: eligibility ? `${eligibility.batch.availableQty} ${eligibility.batch.unit}` : "—" },
                     ].map((item, i) => (
-                      <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <p className="text-xs text-gray-500">{item.label}</p>
-                        <p className="text-sm font-semibold text-gray-800 mt-0.5">{item.value}</p>
+                      <div key={i} className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 dark:text-slate-400">{item.label}</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white mt-0.5">{item.value}</p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Reason form (shown before initiate actually fires) */}
+                  {/* Reason form */}
                   {showReasonForm && !recall && (
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 space-y-3">
-                      <p className="text-xs font-semibold text-gray-700">Recall Reason (required)</p>
+                    <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-lg p-4 space-y-3">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Recall Reason (required)</p>
                       <select
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+                        className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                       >
-                        <option value="">Select a reason...</option>
-                        {RECALL_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+                        <option value="" className="dark:bg-card">Select a reason...</option>
+                        {RECALL_REASONS.map((r) => <option key={r} value={r} className="dark:bg-card">{r}</option>)}
                       </select>
                       {(reason === "Other" || reason === "") && (
                         <textarea
                           value={reasonNotes}
                           onChange={(e) => setReasonNotes(e.target.value)}
                           placeholder={reason === "Other" ? "Notes are required for 'Other'..." : "Additional notes (optional)"}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white min-h-[70px]"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-h-[70px] placeholder:text-gray-400 dark:placeholder:text-slate-500"
                         />
                       )}
                       <div className="flex items-center gap-2">
@@ -554,7 +549,7 @@ export default function BatchRecallPage() {
                         </button>
                         <button
                           onClick={() => setShowReasonForm(false)}
-                          className="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold"
+                          className="px-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 rounded-lg text-xs font-semibold"
                         >
                           Cancel
                         </button>
@@ -562,35 +557,35 @@ export default function BatchRecallPage() {
                     </div>
                   )}
 
-                  {/* Real distribution data (never fabricated) */}
+                  {/* Real distribution data */}
                   {recall && (
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Traceability</h4>
+                      <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Traceability</h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                          <div className="p-1.5 bg-white rounded-lg text-[#f58220] border border-gray-200 shrink-0"><MapPin className="h-3.5 w-3.5" /></div>
+                        <div className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
+                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0"><MapPin className="h-3.5 w-3.5" /></div>
                           <div className="min-w-0">
-                            <p className="text-xs font-semibold text-gray-700">Affected Locations</p>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Affected Locations</p>
                             {stepIdx < 1 ? (
-                              <p className="text-xs text-gray-400 mt-0.5">Not yet located</p>
+                              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Not yet located</p>
                             ) : recall.affectedLocations && recall.affectedLocations.length > 0 ? (
                               <div className="mt-1 space-y-0.5">
                                 {recall.affectedLocations.map((loc, i) => (
-                                  <p key={i} className="text-xs text-gray-600 truncate">{loc.label} — {loc.qty} {eligibility?.batch.unit}</p>
+                                  <p key={i} className="text-xs text-gray-600 dark:text-slate-400 truncate">{loc.label} — {loc.qty} {eligibility?.batch.unit}</p>
                                 ))}
                               </div>
                             ) : (
-                              <p className="text-xs text-gray-400 mt-0.5">No distribution records found for this batch.</p>
+                              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">No distribution records found for this batch.</p>
                             )}
                           </div>
                         </div>
-                        <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                          <div className="p-1.5 bg-white rounded-lg text-[#f58220] border border-gray-200 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></div>
+                        <div className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
+                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></div>
                           <div>
-                            <p className="text-xs font-semibold text-gray-700">Returned Quantity</p>
-                            <p className="text-xs text-gray-600 mt-0.5">
+                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Returned Quantity</p>
+                            <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
                               {recall.returnedQty} / {recall.distributedQty} {eligibility?.batch.unit} returned
-                              {pendingReturnQty > 0 && <span className="text-amber-600"> ({pendingReturnQty} pending)</span>}
+                              {pendingReturnQty > 0 && <span className="text-amber-600 dark:text-amber-400"> ({pendingReturnQty} pending)</span>}
                             </p>
                           </div>
                         </div>
@@ -598,50 +593,47 @@ export default function BatchRecallPage() {
                     </div>
                   )}
 
-                  {/* Recall Summary — restates the same eligibility/recall figures already
-                      shown above as a single non-additive breakdown, so the three audit-log
-                      quantities (quarantined / distributed / re-confirmed) can't be misread
-                      as summing to more stock than was ever approved. */}
+                  {/* Recall Summary */}
                   {recall && eligibility && (
                     <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recall Summary</h4>
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg divide-y divide-gray-200">
+                      <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Recall Summary</h4>
+                      <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg divide-y divide-gray-200 dark:divide-white/5">
                         <div className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-gray-500">Approved Batch</span>
-                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.approvedQty} {eligibility.batch.unit}</span>
+                          <span className="text-xs text-gray-500 dark:text-slate-400">Approved Batch</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.approvedQty} {eligibility.batch.unit}</span>
                         </div>
                         <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500">At Warehouse</span>
-                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.availableQty} {eligibility.batch.unit}</span>
+                          <span className="text-xs text-gray-500 dark:text-slate-400">At Warehouse</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.availableQty} {eligibility.batch.unit}</span>
                         </div>
                         <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500">Distributed</span>
-                          <span className="text-sm font-semibold text-gray-800">{eligibility.batch.distributedQty} {eligibility.batch.unit}</span>
+                          <span className="text-xs text-gray-500 dark:text-slate-400">Distributed</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.distributedQty} {eligibility.batch.unit}</span>
                         </div>
                         <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500">Returned</span>
-                          <span className="text-sm font-semibold text-gray-800">
+                          <span className="text-xs text-gray-500 dark:text-slate-400">Returned</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-white">
                             {recall.returnedQty} / {recall.distributedQty} {eligibility.batch.unit}
                           </span>
                         </div>
                         <div className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-gray-500">Rejected in QC</span>
-                          <span className="text-sm font-semibold text-gray-800">
+                          <span className="text-xs text-gray-500 dark:text-slate-400">Rejected in QC</span>
+                          <span className="text-sm font-semibold text-gray-800 dark:text-white">
                             {eligibility.batch.rejectedQty} {eligibility.batch.unit}
-                            <span className="ml-2 text-[10px] font-medium text-gray-400 uppercase">Not part of recall</span>
+                            <span className="ml-2 text-[10px] font-medium text-gray-400 dark:text-slate-500 uppercase">Not part of recall</span>
                           </span>
                         </div>
                       </div>
-                      <p className="text-[11px] text-gray-400">
+                      <p className="text-[11px] text-gray-400 dark:text-slate-500">
                         "At Warehouse" and "Distributed" split the Approved Batch quantity — they add up to it, they don't add on top of it.
                       </p>
                     </div>
                   )}
 
-                  {/* Collect Returned Stock — needs real user input, not auto-run */}
+                  {/* Collect Returned Stock */}
                   {isActive && (recall!.step === "REPORT_GENERATED" || recall!.step === "RETURN_COLLECTED") && pendingReturnQty > 0.001 && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-2">
-                      <p className="text-xs font-semibold text-gray-700">Record Returned Stock (max {pendingReturnQty} {eligibility?.batch.unit})</p>
+                    <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-2">
+                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Record Returned Stock (max {pendingReturnQty} {eligibility?.batch.unit})</p>
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
@@ -650,7 +642,7 @@ export default function BatchRecallPage() {
                           value={returnQtyInput}
                           onChange={(e) => setReturnQtyInput(e.target.value)}
                           placeholder="Returned quantity"
-                          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+                          className="flex-1 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                         />
                         <button
                           onClick={submitReturn}
@@ -665,15 +657,15 @@ export default function BatchRecallPage() {
 
                   {/* Retry a failed step */}
                   {failedStep && isActive && (
-                    <div className="flex items-center justify-between bg-rose-50 border border-rose-200 rounded-lg p-3">
-                      <p className="text-xs text-rose-600">Step "{failedStep.replace(/_/g, " ")}" failed. Fix the issue and retry.</p>
+                    <div className="flex items-center justify-between bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-3">
+                      <p className="text-xs text-rose-600 dark:text-rose-400">Step "{failedStep.replace(/_/g, " ")}" failed. Fix the issue and retry.</p>
                       <button
                         onClick={() => {
                           if (failedStep === "DISTRIBUTION_LOCATED") runStep("DISTRIBUTION_LOCATED", () => recallApi.locateDistribution(selectedBatchId!)).catch(() => {});
                           else if (failedStep === "SALES_BLOCKED") runStep("SALES_BLOCKED", () => recallApi.blockSales(selectedBatchId!)).catch(() => {});
                           else if (failedStep === "REPORT_GENERATED") runStep("REPORT_GENERATED", () => recallApi.generateReport(selectedBatchId!)).catch(() => {});
                         }}
-                        className="px-3 py-1.5 bg-white border border-rose-200 text-rose-600 rounded-lg text-xs font-semibold"
+                        className="px-3 py-1.5 bg-white dark:bg-white/5 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold"
                       >
                         Retry
                       </button>
@@ -682,7 +674,7 @@ export default function BatchRecallPage() {
 
                   {/* Tracking Map */}
                   <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ERP Tracks</h4>
+                    <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">ERP Tracks</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
                         { label: "Batch Movement", desc: "GRN → Production → Warehouse → DC", icon: Truck },
@@ -690,13 +682,13 @@ export default function BatchRecallPage() {
                         { label: "Sales Linkage", desc: "POS invoices referencing this batch", icon: FileText },
                         { label: "Return Quantity", desc: "Collected stock from affected outlets", icon: RefreshCw },
                       ].map((t, i) => (
-                        <div key={i} className="flex items-start gap-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                          <div className="p-1.5 bg-white rounded-lg text-[#f58220] border border-gray-200 shrink-0">
+                        <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
+                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0">
                             <t.icon className="h-3.5 w-3.5" />
                           </div>
                           <div>
-                            <p className="text-xs font-semibold text-gray-700">{t.label}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{t.desc}</p>
+                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">{t.label}</p>
+                            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{t.desc}</p>
                           </div>
                         </div>
                       ))}
@@ -704,16 +696,16 @@ export default function BatchRecallPage() {
                   </div>
                 </div>
 
-                {/* Live Recall Audit Log — persisted server events, not frontend strings */}
+                {/* Live Recall Audit Log */}
                 {recall?.events && recall.events.length > 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-5 space-y-3">
                     <h4 className="text-xs font-semibold text-[#f58220] uppercase tracking-wide flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#f58220] animate-pulse" />
                       Recall Audit Log
                     </h4>
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
                       {recall.events.map((ev) => (
-                        <div key={ev.id} className="text-xs font-mono text-gray-600 bg-gray-50 border border-gray-200 px-3 py-2 rounded-lg">
+                        <div key={ev.id} className="text-xs font-mono text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 px-3 py-2 rounded-lg">
                           [{new Date(ev.createdAt).toLocaleTimeString()}] {ev.event.replace(/_/g, " ")}
                           {ev.details?.message ? ` — ${ev.details.message}` : ""}
                           {typeof ev.affectedQty === "number" && ev.affectedQty > 0 ? ` (${ev.affectedQty} ${eligibility?.batch.unit || ""})` : ""}
@@ -724,12 +716,12 @@ export default function BatchRecallPage() {
                 )}
               </>
             ) : (
-              <div className="bg-white rounded-lg border border-gray-200 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">
-                <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center mb-4">
+              <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">
+                <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center mb-4">
                   <ShieldAlert className="h-8 w-8 text-[#f58220]" />
                 </div>
-                <h4 className="text-gray-800 font-semibold text-sm">Select a batch from the registry</h4>
-                <p className="text-gray-500 text-sm mt-1 max-w-xs">
+                <h4 className="text-gray-800 dark:text-white font-semibold text-sm">Select a batch from the registry</h4>
+                <p className="text-gray-500 dark:text-slate-400 text-sm mt-1 max-w-xs">
                   Select a batch to inspect its traceability chain and initiate a recall workflow if needed.
                 </p>
               </div>

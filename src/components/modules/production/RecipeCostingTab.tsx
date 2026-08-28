@@ -88,20 +88,20 @@ export default function RecipeCostingTab() {
     : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-gray-800 dark:text-slate-100">
       {/* Recipe selector */}
-      <div className="flex justify-between items-center bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+      <div className="flex justify-between items-center bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm">
         <div>
-          <h3 className="text-sm font-bold text-gray-800">Select Recipe to Cost</h3>
-          <p className="text-xs text-gray-500">Analyze ingredient costs, simulate price changes and profit margin</p>
+          <h3 className="text-sm font-bold text-gray-800 dark:text-white">Select Recipe to Cost</h3>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Analyze ingredient costs, simulate price changes and profit margin</p>
         </div>
         <select
           value={selectedRecipeId}
           onChange={(e) => setSelectedRecipeId(e.target.value)}
-          className="bg-white border border-gray-200 text-gray-800 rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none min-w-[200px]"
+          className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none min-w-[200px]"
         >
           {recipes.map((r) => (
-            <option key={r.id} value={r.id}>
+            <option key={r.id} value={r.id} className="dark:bg-card">
               {r.name}
             </option>
           ))}
@@ -119,25 +119,25 @@ export default function RecipeCostingTab() {
           {/* Cost Rollup metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
 
-            <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-5 space-y-2 relative overflow-hidden">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cost per Yield</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900 dark:text-white">₹{costData.costPerYieldUnit.toFixed(2)}</span>
-                <span className="text-[10px] text-slate-500 font-bold uppercase">/ {costData.yieldUnit || 'unit'}</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">/ {costData.yieldUnit || 'unit'}</span>
               </div>
-              <p className="text-[9px] text-slate-500 font-semibold uppercase">Recipe Yield: {costData.yieldQty} {costData.yieldUnit || 'units'}</p>
+              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Recipe Yield: {costData.yieldQty} {costData.yieldUnit || 'units'}</p>
             </div>
 
-            <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl p-5 space-y-2 relative overflow-hidden">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-5 space-y-2 relative overflow-hidden">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sale Price</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900 dark:text-white">₹{salePrice.toFixed(2)}</span>
-                <span className="text-[10px] text-slate-500 font-bold uppercase">/ {costData.yieldUnit || 'unit'}</span>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">/ {costData.yieldUnit || 'unit'}</span>
               </div>
-              <p className="text-[9px] text-slate-500 font-semibold uppercase">From product pricing</p>
+              <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold uppercase">From product pricing</p>
             </div>
 
-            <div className={`border rounded-3xl p-5 space-y-2 relative overflow-hidden ${grossMargin > 40 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : grossMargin > 20 ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
+            <div className={`border rounded-2xl p-5 space-y-2 relative overflow-hidden ${grossMargin > 40 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : grossMargin > 20 ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
               <span className="text-[9px] font-black uppercase tracking-widest opacity-80">Gross Profit Margin</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black">{grossMargin.toFixed(1)}%</span>
@@ -151,8 +151,8 @@ export default function RecipeCostingTab() {
           </div>
 
           {/* Cost Rollup Breakdown table */}
-          <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800/80 rounded-3xl overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-slate-200/50 dark:border-slate-800/50">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-6 border-b border-gray-200 dark:border-white/5">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <BarChart2 size={16} className="text-[#F97316]" />
                 Ingredient Cost Breakdown
@@ -162,23 +162,23 @@ export default function RecipeCostingTab() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-950 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200/50 dark:border-slate-800/50">
+                  <tr className="bg-slate-50 dark:bg-white/[0.02] text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
                     <th className="py-4 px-6">Ingredient</th>
                     <th className="py-4 px-4 text-right">Recipe Quantity</th>
                     <th className="py-4 px-4 text-right">Unit Rate</th>
                     <th className="py-4 px-6 text-right text-slate-800 dark:text-slate-200">Line Total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-semibold text-slate-700 dark:text-slate-300">
                   {costData.breakdown.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.01] transition-all">
+                    <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
                       <td className="py-4 px-6 font-bold text-slate-900 dark:text-white">
                         {item.name}
                       </td>
-                      <td className="py-4 px-4 text-right text-slate-500">
+                      <td className="py-4 px-4 text-right text-slate-500 dark:text-slate-400">
                         {item.qty.toFixed(3)} <span className="text-[10px] font-bold uppercase">{item.unit}</span>
                       </td>
-                      <td className="py-4 px-4 text-right text-slate-500 font-mono">
+                      <td className="py-4 px-4 text-right text-slate-500 dark:text-slate-400 font-mono">
                         ₹{item.unitCost.toFixed(2)}
                       </td>
                       <td className="py-4 px-6 text-right font-black text-slate-900 dark:text-white font-mono">
@@ -193,12 +193,12 @@ export default function RecipeCostingTab() {
 
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-200 text-center">
-          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3">
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 text-center">
+          <div className="w-12 h-12 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-400 dark:text-slate-500 mb-3">
             <ChefHat size={24} />
           </div>
-          <p className="text-sm font-semibold text-gray-800">No Cost Breakdown Data Available</p>
-          <p className="text-xs text-gray-500 mt-1">Select a recipe from the list above to view itemized costs and profit margin.</p>
+          <p className="text-sm font-semibold text-gray-800 dark:text-white">No Cost Breakdown Data Available</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Select a recipe from the list above to view itemized costs and profit margin.</p>
         </div>
       )}
     </div>

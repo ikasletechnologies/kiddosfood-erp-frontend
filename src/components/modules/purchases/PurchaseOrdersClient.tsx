@@ -30,14 +30,14 @@ interface POItem {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  DRAFT: "bg-slate-50 text-slate-600 border-slate-200",
-  PENDING_APPROVAL: "bg-amber-50 text-amber-600 border-amber-200",
-  APPROVED: "bg-orange-50 text-orange-600 border-orange-200",
-  SENT: "bg-blue-50 text-blue-600 border-blue-200",
-  PARTIALLY_RECEIVED: "bg-orange-50 text-orange-600 border-orange-200",
-  RECEIVED: "bg-emerald-50 text-emerald-600 border-emerald-200",
-  CLOSED: "bg-emerald-900 text-white border-emerald-800",
-  CANCELLED: "bg-red-50 text-red-600 border-red-200",
+  DRAFT: "bg-slate-50 text-slate-600 border-slate-200 dark:bg-white/5 dark:text-slate-400 dark:border-white/10",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/40",
+  APPROVED: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-900/40",
+  SENT: "bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40",
+  PARTIALLY_RECEIVED: "bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-900/40",
+  RECEIVED: "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/40",
+  CLOSED: "bg-emerald-900 text-white border-emerald-800 dark:bg-emerald-900/50 dark:border-emerald-700/50",
+  CANCELLED: "bg-red-50 text-red-600 border-red-200 dark:bg-red-950/30 dark:text-red-400 dark:border-red-900/40",
 };
 
 const STATUS_ICONS: Record<string, any> = {
@@ -330,14 +330,14 @@ export default function PurchaseOrdersClient() {
   };
 
   return (
-    <div className={clsx("min-h-screen bg-gray-50 text-gray-800", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
+    <div className={clsx("min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowSettings(true)}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
             title="Company Profile"
           >
             <Settings size={16} />
@@ -345,7 +345,7 @@ export default function PurchaseOrdersClient() {
           <button
             type="button"
             onClick={fetchAll}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
             title="Refresh"
           >
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
@@ -364,14 +364,14 @@ export default function PurchaseOrdersClient() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: "Total Spend", value: formatCurrency(totalSpend), color: "text-gray-700", dot: "bg-gray-400" },
+            { label: "Total Spend", value: formatCurrency(totalSpend), color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
             { label: "Pending GRNs", value: String(orders.filter(o => o.status === 'APPROVED' || o.status === 'SENT').length), color: "text-[#f58220]", dot: "bg-[#f58220]" },
-            { label: "All Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), color: "text-red-600", dot: "bg-red-500" },
+            { label: "All Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), color: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
           ].map((card) => (
-            <div key={card.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={card.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", card.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{card.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{card.label}</p>
                 <p className={clsx("text-lg font-bold mt-0.5", card.color)}>{card.value}</p>
               </div>
             </div>
@@ -386,25 +386,25 @@ export default function PurchaseOrdersClient() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search orders..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "PENDING_APPROVAL", "APPROVED", "RECEIVED", "CLOSED"].map(s => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : s === "PENDING_APPROVAL" ? "Pending Approval" : s.charAt(0) + s.slice(1).toLowerCase()}
@@ -414,11 +414,11 @@ export default function PurchaseOrdersClient() {
         </div>
 
         {/* ── Table ── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">PO No</th>
                   <th className="text-left px-4 py-3">Vendor</th>
                   <th className="text-left px-4 py-3">Amount</th>
@@ -429,16 +429,16 @@ export default function PurchaseOrdersClient() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2">
-                        <div className="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-[#f58220]">
+                        <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-[#f58220]">
                           <ShoppingCart className="h-6 w-6" />
                         </div>
-                        <p className="text-gray-800 font-semibold text-sm">No Purchase Orders Found</p>
-                        <p className="text-gray-500 text-xs">Create your first PO to start ordering raw materials.</p>
+                        <p className="text-gray-800 dark:text-white font-semibold text-sm">No Purchase Orders Found</p>
+                        <p className="text-gray-500 dark:text-slate-400 text-xs">Create your first PO to start ordering raw materials.</p>
                         <Link href="/purchases/new" onClick={() => localStorage.removeItem('draftPurchaseOrder')} className="mt-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold rounded-lg transition-colors">
                           Create New PO
                         </Link>
@@ -450,18 +450,18 @@ export default function PurchaseOrdersClient() {
                   const balance = Math.max(0, (po.totalAmount ?? 0) - currentPaid);
                   const style = STATUS_STYLES[po.status] || STATUS_STYLES.DRAFT;
                   return (
-                    <tr key={po.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={po.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-semibold text-gray-800 text-xs">{formatERPNumber("PO", po.poNumber || po.id, po.createdAt)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{format(new Date(po.createdAt), "dd MMM yyyy")}</div>
+                        <div className="font-semibold text-gray-800 dark:text-white text-xs">{formatERPNumber("PO", po.poNumber || po.id, po.createdAt)}</div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{format(new Date(po.createdAt), "dd MMM yyyy")}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800 text-sm">{po.vendor?.name || "Unknown"}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{po.vendor?.category || 'General Supplier'}</div>
+                        <div className="font-medium text-gray-800 dark:text-slate-200 text-sm">{po.vendor?.name || "Unknown"}</div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{po.vendor?.category || 'General Supplier'}</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className="font-semibold text-gray-800 text-sm">{formatCurrency(po.totalAmount)}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">
+                        <div className="font-semibold text-gray-800 dark:text-white text-sm">{formatCurrency(po.totalAmount)}</div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
                           {po.receivedItemsCount || 0} / {po.totalItemsCount || 0} units
                         </div>
                       </td>
@@ -473,28 +473,26 @@ export default function PurchaseOrdersClient() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         {po.expectedDeliveryDate ? (
                           <div>
-                            <div className={clsx("text-xs font-medium", isBefore(new Date(po.expectedDeliveryDate), new Date()) && po.status !== 'RECEIVED' ? "text-red-600 font-semibold" : "text-gray-700")}>
+                            <div className={clsx("text-xs font-medium", isBefore(new Date(po.expectedDeliveryDate), new Date()) && po.status !== 'RECEIVED' ? "text-red-600 dark:text-red-400 font-semibold" : "text-gray-700 dark:text-slate-300")}>
                               {format(new Date(po.expectedDeliveryDate), "dd MMM yyyy")}
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">Expected</div>
+                            <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Expected</div>
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400 italic">Not set</span>
+                          <span className="text-xs text-gray-400 dark:text-slate-500 italic">Not set</span>
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <div className={clsx("text-xs font-semibold", balance <= 0 ? "text-emerald-600" : "text-[#f58220]")}>
+                        <div className={clsx("text-xs font-semibold", balance <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-[#f58220]")}>
                           {balance <= 0 ? "Paid" : `${formatCurrency(balance)} Balance Due`}
                         </div>
                         {(po.advanceApplied || 0) > 0 && (
-                          <div className="text-xs text-emerald-600 mt-0.5">
+                          <div className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
                             {formatCurrency(po.advanceApplied)} Advance Applied
                           </div>
                         )}
                         {/* Only offer to apply advance when the vendor actually
-                            has unused credit left — getVendors() already nets
-                            out whatever's been applied/reserved elsewhere, so
-                            this stays correctly hidden once advance is spent. */}
+                            has unused credit left */}
                         {balance > 0 && (vendors.find(v => v.id === po.vendorId)?.advance || 0) > 0 && (
                           <button
                             onClick={() => handleApplyAdvance(po.id)}
@@ -519,7 +517,7 @@ export default function PurchaseOrdersClient() {
                             <button
                               type="button"
                               onClick={() => handleApprove(po.id)}
-                              className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors mr-1"
+                              className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors mr-1"
                             >
                               Approve
                             </button>
@@ -529,7 +527,7 @@ export default function PurchaseOrdersClient() {
                             <button
                               type="button"
                               onClick={() => window.location.href = `/purchases/grn?poId=${po.id}`}
-                              className="px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded text-xs font-bold hover:bg-orange-100 transition-colors mr-1"
+                              className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors mr-1"
                             >
                               Receive Goods
                             </button>
@@ -538,7 +536,7 @@ export default function PurchaseOrdersClient() {
                           <button
                             type="button"
                             onClick={() => window.location.href = `/purchases/edit/${po.id}`}
-                            className="p-1.5 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 rounded transition-colors"
+                            className="p-1.5 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
                             title="Edit PO"
                           >
                             <Pencil className="h-4 w-4" />
@@ -547,7 +545,7 @@ export default function PurchaseOrdersClient() {
                           <button
                             type="button"
                             onClick={() => setViewingPO(po)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                             title="Download PDF"
                           >
                             <Download className="h-4 w-4" />
@@ -714,31 +712,31 @@ export default function PurchaseOrdersClient() {
           <div className="absolute inset-0" onClick={() => setViewingDetailsPO(null)} />
           <div className="bg-white dark:bg-[#0f1117] w-full max-w-2xl h-full shadow-2xl relative flex flex-col animate-in slide-in-from-right duration-500">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+            <div className="bg-white dark:bg-[#0f1117] border-b border-gray-200 dark:border-white/10 px-6 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <ShoppingCart className="h-5 w-5 text-[#f58220]" />
-                <h2 className="text-base font-semibold text-gray-800">
-                  Purchase Order <span className="text-gray-400 font-normal ml-1">#{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0,8)}</span>
+                <h2 className="text-base font-semibold text-gray-800 dark:text-white">
+                  Purchase Order <span className="text-gray-400 dark:text-slate-500 font-normal ml-1">#{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0,8)}</span>
                 </h2>
                 {viewingDetailsPO.vendor?.name && (
-                  <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md ml-2">
+                  <span className="text-xs font-medium bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 px-2.5 py-1 rounded-md ml-2">
                     {viewingDetailsPO.vendor.name}
                   </span>
                 )}
               </div>
-              <button onClick={() => setViewingDetailsPO(null)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+              <button onClick={() => setViewingDetailsPO(null)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
                 <X size={17} />
               </button>
             </div>
 
-            <div className="px-6 border-b border-gray-200 flex gap-6 bg-white shrink-0">
+            <div className="px-6 border-b border-gray-200 dark:border-white/10 flex gap-6 bg-white dark:bg-[#0f1117] shrink-0">
               {["OVERVIEW", "ITEMS", "GRN", "AUDIT"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setPoDetailsTab(tab as any)}
                   className={clsx(
                     "text-xs font-semibold uppercase tracking-wider py-3 border-b-2 transition-all",
-                    poDetailsTab === tab ? "border-[#f58220] text-[#f58220]" : "border-transparent text-gray-500 hover:text-gray-700"
+                    poDetailsTab === tab ? "border-[#f58220] text-[#f58220]" : "border-transparent text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
                   )}
                 >
                   {tab}
@@ -747,21 +745,21 @@ export default function PurchaseOrdersClient() {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-slate-50/50 dark:bg-[#0b0c14]">
               {poDetailsTab === "OVERVIEW" && (
-                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm overflow-hidden">
                   {/* Document Header */}
-                  <div className="p-8 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 dark:bg-slate-800/20">
+                  <div className="p-8 border-b border-slate-200 dark:border-white/5 flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 dark:bg-white/[0.02]">
                     <div>
                       <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight mb-1">Purchase Order</h2>
-                      <p className="text-sm font-semibold text-slate-500">{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0, 8)}</p>
+                      <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0, 8)}</p>
                       
                       <div className="mt-6 space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</p>
                         <span className={clsx("inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider", 
-                          viewingDetailsPO.status === 'COMPLETED' ? "bg-emerald-100 text-emerald-700" : 
-                          viewingDetailsPO.status === 'PENDING_APPROVAL' ? "bg-amber-100 text-amber-700" : 
-                          "bg-slate-100 text-slate-700"
+                          viewingDetailsPO.status === 'COMPLETED' ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : 
+                          viewingDetailsPO.status === 'PENDING_APPROVAL' ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" : 
+                          "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                         )}>
                           {viewingDetailsPO.status?.replace(/_/g, ' ')}
                         </span>
@@ -770,30 +768,30 @@ export default function PurchaseOrdersClient() {
                     
                     <div className="text-right">
                       <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
-                        <div className="text-slate-500 font-medium">PO Date:</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">PO Date:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.createdAt)}</div>
                         
-                        <div className="text-slate-500 font-medium">Expected Delivery:</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">Expected Delivery:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.expectedDeliveryDate)}</div>
                         
-                        <div className="text-slate-500 font-medium">Payment Terms:</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">Payment Terms:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{viewingDetailsPO.vendor?.paymentTerms || "Immediate"}</div>
                       </div>
                     </div>
                   </div>
 
                   {/* Vendor & Delivery Info */}
-                  <div className="p-8 border-b border-slate-200 dark:border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="p-8 border-b border-slate-200 dark:border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Vendor Details</h3>
                       <p className="text-sm font-bold text-slate-800 dark:text-white mb-1">
                         {viewingDetailsPO.vendor?.name} 
                         {viewingDetailsPO.vendor?.vendorCode && <span className="text-slate-400 ml-1">({viewingDetailsPO.vendor.vendorCode})</span>}
                       </p>
-                      {viewingDetailsPO.vendor?.contactPerson && <p className="text-xs text-slate-500 font-medium mb-1">{viewingDetailsPO.vendor.contactPerson}</p>}
-                      {viewingDetailsPO.vendor?.email && <p className="text-xs text-slate-500">{viewingDetailsPO.vendor.email}</p>}
-                      {viewingDetailsPO.vendor?.phone && <p className="text-xs text-slate-500">{viewingDetailsPO.vendor.phone}</p>}
-                      {viewingDetailsPO.vendor?.address && <p className="text-xs text-slate-500 mt-2 max-w-xs leading-relaxed">{viewingDetailsPO.vendor.address}</p>}
+                      {viewingDetailsPO.vendor?.contactPerson && <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{viewingDetailsPO.vendor.contactPerson}</p>}
+                      {viewingDetailsPO.vendor?.email && <p className="text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.vendor.email}</p>}
+                      {viewingDetailsPO.vendor?.phone && <p className="text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.vendor.phone}</p>}
+                      {viewingDetailsPO.vendor?.address && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs leading-relaxed">{viewingDetailsPO.vendor.address}</p>}
                     </div>
                     
                     <div>
@@ -804,7 +802,7 @@ export default function PurchaseOrdersClient() {
                         )}
                       </p>
                       {(viewingDetailsPO.warehouse?.address || viewingDetailsPO.franchise?.address) && (
-                        <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
                           {viewingDetailsPO.warehouse?.address || viewingDetailsPO.franchise?.address}
                         </p>
                       )}
@@ -812,7 +810,7 @@ export default function PurchaseOrdersClient() {
                   </div>
 
                   {/* Financial Summary */}
-                  <div className="p-8 bg-slate-50/30 dark:bg-slate-800/10">
+                  <div className="p-8 bg-slate-50/30 dark:bg-white/[0.01]">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Financial Summary</h3>
                     
                     <div className="flex flex-col md:flex-row justify-end items-start gap-12">
@@ -823,13 +821,13 @@ export default function PurchaseOrdersClient() {
                             {viewingDetailsPO.vendorNotes && (
                               <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Notes</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">{viewingDetailsPO.vendorNotes}</p>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg">{viewingDetailsPO.vendorNotes}</p>
                               </div>
                             )}
                             {viewingDetailsPO.deliveryInstructions && (
                               <div>
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Delivery Instructions</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">{viewingDetailsPO.deliveryInstructions}</p>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg">{viewingDetailsPO.deliveryInstructions}</p>
                               </div>
                             )}
                           </div>
@@ -838,34 +836,34 @@ export default function PurchaseOrdersClient() {
 
                       <div className="w-full md:w-72 space-y-3">
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 font-medium">Subtotal</span>
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">Subtotal</span>
                           <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.subtotal || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 font-medium">Discount</span>
-                          <span className="font-bold text-emerald-600">-{formatCurrency(viewingDetailsPO.discountAmount || 0)}</span>
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">Discount</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">-{formatCurrency(viewingDetailsPO.discountAmount || 0)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 font-medium">GST (All)</span>
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">GST (All)</span>
                           <span className="font-bold text-slate-800 dark:text-white">{formatCurrency((viewingDetailsPO.cgst || 0) + (viewingDetailsPO.sgst || 0) + (viewingDetailsPO.igst || 0))}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 font-medium">Freight</span>
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">Freight</span>
                           <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.freightCost || 0)}</span>
                         </div>
                         
-                        <div className="pt-3 border-t border-slate-200 dark:border-slate-700">
+                        <div className="pt-3 border-t border-slate-200 dark:border-white/10">
                           <div className="flex justify-between items-center">
                             <span className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Grand Total</span>
-                            <span className="text-lg font-black text-orange-600">{formatCurrency(viewingDetailsPO.totalAmount)}</span>
+                            <span className="text-lg font-black text-orange-600 dark:text-orange-400">{formatCurrency(viewingDetailsPO.totalAmount)}</span>
                           </div>
                         </div>
 
                         <div className="flex justify-between items-center text-sm pt-2">
-                          <span className="text-slate-500 font-medium">Advance Applied</span>
+                          <span className="text-slate-500 dark:text-slate-400 font-medium">Advance Applied</span>
                           <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.advanceApplied || 0)}</span>
                         </div>
-                        <div className="flex justify-between items-center text-sm bg-rose-50 dark:bg-rose-900/20 p-2 rounded-lg mt-1">
+                        <div className="flex justify-between items-center text-sm bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg mt-1 border border-rose-200 dark:border-rose-900/40">
                           <span className="text-rose-600 dark:text-rose-400 font-bold">Balance Due</span>
                           <span className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0)}</span>
                         </div>
@@ -874,7 +872,7 @@ export default function PurchaseOrdersClient() {
                   </div>
 
                   {/* Signatures / Audit Info */}
-                  <div className="p-8 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 flex justify-between items-center text-xs">
+                  <div className="p-8 border-t border-slate-200 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] flex justify-between items-center text-xs">
                     <div>
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Created By</p>
                       <p className="font-bold text-slate-700 dark:text-slate-300">System Entry</p>
@@ -909,14 +907,14 @@ export default function PurchaseOrdersClient() {
                         const pQty = Math.max(0, item.quantity - rQty);
                         return (
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
-                            <td className="px-4 py-3 text-xs font-mono text-slate-500">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
+                            <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
                             <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-white">{item.inventoryItem?.name}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{rQty}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600">{pQty}</td>
-                            <td className="px-4 py-3 text-xs text-slate-500">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{rQty}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{pQty}</td>
+                            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.price)}</td>
-                            <td className="px-4 py-3 text-xs text-right text-slate-500">{item.gstRate || 0}%</td>
+                            <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">{item.gstRate || 0}%</td>
                             <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
                           </tr>
                         );
@@ -943,7 +941,7 @@ export default function PurchaseOrdersClient() {
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                       {(!viewingDetailsPO.goodsReceipts || viewingDetailsPO.goodsReceipts.length === 0) ? (
                         <tr>
-                          <td colSpan={7} className="text-center py-10 text-slate-400 text-xs font-semibold">
+                          <td colSpan={7} className="text-center py-10 text-slate-400 dark:text-slate-500 text-xs font-semibold">
                             No GRNs linked to this PO yet.
                           </td>
                         </tr>
@@ -954,19 +952,19 @@ export default function PurchaseOrdersClient() {
                           const totalRejected = grn.items?.reduce((s: number, i: any) => s + (i.rejectedQty || 0), 0) || 0;
                           return (
                             <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
-                              <td className="px-4 py-3 text-xs font-mono text-slate-500">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
+                              <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
                               <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{formatDate(grn.createdAt)}</td>
                               <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600">{totalAccepted}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600">{totalRejected}</td>
-                              <td className="px-4 py-3 text-xs text-slate-500">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{totalAccepted}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{totalRejected}</td>
+                              <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
                                 <span className="text-rose-500 italic font-medium">Update Warehouse</span>
                               )}</td>
                               <td className="px-4 py-3 text-xs">
                                 <span className={clsx("inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider", 
-                                  grn.status === 'COMPLETED' ? "bg-emerald-50 text-emerald-600 border-emerald-200" : 
-                                  grn.status === 'PENDING_INSPECTION' ? "bg-amber-50 text-amber-600 border-amber-200" : 
-                                  "bg-slate-50 text-slate-500 border-slate-200"
+                                  grn.status === 'COMPLETED' ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40" : 
+                                  grn.status === 'PENDING_INSPECTION' ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/40" : 
+                                  "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10"
                                 )}>
                                   {grn.status?.replace(/_/g, ' ')}
                                 </span>
@@ -988,7 +986,7 @@ export default function PurchaseOrdersClient() {
                         <div className={clsx("absolute -left-[41px] top-0 w-4 h-4 rounded-full shadow-lg", event.color)} />
                         <p className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest mb-1">{event.action}</p>
                         <p className="text-xs font-bold text-gray-900 dark:text-white">{format(event.timestamp, "dd MMM yyyy · HH:mm")}</p>
-                        <p className="text-[10px] text-gray-400 mt-1 uppercase">By: {event.user} · {event.reference}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1 uppercase">By: {event.user} · {event.reference}</p>
                       </div>
                     ))}
                   </div>
@@ -997,11 +995,11 @@ export default function PurchaseOrdersClient() {
             </div>
 
             {/* Actions */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-white/10 bg-white dark:bg-[#0f1117] flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setViewingPO(viewingDetailsPO)}
-                className="px-5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-5 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-white/5 border border-gray-300 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/10 transition-colors"
               >
                 Download PDF
               </button>

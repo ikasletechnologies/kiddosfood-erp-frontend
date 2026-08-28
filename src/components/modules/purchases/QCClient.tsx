@@ -119,16 +119,16 @@ export default function QCClient() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const qcStatusBadge: Record<string, { label: string; className: string }> = {
-    APPROVED: { label: 'Passed', className: 'text-emerald-600 bg-emerald-50 border-emerald-200' },
-    PARTIALLY_APPROVED: { label: 'Partial', className: 'text-amber-600 bg-amber-50 border-amber-200' },
-    REJECTED: { label: 'Failed', className: 'text-rose-600 bg-rose-50 border-rose-200' },
+    APPROVED: { label: 'Passed', className: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40' },
+    PARTIALLY_APPROVED: { label: 'Partial', className: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40' },
+    REJECTED: { label: 'Failed', className: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40' },
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground -m-4 md:-m-6">
       {/* Page Header Toolbar */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
-        <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
+        <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">
           <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
         </button>
       </div>
@@ -143,12 +143,12 @@ export default function QCClient() {
               placeholder="Search finished goods or batches..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           {searchQuery && (
             <X
               size={14}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
               onClick={() => setSearchQuery("")}
             />
           )}
@@ -157,17 +157,17 @@ export default function QCClient() {
           {loading && prodBatches.length === 0 ? (
             <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
           ) : filteredProdBatches.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-              <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4 shadow-sm">
+              <div className="w-16 h-16 bg-orange-50 dark:bg-orange-950/30 rounded-full flex items-center justify-center">
                 <CheckCircle2 className="h-8 w-8 text-[#f58220]" />
               </div>
-              <p className="text-gray-800 font-semibold">Queue is completely clear!</p>
+              <p className="text-gray-800 dark:text-white font-semibold">Queue is completely clear!</p>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-3">Batch</th>
                     <th className="text-left px-4 py-3">Product</th>
                     <th className="text-right px-4 py-3">Produced Qty</th>
@@ -175,14 +175,14 @@ export default function QCClient() {
                     <th className="text-right px-4 py-3">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {filteredProdBatches.map((batch) => (
-                    <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.quantity} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                    <tr key={batch.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-white text-xs">{batch.batchCode || "—"}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">{prodBatchName(batch)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 text-right">{batch.quantity} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-amber-600 bg-amber-50 border-amber-200">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40">
                           QC Pending
                         </span>
                       </td>
@@ -203,16 +203,16 @@ export default function QCClient() {
 
           {/* QC History — batches already inspected. */}
           <div className="pt-2">
-            <h2 className="text-sm font-bold text-gray-800 mb-3">QC History</h2>
+            <h2 className="text-sm font-bold text-gray-800 dark:text-white mb-3">QC History</h2>
             {loading && prodBatches.length === 0 ? null : filteredProdHistory.length === 0 ? (
-              <div className="bg-white border border-gray-200 rounded-lg py-12 flex flex-col items-center justify-center text-center">
-                <p className="text-sm text-gray-400">No batches have been QC inspected yet.</p>
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-12 flex flex-col items-center justify-center text-center shadow-sm">
+                <p className="text-sm text-gray-400 dark:text-slate-500">No batches have been QC inspected yet.</p>
               </div>
             ) : (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                       <th className="text-left px-4 py-3">Batch</th>
                       <th className="text-left px-4 py-3">Product</th>
                       <th className="text-right px-4 py-3">Approved</th>
@@ -222,21 +222,21 @@ export default function QCClient() {
                       <th className="text-right px-4 py-3">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {filteredProdHistory.map((batch) => {
-                      const badge = qcStatusBadge[batch.qcStatus] || { label: batch.qcStatus, className: 'text-gray-600 bg-gray-50 border-gray-200' };
+                      const badge = qcStatusBadge[batch.qcStatus] || { label: batch.qcStatus, className: 'text-gray-600 dark:text-slate-400 bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10' };
                       return (
-                        <tr key={batch.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">{batch.batchCode || "—"}</td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-800">{prodBatchName(batch)}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.approvedQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-right">{batch.rejectionQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                        <tr key={batch.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-white text-xs">{batch.batchCode || "—"}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">{prodBatchName(batch)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 text-right">{batch.approvedQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-300 text-right">{batch.rejectionQty ?? 0} {batch.production?.recipe?.yieldUnit || 'KG'}</td>
                           <td className="px-4 py-3">
                             <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", badge.className)}>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-xs text-gray-500">
+                          <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
                             {formatDate(batch.createdAt)}
                           </td>
                           <td className="px-4 py-3 text-right">
@@ -246,7 +246,7 @@ export default function QCClient() {
                                 setSelectedBatchDetails(batch);
                                 setShowBatchDetails(true);
                               }}
-                              className="px-3 py-1.5 border border-gray-200 hover:border-gray-300 text-gray-600 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                              className="px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                             >
                               View
                             </button>
@@ -266,24 +266,24 @@ export default function QCClient() {
       {showBatchDetails && selectedBatchDetails && (
         <div className="fixed inset-0 z-[60] flex justify-end">
           <div
-            className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm transition-opacity"
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity"
             onClick={() => setShowBatchDetails(false)}
           />
-          <div className="relative w-full max-w-2xl bg-white shadow-2xl h-full flex flex-col border-l border-gray-200 animate-in slide-in-from-right duration-300 z-10">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-[#0f1117] shadow-2xl h-full flex flex-col border-l border-gray-200 dark:border-white/10 animate-in slide-in-from-right duration-300 z-10">
             {/* Drawer Header */}
-            <div className="px-6 py-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <div className="px-6 py-5 border-b border-gray-200 dark:border-white/10 flex justify-between items-center bg-gray-50 dark:bg-white/[0.02]">
               <div>
-                <h2 className="text-base font-bold text-gray-800">Batch Details</h2>
+                <h2 className="text-base font-bold text-gray-800 dark:text-white">Batch Details</h2>
                 <div className="flex items-center gap-3 mt-1">
                   <span className="text-sm font-mono font-semibold text-[#f58220]">
                     {selectedBatchDetails.batchCode || "—"}
                   </span>
                   <span className={clsx(
                     "px-2 py-0.5 rounded-full text-xs font-semibold",
-                    selectedBatchDetails.qcStatus === 'APPROVED' ? "bg-emerald-100 text-emerald-700" :
-                    selectedBatchDetails.qcStatus === 'PARTIALLY_APPROVED' ? "bg-amber-100 text-amber-700" :
-                    selectedBatchDetails.qcStatus === 'REJECTED' ? "bg-rose-100 text-rose-700" :
-                    "bg-emerald-100 text-emerald-700"
+                    selectedBatchDetails.qcStatus === 'APPROVED' ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" :
+                    selectedBatchDetails.qcStatus === 'PARTIALLY_APPROVED' ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" :
+                    selectedBatchDetails.qcStatus === 'REJECTED' ? "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400" :
+                    "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                   )}>
                     {qcStatusBadge[selectedBatchDetails.qcStatus]?.label || "Active"}
                   </span>
@@ -292,24 +292,24 @@ export default function QCClient() {
               <button
                 type="button"
                 onClick={() => setShowBatchDetails(false)}
-                className="p-2 hover:bg-gray-200/70 rounded-lg transition-colors font-semibold text-gray-500 cursor-pointer"
+                className="p-2 hover:bg-gray-200/70 dark:hover:bg-white/10 rounded-lg transition-colors font-semibold text-gray-500 dark:text-slate-400 cursor-pointer"
               >
                 ✕
               </button>
             </div>
             
             {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
               {/* Product Header & Timeline */}
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+              <div className="bg-gray-50 dark:bg-white/[0.02] p-5 rounded-lg border border-gray-200 dark:border-white/5">
                 <div className="flex justify-between items-end mb-4">
                   <div>
-                    <p className="text-xs text-gray-500">Product</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">{prodBatchName(selectedBatchDetails)}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400">Product</p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">{prodBatchName(selectedBatchDetails)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500">Recipe Version</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-slate-400">Recipe Version</p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">
                       {selectedBatchDetails.production?.recipe?.version ? `v${selectedBatchDetails.production.recipe.version}` : "v1.2 (Standard)"}
                     </p>
                   </div>
@@ -317,7 +317,7 @@ export default function QCClient() {
                 
                 {/* Production Timeline */}
                 <div className="mt-6">
-                  <h4 className="text-xs font-semibold text-gray-500 mb-4">Production Timeline</h4>
+                  <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-4">Production Timeline</h4>
                   {(() => {
                     const production = selectedBatchDetails.production;
                     const stageLogs = production?.stageLogs ?? [];
@@ -336,9 +336,9 @@ export default function QCClient() {
                       const start = selectedBatchDetails.createdAt || selectedBatchDetails.production?.startTime;
                       const end = selectedBatchDetails.production?.endTime || selectedBatchDetails.updatedAt;
                       return (
-                        <div className="flex items-center gap-4 text-[11px] font-semibold text-gray-500">
-                          {start && <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
-                          {end && <span>End: <span className="text-gray-800">{new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                        <div className="flex items-center gap-4 text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                          {start && <span>Start: <span className="text-gray-800 dark:text-white">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
+                          {end && <span>End: <span className="text-gray-800 dark:text-white">{new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>}
                         </div>
                       );
                     }
@@ -351,11 +351,11 @@ export default function QCClient() {
 
                     return (
                       <>
-                        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-gray-600 relative before:absolute before:top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-gray-200 overflow-x-auto pb-1">
+                        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-gray-600 dark:text-slate-300 relative before:absolute before:top-1.5 before:left-0 before:right-0 before:h-0.5 before:bg-gray-200 dark:before:bg-white/10 overflow-x-auto pb-1">
                           {points.map((p, idx) => (
                             <div key={p.key ?? idx} className="relative flex flex-col items-center gap-2 group z-10 shrink-0">
-                              <div className="w-3 h-3 rounded-full bg-[#f58220] border-2 border-white shadow-sm" />
-                              <span className="w-16 text-center leading-tight bg-gray-50">
+                              <div className="w-3 h-3 rounded-full bg-[#f58220] border-2 border-white dark:border-[#0f1117] shadow-sm" />
+                              <span className="w-16 text-center leading-tight bg-gray-50 dark:bg-[#0f1117]">
                                 {new Date(p.time).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false })}
                                 <br />
                                 {p.label}
@@ -363,10 +363,10 @@ export default function QCClient() {
                             </div>
                           ))}
                         </div>
-                        <div className="flex items-center gap-4 mt-3 text-[11px] font-semibold text-gray-500">
-                          <span>Start: <span className="text-gray-800">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>
-                          <span>End: <span className="text-gray-800">{end ? new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "In Progress"}</span></span>
-                          {durationMinutes !== null && <span>Duration: <span className="text-gray-800">{formatDurationMinutes(durationMinutes)}</span></span>}
+                        <div className="flex items-center gap-4 mt-3 text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                          <span>Start: <span className="text-gray-800 dark:text-white">{new Date(start).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}</span></span>
+                          <span>End: <span className="text-gray-800 dark:text-white">{end ? new Date(end).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "In Progress"}</span></span>
+                          {durationMinutes !== null && <span>Duration: <span className="text-gray-800 dark:text-white">{formatDurationMinutes(durationMinutes)}</span></span>}
                         </div>
                       </>
                     );
@@ -376,35 +376,35 @@ export default function QCClient() {
 
               {/* Yield & Cost */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Production Yield &amp; Cost</h3>
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-3">Production Yield &amp; Cost</h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-gray-500">Produced</p>
-                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
-                      {selectedBatchDetails.quantity ?? 0} <span className="text-xs text-gray-400">{selectedBatchDetails.production?.recipe?.yieldUnit || "KG"}</span>
+                  <div className="p-4 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500 dark:text-slate-400">Produced</p>
+                    <p className="text-base font-bold text-gray-850 dark:text-white mt-1 tabular-nums">
+                      {selectedBatchDetails.quantity ?? 0} <span className="text-xs text-gray-400 dark:text-slate-500">{selectedBatchDetails.production?.recipe?.yieldUnit || "KG"}</span>
                     </p>
                   </div>
-                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-gray-500">Approved / Rejected</p>
-                    <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
-                      {selectedBatchDetails.approvedQty ?? 0} <span className="text-xs text-rose-500">/ {selectedBatchDetails.rejectionQty ?? 0}</span>
+                  <div className="p-4 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-gray-500 dark:text-slate-400">Approved / Rejected</p>
+                    <p className="text-base font-bold text-gray-850 dark:text-white mt-1 tabular-nums">
+                      {selectedBatchDetails.approvedQty ?? 0} <span className="text-xs text-rose-500 dark:text-rose-400">/ {selectedBatchDetails.rejectionQty ?? 0}</span>
                     </p>
                   </div>
-                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg shadow-sm text-center">
+                  <div className="p-4 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/40 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-[#f58220] font-semibold">Material Cost</p>
-                    <p className="text-base font-bold text-[#e8740e] mt-1 tabular-nums">
+                    <p className="text-base font-bold text-[#e8740e] dark:text-orange-400 mt-1 tabular-nums">
                       ₹{(selectedBatchDetails.production?.materialCost ?? selectedBatchDetails.totalCost ?? 0).toFixed(2)}
                     </p>
                   </div>
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-emerald-600 font-semibold">Unit Cost</p>
-                    <p className="text-base font-bold text-emerald-700 mt-1 tabular-nums">
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Unit Cost</p>
+                    <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">
                       ₹{(selectedBatchDetails.unitCost ?? 0).toFixed(2)}
                     </p>
                   </div>
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-rose-600 font-semibold">QC Wastage Cost</p>
-                    <p className="text-base font-bold text-rose-700 mt-1 tabular-nums">
+                  <div className="p-4 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-lg shadow-sm text-center">
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">QC Wastage Cost</p>
+                    <p className="text-base font-bold text-rose-700 dark:text-rose-400 mt-1 tabular-nums">
                       ₹{((selectedBatchDetails.rejectionQty ?? 0) * (selectedBatchDetails.unitCost ?? 0)).toFixed(2)}
                     </p>
                     <p className="text-[11px] text-rose-400 mt-0.5">
@@ -412,25 +412,25 @@ export default function QCClient() {
                     </p>
                   </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
                   Unit cost reflects the real price on whichever purchase bill(s) this run actually consumed (FIFO) — it can differ run-to-run of the same recipe as older, cheaper bills run out and newer purchase prices take over.
                 </p>
               </div>
 
               {/* QC Remarks / Details if available */}
               {selectedBatchDetails.qcRemarks && (
-                <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-lg">
-                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1">QC Inspection Remarks</h4>
-                  <p className="text-xs text-amber-900 leading-relaxed">{selectedBatchDetails.qcRemarks}</p>
+                <div className="p-4 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-lg">
+                  <h4 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider mb-1">QC Inspection Remarks</h4>
+                  <p className="text-xs text-amber-900 dark:text-amber-300 leading-relaxed">{selectedBatchDetails.qcRemarks}</p>
                 </div>
               )}
 
               {/* Ingredients Used */}
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase mb-3">Ingredients Consumption</h3>
-                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-3">Ingredients Consumption</h3>
+                <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg overflow-hidden shadow-sm">
                   <table className="w-full text-left">
-                    <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                    <thead className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                       <tr>
                         <th className="px-4 py-2">Ingredient</th>
                         <th className="px-4 py-2">Purchase Bill</th>
@@ -439,14 +439,14 @@ export default function QCClient() {
                         <th className="px-4 py-2 text-right">Cost</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-150 text-sm text-gray-700">
+                    <tbody className="divide-y divide-gray-150 dark:divide-white/5 text-sm text-gray-700 dark:text-slate-300">
                       {(selectedBatchDetails.production?.items ?? []).map((pi: any) => {
                         const breakdown: any[] = Array.isArray(pi.batchBreakdown) ? pi.batchBreakdown : [];
                         return (
                           <React.Fragment key={pi.id}>
-                            <tr className="bg-gray-50/70 font-semibold">
+                            <tr className="bg-gray-50/70 dark:bg-white/[0.02] font-semibold text-gray-800 dark:text-white">
                               <td className="px-4 py-2.5">{pi.inventoryItem?.name ?? "—"}</td>
-                              <td className="px-4 py-2.5 text-xs text-gray-400 normal-case">
+                              <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500 normal-case">
                                 {breakdown.length > 1 ? `Blended across ${breakdown.length} bills` : ""}
                               </td>
                               <td className="px-4 py-2.5 text-right tabular-nums">{pi.usedQuantity} {pi.inventoryItem?.unit}</td>
@@ -457,10 +457,10 @@ export default function QCClient() {
                               breakdown.map((b: any, idx: number) => {
                                 const isFallback = !b.batchId;
                                 return (
-                                  <tr key={idx} className="text-xs text-gray-500">
+                                  <tr key={idx} className="text-xs text-gray-500 dark:text-slate-400">
                                     <td className="px-4 py-2"></td>
                                     <td className="px-4 py-2 normal-case">
-                                      <span className={isFallback ? "font-semibold text-amber-600" : "font-mono font-semibold text-gray-600"}>
+                                      <span className={isFallback ? "font-semibold text-amber-600 dark:text-amber-400" : "font-mono font-semibold text-gray-600 dark:text-slate-300"}>
                                         {b.billNumber || "—"}
                                       </span>
                                     </td>
@@ -471,7 +471,7 @@ export default function QCClient() {
                                 );
                               })
                             ) : (
-                              <tr className="text-xs text-gray-400">
+                              <tr className="text-xs text-gray-400 dark:text-slate-500">
                                 <td className="px-4 py-2"></td>
                                 <td className="px-4 py-2 normal-case" colSpan={4}>No purchase bill on record for this consumption</td>
                               </tr>
@@ -481,7 +481,7 @@ export default function QCClient() {
                       })}
                       {(!selectedBatchDetails.production?.items || selectedBatchDetails.production.items.length === 0) && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-6 text-center text-gray-400">No ingredient data recorded for this run</td>
+                          <td colSpan={5} className="px-4 py-6 text-center text-gray-400 dark:text-slate-500">No ingredient data recorded for this run</td>
                         </tr>
                       )}
                     </tbody>
@@ -495,16 +495,16 @@ export default function QCClient() {
 
       {/* QC Inspection Dialog */}
       {qcModalBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 shadow-xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-start justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white dark:bg-[#13151f] rounded-lg border border-gray-200 dark:border-white/10 shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017] flex items-start justify-between">
               <div>
-                <h3 className="text-sm font-bold text-gray-800">QC Inspection</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Batch: {qcModalBatch.batchCode || "—"}</p>
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white">QC Inspection</h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Batch: {qcModalBatch.batchCode || "—"}</p>
               </div>
               <button
                 onClick={() => setQcModalBatch(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                className="text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-white transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -513,23 +513,23 @@ export default function QCClient() {
             <div className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Product</p>
-                  <p className="text-sm font-semibold text-gray-800">{prodBatchName(qcModalBatch)}</p>
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Product</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white">{prodBatchName(qcModalBatch)}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Produced Quantity</p>
-                  <p className="text-sm font-semibold text-gray-800">{qcModalBatch.quantity} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
+                  <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Produced Quantity</p>
+                  <p className="text-sm font-semibold text-gray-800 dark:text-white">{qcModalBatch.quantity} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs font-medium text-gray-500 mb-2">QC Decision</p>
+                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-2">QC Decision</p>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => { setQcDecision('ACCEPT'); setQcRejectedQty(0); setQcRemarks(''); }}
                     className={clsx(
                       "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
-                      qcDecision === 'ACCEPT' ? "bg-emerald-50 border-emerald-200 text-emerald-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                      qcDecision === 'ACCEPT' ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400" : "bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
                     )}
                   >
                     <CheckCircle2 className="h-4 w-4" /> Accept
@@ -538,7 +538,7 @@ export default function QCClient() {
                     onClick={() => { setQcDecision('REJECT'); setQcRejectedQty(qcModalBatch.quantity); }}
                     className={clsx(
                       "py-2.5 border rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-colors",
-                      qcDecision === 'REJECT' ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
+                      qcDecision === 'REJECT' ? "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/50 text-rose-600 dark:text-rose-400" : "bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
                     )}
                   >
                     <XCircle className="h-4 w-4" /> Reject
@@ -549,7 +549,7 @@ export default function QCClient() {
               {qcDecision === 'REJECT' ? (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Rejection Quantity (KG)</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Rejection Quantity (KG)</label>
                     <input
                       type="number"
                       min={0}
@@ -559,12 +559,12 @@ export default function QCClient() {
                         const val = Number(e.target.value);
                         setQcRejectedQty(Math.max(0, Math.min(val, qcModalBatch.quantity)));
                       }}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 outline-none focus:border-[#f58220] bg-white"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-white/5"
                     />
-                    <p className="text-xs text-gray-500 mt-1.5">Accepted: {(qcModalBatch.quantity - qcRejectedQty).toFixed(2)} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1.5">Accepted: {(qcModalBatch.quantity - qcRejectedQty).toFixed(2)} {qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">
                       Reason <span className="text-rose-500">*</span>
                     </label>
                     <textarea
@@ -572,22 +572,22 @@ export default function QCClient() {
                       value={qcRemarks}
                       onChange={(e) => setQcRemarks(e.target.value)}
                       placeholder="Reason for rejection..."
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white resize-none"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-white/5 resize-none"
                     />
                   </div>
                 </>
               ) : (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <p className="text-xs font-medium text-emerald-600 mb-1">Accepted Quantity</p>
-                  <p className="text-xl font-bold text-gray-800">{qcModalBatch.quantity} <span className="text-sm text-gray-400">{qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</span></p>
+                <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 rounded-lg p-4">
+                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">Accepted Quantity</p>
+                  <p className="text-xl font-bold text-gray-800 dark:text-white">{qcModalBatch.quantity} <span className="text-sm text-gray-400 dark:text-slate-500">{qcModalBatch.production?.recipe?.yieldUnit || 'KG'}</span></p>
                 </div>
               )}
             </div>
 
-            <div className="px-5 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017] flex justify-end gap-3">
               <button
                 onClick={() => setQcModalBatch(null)}
-                className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white transition-colors"
+                className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 rounded-lg bg-white dark:bg-white/5 transition-colors"
               >
                 Cancel
               </button>
