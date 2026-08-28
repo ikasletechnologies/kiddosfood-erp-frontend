@@ -2,8 +2,19 @@
 
 import { useState } from "react";
 import { Warehouse as WarehouseIcon, Loader2 } from "lucide-react";
-import { inventoryApi } from "@/lib/api";
+import { setupApi } from "@/lib/api";
 import type { CreatedHq, CreatedWarehouse } from "../page";
+
+// Only ever show messages the backend explicitly wrote for end users (see
+// SetupController.createWarehouse's isValidationError check) — anything
+// else (a raw Prisma/db error, a stack trace) gets a generic message here
+// instead, with the real detail going to the console for debugging only.
+const FRIENDLY_ERROR_PATTERNS = [/required/i, /already exists/i, /no franchise is marked/i];
+function toDisplayError(raw: string | undefined): string {
+  if (raw && FRIENDLY_ERROR_PATTERNS.some((p) => p.test(raw))) return raw;
+  if (raw) console.error("[Setup] Warehouse creation failed:", raw);
+  return "We couldn't complete the warehouse setup. Please try again.";
+}
 
 const CARD_CLASS =
   "w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/20 dark:border-slate-800/50 p-10 space-y-6";
@@ -33,15 +44,16 @@ export default function CreateWarehouseStep({
     }
     setSaving(true);
     try {
-      const response = await inventoryApi.createWarehouse({
+      // No franchiseId sent — the backend resolves HQ itself
+      // (WarehouseService.createHqWarehouse / FranchiseService.getHqFranchise).
+      const response = await setupApi.createWarehouse({
         name: name.trim(),
         code: code.trim() || undefined,
         location: address.trim() || undefined,
-        franchiseId: hq.id,
       });
       onCreated({ id: response.data.id, name: response.data.name, code: response.data.code });
     } catch (err: any) {
-      setError(err.response?.data?.error || err.message || "Failed to create the warehouse.");
+      setError(toDisplayError(err.response?.data?.error || err.message));
     } finally {
       setSaving(false);
     }

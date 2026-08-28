@@ -12,7 +12,7 @@ import {
   Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X
 } from "lucide-react";
 import { clsx } from "clsx";
-import {
+import api, {
   productsFullApi, franchiseProductRequestsApi,
   franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem
 } from "@/lib/api";
@@ -108,6 +108,14 @@ export default function FinishedGoodsStockClient() {
   const isEditable = (item: InventoryDemandItem) =>
     !!item.hqInventoryItemId || (!!item.productId && !item.productId.startsWith("inv:"));
 
+  // Product exists (real catalog row) + InventoryItem exists -> sellable in
+  // POS (POS reads Product, and checkout requires a real productId).
+  // InventoryItem exists but no Product row -> "inv:"-prefixed synthetic id
+  // (see inventoryOnlyItems below) -> real stock, but nothing for POS to
+  // sell. Same signal isEditable already relies on, named for what it means
+  // here rather than re-deriving the classification a second way.
+  const isUncatalogued = (item: InventoryDemandItem) => item.productId.startsWith("inv:");
+
   const [creatingItemId, setCreatingItemId] = useState<string | null>(null);
 
   // Finished Goods edit through the same Item Master screen
@@ -146,10 +154,71 @@ export default function FinishedGoodsStockClient() {
     }
   };
 
+  // Reuses the existing Add Product screen/API (productsFullApi.create via
+  // AddProductClient) rather than a second creation flow — the sku/name/
+  // unit query params tell that screen to lock the SKU to this exact
+  // InventoryItem's SKU instead of auto-generating a new one. A locked,
+  // matching SKU is what makes ProductService.create's sync (SKU-first
+  // match) attach to this existing InventoryItem instead of creating a
+  // duplicate — see AddProductClient's lockedSku handling.
+  const goToCreateProduct = (item: InventoryDemandItem) => {
+    const params = new URLSearchParams({ sku: item.sku, name: item.productName, unit: item.unit });
+    router.push(`/products/add?${params.toString()}`);
+  };
+
+  const [linkItem, setLinkItem] = useState<InventoryDemandItem | null>(null);
+  const [productListForLink, setProductListForLink] = useState<any[]>([]);
+  const [selectedLinkProductId, setSelectedLinkProductId] = useState<string>("");
+  const [linking, setLinking] = useState(false);
+
+  const openLinkModal = async (item: InventoryDemandItem) => {
+    setLinkItem(item);
+    setSelectedLinkProductId("");
+    try {
+      const res = await productsFullApi.getAll();
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setProductListForLink(list);
+    } catch (e) {
+      toast.error("Failed to load catalog products");
+    }
+  };
+
+  const handleConfirmLink = async () => {
+    if (!linkItem || !selectedLinkProductId) {
+      toast.error("Please select a Product to link");
+      return;
+    }
+    const prod = productListForLink.find(p => p.id === selectedLinkProductId);
+    if (prod && prod.sku && linkItem.sku && prod.sku.toUpperCase() !== linkItem.sku.toUpperCase()) {
+      toast.error(`Cannot link these products because their SKUs are different.\nInventory SKU: ${linkItem.sku}\nProduct SKU: ${prod.sku}\nCreate a Product using the existing inventory SKU (${linkItem.sku}) instead, or select a Product with the same SKU.`, { duration: 6000 });
+      return;
+    }
+    const hqItemId = linkItem.hqInventoryItemId;
+    if (!hqItemId) {
+      toast.error("HQ inventory record not found for this item");
+      return;
+    }
+    setLinking(true);
+    try {
+      await api.post("/api/products/link", {
+        inventoryItemId: hqItemId,
+        productId: selectedLinkProductId,
+      });
+      toast.success("Successfully linked Product to Inventory Item!");
+      setLinkItem(null);
+      fetchDemandData();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || "Failed to link product");
+    } finally {
+      setLinking(false);
+    }
+  };
+
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [demandFilter, setDemandFilter] = useState<"ALL" | "HAS_DEMAND" | "RESERVED" | "IN_TRANSIT">("ALL");
+  const [catalogFilter, setCatalogFilter] = useState<"ALL" | "SELLABLE" | "UNCATALOGUED">("ALL");
   const [viewMode, setViewMode] = useState<"GRID" | "TABLE">("TABLE");
 
   // Drawer States
@@ -536,7 +605,11 @@ export default function FinishedGoodsStockClient() {
       matchDemand = item.inTransitStock > 0;
     }
 
-    return matchSearch && matchDemand;
+    let matchCatalog = true;
+    if (catalogFilter === "SELLABLE") matchCatalog = !isUncatalogued(item);
+    else if (catalogFilter === "UNCATALOGUED") matchCatalog = isUncatalogued(item);
+
+    return matchSearch && matchDemand && matchCatalog;
   });
 
   // Aggregated Stats for Strip — different finished goods are tracked in
@@ -592,7 +665,7 @@ export default function FinishedGoodsStockClient() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* ── Top Metric Cards Strip ── */}
+      {/* Top Metric Cards Strip */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <InventoryMetricCard
           label="Total Finished Goods"
@@ -655,6 +728,27 @@ export default function FinishedGoodsStockClient() {
 
         {/* Demand Filter Buttons */}
         <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+            {[
+              { id: "ALL", label: "All" },
+              { id: "SELLABLE", label: "Sellable" },
+              { id: "UNCATALOGUED", label: "Needs Catalog Setup" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setCatalogFilter(f.id as any)}
+                className={clsx(
+                  "px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all",
+                  catalogFilter === f.id
+                    ? "bg-white dark:bg-card text-orange-500 shadow-sm"
+                    : "text-slate-450 hover:text-slate-805 dark:hover:text-slate-200"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
           <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
             {[
               { id: "ALL", label: "All Finished Goods" },
@@ -738,27 +832,30 @@ export default function FinishedGoodsStockClient() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {filtered.map((item) => {
                 const hasPending = item.pendingDemandQuantity > 0;
-                const hasReserved = item.hqReservedStock > 0;
-                const hasInTransit = item.inTransitStock > 0;
                 const firstPendingRecord = item.demandRecords.find((r) => r.status === "PENDING");
-
                 return (
                   <div
                     key={item.productId}
                     className="bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
                   >
                     <div>
-                      {/* Card Header */}
                       <div className="flex items-start justify-between gap-3 mb-4">
-                        <div className="w-14 h-14 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-black text-xl shrink-0">
+                        <div className={clsx(
+                          "w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0",
+                          isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
+                        )}>
                           <Package size={28} />
                         </div>
-                        <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 tracking-wider">
-                          AUTOMATED SYNC
-                        </span>
+                        {isUncatalogued(item) ? (
+                          <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 tracking-wider">
+                            Needs Catalog Setup
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 tracking-wider">
+                            AUTOMATED SYNC
+                          </span>
+                        )}
                       </div>
-
-                      {/* Product Name & SKU */}
                       <div>
                         <h3 className="text-base font-bold text-slate-905 dark:text-white leading-tight">
                           {item.productName}
@@ -767,8 +864,6 @@ export default function FinishedGoodsStockClient() {
                           SKU: {item.sku || "N/A"} · UNIT: <strong>{item.unit}</strong>
                         </p>
                       </div>
-
-                      {/* Stock Summary Matrix */}
                       <div className="mt-5 space-y-2.5">
                         {hasAnyBranchHoldings && (
                           <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50 dark:border-white/[0.03]">
@@ -778,7 +873,6 @@ export default function FinishedGoodsStockClient() {
                             </span>
                           </div>
                         )}
-
                         <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                           <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
                             <p className="text-[9px] font-semibold text-slate-500 uppercase">HQ Available</p>
@@ -786,14 +880,12 @@ export default function FinishedGoodsStockClient() {
                               {item.hqAvailableStock}
                             </p>
                           </div>
-
                           <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900/30">
                             <p className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
                             <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
                               {item.hqReservedStock}
                             </p>
                           </div>
-
                           <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
                             <p className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase">In-Transit</p>
                             <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
@@ -802,8 +894,6 @@ export default function FinishedGoodsStockClient() {
                           </div>
                         </div>
                       </div>
-
-                      {/* Live Pending Demand Banner */}
                       <div className="mt-5 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -813,8 +903,6 @@ export default function FinishedGoodsStockClient() {
                             {item.pendingDemandQuantity} {item.unit}
                           </span>
                         </div>
-
-                        {/* Active Request Details Preview */}
                         {firstPendingRecord ? (
                           <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
                             <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-white">
@@ -827,19 +915,12 @@ export default function FinishedGoodsStockClient() {
                               <span>{firstPendingRecord.franchiseName}</span>
                               <span>{firstPendingRecord.quantity} {item.unit}</span>
                             </div>
-                            {firstPendingRecord.requiredBy && (
-                              <p className="text-[10px] text-slate-400">
-                                Required By: <strong>{firstPendingRecord.requiredBy}</strong>
-                              </p>
-                            )}
                           </div>
                         ) : (
                           <p className="text-[11px] text-slate-400 italic">No pending requests awaiting review.</p>
                         )}
                       </div>
                     </div>
-
-                    {/* Actions Footer */}
                     <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-2">
                       <div className="flex gap-2">
                         <button
@@ -848,7 +929,6 @@ export default function FinishedGoodsStockClient() {
                         >
                           <Send size={14} /> Review Request ({item.demandRecords.length})
                         </button>
-
                         {hasAnyBranchHoldings && (
                           <button
                             onClick={() => setSelectedBranchProduct(item)}
@@ -858,15 +938,32 @@ export default function FinishedGoodsStockClient() {
                             <Building2 size={15} />
                           </button>
                         )}
-
-                        <button
-                          onClick={() => openEditPage(item)}
-                          disabled={!isEditable(item) || creatingItemId === item.productId}
-                          className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
-                          title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
-                        >
-                          {creatingItemId === item.productId ? <RefreshCw size={15} className="animate-spin" /> : <Edit2 size={15} />}
-                        </button>
+                        {isUncatalogued(item) ? (
+                          <>
+                            <button
+                              onClick={() => openLinkModal(item)}
+                              className="px-2.5 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+                              title="Link this inventory item to an existing Product catalog entry with matching SKU"
+                            >
+                              Link Existing
+                            </button>
+                            <button
+                              onClick={() => goToCreateProduct(item)}
+                              className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-colors"
+                              title="Add this inventory item to the Product catalog so it becomes sellable in POS"
+                            >
+                              Create Product
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => openEditPage(item)}
+                            disabled={!isEditable(item) || creatingItemId === item.productId}
+                            className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            {creatingItemId === item.productId ? <RefreshCw size={15} className="animate-spin" /> : <Edit2 size={15} />}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -898,16 +995,31 @@ export default function FinishedGoodsStockClient() {
                   <tr key={item.productId} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold text-xs shrink-0">
+                        <div className={clsx(
+                          "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+                          isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
+                        )}>
                           <Package size={16} />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 dark:text-white uppercase truncate">
-                            {item.productName}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-slate-800 dark:text-white uppercase truncate">
+                              {item.productName}
+                            </p>
+                            {isUncatalogued(item) && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                                Needs Catalog Setup
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
                             SKU: {item.sku || "N/A"} · Unit: {item.unit}
                           </p>
+                          {isUncatalogued(item) && (
+                            <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                              Not available in POS — no Product catalog entry
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -955,14 +1067,24 @@ export default function FinishedGoodsStockClient() {
                     </td>
 
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => openEditPage(item)}
-                        disabled={!isEditable(item) || creatingItemId === item.productId}
-                        title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
-                      >
-                        {creatingItemId === item.productId ? <RefreshCw size={12} className="animate-spin" /> : <Edit2 size={12} />}
-                      </button>
+                      {isUncatalogued(item) ? (
+                        <button
+                          onClick={() => goToCreateProduct(item)}
+                          title="Add this inventory item to the Product catalog so it becomes sellable in POS"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 rounded-lg text-white font-semibold text-[11px] uppercase tracking-wide transition-colors"
+                        >
+                          Create Product
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => openEditPage(item)}
+                          disabled={!isEditable(item) || creatingItemId === item.productId}
+                          title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
+                        >
+                          {creatingItemId === item.productId ? <RefreshCw size={12} className="animate-spin" /> : <Edit2 size={12} />}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1253,6 +1375,58 @@ export default function FinishedGoodsStockClient() {
             setImportInvalid([]);
           }}
         />
+      )}
+
+      {/* ── Link Existing Product Modal ── */}
+      {linkItem && (
+        <Modal
+          isOpen={!!linkItem}
+          onClose={() => setLinkItem(null)}
+          title={`Link Existing Product for ${linkItem.productName}`}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+              <p>Inventory Item SKU: <strong className="font-mono">{linkItem.sku}</strong></p>
+              <p>Current HQ Stock: <strong>{linkItem.hqAvailableStock} {linkItem.unit}</strong></p>
+              <p className="text-[11px] opacity-90 mt-1">
+                Linking requires an exact SKU match to preserve stock integrity. If SKUs differ, a validation error will prevent invalid links.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Existing Catalog Product</label>
+              <select
+                value={selectedLinkProductId}
+                onChange={(e) => setSelectedLinkProductId(e.target.value)}
+                className="w-full h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 rounded-lg text-xs font-medium outline-none text-slate-800 dark:text-slate-200"
+              >
+                <option value="">-- Choose Matching Catalog Product --</option>
+                {productListForLink.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.sku ? `(SKU: ${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setLinkItem(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmLink}
+                disabled={linking || !selectedLinkProductId}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors"
+              >
+                {linking ? "Linking..." : "Confirm Link"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

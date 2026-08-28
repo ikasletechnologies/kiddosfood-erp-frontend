@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import Fuse from "fuse.js";
 import { toast } from "react-hot-toast";
 import WarehouseFormModal from "@/components/modals/WarehouseFormModal";
+import { generateSKU } from "@/lib/utils/erp";
 
 interface AddInventoryProductFormProps {
   onSuccess?: (product: any) => void;
@@ -40,6 +41,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
   // Core product details
   const [name, setName] = useState("");
   const [itemCode, setItemCode] = useState("");
+  const [isSkuManuallyOverridden, setIsSkuManuallyOverridden] = useState(false);
+  const [barcode, setBarcode] = useState("");
   const [hsnCode, setHsnCode] = useState("");
   const [category, setCategory] = useState("RAW_MATERIAL");
   const [customCategories, setCustomCategories] = useState<string[]>([]);
@@ -222,6 +225,19 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
     }
   }, [customUnit, category]);
 
+  // Live synchronize auto-generated SKU with name, category, and weight variant
+  useEffect(() => {
+    if (!isSkuManuallyOverridden) {
+      if (name.trim()) {
+        const currentSize = size ? `${size}` : undefined;
+        const autoSku = generateSKU(category, name, currentSize);
+        setItemCode(autoSku);
+      } else {
+        setItemCode("");
+      }
+    }
+  }, [name, category, size, isSkuManuallyOverridden]);
+
   // Prevent scroll change on number inputs
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
@@ -339,29 +355,21 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
     setError(null);
     setSuccess(null);
 
-    const weightSuffix = size ? `-${size.toUpperCase()}` : "";
-    const generatedSku = name.toUpperCase().replace(/\s+/g, "-").slice(0, 20) + weightSuffix;
-    const finalSku = itemCode 
-      ? (itemCode.toUpperCase().endsWith(weightSuffix) ? itemCode.toUpperCase() : `${itemCode.toUpperCase()}${weightSuffix}`)
-      : generatedSku;
+    const sizeUnit = size ? `${size}` : undefined;
+    const canonicalSku = generateSKU(category, name, sizeUnit);
+    const finalSku = itemCode.trim() ? itemCode.trim().toUpperCase() : canonicalSku;
 
     // Prepare payload
     const payload = {
       name,
       sku: finalSku,
+      barcode: barcode.trim() || undefined,
       unit: primaryUnit,
       category,
       hsnCode,
       gstRate,
       minimumStock: Number(minimumStock) || 0,
       initialStock: Number(openingStock) || 0,
-      // Omitted, not a hardcoded literal id — this form has no franchise
-      // selector, so it always creates HQ-scoped stock, and
-      // InventoryService.createItem treats "no franchiseId at all" as
-      // HQ-scoped (franchiseId: null) already. A hardcoded "hq-001"
-      // pointed at whatever id happened to exist when this was written;
-      // that id is no longer a real Franchise row, so this would fail its
-      // foreign key constraint outright.
       costPrice: prices.purchasePrice,
       basePrice: discountValue > 0 ? discountedSellingPrice : prices.customerPrice,
       secondaryUnit,
@@ -523,35 +531,52 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                     />
                   </div>
 
-                  {/* Item Code / Barcode */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Item Code / Barcode</label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
+                  {/* SKU & Barcode Inputs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* SKU / Item Code */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SKU / Item Code</label>
+                      <div className="flex gap-2">
                         <input
-                          placeholder="Enter item code or scan barcode"
+                          placeholder="Auto-generated (e.g. FG-IDLI-1KG)"
                           value={itemCode}
-                          onChange={e => setItemCode(e.target.value)}
+                          onChange={e => {
+                            setItemCode(e.target.value);
+                            setIsSkuManuallyOverridden(true);
+                          }}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-slate-800 dark:text-white transition-all text-xs font-mono font-semibold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (name.trim()) {
+                              const sizeUnit = size ? `${size}` : undefined;
+                              const sku = generateSKU(category, name, sizeUnit);
+                              setItemCode(sku);
+                              setIsSkuManuallyOverridden(false);
+                            } else {
+                              toast.error("Please enter an Item Name first to generate a SKU.");
+                            }
+                          }}
+                          className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:border-orange-400 hover:text-orange-600 transition-all whitespace-nowrap"
+                        >
+                          Generate SKU
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Barcode */}
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Barcode (Optional)</label>
+                      <div className="relative">
+                        <input
+                          placeholder="Scan or enter barcode"
+                          value={barcode}
+                          onChange={e => setBarcode(e.target.value)}
                           className="w-full pl-3 pr-10 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-slate-800 dark:text-white transition-all text-xs font-semibold"
                         />
                         <Barcode size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (name.trim()) {
-                            // Generate code based on item name (e.g., "Batter Idly" -> "BATTER-IDLY")
-                            const base = name.trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '');
-                            setItemCode(base);
-                          } else {
-                            const code = "ITM-" + Math.random().toString(36).toUpperCase().slice(2, 8);
-                            setItemCode(code);
-                          }
-                        }}
-                        className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:border-orange-400 hover:text-orange-600 transition-all whitespace-nowrap"
-                      >
-                        Assign Code
-                      </button>
                     </div>
                   </div>
 

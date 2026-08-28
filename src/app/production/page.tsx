@@ -118,7 +118,10 @@ export default function ProductionPlanningPage() {
     }
   };
 
-  const multiplier = recipe && recipe.yieldQty > 0 ? targetYield / recipe.yieldQty : 1;
+  const recipeUnit = recipe?.yieldUnit || "KG";
+  const effectiveTargetUnit = targetUnit || recipeUnit;
+  const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
+  const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
 
   // Stock is stored and reported in the inventory item's own unit (e.g. KG),
   // while the recipe's requirement is expressed in the recipe item's unit
@@ -137,10 +140,12 @@ export default function ProductionPlanningPage() {
     return convertUnit(found.availableStock ?? 0, found.unit, recipeUnit);
   };
 
+  const EPSILON = 0.000001;
   const hasShortage = recipe
     ? recipe.recipeItems.some((item) => {
         const scaledQty = item.quantityRequired * multiplier;
-        return getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit) < scaledQty;
+        const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
+        return available + EPSILON < scaledQty;
       })
     : false;
 
@@ -415,8 +420,8 @@ export default function ProductionPlanningPage() {
                     {recipe.recipeItems.map((item) => {
                       const scaledQty = item.quantityRequired * multiplier;
                       const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
-                      const sufficient = available >= scaledQty;
-                      const deficit = scaledQty - available;
+                      const sufficient = available + EPSILON >= scaledQty;
+                      const deficit = Math.max(scaledQty - available, 0);
 
                       return (
                         <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
@@ -434,7 +439,7 @@ export default function ProductionPlanningPage() {
                             {sufficient ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100">
                                 <CheckCircle2 size={10} />
-                                OK
+                                AVAILABLE
                               </span>
                             ) : (
                               <span className="inline-flex flex-col items-center gap-0.5">
@@ -443,7 +448,7 @@ export default function ProductionPlanningPage() {
                                   SHORT
                                 </span>
                                 <span className="text-[9px] font-mono text-rose-500 font-bold mt-0.5">
-                                  -{deficit.toFixed(2)} {item.unit}
+                                  {deficit.toFixed(3)} {item.unit} SHORT
                                 </span>
                               </span>
                             )}

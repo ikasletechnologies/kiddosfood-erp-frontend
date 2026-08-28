@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   X,
   Plus,
@@ -14,6 +15,7 @@ import {
   AlertTriangle,
   Play,
   Download,
+  ChevronDown,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
@@ -68,7 +70,69 @@ export default function RecipeMasterTab() {
   const [materialList, setMaterialList] = useState<{ id: string; name: string; unit: string }[]>([{ id: "1", name: "", unit: "kg" }]);
   const [savingMaterial, setSavingMaterial] = useState(false);
 
+  const [openMaterialIdx, setOpenMaterialIdx] = useState<number | null>(null);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
+  const [materialDropdownPos, setMaterialDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState("");
+  const [categoryDropdownPos, setCategoryDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    if (openMaterialIdx === null && !isCategoryDropdownOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (target.closest('.material-selector-container')) return;
+      if (target.closest('.category-selector-container')) return;
+      setOpenMaterialIdx(null);
+      setIsCategoryDropdownOpen(false);
+    };
+    // Any scroll of an ancestor (the ingredients list, the modal body) would
+    // leave the portal's fixed-position dropdown pointing at stale
+    // coordinates, so just close it rather than tracking scroll deltas.
+    // Scrolling inside the dropdown's own results list also fires this (the
+    // capture-phase listener sees it too) — that must NOT close it.
+    const handleScroll = (event: Event) => {
+      const target = event.target as Element;
+      if (target?.closest?.('.material-selector-container')) return;
+      if (target?.closest?.('.category-selector-container')) return;
+      setOpenMaterialIdx(null);
+      setIsCategoryDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [openMaterialIdx, isCategoryDropdownOpen]);
+
   const uniqueCategories = categories.map(c => c.name);
+
+  // Anchors a search dropdown beside its trigger instead of below it —
+  // opening below pushed the panel into the footer/next rows and got
+  // clipped by the scrollable ingredients list. Aligns the dropdown's right
+  // edge with the trigger's right edge (opening leftward over the row)
+  // rather than the trigger's left edge, so it stays inside the modal
+  // instead of spilling past its right border into the backdrop.
+  const computeSideDropdownPos = (rect: DOMRect) => {
+    const dropdownWidth = Math.max(rect.width, 240);
+    let left = rect.right - dropdownWidth;
+    if (left < 8) left = Math.max(8, rect.left);
+
+    // Search box + list + "Add New" row — roughly constant regardless of
+    // how many materials/categories match. When the trigger sits low in the
+    // viewport, opening straight down from it pushes the panel past the
+    // bottom edge (behind the taskbar/off-screen); clamp so it always stays
+    // fully visible, sliding it up above the trigger if needed.
+    const estimatedHeight = 280;
+    const viewportHeight = window.innerHeight;
+    let top = rect.top - 6;
+    if (top + estimatedHeight > viewportHeight - 8) {
+      top = Math.max(8, viewportHeight - estimatedHeight - 8);
+    }
+    return { top, left, width: dropdownWidth };
+  };
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -592,24 +656,108 @@ export default function RecipeMasterTab() {
               className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
             />
           </div>
-
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Category</label>
+            <label className="text-xs font-semibold text-gray-700">Linked Sellable Product (Optional)</label>
             <select
-              value={form.category}
+              value={form.productId || ""}
               onChange={(e) => {
-                if (e.target.value === "___NEW___") {
-                  setIsAddingCategory(true);
-                } else {
-                  setForm(f => ({ ...f, category: e.target.value }));
-                }
+                const selectedId = e.target.value || "";
+                const selectedProd = products.find((p) => p.id === selectedId);
+                setForm((f) => ({
+                  ...f,
+                  productId: selectedId,
+                  shelfLifeDays: selectedProd?.shelfLifeDays ?? f.shelfLifeDays,
+                }));
               }}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
             >
-              <option value="">Select Category</option>
-              {uniqueCategories.map(c => <option key={c} value={c}>{c}</option>)}
-              <option value="___NEW___">+ Add New Category</option>
+              <option value="">-- No Linked Product (Uncatalogued / Bulk Recipe) --</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
+                </option>
+              ))}
             </select>
+            <p className="text-[10px] text-gray-400">
+              Link to an existing sellable Product catalog entry so packaged output inherits this identity.
+            </p>
+          </div>
+
+          <div className="space-y-1.5 relative category-selector-container">
+            <label className="text-xs font-semibold text-gray-700">Category</label>
+            <div
+              onClick={(e) => {
+                if (isCategoryDropdownOpen) {
+                  setIsCategoryDropdownOpen(false);
+                  return;
+                }
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setCategoryDropdownPos(computeSideDropdownPos(rect));
+                setIsCategoryDropdownOpen(true);
+                setCategorySearchQuery("");
+              }}
+              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer flex items-center justify-between gap-1"
+            >
+              <span className={clsx("truncate", !form.category && "text-gray-400 font-normal")}>
+                {form.category || "Select Category"}
+              </span>
+              <ChevronDown size={12} className="text-gray-400 shrink-0" />
+            </div>
+
+            {isCategoryDropdownOpen && categoryDropdownPos && typeof document !== "undefined" && createPortal(
+              <div
+                className="category-selector-container fixed z-[999] min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                style={{ top: categoryDropdownPos.top, left: categoryDropdownPos.left, width: categoryDropdownPos.width }}
+              >
+                <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100">
+                  <Search size={12} className="text-gray-400 shrink-0" />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={categorySearchQuery}
+                    onChange={e => setCategorySearchQuery(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    placeholder="Search category..."
+                    className="w-full text-xs outline-none py-0.5 text-gray-800 placeholder:text-gray-400"
+                  />
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {uniqueCategories.filter(c => c.toLowerCase().includes(categorySearchQuery.trim().toLowerCase())).length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-gray-400 text-center">No categories found</div>
+                  ) : (
+                    uniqueCategories
+                      .filter(c => c.toLowerCase().includes(categorySearchQuery.trim().toLowerCase()))
+                      .map(c => (
+                        <div
+                          key={c}
+                          onClick={e => {
+                            e.stopPropagation();
+                            setForm(f => ({ ...f, category: c }));
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 truncate",
+                            form.category === c ? "bg-orange-50 text-[#f58220] font-bold" : "text-gray-700"
+                          )}
+                        >
+                          {c}
+                        </div>
+                      ))
+                  )}
+                </div>
+                <div
+                  onClick={e => {
+                    e.stopPropagation();
+                    setIsAddingCategory(true);
+                    setIsCategoryDropdownOpen(false);
+                  }}
+                  className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 cursor-pointer border-t border-gray-100 flex items-center gap-1.5"
+                >
+                  <Plus size={12} /> Add New Category
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
 
           {form.productId && (
@@ -689,19 +837,81 @@ export default function RecipeMasterTab() {
             <div id="ingredients-container" className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
               {form.items.map((item, idx) => (
                 <div key={idx} className="flex flex-wrap sm:flex-nowrap items-end gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex-1 space-y-1 min-w-[120px]">
+                  <div className="flex-1 space-y-1 min-w-[120px] relative material-selector-container">
                     <label className="text-xs font-medium text-gray-500">Material</label>
-                    <select
-                      value={item.inventoryItemId}
-                      onChange={e => updateItem(idx, { inventoryItemId: e.target.value })}
-                      className="w-full h-8 bg-white border border-gray-200 px-2 rounded text-xs font-medium text-gray-800 outline-none focus:border-[#f58220] cursor-pointer"
+                    <div
+                      onClick={(e) => {
+                        if (openMaterialIdx === idx) {
+                          setOpenMaterialIdx(null);
+                          return;
+                        }
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        setMaterialDropdownPos(computeSideDropdownPos(rect));
+                        setOpenMaterialIdx(idx);
+                        setMaterialSearchQuery("");
+                      }}
+                      className="w-full h-8 bg-white border border-gray-200 px-2 rounded text-xs font-medium text-gray-800 outline-none focus:border-[#f58220] cursor-pointer flex items-center justify-between gap-1"
                     >
-                      <option value="">Select...</option>
-                      {materials.map((m: any) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                      <option value="___NEW___" className="font-bold text-[#f58220]">+ Add New Material</option>
-                    </select>
+                      <span className={clsx("truncate", !item.inventoryItemId && "text-gray-400 font-normal")}>
+                        {materials.find((m: any) => m.id === item.inventoryItemId)?.name || "Select..."}
+                      </span>
+                      <ChevronDown size={12} className="text-gray-400 shrink-0" />
+                    </div>
+
+                    {openMaterialIdx === idx && materialDropdownPos && typeof document !== "undefined" && createPortal(
+                      <div
+                        className="material-selector-container fixed z-[999] min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                        style={{ top: materialDropdownPos.top, left: materialDropdownPos.left, width: materialDropdownPos.width }}
+                      >
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100">
+                          <Search size={12} className="text-gray-400 shrink-0" />
+                          <input
+                            autoFocus
+                            type="text"
+                            value={materialSearchQuery}
+                            onChange={e => setMaterialSearchQuery(e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            placeholder="Search material..."
+                            className="w-full text-xs outline-none py-0.5 text-gray-800 placeholder:text-gray-400"
+                          />
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {materials.filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase())).length === 0 ? (
+                            <div className="px-3 py-3 text-xs text-gray-400 text-center">No materials found</div>
+                          ) : (
+                            materials
+                              .filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase()))
+                              .map((m: any) => (
+                                <div
+                                  key={m.id}
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    updateItem(idx, { inventoryItemId: m.id });
+                                    setOpenMaterialIdx(null);
+                                  }}
+                                  className={clsx(
+                                    "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 truncate",
+                                    item.inventoryItemId === m.id ? "bg-orange-50 text-[#f58220] font-bold" : "text-gray-700"
+                                  )}
+                                >
+                                  {m.name}
+                                </div>
+                              ))
+                          )}
+                        </div>
+                        <div
+                          onClick={e => {
+                            e.stopPropagation();
+                            updateItem(idx, { inventoryItemId: "___NEW___" });
+                            setOpenMaterialIdx(null);
+                          }}
+                          className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 cursor-pointer border-t border-gray-100 flex items-center gap-1.5"
+                        >
+                          <Plus size={12} /> Add New Material
+                        </div>
+                      </div>,
+                      document.body
+                    )}
                   </div>
 
                   <div className="w-20 space-y-1">
