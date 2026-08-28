@@ -459,18 +459,21 @@ export default function RecipeMasterTab() {
   );
 
   return (
-    <div className="space-y-6">
-      {/* ── Summary & Search Bar ── */}
+    <div className="space-y-6 text-gray-800 dark:text-slate-100">
+      {/* ── Top Bar ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
           {[
-            { label: "Total Recipes", value: recipes.length, color: "text-gray-800", dot: "bg-gray-400" },
-            { label: "Total Ingredients", value: recipes.reduce((s, r) => s + (r.recipeItems?.length ?? 0), 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
+            { label: "Total Recipes", value: recipes.length, color: "text-gray-800 dark:text-white", dot: "bg-gray-400" },
+            { label: "Packaged Products", value: recipes.filter(r => r.productId).length, color: "text-green-700 dark:text-green-400", dot: "bg-green-500" },
+            { label: "Bulk Formulas", value: recipes.filter(r => !r.productId).length, color: "text-blue-700 dark:text-blue-400", dot: "bg-blue-500" },
+            { label: "Avg Ingredients", value: recipes.length ? (recipes.reduce((acc, r) => acc + (r.recipeItems?.length ?? 0), 0) / recipes.length).toFixed(1) : 0, color: "text-orange-700 dark:text-orange-400", dot: "bg-[#f58220]" },
           ].map(stat => (
-            <div key={stat.label} className="bg-white rounded-lg border border-gray-200 px-4 py-2.5 flex items-center gap-3 shadow-sm">
+            <div key={stat.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-2.5 flex items-center gap-3 shadow-sm">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
               <div>
-                <p className="text-xs text-gray-500 font-medium">{stat.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">{stat.label}</p>
                 <p className={clsx("text-base font-bold mt-0.5", stat.color)}>{stat.value}</p>
               </div>
             </div>
@@ -479,25 +482,25 @@ export default function RecipeMasterTab() {
 
         <div className="flex items-center gap-2 w-full md:w-auto">
           <div className="relative w-full md:w-64">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search recipes..."
-              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors"
+              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
           <button
             onClick={fetchAll}
-            className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-500 transition-colors bg-white shrink-0"
+            className="p-2 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400 transition-colors bg-white dark:bg-white/5 shrink-0"
             title="Refresh"
           >
             <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
@@ -514,17 +517,17 @@ export default function RecipeMasterTab() {
 
       {/* ── Recipe List ── */}
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-200">
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5">
           <div className="w-8 h-8 border-2 border-[#f58220] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-xs font-medium text-gray-500">Loading recipes...</p>
+          <p className="text-xs font-medium text-gray-500 dark:text-slate-400">Loading recipes...</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-white rounded-lg border border-gray-200 text-center">
-          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 mb-3">
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 text-center">
+          <div className="w-12 h-12 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-400 dark:text-slate-500 mb-3">
             <ChefHat size={24} />
           </div>
-          <p className="text-sm font-semibold text-gray-800">No Recipes Found</p>
-          <p className="text-xs text-gray-500 mt-1">Create your first recipe to define formulas and production yields.</p>
+          <p className="text-sm font-semibold text-gray-800 dark:text-white">No Recipes Found</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Create your first recipe to define formulas and production yields.</p>
           <button
             onClick={openCreate}
             className="mt-4 flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg font-semibold text-xs transition-colors shadow-sm"
@@ -539,28 +542,28 @@ export default function RecipeMasterTab() {
             return (
               <div
                 key={recipe.id}
-                className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:border-gray-300 transition-all shadow-sm"
+                className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden hover:border-gray-300 dark:hover:border-white/10 transition-all shadow-sm"
               >
                 <div
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50 transition-colors"
+                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors"
                   onClick={() => setExpandedId(isExpanded ? null : recipe.id)}
                 >
                   <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 font-bold text-xs shrink-0">
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-slate-200 font-bold text-xs shrink-0">
                       {recipe.name.substring(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-gray-800 truncate">{recipe.name}</h3>
+                      <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">{recipe.name}</h3>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {recipe.product?.name && (
-                          <span className="text-xs text-gray-500 flex items-center gap-1 font-medium">
+                          <span className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1 font-medium">
                             <Package size={12} className="text-[#f58220]" /> {recipe.product.name}
                           </span>
                         )}
-                        <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200">
+                        <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded border border-green-200 dark:border-green-500/20">
                           Yield: {recipe.yieldQty} {recipe.yieldUnit || "units"}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-gray-500 dark:text-slate-400">
                           {recipe.recipeItems?.length ?? 0} ingredients
                         </span>
                       </div>
@@ -570,21 +573,21 @@ export default function RecipeMasterTab() {
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
                     <button
                       onClick={e => { e.stopPropagation(); router.push(`/production?recipeId=${recipe.id}`); }}
-                      className="px-2.5 py-1 rounded text-xs font-semibold bg-orange-50 text-[#f58220] border border-orange-200 hover:bg-orange-100 transition-colors flex items-center gap-1"
+                      className="px-2.5 py-1 rounded text-xs font-semibold bg-orange-50 dark:bg-orange-500/10 text-[#f58220] border border-orange-200 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors flex items-center gap-1"
                       title="Start Production"
                     >
                       <Play size={11} fill="currentColor" /> Produce
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); downloadRecipePDF(recipe); }}
-                      className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
                       title="Download PDF"
                     >
                       <Download size={14} />
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); openEdit(recipe); }}
-                      className="p-1.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
                       title="Edit"
                     >
                       <Pencil size={14} />
@@ -592,7 +595,7 @@ export default function RecipeMasterTab() {
                     <button
                       onClick={e => { e.stopPropagation(); handleDelete(recipe.id); }}
                       disabled={deleting === recipe.id}
-                      className="p-1.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-500/10 transition-colors"
                       title="Delete"
                     >
                       {deleting === recipe.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
@@ -601,32 +604,32 @@ export default function RecipeMasterTab() {
                 </div>
 
                 {isExpanded && (
-                  <div className="px-4 pb-4 pt-0 border-t border-gray-100">
+                  <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-white/5">
                     <div className="pt-3 grid md:grid-cols-2 gap-4">
                       {/* Bill of Materials */}
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-2">Bill of Materials</p>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Bill of Materials</p>
                         <div className="space-y-1.5">
                           {recipe.recipeItems?.length > 0 ? recipe.recipeItems.map((item: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-                              <span className="text-xs font-medium text-gray-700">{item.inventoryItem?.name || "Ingredient"}</span>
-                              <span className="text-xs font-bold text-gray-800">{item.quantityRequired} {item.unit}</span>
+                            <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
+                              <span className="text-xs font-medium text-gray-700 dark:text-slate-300">{item.inventoryItem?.name || "Ingredient"}</span>
+                              <span className="text-xs font-bold text-gray-800 dark:text-white">{item.quantityRequired} {item.unit}</span>
                             </div>
                           )) : (
-                            <p className="text-xs text-gray-400 italic">No ingredients defined.</p>
+                            <p className="text-xs text-gray-400 dark:text-slate-500 italic">No ingredients defined.</p>
                           )}
                         </div>
                       </div>
 
                       {/* Instructions */}
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 mb-2">Instructions</p>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Instructions</p>
                         {recipe.instructions ? (
-                          <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-xs text-gray-700 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto">
+                          <div className="bg-gray-50 dark:bg-white/[0.02] p-3 rounded-lg border border-gray-200 dark:border-white/5 text-xs text-gray-700 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto">
                             {recipe.instructions.replace(/\[unitWeight:[\d.]+\]/, "").replace(/\[weightUnit:\w+\]/, "").trim()}
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-400 italic">No instructions provided.</p>
+                          <p className="text-xs text-gray-400 dark:text-slate-500 italic">No instructions provided.</p>
                         )}
                       </div>
                     </div>
@@ -647,16 +650,16 @@ export default function RecipeMasterTab() {
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Recipe Name *</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Recipe Name *</label>
             <input
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Khakhra Classic Mix"
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+              className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Linked Sellable Product (Optional)</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Linked Sellable Product (Optional)</label>
             <select
               value={form.productId || ""}
               onChange={(e) => {
@@ -668,22 +671,22 @@ export default function RecipeMasterTab() {
                   shelfLifeDays: selectedProd?.shelfLifeDays ?? f.shelfLifeDays,
                 }));
               }}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
+              className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all cursor-pointer"
             >
-              <option value="">-- No Linked Product (Uncatalogued / Bulk Recipe) --</option>
+              <option value="" className="dark:bg-card">-- No Linked Product (Uncatalogued / Bulk Recipe) --</option>
               {products.map((p) => (
-                <option key={p.id} value={p.id}>
+                <option key={p.id} value={p.id} className="dark:bg-card">
                   {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
                 </option>
               ))}
             </select>
-            <p className="text-[10px] text-gray-400">
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">
               Link to an existing sellable Product catalog entry so packaged output inherits this identity.
             </p>
           </div>
 
           <div className="space-y-1.5 relative category-selector-container">
-            <label className="text-xs font-semibold text-gray-700">Category</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Category</label>
             <div
               onClick={(e) => {
                 if (isCategoryDropdownOpen) {
@@ -695,21 +698,21 @@ export default function RecipeMasterTab() {
                 setIsCategoryDropdownOpen(true);
                 setCategorySearchQuery("");
               }}
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer flex items-center justify-between gap-1"
+              className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all cursor-pointer flex items-center justify-between gap-1"
             >
-              <span className={clsx("truncate", !form.category && "text-gray-400 font-normal")}>
+              <span className={clsx("truncate", !form.category && "text-gray-400 dark:text-slate-500 font-normal")}>
                 {form.category || "Select Category"}
               </span>
-              <ChevronDown size={12} className="text-gray-400 shrink-0" />
+              <ChevronDown size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
             </div>
 
             {isCategoryDropdownOpen && categoryDropdownPos && typeof document !== "undefined" && createPortal(
               <div
-                className="category-selector-container fixed z-[999] min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                className="category-selector-container fixed z-[999] min-w-[220px] bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden"
                 style={{ top: categoryDropdownPos.top, left: categoryDropdownPos.left, width: categoryDropdownPos.width }}
               >
-                <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100">
-                  <Search size={12} className="text-gray-400 shrink-0" />
+                <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 dark:border-white/5">
+                  <Search size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   <input
                     autoFocus
                     type="text"
@@ -717,12 +720,12 @@ export default function RecipeMasterTab() {
                     onChange={e => setCategorySearchQuery(e.target.value)}
                     onClick={e => e.stopPropagation()}
                     placeholder="Search category..."
-                    className="w-full text-xs outline-none py-0.5 text-gray-800 placeholder:text-gray-400"
+                    className="w-full text-xs outline-none py-0.5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 bg-transparent"
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto">
                   {uniqueCategories.filter(c => c.toLowerCase().includes(categorySearchQuery.trim().toLowerCase())).length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-gray-400 text-center">No categories found</div>
+                    <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No categories found</div>
                   ) : (
                     uniqueCategories
                       .filter(c => c.toLowerCase().includes(categorySearchQuery.trim().toLowerCase()))
@@ -735,8 +738,8 @@ export default function RecipeMasterTab() {
                             setIsCategoryDropdownOpen(false);
                           }}
                           className={clsx(
-                            "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 truncate",
-                            form.category === c ? "bg-orange-50 text-[#f58220] font-bold" : "text-gray-700"
+                            "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 dark:hover:bg-white/5 truncate",
+                            form.category === c ? "bg-orange-50 dark:bg-orange-500/10 text-[#f58220] font-bold" : "text-gray-700 dark:text-slate-300"
                           )}
                         >
                           {c}
@@ -750,7 +753,7 @@ export default function RecipeMasterTab() {
                     setIsAddingCategory(true);
                     setIsCategoryDropdownOpen(false);
                   }}
-                  className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 cursor-pointer border-t border-gray-100 flex items-center gap-1.5"
+                  className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer border-t border-gray-100 dark:border-white/5 flex items-center gap-1.5"
                 >
                   <Plus size={12} /> Add New Category
                 </div>
@@ -761,42 +764,42 @@ export default function RecipeMasterTab() {
 
           {form.productId && (
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Shelf Life (Days)</label>
+              <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Shelf Life (Days)</label>
               <input
                 type="number"
                 min={0}
                 placeholder="e.g. 7"
                 value={form.shelfLifeDays ?? ""}
                 onChange={e => setForm(f => ({ ...f, shelfLifeDays: e.target.value === "" ? null : Math.max(0, parseInt(e.target.value) || 0) }))}
-                className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+                className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
-              <p className="text-[10px] text-gray-400">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500">Batch expiry = Production Date + Shelf Life. Leave blank to use the default (7 days).</p>
             </div>
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Yield *</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Yield *</label>
             <div className="flex items-center gap-2">
               <input
                 type="number"
                 min={1}
                 value={form.yieldQty}
                 onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
-                className="flex-1 h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all"
+                className="flex-1 h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all"
               />
               <select
                 value={form.yieldUnit}
                 onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
-                className="w-24 h-9 bg-white border border-gray-200 px-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all cursor-pointer"
+                className="w-24 h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all cursor-pointer"
               >
-                <option value="" disabled>Select...</option>
-                {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                <option value="" disabled className="dark:bg-card">Select...</option>
+                {UNITS.map(u => <option key={u} value={u} className="dark:bg-card">{u}</option>)}
               </select>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Instructions</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Instructions</label>
             <textarea
               ref={(el) => {
                 if (el) {
@@ -808,36 +811,36 @@ export default function RecipeMasterTab() {
               onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))}
               rows={2}
               placeholder="Step-by-step production instructions..."
-              className="w-full min-h-[5rem] bg-white border border-gray-200 px-3 py-2 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 overflow-hidden"
+              className="w-full min-h-[5rem] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 py-2 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500 overflow-hidden"
             />
           </div>
 
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-700">
+              <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">
                 Ingredients / Bill of Materials *
               </label>
               <button
                 onClick={addItem}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg border border-orange-200 transition-colors"
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 px-3 py-1.5 rounded-lg border border-orange-200 dark:border-orange-500/20 transition-colors"
               >
                 <Plus size={14} strokeWidth={3} /> Add Ingredient
               </button>
             </div>
 
             {form.items.length === 0 && (
-              <div className="py-8 text-center rounded-lg border border-gray-200 bg-gray-50/50">
-                <ChefHat size={24} className="mx-auto text-gray-400 mb-1.5" />
-                <p className="text-xs font-semibold text-gray-700">No Ingredients Yet</p>
-                <p className="text-xs text-gray-500 mt-0.5">Click &quot;Add Ingredient&quot; above to add materials to this recipe.</p>
+              <div className="py-8 text-center rounded-lg border border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
+                <ChefHat size={24} className="mx-auto text-gray-400 dark:text-slate-500 mb-1.5" />
+                <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">No Ingredients Yet</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Click &quot;Add Ingredient&quot; above to add materials to this recipe.</p>
               </div>
             )}
 
             <div id="ingredients-container" className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
               {form.items.map((item, idx) => (
-                <div key={idx} className="flex flex-wrap sm:flex-nowrap items-end gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <div key={idx} className="flex flex-wrap sm:flex-nowrap items-end gap-3 p-3 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
                   <div className="flex-1 space-y-1 min-w-[120px] relative material-selector-container">
-                    <label className="text-xs font-medium text-gray-500">Material</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Material</label>
                     <div
                       onClick={(e) => {
                         if (openMaterialIdx === idx) {
@@ -849,21 +852,21 @@ export default function RecipeMasterTab() {
                         setOpenMaterialIdx(idx);
                         setMaterialSearchQuery("");
                       }}
-                      className="w-full h-8 bg-white border border-gray-200 px-2 rounded text-xs font-medium text-gray-800 outline-none focus:border-[#f58220] cursor-pointer flex items-center justify-between gap-1"
+                      className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer flex items-center justify-between gap-1"
                     >
-                      <span className={clsx("truncate", !item.inventoryItemId && "text-gray-400 font-normal")}>
+                      <span className={clsx("truncate", !item.inventoryItemId && "text-gray-400 dark:text-slate-500 font-normal")}>
                         {materials.find((m: any) => m.id === item.inventoryItemId)?.name || "Select..."}
                       </span>
-                      <ChevronDown size={12} className="text-gray-400 shrink-0" />
+                      <ChevronDown size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
                     </div>
 
                     {openMaterialIdx === idx && materialDropdownPos && typeof document !== "undefined" && createPortal(
                       <div
-                        className="material-selector-container fixed z-[999] min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden"
+                        className="material-selector-container fixed z-[999] min-w-[220px] bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden"
                         style={{ top: materialDropdownPos.top, left: materialDropdownPos.left, width: materialDropdownPos.width }}
                       >
-                        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100">
-                          <Search size={12} className="text-gray-400 shrink-0" />
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 dark:border-white/5">
+                          <Search size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
                           <input
                             autoFocus
                             type="text"
@@ -871,12 +874,12 @@ export default function RecipeMasterTab() {
                             onChange={e => setMaterialSearchQuery(e.target.value)}
                             onClick={e => e.stopPropagation()}
                             placeholder="Search material..."
-                            className="w-full text-xs outline-none py-0.5 text-gray-800 placeholder:text-gray-400"
+                            className="w-full text-xs outline-none py-0.5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 bg-transparent"
                           />
                         </div>
                         <div className="max-h-48 overflow-y-auto">
                           {materials.filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase())).length === 0 ? (
-                            <div className="px-3 py-3 text-xs text-gray-400 text-center">No materials found</div>
+                            <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No materials found</div>
                           ) : (
                             materials
                               .filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase()))
@@ -889,8 +892,8 @@ export default function RecipeMasterTab() {
                                     setOpenMaterialIdx(null);
                                   }}
                                   className={clsx(
-                                    "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 truncate",
-                                    item.inventoryItemId === m.id ? "bg-orange-50 text-[#f58220] font-bold" : "text-gray-700"
+                                    "px-3 py-1.5 text-xs font-medium cursor-pointer hover:bg-orange-50 dark:hover:bg-white/5 truncate",
+                                    item.inventoryItemId === m.id ? "bg-orange-50 dark:bg-orange-500/10 text-[#f58220] font-bold" : "text-gray-700 dark:text-slate-300"
                                   )}
                                 >
                                   {m.name}
@@ -904,7 +907,7 @@ export default function RecipeMasterTab() {
                             updateItem(idx, { inventoryItemId: "___NEW___" });
                             setOpenMaterialIdx(null);
                           }}
-                          className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 cursor-pointer border-t border-gray-100 flex items-center gap-1.5"
+                          className="px-3 py-2 text-xs font-bold text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer border-t border-gray-100 dark:border-white/5 flex items-center gap-1.5"
                         >
                           <Plus size={12} /> Add New Material
                         </div>
@@ -914,31 +917,31 @@ export default function RecipeMasterTab() {
                   </div>
 
                   <div className="w-20 space-y-1">
-                    <label className="text-xs font-medium text-gray-500">Qty</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Qty</label>
                     <input
                       type="number"
                       min={0.001}
                       step={0.001}
                       value={item.quantityRequired}
                       onChange={e => updateItem(idx, { quantityRequired: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0) })}
-                      className="w-full h-8 bg-white border border-gray-200 px-2 rounded text-xs font-semibold text-gray-800 outline-none focus:border-[#f58220] text-center"
+                      className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] text-center"
                     />
                   </div>
 
                   <div className="w-20 space-y-1">
-                    <label className="text-xs font-medium text-gray-500">Unit</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Unit</label>
                     <select
                       value={item.unit}
                       onChange={e => updateItem(idx, { unit: e.target.value })}
-                      className="w-full h-8 bg-white border border-gray-200 px-2 rounded text-xs font-medium text-gray-800 uppercase outline-none focus:border-[#f58220] cursor-pointer"
+                      className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs font-medium text-gray-800 dark:text-white uppercase outline-none focus:border-[#f58220] cursor-pointer"
                     >
-                      {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
+                      {UNITS.map(u => <option key={u} value={u} className="dark:bg-card">{u}</option>)}
                     </select>
                   </div>
 
                   <button
                     onClick={() => removeItem(idx)}
-                    className="p-2 mb-[1px] text-gray-400 hover:text-red-600 hover:bg-white rounded transition-colors"
+                    className="p-2 mb-[1px] text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-white/10 rounded transition-colors"
                   >
                     <Trash2 size={15} />
                   </button>
@@ -948,16 +951,16 @@ export default function RecipeMasterTab() {
           </div>
 
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200">
-              <AlertTriangle size={15} className="text-red-500 shrink-0" />
-              <p className="text-xs font-semibold text-red-600">{error}</p>
+            <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-rose-500/10 rounded-lg border border-red-200 dark:border-rose-500/20">
+              <AlertTriangle size={15} className="text-red-500 dark:text-rose-400 shrink-0" />
+              <p className="text-xs font-semibold text-red-600 dark:text-rose-400">{error}</p>
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+          <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-white/5">
             <button
               onClick={() => setShowForm(false)}
-              className="px-4 py-2 font-semibold text-gray-500 hover:text-gray-700 text-xs rounded-lg hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 font-semibold text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white text-xs rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
             >
               Cancel
             </button>
@@ -986,13 +989,13 @@ export default function RecipeMasterTab() {
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700">Category Name *</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Category Name *</label>
             <input
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder="e.g. Beverages"
               autoFocus
-              className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+              className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
           <button
@@ -1017,7 +1020,7 @@ export default function RecipeMasterTab() {
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-gray-700">Material Name *</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Material Name *</label>
             <button
               type="button"
               onClick={() => setMaterialList(prev => [...prev, { id: Math.random().toString(36).slice(2), name: "", unit: "kg" }])}
@@ -1029,15 +1032,15 @@ export default function RecipeMasterTab() {
 
           <div className="space-y-4">
             {materialList.map((item, idx) => (
-              <div key={item.id} className="space-y-3 pt-1 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+              <div key={item.id} className="space-y-3 pt-1 pb-3 border-b border-gray-100 dark:border-white/5 last:border-0 last:pb-0">
                 <div className="space-y-1.5">
                   {materialList.length > 1 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Item #{idx + 1}</span>
+                      <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Item #{idx + 1}</span>
                       <button
                         type="button"
                         onClick={() => setMaterialList(prev => prev.filter(m => m.id !== item.id))}
-                        className="text-gray-400 hover:text-red-500 text-xs transition-colors"
+                        className="text-gray-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
                       >
                         Remove
                       </button>
@@ -1051,26 +1054,26 @@ export default function RecipeMasterTab() {
                     }}
                     placeholder="e.g. Black Grams"
                     autoFocus={idx === 0}
-                    className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+                    className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-700">Unit</label>
+                  <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Unit</label>
                   <select
                     value={item.unit}
                     onChange={(e) => {
                       const val = e.target.value;
                       setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, unit: val } : m));
                     }}
-                    className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 uppercase outline-none focus:border-[#f58220] transition-all"
+                    className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white uppercase outline-none focus:border-[#f58220] transition-all"
                   >
-                    <option value="kg">KG</option>
-                    <option value="g">G</option>
-                    <option value="L">L</option>
-                    <option value="ml">ML</option>
-                    <option value="units">UNITS</option>
-                    <option value="pcs">PCS</option>
+                    <option value="kg" className="dark:bg-card">KG</option>
+                    <option value="g" className="dark:bg-card">G</option>
+                    <option value="L" className="dark:bg-card">L</option>
+                    <option value="ml" className="dark:bg-card">ML</option>
+                    <option value="units" className="dark:bg-card">UNITS</option>
+                    <option value="pcs" className="dark:bg-card">PCS</option>
                   </select>
                 </div>
               </div>

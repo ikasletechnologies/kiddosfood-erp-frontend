@@ -194,18 +194,18 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-4">
               <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Partner Name</label>
+                <label className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 ml-1">Partner Name</label>
                 <input
                   required
                   type="text"
                   placeholder="Full name or Company name"
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-transparent dark:border-white/5 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-purple-500 outline-none"
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Partner Type</label>
+                <label className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 ml-1">Partner Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -213,7 +213,7 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                       formData.type === 'RETAILER' 
                         ? 'bg-purple-600 text-white' 
-                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 hover:bg-slate-100'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
                     }`}
                   >
                     Retailer
@@ -224,7 +224,7 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                       formData.type === 'BUSINESS_OWNER' 
                         ? 'bg-amber-500 text-white' 
-                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 hover:bg-slate-100'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'
                     }`}
                   >
                     Distributor
@@ -233,31 +233,31 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Email</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 ml-1">Email</label>
                   <input
                     type="email"
                     placeholder="partner@example.com"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-transparent dark:border-white/5 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-purple-500 outline-none"
                     value={formData.email}
                     onChange={e => setFormData({...formData, email: e.target.value})}
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Phone</label>
+                  <label className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 ml-1">Phone</label>
                   <input
                     type="tel"
                     placeholder="Contact Number"
-                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-transparent dark:border-white/5 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-purple-500 outline-none"
                     value={formData.phone}
                     onChange={e => setFormData({...formData, phone: e.target.value})}
                   />
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-black uppercase text-slate-500 ml-1">Address</label>
+                <label className="text-[11px] font-black uppercase text-slate-500 dark:text-slate-400 ml-1">Address</label>
                 <textarea
                   rows={2}
-                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border-none rounded-xl focus:ring-2 focus:ring-purple-500 outline-none resize-none"
+                  className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-transparent dark:border-white/5 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-purple-500 outline-none resize-none"
                   value={formData.address}
                   onChange={e => setFormData({...formData, address: e.target.value})}
                 />

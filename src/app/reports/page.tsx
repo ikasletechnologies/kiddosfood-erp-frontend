@@ -2018,20 +2018,20 @@ function ReportsContent() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 text-gray-800 -m-4 md:-m-6">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-4 md:-m-6">
       {/* ── Top Header / Breadcrumb Bar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-2xs">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-4 flex items-center justify-between shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-50 text-[#f58220] rounded-lg">
+          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg">
             <Receipt className="h-5 w-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 font-medium">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium">
               <span>Reports</span>
               <span>/</span>
-              <span className="text-gray-900 font-semibold">{activeParent.label}</span>
+              <span className="text-gray-900 dark:text-white font-semibold">{activeParent.label}</span>
             </div>
-            <h1 className="text-lg font-bold text-gray-900 tracking-tight">
+            <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
               {activeParent.label} — {activeChild?.label || "Report"}
             </h1>
           </div>
@@ -2050,7 +2050,7 @@ function ReportsContent() {
 
       <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
         {/* ── Horizontal Navigation Tabs (Pill style) ── */}
-        <div className="bg-white p-1.5 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="bg-white dark:bg-card p-1.5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           {filteredChildren.map((child) => {
             const isActive = selectedChildId === child.id;
             return (
@@ -2061,7 +2061,7 @@ function ReportsContent() {
                   "px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2",
                   isActive
                     ? "bg-[#f58220] text-white shadow-sm"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-100/80"
+                    : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
                 )}
               >
                 <span>{child.label}</span>
@@ -2072,37 +2072,37 @@ function ReportsContent() {
 
         {/* ── Top Summary / KPI Cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50" />
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20" />
             <div>
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
                 {currentMeta.kpiLabel}
               </div>
-              <div className="text-xl font-bold text-gray-900 mt-0.5">
+              <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">
                 {loading ? "..." : reportData?.kpiValue || "0"}
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50" />
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20" />
             <div>
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
                 Summary Details
               </div>
-              <div className="text-sm font-semibold text-emerald-700 mt-0.5">
+              <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">
                 {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50" />
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20" />
             <div>
-              <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
                 Current Period
               </div>
-              <div className="text-sm font-semibold text-gray-700 mt-0.5">
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5">
                 {displayRange}
               </div>
             </div>
@@ -2113,13 +2113,13 @@ function ReportsContent() {
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               placeholder="Search in table..."
               value={tableSearchTerm}
               onChange={(e) => setTableSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 outline-none focus:border-[#f58220]"
+              className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 outline-none focus:border-[#f58220]"
             />
           </div>
 
@@ -2128,33 +2128,33 @@ function ReportsContent() {
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 outline-none cursor-pointer focus:border-[#f58220]"
+              className="appearance-none pl-3 pr-8 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-700 dark:text-slate-200 outline-none cursor-pointer focus:border-[#f58220]"
             >
-              <option>This Month</option>
-              <option>Today</option>
-              <option>Yesterday</option>
-              <option>Last 7 Days</option>
-              <option>This Year</option>
-              <option>Custom</option>
+              <option className="dark:bg-card">This Month</option>
+              <option className="dark:bg-card">Today</option>
+              <option className="dark:bg-card">Yesterday</option>
+              <option className="dark:bg-card">Last 7 Days</option>
+              <option className="dark:bg-card">This Year</option>
+              <option className="dark:bg-card">Custom</option>
             </select>
-            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" />
           </div>
 
           {/* Custom Date Pickers */}
           {dateFilter === "Custom" && (
-            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-sm">
+            <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm">
               <input
                 type="date"
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
-                className="text-xs text-gray-700 outline-none"
+                className="text-xs text-gray-700 dark:text-white outline-none bg-transparent"
               />
-              <span className="text-gray-400 text-xs">to</span>
+              <span className="text-gray-400 dark:text-slate-500 text-xs">to</span>
               <input
                 type="date"
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
-                className="text-xs text-gray-700 outline-none"
+                className="text-xs text-gray-700 dark:text-white outline-none bg-transparent"
               />
             </div>
           )}
@@ -2164,7 +2164,7 @@ function ReportsContent() {
           {/* CSV Export & Print */}
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
             title="Export CSV"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
@@ -2173,10 +2173,10 @@ function ReportsContent() {
 
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
             title="Print"
           >
-            <Printer className="h-4 w-4 text-gray-500" />
+            <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />
             <span>Print</span>
           </button>
 
@@ -2190,7 +2190,7 @@ function ReportsContent() {
                   .finally(() => setLoading(false));
               }
             }}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
             title="Refresh"
           >
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
@@ -2198,12 +2198,12 @@ function ReportsContent() {
         </div>
 
         {/* ── Unified Clean Data Table ── */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-2xs">
-          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-            <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">
+        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs">
+          <div className="px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02]">
+            <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
               {currentMeta.tableTitle}
             </span>
-            <span className="text-xs font-medium text-gray-400">
+            <span className="text-xs font-medium text-gray-400 dark:text-slate-500">
               {filteredRows.length} entries
             </span>
           </div>
@@ -2216,43 +2216,43 @@ function ReportsContent() {
             ) : (
               <table className="w-full text-left">
                 <thead>
-                  <tr className="bg-gray-50/80 text-gray-500 text-[11px] font-bold border-b border-gray-200 uppercase tracking-wider">
+                  <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
                     {currentMeta.columns.map((col, idx) => (
                       <th
                         key={idx}
-                        className="px-5 py-3.5 font-bold text-gray-500"
+                        className="px-5 py-3.5 font-bold text-gray-500 dark:text-slate-400"
                       >
                         {col.label}
                       </th>
                     ))}
-                    <th className="px-5 py-3.5 text-right font-bold text-gray-500">
+                    <th className="px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 text-xs font-medium">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-medium">
                   {filteredRows.length > 0 ? (
                     filteredRows.map((row, rowIdx) => (
                       <tr
                         key={rowIdx}
-                        className="hover:bg-orange-50/20 transition-colors"
+                        className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors"
                       >
                         {currentMeta.columns.map((col, colIdx) => (
                           <td
                             key={colIdx}
-                            className="px-5 py-3.5 text-gray-700"
+                            className="px-5 py-3.5 text-gray-700 dark:text-slate-200"
                           >
                             {col.key === "status" || col.key === "result" ? (
                               <span
                                 className={clsx(
                                   "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
                                   String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
                                     : String(row[col.key]).toUpperCase().includes("PROGRESS")
-                                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                    ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
                                     : String(row[col.key]).toUpperCase().includes("REJECT")
-                                    ? "bg-rose-50 text-rose-700 border border-rose-200"
-                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                    ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
+                                    : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
                                 )}
                               >
                                 {row[col.key]}
@@ -2265,7 +2265,7 @@ function ReportsContent() {
                         <td className="px-5 py-3.5 text-right">
                           <button
                             onClick={() => handlePrintRow(row)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors inline-flex items-center"
+                            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors inline-flex items-center"
                             title="Print Single Record"
                           >
                             <Printer className="h-4 w-4" />
@@ -2277,7 +2277,7 @@ function ReportsContent() {
                     <tr>
                       <td
                         colSpan={currentMeta.columns.length + 1}
-                        className="px-5 py-16 text-center text-gray-400 text-xs"
+                        className="px-5 py-16 text-center text-gray-400 dark:text-slate-500 text-xs"
                       >
                         {tableSearchTerm
                           ? `No entries match "${tableSearchTerm}".`
@@ -2299,7 +2299,7 @@ export default function ReportsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="flex h-screen items-center justify-center bg-gray-50 dark:bg-background">
           <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
         </div>
       }

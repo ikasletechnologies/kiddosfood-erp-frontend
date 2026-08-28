@@ -138,10 +138,19 @@ export default function VendorsClient() {
   const [isBalanceFilterOpen, setIsBalanceFilterOpen] = useState(false);
   const [balanceFilter, setBalanceFilter] = useState({ category: 'Equal To', value: '', endValue: '' });
 
+  const formatReferenceType = (refType: string) => {
+    if (refType === 'PAYMENT') return 'Payment Out';
+    if (refType === 'PURCHASE') return 'Purchase';
+    if (refType === 'OPENING_BALANCE') return 'Opening Balance';
+    if (refType === 'RETURN' || refType === 'PURCHASE_RETURN') return 'Purchase Return';
+    if (refType === 'ADVANCE') return 'Advance Payment';
+    if (refType === 'ADJUSTMENT') return 'Adjustment';
+    return refType;
+  };
+
   const transactionTypes = [
-    "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note",
-    "Credit Note (e-Invoice)", "Debit Note", "Sale Order",
-    "Purchase Order", "Payment-In", "Payment-Out", "Estimate",
+    "Purchase Return", "Purchase", "Payment Out", "Opening Balance", "Credit Note",
+    "Debit Note", "Sale Order", "Purchase Order", "Payment-In", "Payment-Out", "Estimate",
     "Proforma Invoice", "Delivery Challan", "Receivable Opening Balance",
     "Payable Opening Balance", "Party to Party [Received]",
     "Party to Party [Paid]", "Sale FA", "Sale FA (e-Invoice)",
@@ -310,7 +319,7 @@ export default function VendorsClient() {
     // 6. Inline Type Filter (from table header popover)
     if (selectedTypes.length > 0) {
       result = result.filter(e => {
-        const cleanRefType = e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType;
+        const cleanRefType = formatReferenceType(e.referenceType);
         return selectedTypes.includes(cleanRefType);
       });
     }
@@ -408,11 +417,12 @@ export default function VendorsClient() {
 
     const rowsHtml = [...targetData].reverse().map(e => {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '—';
       return `
         <tr>
           <td>${formatDate(e.createdAt)}</td>
-          <td>${e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType}</td>
-          <td>${e.referenceId || '—'}</td>
+          <td>${formatReferenceType(e.referenceType)}</td>
+          <td>${refNo}</td>
           <td>${e.note || '—'}</td>
           <td class="text-right color-debit">${e.type === 'DEBIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
           <td class="text-right color-credit">${e.type === 'CREDIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
@@ -652,13 +662,14 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       const debitVal = e.type === 'DEBIT' ? Math.round(e.amount) : 0;
       const creditVal = e.type === 'CREDIT' ? Math.round(e.amount) : 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '';
       runningDebit += debitVal;
       runningCredit += creditVal;
       
       return [
         formatDate(e.createdAt),
-        e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
-        e.referenceId || '',
+        formatReferenceType(e.referenceType),
+        refNo,
         e.note || '',
         debitVal,
         creditVal,
@@ -736,13 +747,14 @@ export default function VendorsClient() {
       const balance = e.runningBalance || e.balanceAfterTransaction || 0;
       const debitVal = e.type === 'DEBIT' ? Math.round(e.amount) : 0;
       const creditVal = e.type === 'CREDIT' ? Math.round(e.amount) : 0;
+      const refNo = e.returnNumber || e.paymentNumber || e.referenceId || '';
       runningDebit += debitVal;
       runningCredit += creditVal;
       
       return [
         formatDate(e.createdAt),
-        e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType,
-        e.referenceId || '',
+        formatReferenceType(e.referenceType),
+        refNo,
         e.note || '',
         debitVal,
         creditVal,
@@ -1049,22 +1061,22 @@ export default function VendorsClient() {
     <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
 
       {/* Sidebar */}
-      <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
+      <div className="w-[300px] border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-[#0b0c14] relative z-10">
         
         {/* Search & Action Header */}
-        <div className="p-3 border-b border-slate-200 flex items-center gap-2">
+        <div className="p-3 border-b border-slate-200 dark:border-white/5 flex items-center gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search Vendor Name"
-              className="w-full pl-9 pr-7 py-1.5 border border-slate-200 rounded-xl text-xs outline-none focus:border-[#F58220] text-slate-700"
+              className="w-full pl-9 pr-7 py-1.5 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-xl text-xs outline-none focus:border-[#F58220] text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-300 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
@@ -1079,20 +1091,20 @@ export default function VendorsClient() {
         </div>
 
         {/* List Filter Header */}
-        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+        <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
 
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-white/5 relative filter-popover-container">
             <div 
               className="flex items-center gap-1.5 cursor-pointer select-none group"
               onClick={() => setIsFilterOpen(!isFilterOpen)}
             >
-              <span className="text-[12px] font-bold text-slate-500 group-hover:text-slate-700">Vendor Name</span>
-              <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180 text-orange-500' : 'group-hover:text-slate-600'}`} />
+              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200">Vendor Name</span>
+              <ChevronDown size={13} className={`text-slate-400 transition-transform duration-200 ${isFilterOpen ? 'rotate-180 text-orange-500' : 'group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />
             </div>
 
             {/* Filter Popover */}
             {isFilterOpen && (
-              <div className="absolute top-full left-4 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 p-3">
+              <div className="absolute top-full left-4 mt-2 w-48 bg-white dark:bg-[#1a1c28] rounded-xl shadow-2xl border border-slate-100 dark:border-white/10 z-50 p-3">
                 <div className="space-y-2 mb-3">
                   {[
                     { id: "all", label: "All" },
@@ -1107,20 +1119,20 @@ export default function VendorsClient() {
                           type="checkbox" 
                           checked={(filters as any)[f.id]}
                           onChange={(e) => setFilters({...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false})}
-                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors" 
+                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 dark:border-white/20 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors" 
                         />
                         <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                       </div>
-                      <span className="text-xs font-medium text-slate-700">{f.label}</span>
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{f.label}</span>
                     </label>
                   ))}
                 </div>
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/10">
                   <button 
                     onClick={() => { setFilters({ all: true, active: false, inactive: false, toReceive: false, toPay: false }); setIsFilterOpen(false); }}
-                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-full transition-colors"
+                    className="flex-1 py-1.5 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full transition-colors"
                   >
                     Clear
                   </button>
@@ -1135,7 +1147,7 @@ export default function VendorsClient() {
             )}
             
             <div className="flex items-center gap-1.5 cursor-pointer relative">
-              <span className="text-[12px] font-bold text-slate-500">Amount</span>
+              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Amount</span>
             </div>
           </div>
         </div>
@@ -1144,8 +1156,8 @@ export default function VendorsClient() {
           {loading ? (
             <div className="p-6 text-center text-xs font-semibold text-slate-400 animate-pulse">Loading vendors...</div>
           ) : filteredVendors.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-slate-400">
-              <ShieldCheck size={32} className="opacity-10 mb-2" />
+            <div className="flex flex-col items-center justify-center py-10 text-slate-400 dark:text-slate-500">
+              <ShieldCheck size={32} className="opacity-20 mb-2 text-slate-400 dark:text-slate-500" />
               <p className="text-[10px] font-bold uppercase tracking-[0.1em]">No vendors found</p>
             </div>
           ) : (
@@ -1156,19 +1168,19 @@ export default function VendorsClient() {
                 <div
                   key={v.id}
                   onClick={() => setSelectedVendorId(v.id)}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 transition-colors ${
-                    isActive ? "bg-[#e6f4fc]" : "hover:bg-slate-50 bg-white"
+                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 dark:border-white/5 transition-colors ${
+                    isActive ? "bg-[#e6f4fc] dark:bg-orange-500/15" : "hover:bg-slate-50 dark:hover:bg-white/5 bg-white dark:bg-[#0b0c14]"
                   }`}
                 >
-                  <span className="text-sm text-slate-800 truncate pr-2">{v.name}</span>
+                  <span className={`text-sm truncate pr-2 ${isActive ? "text-slate-900 dark:text-orange-400 font-medium" : "text-slate-800 dark:text-slate-300"}`}>{v.name}</span>
                   <div className="flex flex-col items-end shrink-0">
                     <span className={`text-sm font-semibold ${
-                      bal > 0 ? "text-rose-500" : bal < 0 ? "text-emerald-500" : "text-slate-400"
+                      bal > 0 ? "text-rose-500" : bal < 0 ? "text-emerald-500" : "text-slate-400 dark:text-slate-500"
                     }`}>
                       {bal === 0 ? "0.00" : Math.abs(bal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                     {bal !== 0 && (
-                      <span className="text-[9px] font-bold uppercase text-slate-400 -mt-0.5">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 dark:text-slate-500 -mt-0.5">
                         {bal > 0 ? "To Pay" : "To Receive"}
                       </span>
                     )}
@@ -1229,7 +1241,7 @@ export default function VendorsClient() {
                     <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
                     {/* More Options Menu */}
                     {isMoreMenuOpen && (
-                      <div className="absolute top-full right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 dark:border-white/5 z-50 py-1.5">
+                      <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#1a1c28] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5">
                         <button
                           onClick={() => {
                             setIsMoreMenuOpen(false);
@@ -1484,6 +1496,7 @@ export default function VendorsClient() {
                           <option value="OPENING_BALANCE">Opening Balance</option>
                           <option value="PURCHASE">Purchase</option>
                           <option value="PAYMENT">Payment Out</option>
+                          <option value="RETURN">Purchase Return</option>
                         </select>
                       </div>
 
@@ -1791,14 +1804,15 @@ export default function VendorsClient() {
                       ) : (
                         filteredLedger.map(e => {
                           const balance = e.runningBalance || e.balanceAfterTransaction || 0;
-                          const cleanRefType = e.referenceType === 'PAYMENT' ? 'Payment Out' : e.referenceType === 'PURCHASE' ? 'Purchase' : e.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : e.referenceType;
+                          const cleanRefType = formatReferenceType(e.referenceType);
+                          const refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
                           return (
                             <tr key={e.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.03] transition-colors group">
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
                                 {cleanRefType}
                               </td>
                               <td className="px-6 py-4 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
-                                {e.paymentNumber || e.referenceId || "—"}
+                                {refNo}
                               </td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(e.createdAt)}</td>
                               <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">
@@ -1842,6 +1856,14 @@ export default function VendorsClient() {
                                           className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
                                         >
                                           <Copy size={13} /> Copy Reference ID
+                                        </button>
+                                      )}
+                                      {(e.referenceType === 'RETURN' || e.referenceType === 'PURCHASE_RETURN') && (
+                                        <button
+                                          onClick={() => { setOpenLedgerRowMenuId(null); router.push('/purchases/returns'); }}
+                                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-2"
+                                        >
+                                          <ExternalLink size={13} /> Open Purchase Returns
                                         </button>
                                       )}
                                       {e.referenceType === 'PURCHASE' && (
@@ -2111,8 +2133,8 @@ export default function VendorsClient() {
         {ledgerDetailEntry && (
           <div className="space-y-3 text-sm">
             {[
-              { label: "Type", value: ledgerDetailEntry.referenceType === 'PAYMENT' ? 'Payment Out' : ledgerDetailEntry.referenceType === 'PURCHASE' ? 'Purchase' : ledgerDetailEntry.referenceType === 'OPENING_BALANCE' ? 'Opening Balance' : ledgerDetailEntry.referenceType },
-              { label: "Reference", value: ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
+              { label: "Type", value: formatReferenceType(ledgerDetailEntry.referenceType) },
+              { label: "Reference", value: ledgerDetailEntry.returnNumber || ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
               { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
               { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
               { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
@@ -2130,15 +2152,15 @@ export default function VendorsClient() {
       </Modal>
 
       {showPaymentModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl flex flex-col" style={{maxHeight: '92vh'}}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#13151f] rounded-2xl shadow-xl w-full max-w-4xl flex flex-col border border-slate-200 dark:border-white/10" style={{maxHeight: '92vh'}}>
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 shrink-0">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-white/10 shrink-0">
               <div>
-                <h2 className="text-base font-bold text-gray-800">Record Payment</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{selectedVendor?.name}</p>
+                <h2 className="text-base font-bold text-gray-800 dark:text-white">Record Payment</h2>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{selectedVendor?.name}</p>
               </div>
-              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              <button onClick={() => setShowPaymentModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -2148,15 +2170,15 @@ export default function VendorsClient() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4 flex flex-col">
                 <div className="space-y-3">
-                  <div className="p-1 bg-gray-100 rounded-lg flex border border-gray-200">
-                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'PAYMENT' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'PAYMENT' ? "bg-white text-[#f58220] shadow-sm" : "text-gray-500")}>Pay Due</button>
-                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'ADVANCE' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'ADVANCE' ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500")}>Advance</button>
+                  <div className="p-1 bg-gray-100 dark:bg-white/5 rounded-lg flex border border-gray-200 dark:border-white/10">
+                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'PAYMENT' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'PAYMENT' ? "bg-white dark:bg-white/10 text-[#f58220] shadow-sm" : "text-gray-500 dark:text-slate-400")}>Pay Due</button>
+                    <button onClick={() => setPaymentForm({ ...paymentForm, type: 'ADVANCE' })} className={clsx("flex-1 py-2 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'ADVANCE' ? "bg-white dark:bg-white/10 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-slate-400")}>Advance</button>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-500">Transaction Amount</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Transaction Amount</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-300">₹</span>
-                      <input value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Enter amount" className="w-full pl-9 pr-4 py-3 text-xl font-bold text-gray-800 bg-white border border-gray-200 rounded-lg outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-300 placeholder:font-medium placeholder:text-base" />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-300 dark:text-slate-600">₹</span>
+                      <input value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value.replace(/[^0-9.]/g, '') })} placeholder="Enter amount" className="w-full pl-9 pr-4 py-3 text-xl font-bold text-gray-800 dark:text-white bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-300 dark:placeholder:text-slate-600 placeholder:font-medium placeholder:text-base" />
                     </div>
                     {(() => {
                       const totalPurchased = Number(selectedVendor?.totalPurchased || 0);
@@ -2167,22 +2189,22 @@ export default function VendorsClient() {
                       if (paymentForm.type === 'PAYMENT') {
                         if (netPayable <= 0) {
                           return (
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-gray-500 dark:text-slate-400">
                               No outstanding balance.{advanceCredit > 0 && ` Vendor has ₹${Math.round(advanceCredit).toLocaleString()} advance credit.`}
                             </p>
                           );
                         }
                         return (
-                          <div className="text-xs text-gray-500 space-y-0.5">
-                            <p className="flex justify-between"><span>Outstanding payable</span><span className="font-semibold text-gray-700">₹{Math.round(totalPurchased).toLocaleString()}</span></p>
-                            {totalPaid > 0 && <p className="flex justify-between"><span>Advance credit</span><span className="font-semibold text-gray-700">₹{Math.round(totalPaid).toLocaleString()}</span></p>}
+                          <div className="text-xs text-gray-500 dark:text-slate-400 space-y-0.5">
+                            <p className="flex justify-between"><span>Outstanding payable</span><span className="font-semibold text-gray-700 dark:text-slate-300">₹{Math.round(totalPurchased).toLocaleString()}</span></p>
+                            {totalPaid > 0 && <p className="flex justify-between"><span>Advance credit</span><span className="font-semibold text-gray-700 dark:text-slate-300">₹{Math.round(totalPaid).toLocaleString()}</span></p>}
                             <p className="flex justify-between"><span>Net payable</span><span className="font-semibold text-[#f58220]">₹{Math.round(netPayable).toLocaleString()}</span></p>
                           </div>
                         );
                       }
                       // ADVANCE tab
                       return (
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-slate-400">
                           {advanceCredit > 0 ? `Current advance credit: ₹${Math.round(advanceCredit).toLocaleString()}` : "No existing advance credit."}
                         </p>
                       );
@@ -2199,30 +2221,30 @@ export default function VendorsClient() {
                   const advanceAfter = paymentForm.type === 'ADVANCE' ? advanceBefore + amountNum : advanceBefore;
                   const isOverdraft = amountNum > accountBalance;
                   return (
-                    <div className={`p-4 border rounded-lg space-y-2 shrink-0 ${isOverdraft ? 'bg-rose-50 border-rose-200' : 'bg-orange-50 border-orange-100'}`}>
-                      <p className={`text-xs font-semibold flex items-center gap-1.5 ${isOverdraft ? 'text-rose-600' : 'text-[#f58220]'}`}>
+                    <div className={`p-4 border rounded-lg space-y-2 shrink-0 ${isOverdraft ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/40' : 'bg-orange-50 dark:bg-orange-950/20 border-orange-100 dark:border-orange-900/30'}`}>
+                      <p className={`text-xs font-semibold flex items-center gap-1.5 ${isOverdraft ? 'text-rose-600 dark:text-rose-400' : 'text-[#f58220]'}`}>
                         <Zap size={12} /> {isOverdraft ? '⚠ Insufficient Balance' : 'Payment Summary'}
                       </p>
                       {paymentForm.type === 'PAYMENT' ? (
                         <div className="space-y-1 text-xs">
-                          <div className="flex justify-between"><span className="text-gray-500">Outstanding Before</span><span className="font-semibold text-gray-700">₹{outstandingBefore.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">Payment Amount</span><span className="font-semibold text-[#f58220]">− ₹{amountNum.toLocaleString()}</span></div>
-                          <div className="flex justify-between border-t border-orange-200 pt-1"><span className="text-gray-500 font-medium">Outstanding After</span><span className="font-semibold text-emerald-600">₹{outstandingAfter.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Outstanding Before</span><span className="font-semibold text-gray-700 dark:text-slate-200">₹{outstandingBefore.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Payment Amount</span><span className="font-semibold text-[#f58220]">− ₹{amountNum.toLocaleString()}</span></div>
+                          <div className="flex justify-between border-t border-orange-200 dark:border-orange-900/40 pt-1"><span className="text-gray-500 dark:text-slate-400 font-medium">Outstanding After</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{outstandingAfter.toLocaleString()}</span></div>
                         </div>
                       ) : (
                         <div className="space-y-1 text-xs">
-                          <div className="flex justify-between"><span className="text-gray-500">Current Advance</span><span className="font-semibold text-gray-700">₹{advanceBefore.toLocaleString()}</span></div>
-                          <div className="flex justify-between"><span className="text-gray-500">New Advance</span><span className="font-semibold text-indigo-600">+ ₹{amountNum.toLocaleString()}</span></div>
-                          <div className="flex justify-between border-t border-indigo-200 pt-1"><span className="text-gray-500 font-medium">Total Advance</span><span className="font-semibold text-indigo-600">₹{advanceAfter.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Current Advance</span><span className="font-semibold text-gray-700 dark:text-slate-200">₹{advanceBefore.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">New Advance</span><span className="font-semibold text-indigo-600 dark:text-indigo-400">+ ₹{amountNum.toLocaleString()}</span></div>
+                          <div className="flex justify-between border-t border-indigo-200 dark:border-indigo-900/40 pt-1"><span className="text-gray-500 dark:text-slate-400 font-medium">Total Advance</span><span className="font-semibold text-indigo-600 dark:text-indigo-400">₹{advanceAfter.toLocaleString()}</span></div>
                         </div>
                       )}
-                      {isOverdraft && <p className="text-xs text-rose-600 font-medium">Payment exceeds account balance by ₹{(amountNum - accountBalance).toLocaleString()}</p>}
+                      {isOverdraft && <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">Payment exceeds account balance by ₹{(amountNum - accountBalance).toLocaleString()}</p>}
                     </div>
                   );
                 })() : (
-                  <div className="p-4 bg-gray-50 border border-dashed border-gray-200 rounded-lg flex flex-col items-center justify-center h-[110px] shrink-0 gap-1">
-                    <Zap size={16} className="text-gray-300" />
-                    <p className="text-xs text-gray-400 font-medium">Enter amount to see payment summary</p>
+                  <div className="p-4 bg-gray-50 dark:bg-white/5 border border-dashed border-gray-200 dark:border-white/10 rounded-lg flex flex-col items-center justify-center h-[110px] shrink-0 gap-1">
+                    <Zap size={16} className="text-gray-300 dark:text-slate-600" />
+                    <p className="text-xs text-gray-400 dark:text-slate-500 font-medium">Enter amount to see payment summary</p>
                   </div>
                 )}
               </div>
@@ -2231,11 +2253,11 @@ export default function VendorsClient() {
               <div className="space-y-3">
                 {/* Transaction ID (Auto-generated, read-only) */}
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500">Transaction ID <span className="text-gray-300 font-normal">(Auto-generated · Read Only)</span></label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Transaction ID <span className="text-gray-300 dark:text-slate-600 font-normal">(Auto-generated · Read Only)</span></label>
                   <div className={`w-full px-3 py-2.5 border border-dashed rounded-lg text-sm font-semibold font-mono select-all transition-colors ${
                     nextPaymentNumber
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                      : 'bg-gray-100 border-gray-300 text-gray-400 animate-pulse'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400'
+                      : 'bg-gray-100 dark:bg-white/5 border-gray-300 dark:border-white/10 text-gray-400 animate-pulse'
                   }`}>
                     {nextPaymentNumber || 'Generating…'}
                   </div>
@@ -2243,10 +2265,10 @@ export default function VendorsClient() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1 col-span-2">
-                    <label className="text-xs font-medium text-gray-500">Debit From Account</label>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Debit From Account</label>
                     {accounts.length === 0 ? (
-                      <div className="p-4 bg-rose-50 border-2 border-dashed border-rose-300 rounded-lg flex items-center justify-between gap-3">
-                        <p className="text-xs font-medium text-rose-600">No bank/cash accounts available — a payment can&apos;t be recorded without one.</p>
+                      <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border-2 border-dashed border-rose-300 dark:border-rose-800 rounded-lg flex items-center justify-between gap-3">
+                        <p className="text-xs font-medium text-rose-600 dark:text-rose-400">No bank/cash accounts available — a payment can&apos;t be recorded without one.</p>
                         <button
                           onClick={() => router.push('/banking/accounts')}
                           className="shrink-0 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition-colors active:scale-95 flex items-center gap-1"
@@ -2256,12 +2278,12 @@ export default function VendorsClient() {
                       </div>
                     ) : (
                       <div className="space-y-1.5">
-                        <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
-                          <option value="">Select Account</option>
-                          {getFilteredAccounts().map(a => <option key={a.id} value={a.id}>{a.name} ({a.type})</option>)}
+                        <select value={paymentForm.accountId} onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })} className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]">
+                          <option value="" className="dark:bg-[#13151f]">Select Account</option>
+                          {getFilteredAccounts().map(a => <option key={a.id} value={a.id} className="dark:bg-[#13151f]">{a.name} ({a.type})</option>)}
                         </select>
                         {selectedAccount && (
-                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${amountNum > accountBalance ? 'bg-rose-50 border border-rose-200 text-rose-600' : 'bg-emerald-50 border border-emerald-200 text-emerald-700'}`}>
+                          <div className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold ${amountNum > accountBalance ? 'bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400' : 'bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400'}`}>
                             <span>Available Balance</span>
                             <span className="text-sm">₹{Math.round(accountBalance).toLocaleString()}</span>
                           </div>
@@ -2271,138 +2293,73 @@ export default function VendorsClient() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-500">Payment Mode</label>
-                    <select value={paymentForm.paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]">
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI</option>
-                      <option value="BANK_TRANSFER">Bank Transfer</option>
-                      <option value="CHEQUE">Cheque</option>
-                      <option value="NEFT">NEFT</option>
-                      <option value="RTGS">RTGS</option>
-                      <option value="IMPS">IMPS</option>
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Payment Mode</label>
+                    <select value={paymentForm.paymentMode} onChange={e => handlePaymentModeChange(e.target.value)} className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]">
+                      <option value="CASH" className="dark:bg-[#13151f]">Cash</option>
+                      <option value="UPI" className="dark:bg-[#13151f]">UPI</option>
+                      <option value="BANK_TRANSFER" className="dark:bg-[#13151f]">Bank Transfer</option>
+                      <option value="CHEQUE" className="dark:bg-[#13151f]">Cheque</option>
                     </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-500">Transaction Date</label>
-                    <input
-                      type="date"
-                      value={paymentForm.date}
-                      onChange={async e => {
-                        const newDate = e.target.value;
-                        setPaymentForm({ ...paymentForm, date: newDate });
-                        try {
-                          const res = await vendorsApi.getNextPaymentNumber(newDate);
-                          setNextPaymentNumber(res.data?.nextPaymentNumber || '');
-                        } catch { setNextPaymentNumber(''); }
-                      }}
-                      className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]"
-                    />
-                  </div>
-
-                  {/* Reference Number - fixed label, mode-aware placeholder & required */}
-                  <div className="space-y-1 col-span-2">
-                    {(() => {
-                      const modePlaceholder: Record<string, string> = {
-                        CASH:          'Optional',
-                        UPI:           'Enter UPI Reference ID (e.g. UPI987654321)',
-                        BANK_TRANSFER: 'Enter UTR Number (e.g. UTR5485454)',
-                        NEFT:          'Enter UTR Number (e.g. HDFC2026062600001)',
-                        RTGS:          'Enter UTR Number (e.g. SBIN20260626XXXXX)',
-                        IMPS:          'Enter IMPS Reference No. (e.g. IMPS987654321)',
-                        CHEQUE:        'Enter Cheque Number (e.g. CHQ-001234)',
-                      };
-                      const isRequired = paymentForm.paymentMode !== 'CASH';
-                      const isEmpty = !paymentForm.transactionRef.trim();
-                      const isError = isRequired && isEmpty;
-                      const placeholder = modePlaceholder[paymentForm.paymentMode] || 'Optional';
-                      return (
-                        <>
-                          <label className="text-xs font-medium text-gray-500">
-                            Reference Number {isRequired && <span className="text-rose-500">*</span>}
-                          </label>
-                          <input
-                            placeholder={placeholder}
-                            value={paymentForm.transactionRef}
-                            onChange={e => setPaymentForm({ ...paymentForm, transactionRef: e.target.value })}
-                            className={`w-full px-3 py-2.5 bg-white border rounded-lg text-sm font-medium text-gray-800 outline-none transition-colors ${
-                              isError ? 'border-rose-300 ring-1 ring-rose-200' : 'border-gray-200 focus:border-[#f58220]'
-                            }`}
-                          />
-                          {isError && <p className="text-xs text-rose-500 font-medium mt-0.5">Required — enter the bank/payment reference number</p>}
-                        </>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Allocate to Invoice */}
-                  <div className="space-y-1 col-span-2">
-                    <label className="text-xs font-medium text-gray-500">
-                      Apply to Bill
-                    </label>
-                    {paymentForm.type === 'PAYMENT' ? (
-                      loadingInvoices ? (
-                        <div className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-400 animate-pulse">Loading invoices...</div>
-                      ) : (
-                        <select
-                          value={paymentForm.vendorInvoiceId}
-                          onChange={e => {
-                            const inv = vendorInvoices.find(i => i.id === e.target.value);
-                            setPaymentForm({ ...paymentForm, vendorInvoiceId: e.target.value, amount: inv ? inv.amount.toString() : paymentForm.amount });
-                          }}
-                          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]"
-                        >
-                          <option value="">— Direct Payment (Unallocated)</option>
-                          {vendorInvoices.length === 0 ? (
-                            <option disabled>No outstanding invoices</option>
-                          ) : vendorInvoices.map(inv => (
-                            <option key={inv.id} value={inv.id}>
-                              {inv.invoiceNumber}    ₹{Math.round(inv.amount).toLocaleString()}   [{inv.status}]
-                            </option>
-                          ))}
-                        </select>
-                      )
-                    ) : (
-                      <div className="w-full px-3 py-2.5 bg-gray-100 border border-gray-200 rounded-lg text-xs font-medium text-gray-400 select-none">
-                        Advances are not linked to invoices
-                      </div>
-                    )}
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Date</label>
+                    <input type="date" value={paymentForm.date} onChange={e => setPaymentForm({ ...paymentForm, date: e.target.value })} className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]" />
                   </div>
                 </div>
 
+                {paymentForm.paymentMode !== 'CASH' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Reference / UTR Number <span className="text-rose-500">*</span></label>
+                    <input value={paymentForm.transactionRef} onChange={e => setPaymentForm({ ...paymentForm, transactionRef: e.target.value })} placeholder="e.g. UTR / Cheque / Txn ID" className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]" />
+                  </div>
+                )}
+
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500">Remarks / Internal Notes</label>
-                  <input placeholder="Note for accounting..." value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-800 outline-none focus:border-[#f58220]" />
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Link to Unpaid Bill <span className="text-gray-400 dark:text-slate-500">(Optional)</span></label>
+                  <select value={paymentForm.vendorInvoiceId} onChange={e => setPaymentForm({ ...paymentForm, vendorInvoiceId: e.target.value })} className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]">
+                    <option value="" className="dark:bg-[#13151f]">No specific bill (General payment)</option>
+                    {vendorInvoices.map((inv: any) => (
+                      <option key={inv.id} value={inv.id} className="dark:bg-[#13151f]">
+                        {inv.invoiceNumber || inv.id?.slice(0, 8)} — Due ₹{Math.round(inv.balanceAmount || inv.totalAmount || 0).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Notes / Remarks</label>
+                  <input value={paymentForm.note} onChange={e => setPaymentForm({ ...paymentForm, note: e.target.value })} placeholder="e.g. Cleared via NEFT" className="w-full px-3 py-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]" />
                 </div>
               </div>
             </div>{/* end grid */}
             </div>{/* end scrollable body */}
 
             {/* Sticky Footer */}
-            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 shrink-0 bg-white rounded-b-lg">
-              <p className="text-xs text-gray-500">
+            <div className="flex items-center justify-between px-6 py-3 border-t border-gray-200 dark:border-white/10 shrink-0 bg-white dark:bg-[#13151f] rounded-b-2xl">
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 {accounts.length === 0
                   ? <span className="text-rose-500 font-semibold">⚠ No debit account available</span>
                   : !paymentForm.accountId
                   ? <span className="text-rose-500 font-semibold">⚠ Select a debit account</span>
                   : !amountNum
-                  ? <span className="text-gray-400 font-semibold">Enter payment details to continue</span>
+                  ? <span className="text-gray-400 dark:text-slate-500 font-semibold">Enter payment details to continue</span>
                   : paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable
                   ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds Net Payable</span>
                   : amountNum > accountBalance
                   ? <span className="text-rose-500 font-semibold">⚠ Amount exceeds available account balance</span>
                   : paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()
                   ? <span className="text-rose-500 font-semibold">⚠ Reference number required</span>
-                  : <span className="text-emerald-600 font-semibold">✓ Ready to record</span>}
+                  : <span className="text-emerald-600 dark:text-emerald-400 font-semibold">✓ Ready to record</span>}
               </p>
               <div className="flex items-center gap-3">
-                <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">Cancel</button>
+                <button onClick={() => setShowPaymentModal(false)} className="px-4 py-2 text-sm font-semibold text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors">Cancel</button>
                 <button
                   onClick={handlePayment}
                   className={clsx(
                     "px-6 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm",
                     saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance
-                      ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+                      ? "bg-gray-200 dark:bg-white/10 text-gray-400 dark:text-slate-600 cursor-not-allowed shadow-none"
                       : "bg-[#f58220] text-white hover:bg-[#e8740e] active:scale-95"
                   )}
                   disabled={saving || !amountNum || !paymentForm.accountId || (paymentForm.paymentMode !== 'CASH' && !paymentForm.transactionRef.trim()) || (paymentForm.type === 'PAYMENT' && amountNum > vendorNetPayable) || amountNum > accountBalance}
@@ -2418,20 +2375,20 @@ export default function VendorsClient() {
       {/* Party Settings Slide-over */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end">
-          <div className="w-[400px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right">
+          <div className="w-[400px] bg-white dark:bg-[#13151f] h-full shadow-2xl flex flex-col animate-in slide-in-from-right border-l border-slate-200 dark:border-white/10">
 
             {/* Header */}
-            <div className="px-6 py-4 flex items-center justify-between border-b border-slate-200 bg-white z-10 shrink-0">
-              <h3 className="text-lg font-bold text-slate-700">Party Settings</h3>
-              <button onClick={() => setIsSettingsOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            <div className="px-6 py-4 flex items-center justify-between border-b border-slate-200 dark:border-white/10 bg-white dark:bg-[#13151f] z-10 shrink-0">
+              <h3 className="text-lg font-bold text-slate-700 dark:text-white">Party Settings</h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 rounded-lg transition-colors">
                 <X size={20} />
               </button>
             </div>
 
             {/* Settings Content */}
             <div className="p-6 space-y-4">
-              <div className="bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
-                <span className="text-sm font-bold text-slate-600">General</span>
+              <div className="bg-slate-50 dark:bg-white/5 px-4 py-2 rounded-lg border border-slate-100 dark:border-white/10">
+                <span className="text-sm font-bold text-slate-600 dark:text-slate-300">General</span>
               </div>
 
               <div className="space-y-3">
@@ -2440,23 +2397,23 @@ export default function VendorsClient() {
                     type="checkbox"
                     checked={settings.enablePaymentReminder}
                     onChange={(e) => setSettings({ ...settings, enablePaymentReminder: e.target.checked })}
-                    className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 cursor-pointer"
                   />
-                  <span className="text-sm font-medium text-slate-700">Enable payment reminders</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Enable payment reminders</span>
                 </div>
 
                 {settings.enablePaymentReminder && (
                   <div className="pl-7 space-y-1.5">
-                    <span className="text-xs font-semibold text-slate-500">Remind me X days before payment is due</span>
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Remind me X days before payment is due</span>
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
                         min={1}
                         value={settings.reminderDays}
                         onChange={(e) => setSettings({ ...settings, reminderDays: e.target.value })}
-                        className="w-20 px-3 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 text-center focus:outline-none focus:border-orange-400"
+                        className="w-20 px-3 py-2 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg text-sm font-semibold text-slate-700 dark:text-white text-center focus:outline-none focus:border-orange-400"
                       />
-                      <span className="text-sm font-medium text-slate-500">day{Number(settings.reminderDays) === 1 ? '' : 's'} before due date</span>
+                      <span className="text-sm font-medium text-slate-500 dark:text-slate-400">day{Number(settings.reminderDays) === 1 ? '' : 's'} before due date</span>
                     </div>
                   </div>
                 )}
@@ -2464,7 +2421,7 @@ export default function VendorsClient() {
             </div>
 
             {/* Footer */}
-            <div className="mt-auto p-4 border-t border-slate-200 bg-slate-50 shrink-0 flex justify-end">
+            <div className="mt-auto p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#0e1017] shrink-0 flex justify-end">
               <button
                 onClick={handleSaveSettings}
                 disabled={savingSettings}

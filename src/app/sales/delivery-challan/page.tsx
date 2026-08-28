@@ -73,10 +73,10 @@ const INDIAN_STATES = [
 
 // Unified Color Coding (from Invoice Page status colors)
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:      { label: "Draft",       color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  IN_TRANSIT: { label: "In Transit",  color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  CLOSED:     { label: "Delivered",   color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  CANCELLED:  { label: "Cancelled",   color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
+  DRAFT:      { label: "Draft",       color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  IN_TRANSIT: { label: "In Transit",  color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  CLOSED:     { label: "Delivered",   color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  CANCELLED:  { label: "Cancelled",   color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -918,37 +918,37 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
                 setView("list");
                 resetForm();
               }}
-              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">
+            <h2 className="text-base font-semibold text-gray-800 dark:text-white">
               {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
             </h2>
           </div>
-          <span className="text-xs text-gray-400">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
+          <span className="text-xs text-gray-400 dark:text-slate-500">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 custom-scrollbar">
 
           {/* Customer + Details card */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-3">
                 <div>
                   <div className="flex items-center gap-4 mb-1.5">
-                    <label className="text-xs font-medium text-gray-500">Destination *</label>
-                    <div className="flex items-center gap-3 text-xs">
+                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Destination *</label>
+                    <div className="flex items-center gap-3 text-xs text-gray-700 dark:text-slate-300">
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Customer
                       </label>
@@ -964,13 +964,13 @@ export default function DeliveryChallanPage() {
                     <div className="relative flex-1" ref={customerDropRef}>
                       <div
                         className={clsx(
-                          "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-colors",
-                          showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 hover:border-gray-400"
+                          "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-colors",
+                          showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
                         )}
                         onClick={() => setShowCustomerDrop(v => !v)}
                       >
                         <input
-                          className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                          className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                           placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
                           value={customerSearch}
                           onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
@@ -979,22 +979,22 @@ export default function DeliveryChallanPage() {
             {customerSearch && (
               <X
                 size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
                 onClick={() => setCustomerSearch("")}
               />
             )}
-                        <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                        <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       </div>
                       {showCustomerDrop && (
-                        <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                          <div className="max-h-56 overflow-y-auto">
+                        <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
+                          <div className="max-h-56 overflow-y-auto custom-scrollbar">
                             {destinationOptions.length === 0 ? (
-                              <div className="px-4 py-4 text-xs text-gray-400 text-center">No results found</div>
+                              <div className="px-4 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No results found</div>
                             ) : destinationOptions.map(c => (
-                              <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
+                              <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
                                 <div className="text-left">
-                                  <div className="text-sm font-medium text-gray-800">{c.name}</div>
-                                  <div className="text-xs text-gray-400">{c.phone || c.email || "—"}</div>
+                                  <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
+                                  <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || c.email || "—"}</div>
                                 </div>
                               </button>
                             ))}
@@ -1006,7 +1006,7 @@ export default function DeliveryChallanPage() {
                       type="button"
                       onClick={() => openQuickAdd(destType)}
                       title={`Create new ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
-                      className="shrink-0 p-2 border border-gray-300 hover:border-orange-400 rounded-lg text-gray-500 hover:text-orange-500 transition-colors"
+                      className="shrink-0 p-2 border border-gray-300 dark:border-white/10 hover:border-orange-400 rounded-lg text-gray-500 dark:text-slate-400 hover:text-orange-500 transition-colors"
                     >
                       <Plus size={16} />
                     </button>
@@ -1014,9 +1014,9 @@ export default function DeliveryChallanPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                     <input
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="10-digit phone number"
                       type="tel"
                       inputMode="numeric"
@@ -1029,20 +1029,8 @@ export default function DeliveryChallanPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Source Warehouse</label>
-                    {/* The value submitted is a franchiseId — dispatch/receive
-                        stock accounting keys off sourceFranchiseId, one stock
-                        pool per franchise/branch (see SalesService.dispatch
-                        ChallanStock). `Warehouse` has no franchiseId column
-                        (it's the reverse: Franchise.primaryWarehouseId points
-                        INTO Warehouse), so options are built by joining the
-                        already-fetched franchise list to each one's primary
-                        warehouse — showing a real warehouse name where one
-                        exists, the branch name otherwise. Previously this
-                        filtered the raw Warehouse list on a field
-                        (`w.franchiseId`) that never existed, so it was always
-                        empty. */}
-                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white">
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Source Warehouse</label>
+                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
                       {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
                       {franchises.map((f: any) => {
                         const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
@@ -1059,25 +1047,25 @@ export default function DeliveryChallanPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Vehicle Number</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vehicle Number</label>
+                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Driver Name</label>
-                    <input className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Driver Name</label>
+                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
                   </div>
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs font-medium text-gray-500">Challan Date</span>
-                  <input type="date" className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Challan Date</span>
+                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">Due Date</span>
-                  <input type="date" className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Due Date</span>
+                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">State of Supply</span>
-                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-sm text-gray-700 outline-none focus:border-orange-400 w-44">
+                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">State of Supply</span>
+                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44">
                     <option value="">Select state</option>
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -1087,17 +1075,17 @@ export default function DeliveryChallanPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
-              <button type="button" onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")} className="flex items-center gap-1.5 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg px-2.5 py-1 bg-white hover:border-gray-400 transition-colors">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+              <button type="button" onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")} className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-[#13151f] hover:border-gray-400 transition-colors">
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500 font-semibold text-xs border-b border-gray-200 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-2.5 w-10">#</th>
                     <th className="text-left px-4 py-2.5">Item</th>
                     <th className="text-left px-3 py-2.5 w-32">Batch No</th>
@@ -1109,49 +1097,49 @@ export default function DeliveryChallanPage() {
                     <th className="w-10"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((it, idx) => {
                     const comp = computeRow(it, withTax);
                     const isItemDropOpen = openItemDrop === it.id;
                     return (
-                      <tr key={it.id} className="hover:bg-orange-50/20 group">
-                        <td className="px-4 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
+                      <tr key={it.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
+                        <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                         <td className="px-4 py-2 relative">
-                          <input value={it.itemSearch} onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }} onFocus={() => setOpenItemDrop(it.id)} placeholder="Search product..." className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400" />
+                          <input value={it.itemSearch} onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }} onFocus={() => setOpenItemDrop(it.id)} placeholder="Search product..." className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500" />
             {it.itemSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setOpenItemDrop("")} 
               />
             )}
                           {isItemDropOpen && (
-                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
                               {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).length === 0 ? (
-                                <div className="px-4 py-3 text-xs text-gray-400">
+                                <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">
                                   {products.some(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()))
                                     ? "No dispatchable stock for this item at the selected warehouse"
                                     : "No items matched"}
                                 </div>
                               ) : products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).map(p => (
-                                <button key={p.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 text-left border-b border-gray-50 last:border-0 text-xs" onClick={() => selectProduct(idx, p)}>
-                                  <div><strong className="text-gray-800 font-medium">{p.name}</strong><div className="text-[10px] text-gray-400">SKU: {p.sku || "—"}</div></div>
+                                <button key={p.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs" onClick={() => selectProduct(idx, p)}>
+                                  <div><strong className="text-gray-800 dark:text-white font-medium">{p.name}</strong><div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div></div>
                                   <div className="text-orange-500 font-semibold">₹{p.basePrice || p.price || 0}</div>
                                 </button>
                               ))}
                             </div>
                           )}
-                          <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 outline-none bg-transparent mt-1 focus:text-gray-600" />
+                          <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-600 dark:focus:text-slate-200" />
                         </td>
                         <td className="px-3 py-2.5">
 {(() => {
   const validBatches = getValidBatches(it.productId);
   return (
     <>
-      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 cursor-pointer">
-        <option value="">Select...</option>
+      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 dark:text-white cursor-pointer">
+        <option value="" className="dark:bg-card">Select...</option>
         {validBatches.map(b => (
-          <option key={b.id} value={b.batchCode || b.id}>{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
+          <option key={b.id} value={b.batchCode || b.id} className="dark:bg-card">{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
         ))}
       </select>
       {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
@@ -1170,58 +1158,58 @@ export default function DeliveryChallanPage() {
   } else {
     updateItem(idx, "qty", val);
   }
-}} className="w-full text-sm text-center outline-none bg-transparent text-gray-700" />
+}} className="w-full text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
 </td>
-                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}</select></td>
-                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-sm text-right outline-none bg-transparent text-gray-700" placeholder="0.00" /></td>
+                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
+                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
                         <td className="px-3 py-2.5">
-                          <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 outline-none bg-transparent cursor-pointer">
-                            {TAX_OPTIONS.map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
+                          <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">
+                            {TAX_OPTIONS.map(t => <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800">₹{comp.amount.toFixed(2)}</td>
-                        <td className="pr-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-opacity"><Trash2 className="h-4 w-4" /></button></td>
+                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800 dark:text-white">₹{comp.amount.toFixed(2)}</td>
+                        <td className="pr-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-opacity"><Trash2 className="h-4 w-4" /></button></td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between bg-gray-50/40">
-              <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"><Plus className="h-4 w-4" /> Add Row</button>
-              <span className="text-xs text-gray-500">Total Qty: <span className="font-semibold text-gray-700">{totalQty}</span></span>
+            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
+              <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"><Plus className="h-4 w-4" /> Add Row</button>
+              <span className="text-xs text-gray-500 dark:text-slate-400">Total Qty: <span className="font-semibold text-gray-700 dark:text-slate-200">{totalQty}</span></span>
             </div>
           </div>
 
           {/* Notes + Summary */}
           <div className="flex gap-4 items-start pb-2">
             <div className="flex-1 space-y-2">
-              <button type="button" onClick={() => setShowTerms(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showTerms ? "border-orange-300 bg-orange-50 text-orange-600" : "border-gray-200 bg-white text-gray-500 hover:text-gray-700")}><FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions</button>
-              <button type="button" onClick={() => setShowDesc(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showDesc ? "border-orange-300 bg-orange-50 text-orange-600" : "border-gray-200 bg-white text-gray-500 hover:text-gray-700")}><FileText className="h-3.5 w-3.5" /> Add Description</button>
-              {showTerms && <textarea rows={3} value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Enter terms..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />}
-              {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 border border-gray-200 bg-white rounded-lg px-3 py-2 outline-none resize-none" />}
+              <button type="button" onClick={() => setShowTerms(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showTerms ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions</button>
+              <button type="button" onClick={() => setShowDesc(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showDesc ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Add Description</button>
+              {showTerms && <textarea rows={3} value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Enter terms..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
+              {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
             </div>
-            <div className="bg-white rounded-xl border border-gray-200 p-4 w-64 shrink-0 space-y-2">
-              <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>₹ {totalAmount.toFixed(2)}</span></div>
-              {totalTax > 0 && <div className="flex justify-between text-sm text-gray-500"><span>Tax</span><span>+ ₹ {totalTax.toFixed(2)}</span></div>}
-              <div className="flex justify-between items-center text-sm text-gray-500 border-t border-gray-100 pt-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-2">
+              <div className="flex justify-between text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {totalAmount.toFixed(2)}</span></div>
+              {totalTax > 0 && <div className="flex justify-between text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
+              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" id="roundoff" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" /><span className="text-xs">Round Off</span></label>
-                <span className="text-xs">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
+                <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center border-t border-gray-200 pt-2">
-                <span className="text-sm font-semibold text-gray-800">Total</span>
-                <span className="text-lg font-bold text-orange-500">₹ {finalTotal.toFixed(2)}</span>
+              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/5 pt-2">
+                <span className="text-sm font-semibold text-gray-800 dark:text-white">Total</span>
+                <span className="text-lg font-bold text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Action bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
-          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg">Cancel</button>
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
+          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
           <div className="flex items-center gap-3">
-            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors">
+            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-60">Save Draft</button>
+            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors shadow-sm">
               <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Challan"}
             </button>
           </div>
@@ -1235,13 +1223,13 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "transit") {
     return (
-      <div className="min-h-screen bg-gray-50 text-gray-800">
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <button onClick={() => setView("list")} className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">Challans</button>
-            <button className="px-3 py-1.5 text-sm font-semibold text-white bg-orange-500 rounded-lg">Transit Stock</button>
+            <button onClick={() => setView("list")} className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg">Challans</button>
+            <button className="px-3 py-1.5 text-sm font-semibold text-white bg-orange-500 rounded-lg shadow-sm">Transit Stock</button>
           </div>
-          <button onClick={() => salesApi.getTransitStock().then((res: any) => setTransitStock(res.data || []))} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg" title="Refresh">
+          <button onClick={() => salesApi.getTransitStock().then((res: any) => setTransitStock(res.data || []))} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", transitLoading && "animate-spin")} />
           </button>
         </div>
@@ -1249,12 +1237,12 @@ export default function DeliveryChallanPage() {
           {transitLoading ? (
             <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
           ) : transitStock.length === 0 ? (
-            <div className="bg-white border border-gray-200 rounded-lg py-16 text-center text-gray-400 text-sm">Nothing currently in transit.</div>
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-16 text-center text-gray-400 dark:text-slate-500 text-sm">Nothing currently in transit.</div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-3">Challan No</th>
                     <th className="text-left px-4 py-3">Source</th>
                     <th className="text-left px-4 py-3">Party</th>
@@ -1266,22 +1254,22 @@ export default function DeliveryChallanPage() {
                     <th className="text-left px-4 py-3">Vehicle / Driver</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {transitStock.map((r: any, i: number) => (
-                    <tr key={`${r.challanId}-${i}`} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800">{r.challanNumber}</td>
+                    <tr key={`${r.challanId}-${i}`} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{r.challanNumber}</td>
                       <td className="px-4 py-3 text-xs">
-                        <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200")}>
+                        <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-white/10")}>
                           {r.sourceDocument === "SALES_INVOICE" ? "Sales Invoice" : "Direct"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-700">{r.partyName || "—"} <span className="text-gray-400">({r.partyType})</span></td>
-                      <td className="px-4 py-3 text-xs text-gray-600">{r.sourceWarehouseName || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-gray-700">{r.productName}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{r.batchNumber || "—"}</td>
-                      <td className="px-4 py-3 text-right text-xs font-semibold text-gray-800">{r.quantity} {r.unit}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{formatDate(r.dispatchDate)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{r.vehicleNo || "—"} {r.driverName ? `/ ${r.driverName}` : ""}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300">{r.partyName || "—"} <span className="text-gray-400 dark:text-slate-500">({r.partyType})</span></td>
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">{r.sourceWarehouseName || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300">{r.productName}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{r.batchNumber || "—"}</td>
+                      <td className="px-4 py-3 text-right text-xs font-semibold text-gray-800 dark:text-white">{r.quantity} {r.unit}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{formatDate(r.dispatchDate)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{r.vehicleNo || "—"} {r.driverName ? `/ ${r.driverName}` : ""}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1297,13 +1285,13 @@ export default function DeliveryChallanPage() {
   // 2. LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
         <button
           onClick={() => setView("transit")}
-          className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg border border-gray-200"
+          className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg border border-gray-200 dark:border-white/10"
         >
           Transit Stock
         </button>
@@ -1320,15 +1308,15 @@ export default function DeliveryChallanPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total",      value: stats.total,     color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "In Transit", value: stats.inTransit, color: "text-blue-600",    dot: "bg-blue-500" },
-            { label: "Delivered",  value: stats.closed,    color: "text-emerald-600", dot: "bg-emerald-500" },
-            { label: "Drafts",     value: stats.draft,     color: "text-amber-600",   dot: "bg-amber-500" },
+            { label: "Total",      value: stats.total,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "In Transit", value: stats.inTransit, color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
+            { label: "Delivered",  value: stats.closed,    color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Drafts",     value: stats.draft,     color: "text-amber-600 dark:text-amber-400",   dot: "bg-amber-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -1343,12 +1331,12 @@ export default function DeliveryChallanPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search challan or party..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
@@ -1356,7 +1344,7 @@ export default function DeliveryChallanPage() {
           <select
             value={dateFilter}
             onChange={e => setDateFilter(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 outline-none"
+            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
           >
             <option value="THIS_MONTH">This Month</option>
             <option value="TODAY">Today</option>
@@ -1364,40 +1352,40 @@ export default function DeliveryChallanPage() {
           </select>
           {dateFilter === "CUSTOM" && (
             <>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm outline-none" />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
               <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm outline-none" />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
             </>
           )}
           <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
-            <RefreshCw className="h-4 w-4" />
+          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
 
         {/* ── Empty State ── */}
         {filteredChallans.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Truck className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Delivery Challans</p>
-              <p className="text-gray-500 text-sm mt-1">Create your first delivery challan to get started.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Delivery Challans</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Create your first delivery challan to get started.</p>
             </div>
             <button
               onClick={() => { resetForm(); setView("create"); }}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
             >
               Create Challan
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">Party</th>
                   <th className="text-left px-4 py-3">Challan No.</th>
@@ -1407,25 +1395,25 @@ export default function DeliveryChallanPage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filteredChallans.map(dc => {
                   const style = STATUS_STYLES[dc.status] || STATUS_STYLES.DRAFT;
                   return (
-                    <tr key={dc.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                    <tr key={dc.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {formatDate(dc.invoiceDate)}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800 text-sm">{dc.customerName}</div>
-                        {dc.customerPhone && <div className="text-xs text-gray-400">{dc.customerPhone}</div>}
+                        <div className="font-medium text-gray-800 dark:text-white text-sm">{dc.customerName}</div>
+                        {dc.customerPhone && <div className="text-xs text-gray-400 dark:text-slate-500">{dc.customerPhone}</div>}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-[#f58220] text-xs">
                         #{dc.challanNo}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {formatDate(dc.dueDate)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm">
                         ₹{Number(dc.finalAmount).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1438,7 +1426,7 @@ export default function DeliveryChallanPage() {
                           {dc.status === "DRAFT" && (
                             <button
                               onClick={() => handleEdit(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-[#f58220] hover:bg-orange-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
                             >
                               Resume
                             </button>
@@ -1446,7 +1434,7 @@ export default function DeliveryChallanPage() {
                           {dc.status === "IN_TRANSIT" && (
                             <button
                               onClick={() => setDeliveringChallan(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
                             >
                               Mark Delivered
                             </button>
@@ -1454,7 +1442,7 @@ export default function DeliveryChallanPage() {
                           {dc.status === "CLOSED" && (
                             <button
                               onClick={() => setReturningChallan(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition-colors"
                             >
                               Return Goods
                             </button>
@@ -1462,27 +1450,27 @@ export default function DeliveryChallanPage() {
                           <div className="relative">
                             <button
                               onClick={() => setShowRowMenu(showRowMenu === dc.id ? null : dc.id)}
-                              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                              className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
                             >
                               <MoreVertical className="h-4 w-4" />
                             </button>
                             {showRowMenu === dc.id && (
-                              <div className="absolute right-0 top-8 z-50 w-32 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-left">
+                              <div className="absolute right-0 top-8 z-50 w-32 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg py-1 text-left">
                                 <button
                                   onClick={() => { handleEdit(dc); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
+                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
                                 >
                                   Edit
                                 </button>
                                 <button
                                   onClick={() => { setPreviewingChallan(dc); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
+                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
                                 >
                                   Print
                                 </button>
                                 <button
                                   onClick={() => { handleDelete(dc.id); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-red-50 text-xs text-red-600 text-left border-t border-gray-100"
+                                  className="w-full px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 text-left border-t border-gray-100 dark:border-white/5"
                                 >
                                   Delete
                                 </button>
@@ -1546,9 +1534,6 @@ export default function DeliveryChallanPage() {
 }
 
 // ── Mark Delivered modal ─────────────────────────────────────────────────────
-// Captures the delivery confirmation fields (Received By / delivered date /
-// POD reference) that a bare status PATCH used to silently drop — see
-// SalesService.markChallanDelivered.
 function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { challan: any; onClose: () => void; onDelivered: () => void; showToast: (msg: string, type?: any) => void }) {
   const [receivedBy, setReceivedBy] = useState("");
   const [deliveredAt, setDeliveredAt] = useState(new Date().toISOString().slice(0, 16));
@@ -1573,27 +1558,27 @@ function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { chal
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-card rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 border border-gray-200 dark:border-white/10" onClick={e => e.stopPropagation()}>
         <div>
-          <h3 className="text-base font-bold text-gray-800">Mark Delivered</h3>
-          <p className="text-xs text-gray-400 mt-0.5">{challan.challanNo || challan.challanNumber}</p>
+          <h3 className="text-base font-bold text-gray-800 dark:text-white">Mark Delivered</h3>
+          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{challan.challanNo || challan.challanNumber}</p>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Received By</label>
-          <input value={receivedBy} onChange={e => setReceivedBy(e.target.value)} placeholder="Name of person who received goods" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Received By</label>
+          <input value={receivedBy} onChange={e => setReceivedBy(e.target.value)} placeholder="Name of person who received goods" className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Delivered At</label>
-          <input type="datetime-local" value={deliveredAt} onChange={e => setDeliveredAt(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Delivered At</label>
+          <input type="datetime-local" value={deliveredAt} onChange={e => setDeliveredAt(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">POD / Note Reference (optional)</label>
-          <input value={podReference} onChange={e => setPodReference(e.target.value)} placeholder="Proof-of-delivery reference" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">POD / Note Reference (optional)</label>
+          <input value={podReference} onChange={e => setPodReference(e.target.value)} placeholder="Proof-of-delivery reference" className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500" />
         </div>
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
+          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 shadow-sm">
             {saving ? "Confirming..." : "Confirm Delivery"}
           </button>
         </div>
@@ -1603,11 +1588,6 @@ function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { chal
 }
 
 // ── Return Goods modal ───────────────────────────────────────────────────────
-// Two backend calls in one flow: createDeliveryChallanReturn (returnable-qty
-// validated per line) then receiveDeliveryChallanReturn (condition-based
-// stock disposition) — see sections 22-28. Quantity + reason + condition are
-// all captured in one screen since in practice the person logging a return
-// already knows the condition.
 const RETURN_REASONS = ["Unused Goods", "Demo Completed", "Sample Returned", "Excess Quantity", "Customer Rejected", "Damaged", "Wrong Product", "Replacement Return", "Job Work Returned", "Other"];
 const RETURN_CONDITIONS = ["GOOD", "DAMAGED", "EXPIRED", "REJECTED", "QUARANTINE"];
 
@@ -1651,33 +1631,33 @@ function ReturnGoodsModal({ challan, onClose, onReturned, showToast }: { challan
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-card rounded-2xl shadow-2xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar border border-gray-200 dark:border-white/10" onClick={e => e.stopPropagation()}>
         <div>
-          <h3 className="text-base font-bold text-gray-800">Return Goods</h3>
-          <p className="text-xs text-gray-400 mt-0.5">{challan.challanNo || challan.challanNumber}</p>
+          <h3 className="text-base font-bold text-gray-800 dark:text-white">Return Goods</h3>
+          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{challan.challanNo || challan.challanNumber}</p>
         </div>
 
-        <div className="border border-gray-200 rounded-xl overflow-hidden">
+        <div className="border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-500">
+            <thead className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400">
               <tr>
                 <th className="text-left px-3 py-2">Item</th>
                 <th className="text-right px-3 py-2">Dispatched</th>
                 <th className="text-right px-3 py-2 w-28">Return Qty</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
               {items.map(it => (
                 <tr key={it.id}>
-                  <td className="px-3 py-2 text-gray-700">{it.productName}</td>
-                  <td className="px-3 py-2 text-right text-gray-500">{it.quantity} {it.unit}</td>
+                  <td className="px-3 py-2 text-gray-700 dark:text-slate-200">{it.productName}</td>
+                  <td className="px-3 py-2 text-right text-gray-500 dark:text-slate-400">{it.quantity} {it.unit}</td>
                   <td className="px-3 py-2">
                     <input
                       type="number" min={0} max={it.quantity}
                       value={qtyByItem[it.id] || ""}
                       onChange={e => setQtyByItem(prev => ({ ...prev, [it.id]: e.target.value }))}
-                      className="w-full border border-gray-300 rounded px-2 py-1 text-right outline-none focus:border-orange-400"
+                      className="w-full border border-gray-300 dark:border-white/10 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white rounded px-2 py-1 text-right outline-none focus:border-orange-400"
                     />
                   </td>
                 </tr>
@@ -1688,33 +1668,33 @@ function ReturnGoodsModal({ challan, onClose, onReturned, showToast }: { challan
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Reason</label>
-            <select value={reason} onChange={e => setReason(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400 bg-white">
-              {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Reason</label>
+            <select value={reason} onChange={e => setReason(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
+              {RETURN_REASONS.map(r => <option key={r} value={r} className="dark:bg-card">{r}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Condition on Receipt</label>
-            <select value={condition} onChange={e => setCondition(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400 bg-white">
-              {RETURN_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Condition on Receipt</label>
+            <select value={condition} onChange={e => setCondition(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
+              {RETURN_CONDITIONS.map(c => <option key={c} value={c} className="dark:bg-card">{c}</option>)}
             </select>
           </div>
         </div>
         {reason === "Other" && (
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Note</label>
-            <input value={otherReason} onChange={e => setOtherReason(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400" />
+            <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Note</label>
+            <input value={otherReason} onChange={e => setOtherReason(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" />
           </div>
         )}
         {condition !== "GOOD" && (
-          <p className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-3 py-2">
             {condition} condition returns are logged for traceability but are NOT added to available warehouse stock.
           </p>
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</button>
-          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
+          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg disabled:opacity-50 shadow-sm">
             {saving ? "Saving..." : "Record Return"}
           </button>
         </div>

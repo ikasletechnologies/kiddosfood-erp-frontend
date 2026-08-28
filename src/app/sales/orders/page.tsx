@@ -76,13 +76,13 @@ const INDIAN_STATES = [
 // backend ever actually sends, so every non-DRAFT/CANCELLED order silently
 // fell back to the DRAFT style regardless of its real status.
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:          { label: "Draft",           color: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200" },
-  PENDING:        { label: "Pending",         color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
-  CONFIRMED:      { label: "Confirmed",       color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  PROCESSING:     { label: "Processing",      color: "text-orange-600",  bg: "bg-orange-50",  border: "border-orange-200" },
-  SHIPPED:        { label: "Shipped",         color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200" },
-  DELIVERED:      { label: "Delivered",       color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  CANCELLED:      { label: "Cancelled",       color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
+  DRAFT:          { label: "Draft",           color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  PENDING:        { label: "Pending",         color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
+  CONFIRMED:      { label: "Confirmed",       color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  PROCESSING:     { label: "Processing",      color: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10",  border: "border-orange-200 dark:border-orange-500/20" },
+  SHIPPED:        { label: "Shipped",         color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-50 dark:bg-indigo-500/10",  border: "border-indigo-200 dark:border-indigo-500/20" },
+  DELIVERED:      { label: "Delivered",       color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  CANCELLED:      { label: "Cancelled",       color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -697,9 +697,9 @@ export default function SalesOrdersPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
         {/* Top Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => {
@@ -717,17 +717,17 @@ export default function SalesOrdersPage() {
                   resetForm();
                 }
               }}
-              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
             <div className="flex flex-col">
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-[#f58220]" />
                 {readOnly ? `Sales Order ${orderNo}` : view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
               </h2>
               {viewOrderRef?.quotation?.quotationNumber && (
-                <span className="text-xs font-semibold text-gray-500 mt-0.5 pl-7">
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 mt-0.5 pl-7">
                   Source Estimate: {viewOrderRef.quotation.quotationNumber}
                 </span>
               )}
@@ -740,58 +740,54 @@ export default function SalesOrdersPage() {
           disabled={readOnly}
           style={{ border: 0, margin: 0, padding: 0, display: "contents" }}
         >
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {/* Customer + Order Details */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               {/* Left: Party + Phone */}
               <div className="space-y-4">
                 <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                    Party *
-                    {lockFromQuotation && <span title="Locked — carried from the source Estimate" className="text-[10px] text-gray-400">🔒</span>}
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
                   <div
                     className={clsx(
-                      "flex items-center gap-2 border rounded-lg px-3 py-2 transition-all",
-                      lockFromQuotation ? "cursor-not-allowed bg-gray-50" : "cursor-pointer bg-white",
-                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 hover:border-gray-400"
+                      "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
+                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
                     )}
                     onClick={() => { if (!lockFromQuotation) setShowCustomerDrop(v => !v); }}
                   >
                     <input
-                      className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400 disabled:cursor-not-allowed"
+                      className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="Select or search party"
                       value={customerSearch}
                       disabled={lockFromQuotation}
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                       onClick={e => { e.stopPropagation(); if (!lockFromQuotation) setShowCustomerDrop(true); }}
                     />
-            {customerSearch && !lockFromQuotation && (
-              <X
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
-                onClick={() => setCustomerSearch("")}
+            {customerSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setCustomerSearch("")} 
               />
             )}
-                    <ChevronDown size={14} className="text-gray-400 shrink-0" />
+                    <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
-                  {showCustomerDrop && !lockFromQuotation && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-                      <div className="max-h-52 overflow-y-auto">
+                  {showCustomerDrop && (
+                    <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
+                      <div className="max-h-52 overflow-y-auto custom-scrollbar">
                         {filteredCustomers.length === 0 ? (
-                          <div className="px-4 py-3 text-xs text-gray-400 text-center">No customers found</div>
+                          <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No customers found</div>
                         ) : (
                           filteredCustomers.map(c => (
                             <button
                               key={c.id}
                               type="button"
-                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 border-b border-gray-50 last:border-0 text-left"
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left"
                               onClick={() => selectCustomer(c)}
                             >
                               <div>
-                                <div className="text-sm font-semibold text-gray-800">{c.name}</div>
-                                <div className="text-xs text-gray-400">{c.phone || "—"}</div>
+                                <div className="text-sm font-semibold text-gray-800 dark:text-white">{c.name}</div>
+                                <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
                               </div>
                             </button>
                           ))
@@ -801,9 +797,9 @@ export default function SalesOrdersPage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Phone</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                     placeholder="10-digit phone number"
                     type="tel"
                     inputMode="numeric"
@@ -817,41 +813,34 @@ export default function SalesOrdersPage() {
               {/* Right: Order No, Order Date, Due Date, State of Supply */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Order No</label>
-                  <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 font-mono">{orderNo || "Auto"}</div>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order No</label>
+                  <div className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-white/[0.02] font-mono">{orderNo || "Auto"}</div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                    Order Date
-                    {lockFromQuotation && <span title="Locked — this is the conversion date, not the Estimate's date" className="text-[10px] text-gray-400">🔒</span>}
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order Date</label>
                   <input
                     type="date"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                     value={orderDate}
                     disabled={lockFromQuotation}
                     onChange={e => setOrderDate(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Due Date</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Due Date</label>
                   <input
                     type="date"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                     value={dueDate}
                     onChange={e => setDueDate(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                    State of Supply
-                    {lockFromQuotation && <span title="Locked — changing this could flip CGST+SGST vs IGST against the accepted Estimate" className="text-[10px] text-gray-400">🔒</span>}
-                  </label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">State of Supply</label>
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    disabled={lockFromQuotation}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                   >
                     <option value="">Select state</option>
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -862,20 +851,20 @@ export default function SalesOrdersPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Items</span>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <button
                 type="button"
                 onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
-                className="px-2.5 py-1 bg-white border border-gray-200 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 transition-colors"
+                className="px-2.5 py-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 dark:text-slate-300 transition-colors"
               >
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs border-b border-gray-100">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5">
                   <th className="text-left px-4 py-2.5 w-10 font-medium">#</th>
                   <th className="text-left px-4 py-2.5 font-medium">Item</th>
                   <th className="text-center px-4 py-2.5 w-20 font-medium">Qty</th>
@@ -886,43 +875,43 @@ export default function SalesOrdersPage() {
                   <th className="w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {items.map((it, idx) => {
                   const comp = computeRow(it, withTax);
                   const isItemDropOpen = openItemDrop === it.id;
                   return (
-                    <tr key={it.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
+                    <tr key={it.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                      <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                       <td className="px-4 py-2.5 relative">
                         <input
                           value={it.itemSearch}
                           onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
                           onFocus={() => setOpenItemDrop(it.id)}
                           placeholder="Search item..."
-                          className="w-full px-3 py-1.5 border border-gray-200 rounded-md text-sm outline-none focus:border-orange-400"
+                          className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                         />
             {it.itemSearch && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setOpenItemDrop("")} 
               />
             )}
                         {isItemDropOpen && (
-                          <div className="absolute left-4 right-4 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto">
+                          <div className="absolute left-4 right-4 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto custom-scrollbar">
                             {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
-                              <div className="px-4 py-3 text-xs text-gray-400">No items found</div>
+                              <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">No items found</div>
                             ) : (
                               products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).map(p => (
                                 <button
                                   key={p.id}
                                   type="button"
-                                  className="w-full flex items-center justify-between px-4 py-2 hover:bg-orange-50 text-left border-b border-gray-50 last:border-0 text-xs"
+                                  className="w-full flex items-center justify-between px-4 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs"
                                   onClick={() => selectProduct(idx, p)}
                                 >
                                   <div>
-                                    <strong className="text-gray-800">{p.name}</strong>
-                                    <div className="text-gray-400">SKU: {p.sku || "—"}</div>
+                                    <strong className="text-gray-800 dark:text-white">{p.name}</strong>
+                                    <div className="text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
                                   </div>
                                   <span className="text-[#f58220] font-mono font-bold">₹{p.basePrice || p.price || 0}</span>
                                 </button>
@@ -934,7 +923,7 @@ export default function SalesOrdersPage() {
                           value={it.remarks}
                           onChange={e => updateItem(idx, "remarks", e.target.value)}
                           placeholder="Remarks / delivery details"
-                          className="w-full px-3 py-1 text-xs text-gray-400 outline-none bg-transparent mt-1 focus:text-gray-700"
+                          className="w-full px-3 py-1 text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
                         />
                       </td>
                       <td className="px-4 py-2.5">
@@ -943,27 +932,27 @@ export default function SalesOrdersPage() {
                           min={1}
                           value={it.qty}
                           onChange={e => updateItem(idx, "qty", Number(e.target.value) || 0)}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm text-center outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                         />
                       </td>
                       <td className="px-4 py-2.5">
                         <select
                           value={it.unit}
                           onChange={e => updateItem(idx, "unit", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
                         >
                           {getUnitOptions(it).map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
                           <input
                             type="number"
                             min={0}
                             value={it.rate || ""}
                             onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
-                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 rounded-md text-sm text-right outline-none focus:border-orange-400"
+                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                             placeholder="0.00"
                           />
                         </div>
@@ -977,20 +966,20 @@ export default function SalesOrdersPage() {
                             updateItem(idx, "taxPct", val);
                             updateItem(idx, "taxLabel", opt?.label || "NONE");
                           }}
-                          className="w-full px-2 py-1.5 border border-gray-200 rounded-md text-sm bg-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
                         >
                           {taxOptionsFor(isSameState).map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
                         </select>
-                        <div className="text-[10px] text-right text-gray-400 mt-0.5 font-mono">₹{comp.taxAmt.toFixed(2)}</div>
+                        <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5 font-mono">₹{comp.taxAmt.toFixed(2)}</div>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-gray-700">
+                      <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-gray-700 dark:text-slate-200">
                         ₹{comp.amount.toFixed(2)}
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeRow(idx)}
-                          className="p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition-colors"
+                          className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 rounded transition-colors"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1000,17 +989,17 @@ export default function SalesOrdersPage() {
                 })}
               </tbody>
             </table>
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
               <button
                 type="button"
                 onClick={addRow}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:border-orange-300 hover:bg-orange-50 rounded-lg text-xs font-semibold text-gray-600 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 transition-all"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Row
               </button>
-              <div className="flex items-center gap-5 text-xs text-gray-400">
-                <span>Qty: <strong className="text-gray-700">{totalQty}</strong></span>
-                <span>Tax: <strong className="text-gray-700 font-mono">₹{totalTax.toFixed(2)}</strong></span>
+              <div className="flex items-center gap-5 text-xs text-gray-400 dark:text-slate-500">
+                <span>Qty: <strong className="text-gray-700 dark:text-slate-200">{totalQty}</strong></span>
+                <span>Tax: <strong className="text-gray-700 dark:text-slate-200 font-mono">₹{totalTax.toFixed(2)}</strong></span>
               </div>
             </div>
           </div>
@@ -1018,14 +1007,14 @@ export default function SalesOrdersPage() {
           {/* Notes + Summary */}
           <div className="flex gap-4 items-start">
             {/* Left: Add-ons */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setShowTerms(v => !v)}
                   className={clsx(
                     "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showTerms ? "border-orange-400 bg-orange-50 text-orange-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    showTerms ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
                   <ClipboardList className="h-3.5 w-3.5" /> Terms & Conditions
@@ -1035,7 +1024,7 @@ export default function SalesOrdersPage() {
                   onClick={() => setShowDesc(v => !v)}
                   className={clsx(
                     "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showDesc ? "border-orange-400 bg-orange-50 text-orange-600" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    showDesc ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
                   <FileText className="h-3.5 w-3.5" /> Description
@@ -1043,14 +1032,14 @@ export default function SalesOrdersPage() {
                 <button
                   type="button"
                   onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-semibold text-gray-600"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300"
                 >
                   <ImageIcon className="h-3.5 w-3.5" /> Image
                 </button>
                 <button
                   type="button"
                   onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 rounded-lg text-xs font-semibold text-gray-600"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300"
                 >
                   <LinkIcon className="h-3.5 w-3.5" /> Document
                 </button>
@@ -1058,7 +1047,7 @@ export default function SalesOrdersPage() {
 
               {/* Payment Type */}
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Payment Type</label>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Payment Type</label>
                 <div className="flex items-center gap-2">
                   {["Cash", "Credit", "Cheque", "Online"].map(type => (
                     <button
@@ -1069,7 +1058,7 @@ export default function SalesOrdersPage() {
                         "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
                         paymentType === type
                           ? "bg-orange-500 text-white border-orange-500"
-                          : "bg-white text-gray-600 border-gray-200 hover:border-orange-300"
+                          : "bg-white dark:bg-card text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-orange-300"
                       )}
                     >
                       {type === "Online" ? "Online/UPI" : type}
@@ -1080,57 +1069,57 @@ export default function SalesOrdersPage() {
 
               {showTerms && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Terms & Conditions</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Terms & Conditions</label>
                   <textarea
                     rows={3}
                     value={termsText}
                     onChange={e => setTermsText(e.target.value)}
                     placeholder="Enter sales terms, delivery instructions..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none resize-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
               {showDesc && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Order Remarks / Memo</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order Remarks / Memo</label>
                   <textarea
                     rows={3}
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                     placeholder="Internal remarks or packaging instructions..."
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none resize-none focus:border-orange-400"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
             </div>
 
             {/* Right: Summary */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 w-64 shrink-0 space-y-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500">Subtotal</span>
-                <span className="font-mono font-semibold text-gray-700">₹{totalAmount.toFixed(2)}</span>
+                <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
+                <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{totalAmount.toFixed(2)}</span>
               </div>
               {totalTax > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500">Tax</span>
-                  <span className="font-mono text-gray-600">₹{totalTax.toFixed(2)}</span>
+                  <span className="text-gray-500 dark:text-slate-400">Tax</span>
+                  <span className="font-mono text-gray-600 dark:text-slate-300">₹{totalTax.toFixed(2)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-sm">
-                <label htmlFor="so_roundoff" className="flex items-center gap-1.5 text-gray-500 cursor-pointer">
+                <label htmlFor="so_roundoff" className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 cursor-pointer">
                   <input
                     type="checkbox"
                     id="so_roundoff"
                     checked={roundOffEnabled}
                     onChange={e => setRoundOffEnabled(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300"
+                    className="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20"
                   />
                   Round Off
                 </label>
-                <span className="font-mono text-gray-500 text-xs">{roundOff >= 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span>
+                <span className="font-mono text-gray-500 dark:text-slate-400 text-xs">{roundOff >= 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span>
               </div>
-              <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                <span className="font-bold text-gray-800">Total</span>
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+                <span className="font-bold text-gray-800 dark:text-white">Total</span>
                 <span className="text-xl font-bold font-mono text-[#f58220]">₹{finalTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -1139,7 +1128,7 @@ export default function SalesOrdersPage() {
         </fieldset>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
           {readOnly ? (
             <>
               <button
@@ -1149,7 +1138,7 @@ export default function SalesOrdersPage() {
                   resetForm();
                   window.history.replaceState({}, "", window.location.pathname);
                 }}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
               >
                 Back to List
               </button>
@@ -1157,7 +1146,7 @@ export default function SalesOrdersPage() {
                 <button
                   type="button"
                   onClick={(e) => handleConfirm(viewOrderRef, e)}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm"
                 >
                   <Check className="h-4 w-4" /> Confirm Order
                 </button>
@@ -1167,7 +1156,7 @@ export default function SalesOrdersPage() {
                   type="button"
                   onClick={(e) => handleCreateProforma(viewOrderRef, e)}
                   disabled={convertingId === viewOrderRef?.id}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
                 >
                   {convertingId === viewOrderRef?.id ? "Creating..." : "Create Proforma Invoice"}
                 </button>
@@ -1175,7 +1164,7 @@ export default function SalesOrdersPage() {
               {viewOrderRef?.proformaInvoiceId && (
                 <a
                   href={`/sales/proforma-invoice?id=${viewOrderRef.proformaInvoiceId}`}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
                 >
                   View Proforma Invoice
                 </a>
@@ -1186,7 +1175,7 @@ export default function SalesOrdersPage() {
               <button
                 type="button"
                 onClick={() => { setView("list"); resetForm(); }}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-600 transition-colors"
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
               >
                 Cancel
               </button>
@@ -1194,14 +1183,14 @@ export default function SalesOrdersPage() {
                 type="button"
                 onClick={() => handleSave("DRAFT")}
                 disabled={saving}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 rounded-lg text-gray-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-700 dark:text-slate-200 transition-colors disabled:opacity-50"
               >
                 Save as Draft
               </button>
               <button
                 type="button"
                 onClick={() => showToast("Share links generated! Ready for PDF dispatch.", "success")}
-                className="px-4 py-2 text-sm font-semibold border border-orange-200 hover:bg-orange-50 rounded-lg text-[#f58220] transition-colors"
+                className="px-4 py-2 text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-[#f58220] transition-colors"
               >
                 Share
               </button>
@@ -1209,7 +1198,7 @@ export default function SalesOrdersPage() {
                 type="button"
                 onClick={() => handleSave("OPEN")}
                 disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
               >
                 <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
               </button>
@@ -1224,10 +1213,10 @@ export default function SalesOrdersPage() {
   // 2. LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={() => { resetForm(); setView("create"); }}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -1241,15 +1230,15 @@ export default function SalesOrdersPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total",    value: stats.total,   color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "Open",     value: stats.open,    color: "text-blue-600",    dot: "bg-blue-500" },
-            { label: "Overdue",  value: stats.overdue,  color: "text-orange-600",  dot: "bg-orange-500" },
-            { label: "Closed",   value: stats.closed,  color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Total",    value: stats.total,   color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "Open",     value: stats.open,    color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
+            { label: "Overdue",  value: stats.overdue,  color: "text-orange-600 dark:text-orange-400",  dot: "bg-orange-500" },
+            { label: "Closed",   value: stats.closed,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -1264,12 +1253,12 @@ export default function SalesOrdersPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search order or party..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-blue-500 bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-blue-500 bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
@@ -1277,7 +1266,7 @@ export default function SalesOrdersPage() {
           <select
             value={dateFilter}
             onChange={e => setDateFilter(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-700 outline-none"
+            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
           >
             <option value="THIS_MONTH">This Month</option>
             <option value="TODAY">Today</option>
@@ -1285,26 +1274,40 @@ export default function SalesOrdersPage() {
           </select>
           {dateFilter === "CUSTOM" && (
             <>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm outline-none" />
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
               <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm outline-none" />
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
             </>
           )}
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
+          >
+            <option value="ALL">All Orders</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="PROCESSING">Processing</option>
+            <option value="SHIPPED">Shipped</option>
+            <option value="DELIVERED">Delivered</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
           <div className="flex-1" />
-          <button onClick={fetchAllData} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={fetchAllData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
 
         {/* ── Empty State ── */}
         {filteredOrders.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-full flex items-center justify-center">
               <ShoppingBag className="h-8 w-8 text-blue-600" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Sales Orders</p>
-              <p className="text-gray-500 text-sm mt-1">Record sales bookings and convert them to invoices.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Sales Orders</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Record sales bookings and convert them to invoices.</p>
             </div>
             <button
               onClick={() => { resetForm(); setView("create"); }}
@@ -1315,10 +1318,10 @@ export default function SalesOrdersPage() {
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Party</th>
                   <th className="text-left px-4 py-3">Order No.</th>
                   <th className="text-left px-4 py-3">Date</th>
@@ -1329,33 +1332,33 @@ export default function SalesOrdersPage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filteredOrders.map(o => {
                   const style = STATUS_STYLES[o.status] || STATUS_STYLES.DRAFT;
                   return (
-                    <tr key={o.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1">
-                          <div className="font-medium text-gray-800 text-sm">{o.customerName}</div>
-                          {o.customerPhone && <div className="text-xs text-gray-400">{o.customerPhone}</div>}
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 border border-gray-200">
+                          <div className="font-medium text-gray-800 dark:text-white text-sm">{o.customerName}</div>
+                          {o.customerPhone && <div className="text-xs text-gray-400 dark:text-slate-500">{o.customerPhone}</div>}
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
                             {o.partyType || (o.customerId ? "CUSTOMER" : "UNKNOWN")}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-600 text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-600 dark:text-slate-400 text-xs">
                         {o.orderNo}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {formatDate(o.invoiceDate)}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {formatDate(o.dueDate)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm">
                         ₹{Number(o.finalAmount).toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-600 text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400 text-sm">
                         ₹{Number(o.balance).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1369,13 +1372,13 @@ export default function SalesOrdersPage() {
                             <>
                               <button
                                 onClick={() => handleEdit(o)}
-                                className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
                               >
                                 Resume
                               </button>
                               <button
                                 onClick={(e) => handleConfirm(o, e)}
-                                className="px-2.5 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                className="px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
                               >
                                 Confirm
                               </button>
@@ -1385,7 +1388,7 @@ export default function SalesOrdersPage() {
                             <button
                               onClick={(e) => handleCreateProforma(o, e)}
                               disabled={convertingId === o.id}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors disabled:opacity-50"
+                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors disabled:opacity-50"
                             >
                               {convertingId === o.id ? "..." : "Create Proforma Invoice"}
                             </button>
@@ -1394,28 +1397,28 @@ export default function SalesOrdersPage() {
                             <a
                               href={`/sales/proforma-invoice?id=${o.proformaInvoiceId}`}
                               onClick={(e) => e.stopPropagation()}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
                             >
                               View Proforma Invoice
                             </a>
                           )}
                           {o.status === "DELIVERED" && (
-                            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                               <Check className="h-3 w-3" /> Done
                             </span>
                           )}
                           <div className="relative">
                             <button
                               onClick={() => setShowRowMenu(showRowMenu === o.id ? null : o.id)}
-                              className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600 transition-colors"
+                              className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
                             >
                               <ChevronRight className="h-4 w-4 rotate-90" />
                             </button>
                             {showRowMenu === o.id && (
-                              <div className="absolute right-0 top-8 z-50 w-32 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-left">
+                              <div className="absolute right-0 top-8 z-50 w-32 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg py-1 text-left">
                                 <button
                                   onClick={() => { handleEdit(o); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
+                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
                                 >
                                   Edit
                                 </button>
@@ -1427,7 +1430,7 @@ export default function SalesOrdersPage() {
                                 </button>
                                 <button
                                   onClick={() => { handleDelete(o.id); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-red-50 text-xs text-red-600 text-left border-t border-gray-100"
+                                  className="w-full px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 text-left border-t border-gray-100 dark:border-white/5"
                                 >
                                   Delete
                                 </button>

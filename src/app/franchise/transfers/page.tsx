@@ -18,11 +18,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  PENDING:   { label: "Pending",    color: "text-amber-600",   bg: "bg-amber-50",   border: "border-amber-200" },
-  APPROVED:  { label: "Approved",   color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-200" },
-  SHIPPED:   { label: "In Transit", color: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-200" },
-  COMPLETED: { label: "Completed",  color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  CANCELLED: { label: "Cancelled",  color: "text-slate-400",   bg: "bg-slate-100",  border: "border-slate-200" },
+  PENDING:   { label: "Pending",    color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
+  APPROVED:  { label: "Approved",   color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-50 dark:bg-indigo-500/10",  border: "border-indigo-200 dark:border-indigo-500/20" },
+  SHIPPED:   { label: "In Transit", color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  COMPLETED: { label: "Completed",  color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  CANCELLED: { label: "Cancelled",  color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
 type TransferItemRow = { id: string; inventoryItemId: string; itemSearch: string; quantity: number; availableStock: number; unit: string; baseUnit: string; };
@@ -181,29 +181,29 @@ export default function FranchiseTransfersPage() {
       .reduce((s, i) => s + Number(i.quantity), 0);
 
     return (
-      <div className="flex flex-col bg-gray-50" style={{ height: 'calc(100vh - 104px)' }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: 'calc(100vh - 104px)' }}>
         {/* Top bar */}
-        <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800">New Stock Transfer</h2>
+            <h2 className="text-base font-semibold text-gray-800 dark:text-white">New Stock Transfer</h2>
           </div>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4 custom-scrollbar">
           {/* Branch Details */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
             <div className="grid grid-cols-2 gap-8">
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Source Branch *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Source Branch *</label>
                   <select
                     value={sourceId}
                     onChange={(e) => { setSourceId(e.target.value); setItems([makeItem()]); }}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] transition-colors"
                   >
                     <option value="">Select source...</option>
                     {branches.map((b) => (
@@ -214,11 +214,11 @@ export default function FranchiseTransfersPage() {
               </div>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Destination Branch *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Destination Branch *</label>
                   <select
                     value={destId}
                     onChange={(e) => setDestId(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-[#f58220] bg-white transition-colors"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] transition-colors"
                   >
                     <option value="">Select destination...</option>
                     {branches.map((b) => (
@@ -231,16 +231,16 @@ export default function FranchiseTransfersPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
-              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Transfer Items</span>
-              {loadingInventory && <span className="text-[10px] text-gray-400">Loading stock...</span>}
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Transfer Items</span>
+              {loadingInventory && <span className="text-[10px] text-gray-400 dark:text-slate-500">Loading stock...</span>}
             </div>
 
             <div style={{ overflowX: "auto" }}>
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                     <th className="w-12 px-3 py-2.5 text-center">#</th>
                     <th className="px-3 py-2.5 text-left">Item</th>
                     <th className="w-32 px-3 py-2.5 text-center">Quantity</th>
@@ -250,7 +250,7 @@ export default function FranchiseTransfersPage() {
                 <tbody>
                   {!sourceId ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
+                      <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400 dark:text-slate-500">
                         Please select a source branch to load available inventory items.
                       </td>
                     </tr>
@@ -260,11 +260,11 @@ export default function FranchiseTransfersPage() {
                     ).slice(0, 10);
 
                     return (
-                      <tr key={item.id} className="border-b border-gray-100 hover:bg-orange-50/30 group">
-                        <td className="px-3 py-2.5 text-center text-xs text-gray-400">{idx + 1}</td>
+                      <tr key={item.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/30 dark:hover:bg-orange-500/5 group">
+                        <td className="px-3 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                         <td className="px-3 py-2" style={{ position: "relative", overflow: "visible" }}>
                           <input
-                            className="w-full text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                             placeholder="Search item to transfer..."
                             value={item.itemSearch}
                             onChange={e => {
@@ -280,13 +280,13 @@ export default function FranchiseTransfersPage() {
                           {item.itemSearch && (
                             <X 
                               size={14} 
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                               onClick={() => updateItemRow(idx, { itemSearch: "" })} 
                             />
                           )}
                           
                           {item.inventoryItemId && (
-                            <div className="text-[10px] text-gray-500 mt-1 leading-tight">
+                            <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
                               Available: {item.availableStock || 0} {item.unit}
                               {item.quantity > (item.availableStock || 0) && <span className="text-red-500 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
                             </div>
@@ -294,20 +294,20 @@ export default function FranchiseTransfersPage() {
 
                           {openItemDrop === item.id && itemDropRect && (
                             <div
-                              className="bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+                              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col"
                               style={{ position: "fixed", top: itemDropRect.top + 4, left: itemDropRect.left, width: itemDropRect.width, zIndex: 9999 }}
                             >
-                              <div className="max-h-48 overflow-y-auto">
+                              <div className="max-h-48 overflow-y-auto custom-scrollbar">
                                 {filtProd.length === 0 ? (
-                                  <div className="px-3 py-4 text-xs text-gray-400 text-center">No matching items in branch</div>
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No matching items in branch</div>
                                 ) : (
                                   filtProd.map(p => (
                                     <button
                                       key={p.id}
                                       disabled={p.currentStock <= 0}
                                       className={clsx(
-                                        "w-full flex items-center justify-between px-3 py-2.5 text-left border-b border-gray-50 last:border-0",
-                                        p.currentStock > 0 ? "hover:bg-orange-50 cursor-pointer" : "opacity-50 cursor-not-allowed bg-gray-50"
+                                        "w-full flex items-center justify-between px-3 py-2.5 text-left border-b border-gray-50 dark:border-white/5 last:border-0",
+                                        p.currentStock > 0 ? "hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer" : "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-white/[0.02]"
                                       )}
                                       onMouseDown={() => {
                                         if (p.currentStock > 0) {
@@ -322,11 +322,11 @@ export default function FranchiseTransfersPage() {
                                       }}
                                     >
                                       <div>
-                                        <div className="text-sm font-medium text-gray-800">{p.name}</div>
-                                        <div className="text-[10px] text-gray-500">{p.category}</div>
+                                        <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                        <div className="text-[10px] text-gray-500 dark:text-slate-400">{p.category}</div>
                                       </div>
-                                      <div className="text-xs font-semibold text-gray-600 text-right">
-                                        {p.currentStock} {p.unit} <span className="text-[9px] font-normal block text-gray-400">avail</span>
+                                      <div className="text-xs font-semibold text-gray-600 dark:text-slate-300 text-right">
+                                        {p.currentStock} {p.unit} <span className="text-[9px] font-normal block text-gray-400 dark:text-slate-500">avail</span>
                                       </div>
                                     </button>
                                   ))
@@ -341,16 +341,16 @@ export default function FranchiseTransfersPage() {
                                 type="number" min={1}
                                 value={item.quantity || ""}
                                 onChange={e => updateItemRow(idx, { quantity: Number(e.target.value) })}
-                                className="w-full text-sm text-gray-700 text-center outline-none bg-transparent border-b border-dashed border-gray-300 focus:border-[#f58220] px-1 py-1"
+                                className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent border-b border-dashed border-gray-300 dark:border-white/20 focus:border-[#f58220] px-1 py-1"
                               />
-                              <span className="text-xs text-gray-500 w-8">{item.unit}</span>
+                              <span className="text-xs text-gray-500 dark:text-slate-400 w-8">{item.unit}</span>
                            </div>
                         </td>
                         <td className="pr-3 text-right">
                           <button
                             onClick={() => removeItemRow(idx)}
                             disabled={items.length === 1}
-                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 disabled:opacity-30 p-1"
+                            className="opacity-0 group-hover:opacity-100 text-gray-400 dark:text-slate-400 hover:text-red-500 disabled:opacity-30 p-1"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -362,24 +362,24 @@ export default function FranchiseTransfersPage() {
               </table>
             </div>
 
-            <div className="px-4 py-2.5 border-t border-gray-100 flex items-center justify-between bg-gray-50/40">
+            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
               <button
                 onClick={addItemRow}
                 disabled={!sourceId}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] border border-orange-200 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:border-transparent disabled:bg-gray-100"
+                className="flex items-center gap-1.5 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:border-transparent disabled:bg-gray-100 dark:disabled:bg-white/5"
               >
                 <Plus size={13} /> Add Row
               </button>
-              <span className="text-xs text-gray-500">Total Qty: <span className="font-semibold text-gray-700">{totalQty}</span></span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">Total Qty: <span className="font-semibold text-gray-700 dark:text-white">{totalQty}</span></span>
             </div>
           </div>
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-gray-200 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
           <button
             onClick={handleBack}
-            className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg"
+            className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 rounded-lg transition-colors"
           >
             Cancel
           </button>
@@ -397,9 +397,9 @@ export default function FranchiseTransfersPage() {
 
   // LIST VIEW
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
           onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -412,15 +412,15 @@ export default function FranchiseTransfersPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total Transfers", value: transfers.length, color: "text-gray-700",    dot: "bg-gray-400" },
-            { label: "Pending",         value: transfers.filter((t) => t.status === "PENDING").length, color: "text-amber-600", dot: "bg-amber-500" },
-            { label: "In Transit",      value: shippedCount, color: "text-blue-600",    dot: "bg-blue-500" },
-            { label: "Completed",       value: transfers.filter((t) => t.status === "COMPLETED").length, color: "text-emerald-600", dot: "bg-emerald-500" },
+            { label: "Total Transfers", value: transfers.length, color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "Pending",         value: transfers.filter((t) => t.status === "PENDING").length, color: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
+            { label: "In Transit",      value: shippedCount, color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
+            { label: "Completed",       value: transfers.filter((t) => t.status === "COMPLETED").length, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
               <div>
-                <p className="text-xs text-gray-500">{s.label}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
                 <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
               </div>
             </div>
@@ -435,25 +435,25 @@ export default function FranchiseTransfersPage() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search branch or transfer ID..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
             {["ALL", "PENDING", "SHIPPED", "COMPLETED"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
                 className={clsx(
                   "px-3 py-2 text-xs font-medium transition-colors",
-                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 hover:bg-gray-50"
+                  statusFilter === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
                 {s === "ALL" ? "All" : STATUS_LABELS[s]}
@@ -462,7 +462,7 @@ export default function FranchiseTransfersPage() {
           </div>
 
           <div className="flex-1" />
-          <button onClick={loadTransfers} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="Refresh">
+          <button onClick={loadTransfers} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -471,27 +471,27 @@ export default function FranchiseTransfersPage() {
         {loading ? (
           <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-[#f58220] opacity-50" /></div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white border border-gray-200 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-orange-50 rounded-full flex items-center justify-center">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <ArrowRightLeft className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 font-semibold">No Transfers Found</p>
-              <p className="text-gray-500 text-sm mt-1">Create a stock transfer to move inventory.</p>
+              <p className="text-gray-800 dark:text-white font-semibold">No Transfers Found</p>
+              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Create a stock transfer to move inventory.</p>
             </div>
             <button
               onClick={openCreate}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
             >
               Create Transfer
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 text-gray-500 text-xs font-medium border-b border-gray-200 uppercase">
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
                   <th className="text-left px-4 py-3">Transfer ID</th>
                   <th className="text-left px-4 py-3">Source</th>
@@ -502,31 +502,28 @@ export default function FranchiseTransfersPage() {
                   <th className="text-right px-4 py-3">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {filtered.map((t) => {
                   const style = STATUS_STYLES[t.status] || STATUS_STYLES.PENDING;
                   return (
-                    <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
+                    <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(t.createdAt)}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-slate-200 text-xs">
                         #{t.id?.slice(0, 8).toUpperCase()}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">{t.fromBranch?.name ?? "HQ"}</span>
+                        <span className="font-medium text-gray-800 dark:text-white">{t.fromBranch?.name ?? "HQ"}</span>
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        <span className="font-medium text-gray-800">{t.toBranch?.name ?? "Branch"}</span>
+                        <span className="font-medium text-gray-800 dark:text-white">{t.toBranch?.name ?? "Branch"}</span>
                       </td>
-                      <td className="px-4 py-3 text-center text-xs text-gray-600 font-medium">
+                      <td className="px-4 py-3 text-center text-xs text-gray-600 dark:text-slate-400 font-medium">
                         {t.items?.length || 0}
                       </td>
-                      <td className="px-4 py-3 text-center text-xs text-gray-600 font-medium">
+                      <td className="px-4 py-3 text-center text-xs text-gray-600 dark:text-slate-400 font-medium">
                         {(() => {
-                          // Different transferred items can carry different
-                          // units — sum per unit rather than producing a
-                          // single meaningless cross-unit total.
                           const byUnit = new Map<string, number>();
                           (t.items || []).forEach((it: any) => {
                             const unit = it.inventoryItem?.unit || "UNT";
@@ -549,7 +546,7 @@ export default function FranchiseTransfersPage() {
                             <button
                               onClick={(e) => handleDispatch(t.id, e)}
                               disabled={actioningId === t.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                             >
                               <Send size={12} /> {actioningId === t.id ? "..." : "Dispatch"}
                             </button>
@@ -558,13 +555,13 @@ export default function FranchiseTransfersPage() {
                             <button
                               onClick={(e) => handleComplete(t.id, e)}
                               disabled={actioningId === t.id}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                             >
                               <CheckCircle2 size={12} /> {actioningId === t.id ? "..." : "Receive"}
                             </button>
                           )}
                           {t.status !== "PENDING" && t.status !== "SHIPPED" && (
-                            <span className="text-gray-300 text-xs">—</span>
+                            <span className="text-gray-300 dark:text-slate-600 text-xs">—</span>
                           )}
                         </div>
                       </td>

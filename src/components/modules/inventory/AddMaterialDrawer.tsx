@@ -64,7 +64,7 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess, initialN
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold text-gray-700">Material Name *</label>
+          <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Material Name *</label>
           <button
             type="button"
             onClick={() => setMaterialList(prev => [...prev, { id: Math.random().toString(36).slice(2), name: "", unit: "kg" }])}
@@ -76,15 +76,15 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess, initialN
 
         <div className="space-y-4">
           {materialList.map((item, idx) => (
-            <div key={item.id} className="space-y-3 pt-1 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+            <div key={item.id} className="space-y-3 pt-1 pb-3 border-b border-gray-100 dark:border-white/5 last:border-0 last:pb-0">
               <div className="space-y-1.5">
                 {materialList.length > 1 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Item #{idx + 1}</span>
+                    <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Item #{idx + 1}</span>
                     <button
                       type="button"
                       onClick={() => setMaterialList(prev => prev.filter(m => m.id !== item.id))}
-                      className="text-gray-400 hover:text-red-500 text-xs transition-colors"
+                      className="text-gray-400 dark:text-slate-500 hover:text-red-500 text-xs transition-colors"
                     >
                       Remove
                     </button>
@@ -98,19 +98,19 @@ export default function AddMaterialDrawer({ isOpen, onClose, onSuccess, initialN
                   }}
                   placeholder="e.g. Black Grams"
                   autoFocus={idx === 0}
-                  className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400"
+                  className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">Unit</label>
+                <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Unit</label>
                 <select
                   value={item.unit}
                   onChange={(e) => {
                     const val = e.target.value;
                     setMaterialList(prev => prev.map(m => m.id === item.id ? { ...m, unit: val } : m));
                   }}
-                  className="w-full h-9 bg-white border border-gray-200 px-3 rounded-lg font-medium text-xs text-gray-800 uppercase outline-none focus:border-[#f58220] transition-all"
+                  className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white uppercase outline-none focus:border-[#f58220] transition-all"
                 >
                   <option value="kg">KG</option>
                   <option value="g">G</option>

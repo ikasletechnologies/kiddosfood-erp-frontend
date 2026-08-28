@@ -10,7 +10,7 @@ import { toast } from "react-hot-toast";
 import api, { franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 
-const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-3 pb-2 border-b border-gray-100";
+const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-3 pb-2 border-b border-gray-100 dark:border-white/5";
 
 interface Dealer {
   id: string;
@@ -175,33 +175,33 @@ export default function DealersClient() {
   });
 
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white text-slate-800">
+    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white dark:bg-background text-slate-800 dark:text-slate-100">
       
       {/* Left Sidebar - Dealer List */}
-      <div className="w-[300px] border-r border-slate-200 flex flex-col shrink-0 bg-white relative z-10">
+      <div className="w-[300px] border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-card relative z-10">
         
         {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200">
-          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 hover:text-blue-600 transition-colors">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-white/5">
+          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
             Dealers <ChevronDown size={18} className="text-blue-500" />
           </button>
         </div>
 
         {/* HQ / Franchise Scope Selector — Super Admin only */}
         {isSuper && (
-          <div className="px-3 py-2 border-b border-slate-200 space-y-2">
-            <div className="flex gap-1 bg-slate-100 rounded-full p-1">
+          <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
+            <div className="flex gap-1 bg-slate-100 dark:bg-white/5 rounded-full p-1">
               <button
                 type="button"
                 onClick={() => setScope("HQ")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
               >
                 HQ
               </button>
               <button
                 type="button"
                 onClick={() => setScope("FRANCHISE")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white text-blue-600 shadow" : "text-slate-500"}`}
+                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
               >
                 Franchise
               </button>
@@ -210,7 +210,7 @@ export default function DealersClient() {
               <select
                 value={selectedFranchiseId}
                 onChange={(e) => setSelectedFranchiseId(e.target.value)}
-                className="w-full text-xs border border-slate-200 rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
+                className="w-full text-xs border border-slate-200 dark:border-white/10 bg-white dark:bg-[#13151f] text-slate-800 dark:text-white rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
                 disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
               >
                 {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
@@ -226,7 +226,7 @@ export default function DealersClient() {
               </select>
             )}
             {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
-              <div className="w-full text-xs border border-rose-200 bg-rose-50 text-rose-600 rounded-full px-3 py-1.5 text-center font-medium">
+              <div className="w-full text-xs border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-full px-3 py-1.5 text-center font-medium">
                 HQ is not configured
               </div>
             )}
@@ -234,7 +234,7 @@ export default function DealersClient() {
         )}
 
         {/* Search & List Headers */}
-        <div className="px-3 py-2 border-b border-slate-200 space-y-2">
+        <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
@@ -242,22 +242,22 @@ export default function DealersClient() {
               placeholder="Search Dealer Name" 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-800 dark:text-white rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
           
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 relative filter-popover-container">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-white/5 relative filter-popover-container">
             <div 
               className="flex items-center gap-2 cursor-pointer"
               onClick={() => setIsFilterOpen(!isFilterOpen)}
             >
-              <span className="text-[12px] font-bold text-slate-500">Dealer Name</span>
+              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Dealer Name</span>
               <Filter size={12} className="text-orange-500" />
             </div>
 
             {/* Filter Popover */}
             {isFilterOpen && (
-              <div className="absolute top-full left-4 mt-2 w-48 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 p-3">
+              <div className="absolute top-full left-4 mt-2 w-48 bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-slate-100 dark:border-white/10 z-50 p-3">
                 <div className="space-y-2 mb-3">
                   {[
                     { id: "all", label: "All" },
@@ -270,26 +270,26 @@ export default function DealersClient() {
                           type="checkbox" 
                           checked={(filters as any)[f.id]}
                           onChange={(e) => setFilters({...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false})}
-                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors" 
+                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 dark:border-white/20 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors bg-white dark:bg-white/5" 
                         />
                         <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12"></polyline>
                         </svg>
                       </div>
-                      <span className="text-xs font-medium text-slate-700">{f.label}</span>
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{f.label}</span>
                     </label>
                   ))}
                 </div>
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/10">
                   <button 
                     onClick={() => { setFilters({ all: true, active: false, inactive: false }); setIsFilterOpen(false); }}
-                    className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-full transition-colors"
+                    className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full transition-colors"
                   >
                     Clear
                   </button>
                   <button 
                     onClick={() => setIsFilterOpen(false)}
-                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-full transition-colors"
+                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-full transition-colors shadow-sm"
                   >
                     Apply
                   </button>
@@ -298,7 +298,7 @@ export default function DealersClient() {
             )}
             
             <div className="flex items-center gap-1.5 cursor-pointer">
-              <span className="text-[12px] font-bold text-slate-500">Status</span>
+              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Status</span>
             </div>
           </div>
         </div>
@@ -316,13 +316,13 @@ export default function DealersClient() {
                 <div 
                   key={d.id}
                   onClick={() => setSelectedDealerId(d.id)}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 transition-colors ${
-                    isActive ? "bg-[#e6f4fc]" : "hover:bg-slate-50 bg-white"
+                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 dark:border-white/5 transition-colors ${
+                    isActive ? "bg-[#e6f4fc] dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-white/[0.02] bg-white dark:bg-transparent"
                   }`}
                 >
-                  <span className="text-sm text-slate-800 truncate pr-2">{d.name}</span>
+                  <span className="text-sm text-slate-800 dark:text-slate-200 truncate pr-2">{d.name}</span>
                   <div className="flex flex-col items-end shrink-0">
-                    <span className={`text-[10px] font-bold uppercase ${d.status === 'ACTIVE' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                    <span className={`text-[10px] font-bold uppercase ${d.status === 'ACTIVE' ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                       {d.status}
                     </span>
                   </div>
@@ -332,14 +332,13 @@ export default function DealersClient() {
           )}
         </div>
 
-
       </div>
 
       {/* Right Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white">
+      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-card">
         
         {/* Top Header Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200">
+        <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200 dark:border-white/5">
           <button 
             onClick={() => {
               if (isSuper && franchisesLoading) return;
@@ -359,8 +358,8 @@ export default function DealersClient() {
             disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
               (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
-                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                : "bg-orange-500 hover:bg-orange-600 text-white"
+                ? "bg-slate-300 dark:bg-white/10 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
             }`}
           >
             <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Dealer"}
@@ -369,26 +368,26 @@ export default function DealersClient() {
 
         {/* Dealer Details Header */}
         {selectedDealer ? (
-          <div className="px-6 py-4 flex items-start justify-between border-b border-slate-200 bg-white">
+          <div className="px-6 py-4 flex items-start justify-between border-b border-slate-200 dark:border-white/5 bg-white dark:bg-card">
             <div className="space-y-4 w-full">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-800 tracking-tight">{selectedDealer.name}</h2>
+                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{selectedDealer.name}</h2>
                   <button className="text-orange-500 hover:text-orange-600 transition-colors">
                     <Edit3 size={16} />
                   </button>
                 </div>
                 <div className="flex items-center gap-4 text-slate-400">
                   <div className="relative filter-popover-container">
-                    <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 transition-colors"><MoreVertical size={18} /></button>
+                    <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><MoreVertical size={18} /></button>
                     {/* More Options Menu */}
                     {isMoreMenuOpen && (
-                      <div className="absolute top-full right-0 mt-2 w-60 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-1.5">
+                      <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5">
                         {[
                           "Dealer Statement (Report)",
                           "All Dealers (Report)"
                         ].map((item, i) => (
-                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                             {item}
                           </button>
                         ))}
@@ -400,16 +399,16 @@ export default function DealersClient() {
               
               <div className="grid grid-cols-3 gap-6 max-w-3xl">
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-0.5">Phone Number</p>
-                  <p className="text-[13px] font-medium text-slate-700">{selectedDealer.phone || "—"}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Phone Number</p>
+                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedDealer.phone || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-0.5">Email</p>
-                  <p className="text-[13px] font-medium text-slate-700">{selectedDealer.email || "—"}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Email</p>
+                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedDealer.email || "—"}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] text-slate-400 mb-0.5">Branch</p>
-                  <p className="text-[13px] font-medium text-slate-700 flex items-center gap-1">
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Branch</p>
+                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
                     <Building2 size={12} className="text-slate-400" />
                     {selectedDealer.franchise?.name || "HQ"}
                   </p>
@@ -417,8 +416,8 @@ export default function DealersClient() {
               </div>
 
               <div>
-                <p className="text-[11px] text-slate-400 mb-0.5">Address</p>
-                <p className="text-[13px] font-medium text-slate-700 flex items-center gap-1">
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Address</p>
+                <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
                   <MapPin size={12} className="text-slate-400" />
                   {selectedDealer.address || "—"}
                 </p>
@@ -426,25 +425,25 @@ export default function DealersClient() {
             </div>
           </div>
         ) : (
-          <div className="px-6 py-4 flex items-center justify-center border-b border-slate-200">
+          <div className="px-6 py-4 flex items-center justify-center border-b border-slate-200 dark:border-white/5">
             <span className="text-sm font-semibold text-slate-400">Select a dealer to view details</span>
           </div>
         )}
 
         {/* Transactions Section */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white">
+        <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-card">
           {/* Section Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200">
-            <h3 className="text-sm font-bold text-slate-700">Transactions</h3>
+          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 dark:border-white/5">
+            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Transactions</h3>
             <div className="flex items-center gap-3 text-slate-400">
               {isTransactionSearchOpen ? (
-                <div className="flex items-center bg-slate-100 rounded-full px-3 py-1">
+                <div className="flex items-center bg-slate-100 dark:bg-white/5 rounded-full px-3 py-1">
                   <Search size={14} className="text-slate-400" />
                   <input 
                     type="text" 
                     autoFocus
                     placeholder="Search transactions..." 
-                    className="bg-transparent border-none text-xs w-32 focus:outline-none ml-2 text-slate-700 placeholder:text-slate-400"
+                    className="bg-transparent border-none text-xs w-32 focus:outline-none ml-2 text-slate-700 dark:text-white placeholder:text-slate-400"
                     value={transactionSearchQuery}
                     onChange={(e) => setTransactionSearchQuery(e.target.value)}
                     onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
@@ -452,15 +451,15 @@ export default function DealersClient() {
                   {transactionSearchQuery && (
                     <X 
                       size={14} 
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                       onClick={() => setTransactionSearchQuery("")} 
                     />
                   )}
                 </div>
               ) : (
-                <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 transition-colors"><Search size={16} /></button>
+                <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Search size={16} /></button>
               )}
-              <button onClick={() => setIsPrintModalOpen(true)} className="hover:text-slate-600 transition-colors"><Printer size={16} /></button>
+              <button onClick={() => setIsPrintModalOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Printer size={16} /></button>
               <button className="text-emerald-600 hover:text-emerald-700 transition-colors"><ExcelIcon size={16} fill="currentColor" className="opacity-20" /></button>
             </div>
           </div>
@@ -468,21 +467,21 @@ export default function DealersClient() {
           {/* Transactions Table */}
           <div className="flex-1 overflow-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-white sticky top-0 z-10 border-b border-slate-200">
+              <thead className="bg-white dark:bg-card sticky top-0 z-10 border-b border-slate-200 dark:border-white/5">
                 <tr>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 relative filter-popover-container">
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 relative filter-popover-container">
                     <div className="flex items-center justify-between">
                       Type 
                       <button onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
-                        <Filter size={14} className="text-slate-400 hover:text-slate-700" />
+                        <Filter size={14} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
                       </button>
                     </div>
                     {/* Type Filter Popover */}
                     {isTypeFilterOpen && (
-                      <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden flex flex-col font-normal text-slate-700 normal-case tracking-normal">
+                      <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-200 normal-case tracking-normal">
                         <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-2 space-y-1">
                           {transactionTypes.map(type => (
-                            <label key={type} className="flex items-start gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer group">
+                            <label key={type} className="flex items-start gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded cursor-pointer group">
                               <input 
                                 type="checkbox" 
                                 checked={selectedTypes.includes(type)}
@@ -490,16 +489,16 @@ export default function DealersClient() {
                                   if (e.target.checked) setSelectedTypes([...selectedTypes, type]);
                                   else setSelectedTypes(selectedTypes.filter(t => t !== type));
                                 }}
-                                className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
+                                className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 cursor-pointer bg-white dark:bg-white/5"
                               />
-                              <span className="text-[11px] leading-tight group-hover:text-slate-900">{type}</span>
+                              <span className="text-[11px] leading-tight group-hover:text-slate-900 dark:group-hover:text-white">{type}</span>
                             </label>
                           ))}
                         </div>
-                        <div className="p-2 border-t border-slate-100 flex items-center gap-2 bg-white">
+                        <div className="p-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-2 bg-white dark:bg-[#13151f]">
                           <button 
                             onClick={() => setSelectedTypes([])} 
-                            className="flex-1 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-bold transition-colors"
+                            className="flex-1 py-1.5 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
                           >
                             Clear
                           </button>
@@ -513,22 +512,22 @@ export default function DealersClient() {
                       </div>
                     )}
                   </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100">
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
                     Number
                   </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100">
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
                     Date
                   </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 text-right">
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
                     Total
                   </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 border-r border-slate-100 text-right">
+                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
                     Balance
                   </th>
-                  <th className="w-10 px-2 py-3 border-b border-slate-200"></th>
+                  <th className="w-10 px-2 py-3 border-b border-slate-200 dark:border-white/5"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {transactions.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
@@ -537,14 +536,14 @@ export default function DealersClient() {
                   </tr>
                 ) : (
                   transactions.map((t, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.type}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.number}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100">{t.date}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">₹ {t.total}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 border-r border-slate-100 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
+                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.date}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.total}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
                       <td className="px-2 py-4 text-center">
-                        <button className="text-slate-300 hover:text-slate-500">
+                        <button className="text-slate-300 hover:text-slate-500 dark:hover:text-slate-200">
                           <MoreVertical size={14} />
                         </button>
                       </td>
@@ -561,9 +560,9 @@ export default function DealersClient() {
       {/* Print Options Modal Overlay */}
       {isPrintModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-[320px] overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="text-sm font-bold text-slate-800">Print Options</h3>
+          <div className="bg-white dark:bg-[#13151f] border border-slate-100 dark:border-white/10 rounded-xl shadow-2xl w-[320px] overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Print Options</h3>
             </div>
             <div className="p-6 space-y-4">
               {[
@@ -573,19 +572,19 @@ export default function DealersClient() {
                 { id: "paymentStatus", label: "Payment Status" }
               ].map(opt => (
                 <label key={opt.id} className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-800">{opt.label}</span>
+                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white">{opt.label}</span>
                   <input 
                     type="checkbox" 
                     checked={(printOptions as any)[opt.id]}
                     onChange={(e) => setPrintOptions({...printOptions, [opt.id]: e.target.checked})}
-                    className="w-4 h-4 rounded-sm border-slate-300 text-orange-500 focus:ring-orange-500" 
+                    className="w-4 h-4 rounded-sm border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 bg-white dark:bg-white/5" 
                   />
                 </label>
               ))}
             </div>
-            <div className="px-6 py-4 flex items-center justify-end gap-6 border-t border-slate-100">
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-800 uppercase tracking-wide">Cancel</button>
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-800 uppercase tracking-wide">OK</button>
+            <div className="px-6 py-4 flex items-center justify-end gap-6 border-t border-slate-100 dark:border-white/10">
+              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 uppercase tracking-wide">Cancel</button>
+              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 uppercase tracking-wide">OK</button>
             </div>
           </div>
         </div>
@@ -593,19 +592,19 @@ export default function DealersClient() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
-            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200">
-              <h2 className="text-base font-semibold text-gray-800">ADD DEALER</h2>
-              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors">
+          <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10">
+              <h2 className="text-base font-semibold text-gray-800 dark:text-white">ADD DEALER</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
                 <XCircle size={20} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
               {isSuper && (
                 <div>
                   <label className={dealerSectionLabelClass}>Target Scope</label>
-                  <div className="w-full border border-orange-200 bg-orange-50 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700">
+                  <div className="w-full border border-orange-200 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-400">
                     {scope === "HQ"
                       ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
                       : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected")}
@@ -617,33 +616,33 @@ export default function DealersClient() {
                 <label className={dealerSectionLabelClass}>Business Information</label>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Dealer Name *</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Dealer Name *</label>
                     <input
                       required
                       type="text"
                       placeholder="e.g. Acme Distribution"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                       value={formData.name}
                       onChange={e => setFormData({...formData, name: e.target.value})}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Email</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Email</label>
                       <input
                         type="email"
                         placeholder="dealer@example.com"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                         value={formData.email}
                         onChange={e => setFormData({...formData, email: e.target.value})}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone</label>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                       <input
                         type="tel"
                         placeholder="Contact Number"
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors"
+                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                         value={formData.phone}
                         onChange={e => setFormData({...formData, phone: e.target.value})}
                       />
@@ -657,25 +656,25 @@ export default function DealersClient() {
                 <textarea
                   rows={3}
                   placeholder="Enter shop/office address..."
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white placeholder-gray-400 transition-colors resize-none"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none"
                   value={formData.address}
                   onChange={e => setFormData({...formData, address: e.target.value})}
                 />
               </div>
             </div>
 
-            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 bg-gray-50">
+            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.02]">
               <button
                 type="button"
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCreate}
-                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
               >
                 Save Dealer
               </button>

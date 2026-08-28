@@ -237,36 +237,36 @@ export default function ActiveProductionRunsClient() {
             return (
               <div
                 key={run.id}
-                className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm hover:shadow-md transition-all flex flex-col gap-6"
+                className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 p-6 rounded-lg shadow-sm hover:shadow-md transition-all flex flex-col gap-6"
               >
                 {/* Top Section: Title, Batch, Status */}
-                <div className="border-b border-gray-200 pb-5">
+                <div className="border-b border-gray-200 dark:border-white/5 pb-5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <h3 className="text-xl font-bold text-gray-800 uppercase tracking-tight">
+                    <h3 className="text-xl font-bold text-gray-800 dark:text-white uppercase tracking-tight">
                       {run.recipe?.name || "IDLY DOSA BATTER"}
                     </h3>
                     <span
                       className={clsx(
                         "px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider w-fit border",
                         run.status === "IN_PROGRESS"
-                          ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                          : "bg-amber-50 text-amber-700 border-amber-200"
+                          ? "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20"
+                          : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20"
                       )}
                     >
                       Status : {run.status === "IN_PROGRESS" ? "IN PROGRESS" : run.status.replace("_", " ")}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 p-4 rounded-lg border border-gray-250">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-gray-50 dark:bg-white/[0.02] p-4 rounded-lg border border-gray-250 dark:border-white/5">
                     <div>
-                      <span className="text-xs font-semibold text-gray-500 block uppercase">Batch</span>
-                      <span className="text-sm font-semibold text-gray-800 font-mono mt-0.5 block">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 block uppercase">Batch</span>
+                      <span className="text-sm font-semibold text-gray-800 dark:text-white font-mono mt-0.5 block">
                         {run.productionBatchCode || "Batch code pending"}
                       </span>
                     </div>
                     <div>
-                      <span className="text-xs font-semibold text-gray-500 block uppercase">Status</span>
-                      <span className="text-sm font-semibold text-indigo-600 mt-0.5 block">
+                      <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 block uppercase">Status</span>
+                      <span className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mt-0.5 block">
                         {run.status === "IN_PROGRESS" ? "IN PROGRESS" : run.status.replace("_", " ")}
                       </span>
                     </div>
@@ -274,24 +274,24 @@ export default function ActiveProductionRunsClient() {
                 </div>
 
                 {/* Section 2: Production Operational Details */}
-                <div className="border-b border-gray-200 pb-5">
+                <div className="border-b border-gray-200 dark:border-white/5 pb-5">
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500">Recipe</p>
-                      <p className="text-xs font-semibold text-gray-800 mt-1 uppercase">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Recipe</p>
+                      <p className="text-xs font-semibold text-gray-800 dark:text-white mt-1 uppercase">
                         {run.recipe?.name || "Idly Dosa Batter"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Expected Yield</p>
-                      <p className="text-xs font-semibold text-gray-800 mt-1 tabular-nums">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Expected Yield</p>
+                      <p className="text-xs font-semibold text-gray-800 dark:text-white mt-1 tabular-nums">
                         {((run.quantity || 0) * (run.recipe?.yieldQty || 1)).toFixed(2)}{" "}
-                        <span className="text-xs text-gray-400 font-normal">{run.recipe?.yieldUnit || "KG"}</span>
+                        <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{run.recipe?.yieldUnit || "KG"}</span>
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500">Ingredients</p>
-                      <p className="text-xs font-semibold text-gray-800 mt-1 tabular-nums">
+                      <p className="text-xs text-gray-500 dark:text-slate-400">Ingredients</p>
+                      <p className="text-xs font-semibold text-gray-800 dark:text-white mt-1 tabular-nums">
                         {run.recipe?.recipeItems?.length || 4}
                       </p>
                     </div>
@@ -300,34 +300,34 @@ export default function ActiveProductionRunsClient() {
 
                 {/* Section 2B: Conditional Stock Shortage & Production Paused Alerts */}
                 {shortItems.length > 0 && (
-                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-4 space-y-3">
+                  <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle size={16} className="text-rose-600 shrink-0" />
-                      <p className="text-xs font-semibold text-rose-900 uppercase tracking-wider">
+                      <AlertTriangle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
+                      <p className="text-xs font-semibold text-rose-900 dark:text-rose-300 uppercase tracking-wider">
                         Stock Shortage — Cannot Continue
                       </p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs">
                         <thead>
-                          <tr className="text-xs font-semibold uppercase text-rose-600 border-b border-rose-200">
+                          <tr className="text-xs font-semibold uppercase text-rose-600 dark:text-rose-400 border-b border-rose-200 dark:border-rose-500/20">
                             <th className="pb-1.5">Ingredient</th>
                             <th className="pb-1.5">Required</th>
                             <th className="pb-1.5">Available</th>
                             <th className="pb-1.5">Short</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-rose-200/50">
+                        <tbody className="divide-y divide-rose-200/50 dark:divide-rose-500/20">
                           {shortItems.map((item: any, idx: number) => {
                             const required = (item.quantityRequired || 0) * (run.quantity || 1);
                             const available = getAvailableFor(run, item) + required;
                             const short = required - available;
                             return (
-                              <tr key={idx} className="text-rose-900 font-bold">
+                              <tr key={idx} className="text-rose-900 dark:text-rose-200 font-bold">
                                 <td className="py-2">{item.inventoryItem?.name || "Ingredient"}</td>
                                 <td className="py-2">{required.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
                                 <td className="py-2">{available.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
-                                <td className="py-2 text-rose-600">{short.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
+                                <td className="py-2 text-rose-600 dark:text-rose-400">{short.toFixed(2)} {item.unit || item.inventoryItem?.unit || "KG"}</td>
                               </tr>
                             );
                           })}
@@ -338,16 +338,16 @@ export default function ActiveProductionRunsClient() {
                 )}
 
                 {run.status === "STOPPED" && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
                         <AlertTriangle size={18} />
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-amber-900 uppercase tracking-wide">
+                        <p className="text-xs font-semibold text-amber-900 dark:text-amber-300 uppercase tracking-wide">
                           Production Paused
                         </p>
-                        <p className="text-xs text-amber-700 mt-0.5">
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
                           Paused at:{" "}
                           {run.endTime
                             ? new Date(run.endTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -370,14 +370,14 @@ export default function ActiveProductionRunsClient() {
                   {run.status === "IN_PROGRESS" ? (
                     <button
                       onClick={() => handleStop(run.id)}
-                      className="w-full sm:flex-1 py-2 px-4 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full sm:flex-1 py-2 px-4 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <StopCircle size={16} /> Pause Production
                     </button>
                   ) : (
                     <button
                       onClick={() => handleResume(run.id)}
-                      className="w-full sm:flex-1 py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
+                      className="w-full sm:flex-1 py-2 px-4 bg-indigo-50 dark:bg-indigo-500/10 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/20 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                     >
                       <PlayCircle size={16} /> Resume Production
                     </button>
@@ -389,7 +389,7 @@ export default function ActiveProductionRunsClient() {
                     className={clsx(
                       "w-full sm:flex-[1.3] py-2 px-4 rounded-lg font-semibold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm",
                       shortItems.length > 0
-                        ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                        ? "bg-gray-200 dark:bg-white/5 text-gray-400 dark:text-slate-600 cursor-not-allowed"
                         : "bg-emerald-600 hover:bg-emerald-700 text-white"
                     )}
                   >
@@ -398,7 +398,7 @@ export default function ActiveProductionRunsClient() {
 
                   <button
                     onClick={() => handleCancel(run.id)}
-                    className="w-full sm:flex-1 py-2 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full sm:flex-1 py-2 px-4 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20 rounded-lg font-semibold text-xs uppercase tracking-wider transition-colors flex items-center justify-center gap-2 shadow-sm"
                   >
                     Cancel Production
                   </button>
@@ -417,15 +417,15 @@ export default function ActiveProductionRunsClient() {
       >
         <div className="space-y-6">
           {batchToApprove && (
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-250 flex justify-between items-center">
+            <div className="bg-gray-50 dark:bg-white/[0.02] p-4 rounded-lg border border-gray-250 dark:border-white/5 flex justify-between items-center">
               <div>
-                <p className="text-xs text-gray-500">Recipe</p>
-                <p className="text-sm font-bold text-gray-800 uppercase mt-0.5">
+                <p className="text-xs text-gray-500 dark:text-slate-400">Recipe</p>
+                <p className="text-sm font-bold text-gray-800 dark:text-white uppercase mt-0.5">
                   {batchToApprove.recipe?.name || "IDLY DOSA BATTER"}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-500">Batch</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400">Batch</p>
                 <p className="text-xs font-semibold text-[#f58220] font-mono mt-0.5">
                   {batchToApprove.productionBatchCode || "Batch code pending"}
                 </p>
@@ -434,19 +434,19 @@ export default function ActiveProductionRunsClient() {
           )}
 
           <div className="grid grid-cols-3 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
-              <p className="text-xs text-gray-500">Expected Yield</p>
-              <p className="text-base font-bold text-gray-850 mt-1 tabular-nums">
+            <div className="p-4 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5 text-center">
+              <p className="text-xs text-gray-500 dark:text-slate-400">Expected Yield</p>
+              <p className="text-base font-bold text-gray-850 dark:text-white mt-1 tabular-nums">
                 {expectedYieldVal.toFixed(2)}{" "}
-                <span className="text-xs text-gray-400 font-normal">{yieldUnit}</span>
+                <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{yieldUnit}</span>
               </p>
             </div>
 
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
-              <p className="text-xs text-gray-500">Actual Yield</p>
-              <p className="text-base font-bold text-indigo-600 mt-1 tabular-nums">
+            <div className="p-4 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5 text-center">
+              <p className="text-xs text-gray-500 dark:text-slate-400">Actual Yield</p>
+              <p className="text-base font-bold text-indigo-600 dark:text-indigo-400 mt-1 tabular-nums">
                 {(Number(actualYield) || 0).toFixed(2)}{" "}
-                <span className="text-xs text-gray-400 font-normal">{yieldUnit}</span>
+                <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{yieldUnit}</span>
               </p>
             </div>
 
@@ -454,16 +454,16 @@ export default function ActiveProductionRunsClient() {
               className={clsx(
                 "p-4 rounded-lg border text-center",
                 wasteVal > 0
-                  ? "bg-amber-50 border-amber-200"
-                  : "bg-emerald-50 border-emerald-200"
+                  ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
+                  : "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
               )}
             >
               <p
                 className={clsx(
                   "text-xs font-semibold uppercase tracking-wider",
                   wasteVal > 0
-                    ? "text-amber-700"
-                    : "text-emerald-700"
+                    ? "text-amber-700 dark:text-amber-400"
+                    : "text-emerald-700 dark:text-emerald-400"
                 )}
               >
                 Waste
@@ -472,8 +472,8 @@ export default function ActiveProductionRunsClient() {
                 className={clsx(
                   "text-base font-bold mt-1 tabular-nums",
                   wasteVal > 0
-                    ? "text-amber-800"
-                    : "text-emerald-800"
+                    ? "text-amber-800 dark:text-amber-300"
+                    : "text-emerald-800 dark:text-emerald-300"
                 )}
               >
                 {wasteVal.toFixed(2)}{" "}
@@ -483,7 +483,7 @@ export default function ActiveProductionRunsClient() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-gray-500 block">
+            <label className="text-xs font-semibold text-gray-500 dark:text-slate-400 block">
               Actual Yield ({yieldUnit})
             </label>
             <input
@@ -492,27 +492,27 @@ export default function ActiveProductionRunsClient() {
               value={actualYield === 0 ? "" : actualYield}
               onChange={(e) => setActualYield(Number(e.target.value))}
               placeholder={`Enter actual yield in ${yieldUnit}`}
-              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold"
+              className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-slate-400 flex items-center gap-1.5">
               <CalendarClock size={12} /> Expiry Date
             </label>
             <input
               type="date"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
-              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold text-gray-800"
+              className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 font-semibold text-gray-800 dark:text-white"
             />
-            <p className="text-[11px] text-gray-400">
+            <p className="text-[11px] text-gray-400 dark:text-slate-500">
               Pre-filled from the product&apos;s configured shelf life — confirm or correct before completing.
             </p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-semibold text-gray-500 flex items-center gap-1.5">
+            <label className="text-xs font-semibold text-gray-500 dark:text-slate-400 flex items-center gap-1.5">
               <FileText size={12} /> Remarks / Production Notes
             </label>
             <textarea
@@ -520,15 +520,15 @@ export default function ActiveProductionRunsClient() {
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="Enter production remarks, QC notes, or reason for waste..."
-              className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 text-gray-700 resize-none font-medium"
+              className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500 text-gray-700 dark:text-slate-300 resize-none font-medium placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-white/10">
             <button
               onClick={() => setShowApprovalModal(false)}
               disabled={submitting}
-              className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-500 hover:text-gray-700 transition-colors"
+              className="flex-1 py-2 rounded-lg text-xs font-semibold text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white transition-colors"
             >
               Cancel
             </button>
