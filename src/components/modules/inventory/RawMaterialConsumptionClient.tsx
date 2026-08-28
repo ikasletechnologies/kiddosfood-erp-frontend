@@ -5,6 +5,12 @@ import { X, Search, RefreshCw, Download, Database } from "lucide-react";
 import { clsx } from "clsx";
 import { inventoryApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
+import { convertUnit } from "@/lib/unitConversion";
+
+// Only convert units erp-units actually knows are weight — converting an
+// unrelated unit (PCS, BOX...) would silently fall back to the identity
+// value via convertUnit and render a bogus "(3 g)" next to a piece count.
+const WEIGHT_UNITS = ["KG", "MG"];
 
 const TYPE_FILTERS = [
   { id: "ALL", label: "All" },
@@ -204,6 +210,10 @@ export default function RawMaterialConsumptionClient() {
                   const source = item.consumptionType || "Production";
                   const style = SOURCE_STYLES[source] || DEFAULT_SOURCE_STYLE;
                   const prefix = source === "Production Consumption" ? "PRD" : source === "Damage" ? "WST" : source === "Expiry" ? "EXP" : "ADJ";
+                  const unitUpper = (item.unit || "").trim().toUpperCase();
+                  const gramsEquivalent = WEIGHT_UNITS.includes(unitUpper)
+                    ? convertUnit(item.quantity, item.unit, "G")
+                    : null;
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
@@ -222,6 +232,9 @@ export default function RawMaterialConsumptionClient() {
                           {item.quantity.toFixed(2)}
                         </span>
                         <span className="ml-1 text-xs text-gray-400">{item.unit}</span>
+                        {gramsEquivalent !== null && (
+                          <div className="text-[11px] text-gray-400">({gramsEquivalent.toFixed(2)} g)</div>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>

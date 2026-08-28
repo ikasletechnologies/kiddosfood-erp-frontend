@@ -81,7 +81,6 @@ export default function GRNPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnItems, setGrnItems] = useState<GRNItem[]>([]);
-  const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [poSearch, setPoSearch] = useState("");
@@ -249,19 +248,6 @@ export default function GRNPage() {
     });
   };
 
-  const handleAutoBatch = async (idx: number) => {
-    setGeneratingLotIdx(idx);
-    try {
-      const res = await grnApi.generateLotNumber();
-      updateItemStr(idx, "lotNumber", res.data.lotNumber);
-    } catch (e) {
-      console.error("Failed to generate lot number", e);
-      toast.error("Failed to generate a batch number. Please try again.");
-    } finally {
-      setGeneratingLotIdx(null);
-    }
-  };
-
   const handleCreateAndApprove = async () => {
     if (!selectedPO) return;
 
@@ -284,15 +270,6 @@ export default function GRNPage() {
         return;
       }
       toast.error("Please select a destination warehouse for all items.");
-      return;
-    }
-
-    // Verify that lot numbers are entered for all accepted items
-    const missingLot = itemsToSubmit.some(
-      item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
-    );
-    if (missingLot) {
-      toast.error("Please enter or generate a Lot Number for all accepted materials before approving.");
       return;
     }
 
@@ -634,48 +611,8 @@ export default function GRNPage() {
                             <div className="text-[11px] text-gray-500 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="space-y-1.5 min-w-[280px]">
-                              {/* Row 1: Lot / Batch Number */}
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  title="Generate a unique lot/batch number"
-                                  disabled={generatingLotIdx === idx}
-                                  onClick={() => handleAutoBatch(idx)}
-                                  className="px-2 py-1 bg-orange-50 hover:bg-orange-100 text-[#f58220] border border-orange-200 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors shrink-0"
-                                >
-                                  {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
-                                </button>
-                                <input
-                                  type="text"
-                                  placeholder="Lot Number *"
-                                  value={item.lotNumber || ""}
-                                  onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
-                                  className={clsx(
-                                    "w-36 px-2.5 py-1 bg-white border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800",
-                                    item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim())
-                                      ? "border-amber-300 bg-amber-50/20"
-                                      : "border-gray-200"
-                                  )}
-                                />
-                              </div>
-
-                              {/* Row 2: Starting & Ending Dates with clear labels */}
+                            <div className="space-y-1.5 min-w-[200px]">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
-                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
-                                  <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
-                                    {formatDisplayDate(item.mfgDate)}
-                                    <CalendarIcon size={12} className="text-gray-400 ml-1" />
-                                  </span>
-                                  <input
-                                    type="date"
-                                    title="Manufacturing (Start) Date"
-                                    value={item.mfgDate || ""}
-                                    onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                  />
-                                </div>
                                 <div className="relative flex items-center gap-1 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
                                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
                                   <span className="text-xs text-gray-800 pointer-events-none min-w-[75px] flex items-center justify-between">
@@ -769,10 +706,7 @@ export default function GRNPage() {
             {/* ── Bottom Actions Footer Bar ── */}
             {(() => {
               const totalAccepted = grnItems.reduce((s, i) => s + (Number(i.acceptedQty) || 0), 0);
-              const isMissingLotNumber = grnItems.length === 0 || totalAccepted === 0 || grnItems.some(
-                item => (Number(item.acceptedQty) || 0) > 0 && (!item.lotNumber || !item.lotNumber.trim())
-              );
-              const isApproveDisabled = submitting || isMissingLotNumber;
+              const isApproveDisabled = submitting || grnItems.length === 0 || totalAccepted === 0;
 
               return (
                 <div className="bg-white px-6 py-4 rounded-lg border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -780,11 +714,6 @@ export default function GRNPage() {
                     <span>
                       <span className="font-semibold text-gray-800">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600">{totalAccepted}</span> units
                     </span>
-                    {isMissingLotNumber && totalAccepted > 0 && (
-                      <span className="text-[11px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 px-2 py-0.5 rounded">
-                        ⚠ Lot Number required to approve
-                      </span>
-                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
 
@@ -799,7 +728,7 @@ export default function GRNPage() {
                       type="button"
                       onClick={handleCreateAndApprove}
                       disabled={isApproveDisabled}
-                      title={isMissingLotNumber ? "Please enter or generate a Lot Number for all accepted materials to enable Approve & Sync" : "Approve GRN and synchronize stock"}
+                      title="Approve GRN and synchronize stock"
                       className={clsx(
                         "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
                         isApproveDisabled

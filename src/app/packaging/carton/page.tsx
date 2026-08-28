@@ -20,6 +20,30 @@ interface Batch {
   franchiseId?: string;
 }
 
+// Raw shape returned by GET /api/production/batches
+// (ProductionService.getProductBatches). remainingQty below is a bulk
+// weight/volume quantity (approvedQty - cartonedQty), and its real unit of
+// measure lives on the recipe that produced it (Recipe.yieldUnit), not on
+// Product — Product has no unit field. This is the same field Packaging
+// Queue and Batch Registry already read.
+interface RawProductionBatch {
+  id: string;
+  batchCode?: string;
+  qcStatus?: string;
+  status?: string;
+  approvedQty?: number | null;
+  cartonedQty?: number | null;
+  createdAt: string;
+  franchiseId?: string;
+  product?: { name?: string } | null;
+  recipe?: { name?: string } | null;
+  production?: {
+    recipe?: {
+      yieldUnit?: string | null;
+    } | null;
+  } | null;
+}
+
 interface CartonLot {
   id: string;
   cartonCode: string;
@@ -49,13 +73,17 @@ export default function CartonPackingPage() {
     try {
       const res = await api.get("/api/production/batches");
       const data = (res.data || [])
-        .filter((b: any) => b.qcStatus === "APPROVED" && b.status === "COMPLETED")
-        .map((b: any) => ({
+        .filter((b: RawProductionBatch) => b.qcStatus === "APPROVED" && b.status === "COMPLETED")
+        .map((b: RawProductionBatch) => ({
           id: b.id,
           batchCode: b.batchCode || b.id?.slice(-6),
           productName: b.product?.name || b.recipe?.name || "Unknown Product",
           remainingQty: Math.max(0, (b.approvedQty || 0) - (b.cartonedQty || 0)),
-          unit: b.product?.unit || "units",
+          // remainingQty is bulk weight/volume (approvedQty - cartonedQty), not
+          // a discrete item count — its real unit lives on the recipe that
+          // produced the batch, not on Product (Product has no unit field).
+          // See RawProductionBatch above / packaging/queue/page.tsx.
+          unit: b.production?.recipe?.yieldUnit || "KG",
           productionDate: b.createdAt,
           franchiseId: b.franchiseId,
         }))

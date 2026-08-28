@@ -78,7 +78,13 @@ function summarizeStock(matchedItems: any[], franchises: any[]) {
     branchMap.set(fid, existing);
   });
 
-  return { hqAvailable, totalBranchAvailable, branchStockBreakdown: Array.from(branchMap.values()), hqItemId: hqItems[0]?.id as string | undefined };
+  return {
+    hqAvailable,
+    totalBranchAvailable,
+    branchStockBreakdown: Array.from(branchMap.values()),
+    hqItemId: hqItems[0]?.id as string | undefined,
+    hqMinimumStock: hqItems[0]?.minimumStock as number | undefined,
+  };
 }
 
 export default function FinishedGoodsStockClient() {
@@ -217,8 +223,10 @@ export default function FinishedGoodsStockClient() {
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [demandFilter, setDemandFilter] = useState<"ALL" | "HAS_DEMAND" | "RESERVED" | "IN_TRANSIT">("ALL");
-  const [catalogFilter, setCatalogFilter] = useState<"ALL" | "SELLABLE" | "UNCATALOGUED">("ALL");
+  const [demandFilter, setDemandFilter] = useState<
+    "ALL" | "IN_STOCK" | "OUT_OF_STOCK" | "LOW_STOCK" | "RESERVED" | "IN_TRANSIT" | "PENDING_DEMAND"
+  >("ALL");
+  const [catalogFilter, setCatalogFilter] = useState<"ALL" | "SELLABLE">("ALL");
   const [viewMode, setViewMode] = useState<"GRID" | "TABLE">("TABLE");
 
   // Drawer States
@@ -410,7 +418,7 @@ export default function FinishedGoodsStockClient() {
         // or shipped) and mislabeled HQ's own production batches as
         // "Branch Holdings" even when nothing was ever transferred out.
         const matchedItems = inventoryItems.filter((it) => matchesProduct(it, prod));
-        const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId } = summarizeStock(matchedItems, franchises);
+        const { hqAvailable, totalBranchAvailable, branchStockBreakdown, hqItemId, hqMinimumStock } = summarizeStock(matchedItems, franchises);
 
         // InventoryItem doesn't carry a per-row damaged/expired flag the way
         // ProductBatch did — damaged/expired retail stock would need a
@@ -516,6 +524,7 @@ export default function FinishedGoodsStockClient() {
           unit: matchedItems[0]?.unit || "KG",
           hqInventoryItemId: hqItemId,
           hqAvailableStock: hqAvailable,
+          hqMinimumStock,
           hqReservedStock: reservedStockQty,
           inTransitStock: inTransitStockQty,
           totalFranchiseAvailableStock: totalBranchAvailable,
@@ -597,17 +606,23 @@ export default function FinishedGoodsStockClient() {
       item.sku.toLowerCase().includes(q);
 
     let matchDemand = true;
-    if (demandFilter === "HAS_DEMAND") {
-      matchDemand = item.pendingDemandQuantity > 0 || item.approvedDemandQuantity > 0;
+    if (demandFilter === "IN_STOCK") {
+      matchDemand = item.hqAvailableStock > 0;
+    } else if (demandFilter === "OUT_OF_STOCK") {
+      matchDemand = item.hqAvailableStock <= 0;
+    } else if (demandFilter === "LOW_STOCK") {
+      // Unknown threshold (no HQ item matched yet) is treated as "not low" —
+      // there's nothing to compare against, so it shouldn't false-alarm.
+      matchDemand = item.hqMinimumStock !== undefined && item.hqAvailableStock > 0 && item.hqAvailableStock <= item.hqMinimumStock;
     } else if (demandFilter === "RESERVED") {
       matchDemand = item.hqReservedStock > 0;
     } else if (demandFilter === "IN_TRANSIT") {
       matchDemand = item.inTransitStock > 0;
+    } else if (demandFilter === "PENDING_DEMAND") {
+      matchDemand = item.pendingDemandQuantity > 0;
     }
 
-    let matchCatalog = true;
-    if (catalogFilter === "SELLABLE") matchCatalog = !isUncatalogued(item);
-    else if (catalogFilter === "UNCATALOGUED") matchCatalog = isUncatalogued(item);
+    const matchCatalog = catalogFilter === "SELLABLE" ? !isUncatalogued(item) : true;
 
     return matchSearch && matchDemand && matchCatalog;
   });
@@ -732,7 +747,6 @@ export default function FinishedGoodsStockClient() {
             {[
               { id: "ALL", label: "All" },
               { id: "SELLABLE", label: "Sellable" },
-              { id: "UNCATALOGUED", label: "Needs Catalog Setup" },
             ].map((f) => (
               <button
                 key={f.id}
@@ -752,9 +766,12 @@ export default function FinishedGoodsStockClient() {
           <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
             {[
               { id: "ALL", label: "All Finished Goods" },
-              { id: "HAS_DEMAND", label: "Has Pending Demand" },
+              { id: "IN_STOCK", label: "In Stock" },
+              { id: "OUT_OF_STOCK", label: "Out of Stock" },
+              { id: "LOW_STOCK", label: "Low Stock" },
               { id: "RESERVED", label: "Reserved" },
               { id: "IN_TRANSIT", label: "In Transit" },
+              { id: "PENDING_DEMAND", label: "Pending Demand" },
             ].map((f) => (
               <button
                 key={f.id}

@@ -26,7 +26,11 @@ interface PackagingTicket {
     batchCode: string;
     expiryDate: string;
     recall?: { status: string } | null;
-    product: { name: string; sku: string; unit: string };
+    product: { name: string; sku: string };
+    // Batch/output unit lives on the recipe that produced it (Recipe.yieldUnit),
+    // not on Product — Product has no unit field. This page only sums packet
+    // counts and never does unit math, so this typing exists for accuracy only.
+    production?: { recipe?: { yieldUnit?: string | null } | null } | null;
   };
 }
 

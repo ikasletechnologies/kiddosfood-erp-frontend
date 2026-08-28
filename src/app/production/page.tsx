@@ -9,7 +9,7 @@ import {
 import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
-import { UNITS } from "@/lib/constants";
+import { RECIPE_UNITS } from "@/lib/recipe-units";
 import { convertUnit } from "@/lib/unitConversion";
 
 interface RecipeItem {
@@ -70,7 +70,7 @@ export default function ProductionPlanningPage() {
         if (rRes.data?.length > 0) {
           setSelectedRecipeId(rRes.data[0].id);
           setTargetYield(rRes.data[0].yieldQty || 100);
-          setTargetUnit(rRes.data[0].yieldUnit || "kg");
+          setTargetUnit(rRes.data[0].yieldUnit || "KG");
         }
         if (whList.length > 0) {
           setSelectedWarehouseId(whList[0].id);
@@ -114,7 +114,7 @@ export default function ProductionPlanningPage() {
     const found = recipes.find((r) => r.id === id);
     if (found) {
       setTargetYield(found.yieldQty || 100);
-      setTargetUnit(found.yieldUnit || "kg");
+      setTargetUnit(found.yieldUnit || "KG");
     }
   };
 
@@ -250,9 +250,9 @@ export default function ProductionPlanningPage() {
             </button>
             <button
               onClick={handleStartProductionDirect}
-              disabled={launching}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:shadow-xl hover:translate-y-[-1px] transition-all active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none ${
-                hasShortage ? "bg-rose-600 text-white" : "bg-[#F97316] text-white"
+              disabled={launching || multiplier <= 0}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:shadow-xl hover:translate-y-[-1px] transition-all active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none disabled:hover:shadow-none disabled:hover:translate-y-0 ${
+                multiplier <= 0 ? "bg-gray-300 text-gray-600" : hasShortage ? "bg-rose-600 text-white" : "bg-[#F97316] text-white"
               }`}
             >
               {launching ? (
@@ -260,6 +260,8 @@ export default function ProductionPlanningPage() {
                   <RefreshCw size={16} className="animate-spin" />
                   Starting...
                 </>
+              ) : multiplier <= 0 ? (
+                <>Enter Target Batch Yield</>
               ) : hasShortage ? (
                 <>
                   <AlertTriangle size={16} />
@@ -311,12 +313,12 @@ export default function ProductionPlanningPage() {
               />
             </div>
             <select
-              value={targetUnit || recipe?.yieldUnit || "kg"}
+              value={targetUnit || recipe?.yieldUnit || "KG"}
               onChange={(e) => setTargetUnit(e.target.value)}
               title="Unit"
               className="px-3 py-2 rounded-md bg-orange-50 border border-orange-200 text-[#F97316] text-xs font-bold uppercase focus:outline-none focus:border-[#f58220]"
             >
-              {UNITS.map((u) => (
+              {RECIPE_UNITS.map((u) => (
                 <option key={u} value={u}>{u}</option>
               ))}
             </select>

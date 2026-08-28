@@ -24,14 +24,13 @@ import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
+import { RECIPE_UNITS as UNITS } from "@/lib/recipe-units";
 
 interface RecipeItem {
   inventoryItemId: string;
   quantityRequired: number | string;
   unit: string;
 }
-
-const UNITS = ["KG", "G", "L", "ML", "PCS", "PKT", "BOX", "DOZEN"];
 
 const emptyForm = {
   recipeCode: "",

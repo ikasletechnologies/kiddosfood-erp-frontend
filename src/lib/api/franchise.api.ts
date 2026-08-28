@@ -270,6 +270,10 @@ export interface InventoryDemandItem {
   // InventoryItem row, not the Product catalog entry.
   hqInventoryItemId?: string;
   hqAvailableStock: number;
+  // Reorder threshold from the HQ InventoryItem row (InventoryItem.minimumStock).
+  // Undefined when there's no matched HQ item yet — Low Stock filtering treats
+  // that as "unknown," not "low," so an uncatalogued row never falsely alarms.
+  hqMinimumStock?: number;
   hqReservedStock: number;
   inTransitStock: number;
   totalFranchiseAvailableStock: number;
