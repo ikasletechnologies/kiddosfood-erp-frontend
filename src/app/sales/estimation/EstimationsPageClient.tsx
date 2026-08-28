@@ -419,6 +419,11 @@ export default function EstimationsPageClient({
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [courierName, setCourierName] = useState("");
+  // Sales-order-specific fulfilment/payment commitment — deliberately NOT
+  // derived from the Estimate's validUntil (a price-offer expiry, a
+  // different business concept). Defaults to 7 days out at modal-open time,
+  // matching the backend's own default when this is left unset.
+  const [convertDueDate, setConvertDueDate] = useState("");
 
   // Add Party inline form
   const [showAddParty, setShowAddParty] = useState(false);
@@ -587,7 +592,11 @@ export default function EstimationsPageClient({
       setCustomerSearch((party ? party.name : "") || draft.customerName || "");
       setCustomerPhone(draft.customerPhone || party?.phone || "");
       setInvoiceDate(draft.validUntil ? new Date(draft.validUntil).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
-      setStateOfSupply(party?.state || "");
+      // Prefer the quotation's own persisted stateOfSupply — falling back to
+      // the customer's current state only for legacy rows saved before this
+      // field existed (a customer's state can drift after the fact; the
+      // Estimate's own value is what was actually quoted against).
+      setStateOfSupply(draft.stateOfSupply || party?.state || "");
       setRefNo(draft.quotationNumber || draft.proformaNumber || "");
       
       const mappedItems = draft.items && draft.items.length > 0
@@ -704,6 +713,7 @@ export default function EstimationsPageClient({
         customerName: selectedCustomer ? selectedCustomer.name : (customerSearch || undefined),
         customerPhone,
         validUntil: invoiceDate,
+        stateOfSupply: stateOfSupply || undefined,
         status: isDraft ? "DRAFT" : "SENT",
         items: itemsToSave.map(i => ({
           productId: i.productId || undefined,
@@ -760,6 +770,7 @@ export default function EstimationsPageClient({
     setDeliveryAddress("");
     setTrackingNumber("");
     setCourierName("");
+    setConvertDueDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
     setShowConvertModal(true);
   };
 
@@ -773,7 +784,8 @@ export default function EstimationsPageClient({
         deliveryDate: deliveryDate || undefined,
         deliveryAddress: deliveryAddress || undefined,
         trackingNumber: trackingNumber || undefined,
-        courierName: courierName || undefined
+        courierName: courierName || undefined,
+        dueDate: convertDueDate || undefined
       });
       showToast("Converted to Sales Order successfully", "success");
       setShowConvertModal(false);
@@ -1702,6 +1714,19 @@ export default function EstimationsPageClient({
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col">
                   <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                    <Calendar size={12} /> Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={convertDueDate}
+                    onChange={e => setConvertDueDate(e.target.value)}
+                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                  />
+                  <span className="text-[10px] text-gray-400 mt-1">Fulfilment/payment commitment — not the Estimate's Valid Until</span>
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
                     <Calendar size={12} /> Delivery Date
                   </label>
                   <input
@@ -1711,19 +1736,19 @@ export default function EstimationsPageClient({
                     className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
                   />
                 </div>
+              </div>
 
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    <Truck size={12} /> Courier Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Delhivery, BlueDart"
-                    value={courierName}
-                    onChange={e => setCourierName(e.target.value)}
-                    className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                  />
-                </div>
+              <div className="flex flex-col">
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <Truck size={12} /> Courier Name
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Delhivery, BlueDart"
+                  value={courierName}
+                  onChange={e => setCourierName(e.target.value)}
+                  className="px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                />
               </div>
 
               <div className="flex flex-col">

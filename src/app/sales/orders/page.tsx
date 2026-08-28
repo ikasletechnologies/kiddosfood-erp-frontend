@@ -196,6 +196,14 @@ export default function SalesOrdersPage() {
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [stateOfSupply, setStateOfSupply] = useState("");
+  // Set only for an order converted from an Estimate (order.quotationId).
+  // Customer / Order Date / State of Supply must stay locked to what the
+  // customer already accepted in that Estimate — changing State of Supply
+  // in particular can flip CGST+SGST vs IGST and desync the order from the
+  // totals already agreed. Due Date is deliberately NOT gated by this: it's
+  // a separate fulfilment/payment commitment, not something the Estimate
+  // ever fixed (see Quotation.validUntil, a price-offer expiry — not this).
+  const [sourceQuotationId, setSourceQuotationId] = useState<string | null>(null);
   const [companyState, setCompanyState] = useState("");
   const [items, setItems] = useState<LineItem[]>([makeItem(), makeItem()]);
   const [priceMode, setPriceMode] = useState<"without_tax" | "with_tax">("without_tax");
@@ -426,6 +434,7 @@ export default function SalesOrdersPage() {
     setIdempotencyKey(crypto.randomUUID());
     setReadOnly(false);
     setViewOrderRef(null);
+    setSourceQuotationId(null);
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -475,6 +484,9 @@ export default function SalesOrdersPage() {
       customerId: selectedCustomer?.id || undefined,
       customerName: selectedCustomer?.name || customerSearch || undefined,
       customerPhone: customerPhone || undefined,
+      orderDate: orderDate || undefined,
+      dueDate: dueDate || undefined,
+      stateOfSupply: stateOfSupply || undefined,
       deliveryDate: dueDate || undefined,
       notes: description || undefined,
       discountAmount: undefined,
@@ -512,14 +524,22 @@ export default function SalesOrdersPage() {
   const handleEdit = (order: any) => {
     setReadOnly(false);
     setViewOrderRef(null);
+    // Real, persisted order.quotationId — not the locally-cached _rawState —
+    // is what gates the Customer/Order Date/State of Supply lock below, so
+    // it must survive a page reload the same way the order itself does.
+    setSourceQuotationId(order.quotationId || null);
     setDraftId(order.id);
     setOrderNo(order.orderNo);
     const raw = order._rawState || {};
     setSelectedCustomer(raw.selectedCustomer || null);
     setCustomerSearch(raw.customerSearch || order.customerName);
     setCustomerPhone(raw.customerPhone || order.customerPhone || "");
-    setOrderDate(raw.orderDate || order.invoiceDate);
-    setDueDate(raw.dueDate || order.dueDate);
+    // order.orderDate/dueDate are real DB DateTime values (full ISO) once
+    // persisted — the <input type="date"> needs just the date portion.
+    // raw._rawState (a same-session local cache) already stores plain
+    // "YYYY-MM-DD" strings, so only the DB-sourced values need slicing.
+    setOrderDate(raw.orderDate || (order.orderDate ? new Date(order.orderDate).toISOString().split("T")[0] : order.invoiceDate));
+    setDueDate(raw.dueDate || (order.dueDate ? new Date(order.dueDate).toISOString().split("T")[0] : ""));
     setStateOfSupply(raw.stateOfSupply || order.stateOfSupply || "");
     setPriceMode(raw.priceMode || "without_tax");
     setPaymentType(raw.paymentType || order.paymentType || "Cash");
@@ -654,6 +674,11 @@ export default function SalesOrdersPage() {
 
   const filteredOrders = getFilteredOrders();
 
+  // Customer / Order Date / State of Supply are locked (not the whole form —
+  // Due Date and line items stay editable) once this order has a source
+  // Estimate. See sourceQuotationId's declaration for why.
+  const lockFromQuotation = !!sourceQuotationId;
+
   const filteredCustomers = customers.filter(c =>
     !customerSearch ||
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -722,31 +747,36 @@ export default function SalesOrdersPage() {
               {/* Left: Party + Phone */}
               <div className="space-y-4">
                 <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Party *</label>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                    Party *
+                    {lockFromQuotation && <span title="Locked — carried from the source Estimate" className="text-[10px] text-gray-400">🔒</span>}
+                  </label>
                   <div
                     className={clsx(
-                      "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white transition-all",
+                      "flex items-center gap-2 border rounded-lg px-3 py-2 transition-all",
+                      lockFromQuotation ? "cursor-not-allowed bg-gray-50" : "cursor-pointer bg-white",
                       showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 hover:border-gray-400"
                     )}
-                    onClick={() => setShowCustomerDrop(v => !v)}
+                    onClick={() => { if (!lockFromQuotation) setShowCustomerDrop(v => !v); }}
                   >
                     <input
-                      className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400"
+                      className="flex-1 text-sm text-gray-700 outline-none bg-transparent placeholder-gray-400 disabled:cursor-not-allowed"
                       placeholder="Select or search party"
                       value={customerSearch}
+                      disabled={lockFromQuotation}
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                      onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
+                      onClick={e => { e.stopPropagation(); if (!lockFromQuotation) setShowCustomerDrop(true); }}
                     />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
+            {customerSearch && !lockFromQuotation && (
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                onClick={() => setCustomerSearch("")}
               />
             )}
                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                   </div>
-                  {showCustomerDrop && (
+                  {showCustomerDrop && !lockFromQuotation && (
                     <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
                       <div className="max-h-52 overflow-y-auto">
                         {filteredCustomers.length === 0 ? (
@@ -791,11 +821,15 @@ export default function SalesOrdersPage() {
                   <div className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 font-mono">{orderNo || "Auto"}</div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Order Date</label>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                    Order Date
+                    {lockFromQuotation && <span title="Locked — this is the conversion date, not the Estimate's date" className="text-[10px] text-gray-400">🔒</span>}
+                  </label>
                   <input
                     type="date"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
                     value={orderDate}
+                    disabled={lockFromQuotation}
                     onChange={e => setOrderDate(e.target.value)}
                   />
                 </div>
@@ -809,11 +843,15 @@ export default function SalesOrdersPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">State of Supply</label>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                    State of Supply
+                    {lockFromQuotation && <span title="Locked — changing this could flip CGST+SGST vs IGST against the accepted Estimate" className="text-[10px] text-gray-400">🔒</span>}
+                  </label>
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white"
+                    disabled={lockFromQuotation}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:border-orange-400 bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
                   >
                     <option value="">Select state</option>
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
