@@ -1723,7 +1723,6 @@ export default function EstimationsPageClient({
                     className="px-3.5 py-2.5 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
                   />
                 </div>
-              </div>
 
                 <div className="flex flex-col">
                   <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">

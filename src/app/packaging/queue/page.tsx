@@ -295,20 +295,14 @@ export default function PackagingQueuePage() {
                                 {badge.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right text-gray-700">
-                              {approvedQty} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
-                              {approvedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.product?.unit || 'KG'}</span>
+                              {approvedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             </td>
-                            <td className="px-4 py-3 text-right text-gray-700">
-                              {packagedQty} <span className="text-xs text-gray-400">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             <td className="px-4 py-3 text-right text-gray-700 dark:text-slate-300">
-                              {packagedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.product?.unit || 'KG'}</span>
+                              {packagedQty} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             </td>
-                            <td className="px-4 py-3 text-right font-semibold text-gray-800">
-                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 font-normal">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white">
-                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{batch.product?.unit || 'KG'}</span>
+                              {balanceQty.toFixed(2)} <span className="text-xs text-gray-400 dark:text-slate-500 font-normal">{batch.production?.recipe?.yieldUnit || 'KG'}</span>
                             </td>
                             <td className="px-4 py-3 text-center">
                               {isFullyPackaged ? (
@@ -381,8 +375,7 @@ export default function PackagingQueuePage() {
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500 dark:text-slate-400">Available approved bulk</span>
                     {/* approvedQty minus already packaged — never total produced quantity */}
-                    <span className="text-gray-800 font-semibold">{availableBulk} {selectedBatch.production?.recipe?.yieldUnit || 'KG'}</span>
-                    <span className="text-gray-800 dark:text-white font-semibold">{availableBulk} {selectedBatch.product?.unit || 'KG'}</span>
+                    <span className="text-gray-800 dark:text-white font-semibold">{availableBulk} {selectedBatch.production?.recipe?.yieldUnit || 'KG'}</span>
                   </div>
 
                   <div>
@@ -487,16 +480,12 @@ export default function PackagingQueuePage() {
 
                     <div className="space-y-1.5 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Bulk Stock to Deduct on Confirm</span>
-                        <span className="text-rose-600 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.production?.recipe?.yieldUnit || "KG"}</span>
                         <span className="text-gray-500 dark:text-slate-400">Bulk Stock to Deduct on Confirm</span>
-                        <span className="text-rose-600 dark:text-rose-400 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold">{totalWeightNeeded.toFixed(2)} {selectedBatch.production?.recipe?.yieldUnit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Bulk Stock Remaining</span>
-                        <span className="text-gray-700 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.production?.recipe?.yieldUnit || "KG"}</span>
                         <span className="text-gray-500 dark:text-slate-400">Bulk Stock Remaining</span>
-                        <span className="text-gray-700 dark:text-slate-300 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.product?.unit || "KG"}</span>
+                        <span className="text-gray-700 dark:text-slate-300 font-semibold">{bulkRemaining.toFixed(2)} {selectedBatch.production?.recipe?.yieldUnit || "KG"}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-slate-400">Planned Packets</span>

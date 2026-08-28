@@ -155,6 +155,7 @@ export default function GRNPage() {
   const [isScanProcessing, setIsScanProcessing] = useState(false);
   const [scanInput, setScanInput] = useState("");
   const [viewingGRNDetails, setViewingGRNDetails] = useState<any>(null);
+  const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
 
   // Fetch Pending POs or History based on view
   useEffect(() => {
@@ -246,6 +247,18 @@ export default function GRNPage() {
       next[idx] = currentItem;
       return next;
     });
+  };
+
+  const handleAutoBatch = async (idx: number) => {
+    setGeneratingLotIdx(idx);
+    try {
+      const res = await grnApi.generateLotNumber();
+      updateItemStr(idx, "lotNumber", res.data.lotNumber);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || "Failed to generate lot number.");
+    } finally {
+      setGeneratingLotIdx(null);
+    }
   };
 
   const handleCreateAndApprove = async () => {

@@ -318,7 +318,7 @@ export default function ProductionPlanningPage() {
               title="Unit"
               className="px-3 py-2 rounded-md bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-[#F97316] text-xs font-bold uppercase focus:outline-none focus:border-[#f58220]"
             >
-              {UNITS.map((u) => (
+              {RECIPE_UNITS.map((u) => (
                 <option key={u} value={u} className="dark:bg-card">{u}</option>
               ))}
             </select>
