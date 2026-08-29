@@ -13,12 +13,26 @@ import {
 import { useToast } from '@/context/ToastContext';
 import clsx from 'clsx';
 
+// Human-readable label for Payment.entityType / Order.partyType — same
+// mechanism for all three party kinds, no per-type special casing.
+const PARTY_TYPE_LABEL: Record<string, string> = {
+  CUSTOMER: 'Customer',
+  DEALER: 'Dealer',
+  FRANCHISE: 'Franchise',
+};
+
 interface LedgerRow {
   id: string;
   date: string;
   particulars: string;
   type: 'INFLOW' | 'OUTFLOW';
   amount: number;
+  // POS-traceability reference fields (undefined for non-POS rows e.g.
+  // expenses/vendor/customer ledger entries, which keep the plain layout).
+  billNumber?: string | null;
+  partyType?: string | null;
+  partyName?: string | null;
+  method?: string | null;
 }
 
 function toRows(account: any): LedgerRow[] {
@@ -26,12 +40,19 @@ function toRows(account: any): LedgerRow[] {
 
   for (const p of account.payments || []) {
     const isOutflow = p.entityType === 'VENDOR' || p.sourceModule === 'EXPENSE' || p.type === 'INTERNAL_TRANSFER';
+    const isPos = p.sourceModule === 'POS';
     rows.push({
       id: `payment-${p.id}`,
       date: p.createdAt,
-      particulars: p.transactionRef || (isOutflow ? (p.sourceModule === 'EXPENSE' ? 'Expense Paid' : 'Payment Made') : 'Payment Received'),
+      particulars: isPos
+        ? 'POS Payment Received'
+        : (p.transactionRef || (isOutflow ? (p.sourceModule === 'EXPENSE' ? 'Expense Paid' : 'Payment Made') : 'Payment Received')),
       type: isOutflow ? 'OUTFLOW' : 'INFLOW',
       amount: p.paidAmount,
+      billNumber: isPos ? p.billNumber : null,
+      partyType: isPos ? p.partyType : null,
+      partyName: isPos ? p.partyName : null,
+      method: isPos ? p.paymentMode : null,
     });
   }
 
@@ -168,10 +189,19 @@ export default function AccountDetailPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {rows.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                    <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400">{new Date(r.date).toLocaleString("en-IN")}</td>
-                    <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">{r.particulars}</td>
+                    <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap align-top">{new Date(r.date).toLocaleString("en-IN")}</td>
+                    <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300 align-top">
+                      <div>{r.particulars}</div>
+                      {(r.billNumber || r.partyName || r.method) && (
+                        <div className="mt-1 space-y-0.5 text-[11px] font-normal text-gray-500 dark:text-slate-400">
+                          {r.billNumber && <div>Bill: #{r.billNumber}</div>}
+                          {r.partyName && <div>{PARTY_TYPE_LABEL[r.partyType || ''] || 'Party'}: {r.partyName}</div>}
+                          {r.method && <div>Method: {r.method}</div>}
+                        </div>
+                      )}
+                    </td>
                     <td className={clsx(
-                      "px-5 py-3 text-xs font-bold text-right",
+                      "px-5 py-3 text-xs font-bold text-right align-top whitespace-nowrap",
                       r.type === 'INFLOW' ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                     )}>
                       {r.type === 'INFLOW' ? '+' : '-'}₹{r.amount.toLocaleString("en-IN")}
