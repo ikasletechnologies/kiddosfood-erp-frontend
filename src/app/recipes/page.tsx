@@ -430,16 +430,16 @@ export default function RecipesPage() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 w-full min-w-0 p-3 sm:p-0">
         {/* Action Toolbar */}
         <div className="flex items-center justify-end gap-2 pb-2 border-b border-slate-200 dark:border-white/10">
           <div className="flex gap-2">
-            <button onClick={fetchAll} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+            <button onClick={fetchAll} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 transition-all" title="Refresh">
               <RefreshCw size={18} className="text-gray-400" />
             </button>
             <button
               onClick={handleOpenNew}
-              className="flex items-center gap-2 bg-[#F97316] hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl text-sm font-black transition-all shadow-lg shadow-orange-500/20"
+              className="flex items-center gap-2 bg-[#F97316] hover:bg-orange-600 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-black transition-all shadow-lg shadow-orange-500/20"
             >
               <Plus size={18} strokeWidth={3} /> New Recipe
             </button>
@@ -447,29 +447,29 @@ export default function RecipesPage() {
         </div>
 
         {/* Stats Dashboard */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
           {[
             { label: "Total Formulas", value: recipes.length, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-500/10" },
             { label: "Products Covered", value: new Set(recipes.map((r) => r.productId)).size, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-500/10" },
             { label: "Avg Ingredients", value: recipes.length ? (recipes.reduce((s, r) => s + (r.recipeItems?.length ?? 0), 0) / recipes.length).toFixed(1) : 0, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
           ].map((stat) => (
-            <div key={stat.label} className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 p-5 shadow-sm">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
-              <p className={clsx("text-2xl font-black", stat.color)}>{stat.value}</p>
+            <div key={stat.label} className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 p-4 sm:p-5 shadow-sm min-w-0">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 truncate">{stat.label}</p>
+              <p className={clsx("text-xl sm:text-2xl font-black", stat.color)}>{stat.value}</p>
             </div>
           ))}
         </div>
 
         {/* Main Content */}
-        <div className="bg-white dark:bg-card rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-50 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white dark:bg-card rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden w-full min-w-0">
+          <div className="p-4 sm:p-6 border-b border-gray-50 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by recipe name or product..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50/50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
+                className="w-full pl-10 pr-8 py-2.5 text-xs sm:text-sm bg-gray-50/50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 transition-all"
               />
               {search && (
                 <X 
@@ -492,8 +492,8 @@ export default function RecipesPage() {
               <p className="mt-4 text-sm font-bold text-gray-400">No recipes found matching your search.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-left min-w-[650px]">
                 <thead>
                   <tr className="bg-gray-50/50 dark:bg-white/5 text-[10px] font-black text-gray-400 uppercase tracking-widest">
                     <th className="px-6 py-4">Recipe Detail</th>

@@ -7,7 +7,7 @@ import {
   User, Check, Package, Calendar,
   MapPin, Hash, ArrowRight,
   ChevronDown, Trash2, MoreVertical,
-  ArrowLeft
+  ArrowLeft, Download, FileSpreadsheet, Printer
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi, posApi } from "@/lib/api";
@@ -219,6 +219,21 @@ export default function DeliveryChallanPage() {
   const customerDropRef = useRef<HTMLDivElement>(null);
   const priceDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
+  const exportDropRef = useRef<HTMLDivElement>(null);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const handleDocClick = (e: MouseEvent) => {
+      if (exportDropRef.current && !exportDropRef.current.contains(e.target as Node)) {
+        setExportDropdownOpen(false);
+      }
+      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node)) {
+        setShowCustomerDrop(false);
+      }
+    };
+    document.addEventListener("mousedown", handleDocClick);
+    return () => document.removeEventListener("mousedown", handleDocClick);
+  }, []);
 
   // ── Data Fetching ────────────────────────────────────────────────────────────
 
@@ -913,42 +928,133 @@ export default function DeliveryChallanPage() {
     draft: challans.filter(d => d.status === "DRAFT").length,
   };
 
+  const handleExportExcel = () => {
+    setExportDropdownOpen(false);
+    const headers = ["Date", "Party", "Challan No", "Due Date", "Amount", "Status"];
+    const rows = [
+      ["DELIVERY CHALLAN REPORT"],
+      [`Generated: ${new Date().toLocaleString()}`],
+      [],
+      headers,
+      ...filteredChallans.map((dc: any) => [
+        formatDate(dc.invoiceDate),
+        dc.customerName || "—",
+        `#${dc.challanNo}`,
+        formatDate(dc.dueDate),
+        `₹${Number(dc.finalAmount || 0).toFixed(2)}`,
+        STATUS_STYLES[dc.status]?.label || dc.status,
+      ]),
+    ];
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      rows.map((e) => e.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `Delivery_Challans_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Excel (.csv) report downloaded!", "success");
+  };
+
+  const handleExportPDF = () => {
+    setExportDropdownOpen(false);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      showToast("Please allow pop-ups to export as PDF", "error");
+      return;
+    }
+    const tableRows = filteredChallans.map((dc: any) => `
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${formatDate(dc.invoiceDate)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${dc.customerName || "—"}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-weight: bold; color: #f58220;">#${dc.challanNo}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${formatDate(dc.dueDate)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold;">₹${Number(dc.finalAmount || 0).toFixed(2)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${STATUS_STYLES[dc.status]?.label || dc.status}</td>
+      </tr>
+    `).join("");
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Delivery Challans Summary — ${new Date().toLocaleDateString()}</title>
+          <style>
+            @media print {
+              body { margin: 0; padding: 20px; font-size: 11px; }
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; padding: 24px; }
+            h1 { font-size: 20px; font-weight: 900; margin: 0; text-transform: uppercase; }
+            p { font-size: 11px; color: #64748b; margin: 4px 0 16px 0; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; margin-top: 12px; }
+            th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: bold; text-transform: uppercase; font-size: 10px; color: #475569; }
+          </style>
+        </head>
+        <body>
+          <h1>DELIVERY CHALLANS REGISTRY</h1>
+          <p>Generated on ${new Date().toLocaleString()} | Dispatch & Logistics</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Party</th>
+                <th>Challan No</th>
+                <th>Due Date</th>
+                <th style="text-align: right;">Amount</th>
+                <th style="text-align: center;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   // ════════════════════════════════════════════════════════════════════════════
   // 1. FORM VIEW (Screen 2 Layout - Full Page Creation View)
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0" style={{ minHeight: "calc(100vh - 80px)" }}>
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => {
                 setView("list");
                 resetForm();
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-white">
+            <h2 className="text-base font-bold text-gray-800 dark:text-white truncate">
               {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
             </h2>
           </div>
-          <span className="text-xs text-gray-400 dark:text-slate-500">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
+          <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 custom-scrollbar w-full min-w-0">
 
           {/* Customer + Details card */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
-            <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-3">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+              <div className="space-y-3 min-w-0">
                 <div>
-                  <div className="flex items-center gap-4 mb-1.5">
-                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Destination *</label>
-                    <div className="flex items-center gap-3 text-xs text-gray-700 dark:text-slate-300">
+                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mb-1.5">
+                    <label className="text-xs font-semibold text-gray-500 dark:text-slate-400">Destination *</label>
+                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-gray-700 dark:text-slate-300">
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Customer
                       </label>
@@ -970,7 +1076,7 @@ export default function DeliveryChallanPage() {
                         onClick={() => setShowCustomerDrop(v => !v)}
                       >
                         <input
-                          className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                          className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                           placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
                           value={customerSearch}
                           onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
@@ -986,15 +1092,15 @@ export default function DeliveryChallanPage() {
                         <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       </div>
                       {showCustomerDrop && (
-                        <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
+                        <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
                           <div className="max-h-56 overflow-y-auto custom-scrollbar">
                             {destinationOptions.length === 0 ? (
                               <div className="px-4 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No results found</div>
                             ) : destinationOptions.map(c => (
                               <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
                                 <div className="text-left">
-                                  <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                  <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || c.email || "—"}</div>
+                                  <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
+                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.email || "—"}</div>
                                 </div>
                               </button>
                             ))}
@@ -1012,11 +1118,11 @@ export default function DeliveryChallanPage() {
                     </button>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                     <input
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                       placeholder="10-digit phone number"
                       type="tel"
                       inputMode="numeric"
@@ -1029,8 +1135,8 @@ export default function DeliveryChallanPage() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Source Warehouse</label>
-                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Source Warehouse</label>
+                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
                       {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
                       {franchises.map((f: any) => {
                         const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
@@ -1044,28 +1150,28 @@ export default function DeliveryChallanPage() {
                   </div>
                 </div>
               </div>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3 min-w-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vehicle Number</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Vehicle Number</label>
+                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Driver Name</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Driver Name</label>
+                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Challan Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Challan Date</span>
+                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Due Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Due Date</span>
+                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={dueDate} onChange={e => setDueDate(e.target.value)} />
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500 dark:text-slate-400">State of Supply</span>
-                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">State of Supply</span>
+                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44">
                     <option value="">Select state</option>
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -1075,15 +1181,15 @@ export default function DeliveryChallanPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <button type="button" onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")} className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-[#13151f] hover:border-gray-400 transition-colors">
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-2.5 w-10">#</th>
@@ -1136,7 +1242,7 @@ export default function DeliveryChallanPage() {
   const validBatches = getValidBatches(it.productId);
   return (
     <>
-      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-sm outline-none bg-transparent text-gray-700 dark:text-white cursor-pointer">
+      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-xs sm:text-sm outline-none bg-transparent text-gray-700 dark:text-white cursor-pointer">
         <option value="" className="dark:bg-card">Select...</option>
         {validBatches.map(b => (
           <option key={b.id} value={b.batchCode || b.id} className="dark:bg-card">{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
@@ -1158,16 +1264,16 @@ export default function DeliveryChallanPage() {
   } else {
     updateItem(idx, "qty", val);
   }
-}} className="w-full text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
+}} className="w-full text-xs sm:text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
 </td>
                         <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
-                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
+                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-xs sm:text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
                         <td className="px-3 py-2.5">
                           <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">
                             {TAX_OPTIONS.map(t => <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-800 dark:text-white">₹{comp.amount.toFixed(2)}</td>
+                        <td className="px-3 py-2.5 text-right text-xs sm:text-sm font-medium text-gray-800 dark:text-white">₹{comp.amount.toFixed(2)}</td>
                         <td className="pr-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-opacity"><Trash2 className="h-4 w-4" /></button></td>
                       </tr>
                     );
@@ -1182,34 +1288,34 @@ export default function DeliveryChallanPage() {
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex gap-4 items-start pb-2">
-            <div className="flex-1 space-y-2">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start pb-2 w-full min-w-0">
+            <div className="flex-1 space-y-2 min-w-0">
               <button type="button" onClick={() => setShowTerms(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showTerms ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions</button>
               <button type="button" onClick={() => setShowDesc(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showDesc ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Add Description</button>
               {showTerms && <textarea rows={3} value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Enter terms..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
               {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
             </div>
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-2">
-              <div className="flex justify-between text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {totalAmount.toFixed(2)}</span></div>
-              {totalTax > 0 && <div className="flex justify-between text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
-              <div className="flex justify-between items-center text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
+              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {totalAmount.toFixed(2)}</span></div>
+              {totalTax > 0 && <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
+              <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" id="roundoff" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" /><span className="text-xs">Round Off</span></label>
                 <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/5 pt-2">
-                <span className="text-sm font-semibold text-gray-800 dark:text-white">Total</span>
-                <span className="text-lg font-bold text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
+                <span className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white">Total</span>
+                <span className="text-base sm:text-lg font-bold text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Action bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
-          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-6 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors shadow-sm">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
+          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-60">Save Draft</button>
+            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-4 sm:px-6 py-2 text-xs sm:text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors shadow-sm">
               <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Challan"}
             </button>
           </div>
@@ -1223,57 +1329,59 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "transit") {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
+      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-2xs w-full min-w-0">
           <div className="flex items-center gap-2">
-            <button onClick={() => setView("list")} className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg">Challans</button>
-            <button className="px-3 py-1.5 text-sm font-semibold text-white bg-orange-500 rounded-lg shadow-sm">Transit Stock</button>
+            <button onClick={() => setView("list")} className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-colors">Challans</button>
+            <button className="px-3 py-1.5 text-xs sm:text-sm font-semibold text-white bg-orange-500 rounded-xl shadow-sm">Transit Stock</button>
           </div>
-          <button onClick={() => salesApi.getTransitStock().then((res: any) => setTransitStock(res.data || []))} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg" title="Refresh">
-            <RefreshCw className={clsx("h-4 w-4", transitLoading && "animate-spin")} />
+          <button onClick={() => salesApi.getTransitStock().then((res: any) => setTransitStock(res.data || []))} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-colors" title="Refresh">
+            <RefreshCw className={clsx("h-4 w-4", transitLoading && "animate-spin text-orange-500")} />
           </button>
         </div>
-        <div className="max-w-6xl mx-auto px-6 py-5">
+        <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 w-full min-w-0">
           {transitLoading ? (
             <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
           ) : transitStock.length === 0 ? (
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-16 text-center text-gray-400 dark:text-slate-500 text-sm">Nothing currently in transit.</div>
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-16 text-center text-gray-400 dark:text-slate-500 text-sm shadow-2xs">Nothing currently in transit.</div>
           ) : (
-            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="text-left px-4 py-3">Challan No</th>
-                    <th className="text-left px-4 py-3">Source</th>
-                    <th className="text-left px-4 py-3">Party</th>
-                    <th className="text-left px-4 py-3">From</th>
-                    <th className="text-left px-4 py-3">Item</th>
-                    <th className="text-left px-4 py-3">Batch</th>
-                    <th className="text-right px-4 py-3">Qty</th>
-                    <th className="text-left px-4 py-3">Dispatched</th>
-                    <th className="text-left px-4 py-3">Vehicle / Driver</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {transitStock.map((r: any, i: number) => (
-                    <tr key={`${r.challanId}-${i}`} className="hover:bg-gray-50 dark:hover:bg-white/[0.02]">
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200">{r.challanNumber}</td>
-                      <td className="px-4 py-3 text-xs">
-                        <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-white/10")}>
-                          {r.sourceDocument === "SALES_INVOICE" ? "Sales Invoice" : "Direct"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300">{r.partyName || "—"} <span className="text-gray-400 dark:text-slate-500">({r.partyType})</span></td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">{r.sourceWarehouseName || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300">{r.productName}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{r.batchNumber || "—"}</td>
-                      <td className="px-4 py-3 text-right text-xs font-semibold text-gray-800 dark:text-white">{r.quantity} {r.unit}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{formatDate(r.dispatchDate)}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">{r.vehicleNo || "—"} {r.driverName ? `/ ${r.driverName}` : ""}</td>
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[780px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Challan No</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Source</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Party</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">From</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Item</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Batch</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">Qty</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Dispatched</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Vehicle / Driver</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {transitStock.map((r: any, i: number) => (
+                      <tr key={`${r.challanId}-${i}`} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{r.challanNumber}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-white/10")}>
+                            {r.sourceDocument === "SALES_INVOICE" ? "Sales Invoice" : "Direct"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300 whitespace-nowrap">{r.partyName || "—"} <span className="text-gray-400 dark:text-slate-500">({r.partyType})</span></td>
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">{r.sourceWarehouseName || "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-700 dark:text-slate-300 whitespace-nowrap">{r.productName}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">{r.batchNumber || "—"}</td>
+                        <td className="px-4 py-3 text-right text-xs font-semibold text-gray-800 dark:text-white whitespace-nowrap">{r.quantity} {r.unit}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">{formatDate(r.dispatchDate)}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap">{r.vehicleNo || "—"} {r.driverName ? `/ ${r.driverName}` : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1285,53 +1393,68 @@ export default function DeliveryChallanPage() {
   // 2. LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
-        <button
-          onClick={() => setView("transit")}
-          className="px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg border border-gray-200 dark:border-white/10"
-        >
-          Transit Stock
-        </button>
-        <button
-          onClick={() => { resetForm(); setView("create"); }}
-          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
-        >
-          <Plus className="h-4 w-4" /> New Challan
-        </button>
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
+            <Truck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+              Delivery Challans
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
+              Issue, dispatch, and track goods in transit
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setView("transit")}
+            className="px-3 py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-colors shrink-0"
+          >
+            Transit Stock
+          </button>
+          <button
+            onClick={() => { resetForm(); setView("create"); }}
+            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
+          >
+            <Plus className="h-4 w-4 shrink-0" /> <span>New Challan</span>
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
 
         {/* ── Summary Strip ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
           {[
-            { label: "Total",      value: stats.total,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
-            { label: "In Transit", value: stats.inTransit, color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
-            { label: "Delivered",  value: stats.closed,    color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-            { label: "Drafts",     value: stats.draft,     color: "text-amber-600 dark:text-amber-400",   dot: "bg-amber-500" },
+            { label: "Total Challans", value: stats.total,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "In Transit",     value: stats.inTransit, color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
+            { label: "Delivered",      value: stats.closed,    color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Drafts",         value: stats.draft,     color: "text-amber-600 dark:text-amber-400",   dot: "bg-amber-500" },
           ].map(s => (
-            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
-              <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
-              <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
-                <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
+            <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
+              <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{s.label}</p>
+                <p className={clsx("text-base sm:text-lg font-bold truncate", s.color)}>{s.value}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* ── Filters Row ── */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+          <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search challan or party..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
@@ -1341,58 +1464,112 @@ export default function DeliveryChallanPage() {
               />
             )}
           </div>
+
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar bg-white dark:bg-card p-0.5 shrink-0">
+            {["ALL", "DRAFT", "IN_TRANSIT", "CLOSED"].map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={clsx(
+                  "px-3 py-1.5 sm:py-2 text-xs font-medium transition-colors whitespace-nowrap shrink-0 rounded-lg",
+                  statusFilter === s ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
+                )}
+              >
+                {s === "ALL" ? "All" : STATUS_STYLES[s]?.label || s}
+              </button>
+            ))}
+          </div>
+
           <select
             value={dateFilter}
             onChange={e => setDateFilter(e.target.value)}
-            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
+            className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] transition-colors"
           >
             <option value="THIS_MONTH">This Month</option>
             <option value="TODAY">Today</option>
             <option value="CUSTOM">Custom Range</option>
           </select>
           {dateFilter === "CUSTOM" && (
-            <>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
-              <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
-            </>
+            <div className="flex items-center gap-1.5">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-xs outline-none focus:border-[#f58220]" />
+              <span className="text-gray-400 text-xs">to</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-xs outline-none focus:border-[#f58220]" />
+            </div>
           )}
-          <div className="flex-1" />
-          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
-            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+
+          <div className="flex-1 hidden sm:block" />
+
+          {/* Export Dropdown */}
+          <div className="relative" ref={exportDropRef}>
+            <button
+              type="button"
+              onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 text-xs font-bold shadow-sm transition-all duration-150 active:scale-95 shrink-0"
+              title="Export Options"
+            >
+              <Download size={14} className="shrink-0" />
+              <span className="hidden xs:inline">Export</span>
+              <ChevronDown size={12} className="shrink-0 opacity-70" />
+            </button>
+
+            {exportDropdownOpen && (
+              <div className="absolute right-0 z-50 mt-1.5 w-44 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden p-1 animate-in zoom-in-95 duration-150">
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                  <span>Excel (.csv)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportPDF}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <FileText size={15} className="text-rose-600 shrink-0" />
+                  <span>PDF Document</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button onClick={fetchData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl transition-colors shrink-0 bg-white dark:bg-card" title="Refresh">
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
           </button>
         </div>
 
         {/* ── Empty State ── */}
         {filteredChallans.length === 0 ? (
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-16 sm:py-20 flex flex-col items-center justify-center text-center space-y-4 px-4 shadow-2xs">
             <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
               <Truck className="h-8 w-8 text-[#f58220]" />
             </div>
             <div>
-              <p className="text-gray-800 dark:text-white font-semibold">No Delivery Challans</p>
-              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Create your first delivery challan to get started.</p>
+              <p className="text-gray-800 dark:text-white font-semibold text-sm sm:text-base">No Delivery Challans</p>
+              <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Create your first delivery challan to get started.</p>
             </div>
             <button
               onClick={() => { resetForm(); setView("create"); }}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors shadow-sm"
+              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-xs sm:text-sm rounded-xl transition-colors shadow-sm"
             >
               Create Challan
             </button>
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Party</th>
-                  <th className="text-left px-4 py-3">Challan No.</th>
-                  <th className="text-left px-4 py-3">Due Date</th>
-                  <th className="text-right px-4 py-3">Amount</th>
-                  <th className="text-center px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Actions</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Party</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Challan No.</th>
+                  <th className="text-left px-4 py-3 whitespace-nowrap">Due Date</th>
+                  <th className="text-right px-4 py-3 whitespace-nowrap">Amount</th>
+                  <th className="text-center px-4 py-3 whitespace-nowrap">Status</th>
+                  <th className="text-right px-4 py-3 whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -1400,28 +1577,28 @@ export default function DeliveryChallanPage() {
                   const style = STATUS_STYLES[dc.status] || STATUS_STYLES.DRAFT;
                   return (
                     <tr key={dc.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(dc.invoiceDate)}
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-800 dark:text-white text-sm">{dc.customerName}</div>
-                        {dc.customerPhone && <div className="text-xs text-gray-400 dark:text-slate-500">{dc.customerPhone}</div>}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="font-medium text-gray-800 dark:text-white text-xs sm:text-sm">{dc.customerName}</div>
+                        {dc.customerPhone && <div className="text-[11px] text-gray-400 dark:text-slate-500">{dc.customerPhone}</div>}
                       </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-[#f58220] text-xs">
+                      <td className="px-4 py-3 font-mono font-semibold text-[#f58220] text-xs whitespace-nowrap">
                         #{dc.challanNo}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
+                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(dc.dueDate)}
                       </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm">
+                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-xs sm:text-sm whitespace-nowrap">
                         ₹{Number(dc.finalAmount).toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
                           {style.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {dc.status === "DRAFT" && (
                             <button
@@ -1484,6 +1661,7 @@ export default function DeliveryChallanPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

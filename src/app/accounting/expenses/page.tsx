@@ -236,17 +236,14 @@ export default function ExpensesPage() {
         <div className="flex-1 flex flex-col gap-4">
           {/* Header Fields */}
           <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 p-6 shadow-sm">
-            <div className="flex flex-col lg:flex-row gap-6 justify-between">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               {/* Left: Category */}
-              <div className="flex-1 max-w-xs">
-                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Expense Category *</label>
-                <div className="relative" ref={catDropRef}>
+              <div className="space-y-3 min-w-0">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Expense Category *</label>
                   <button
                     onClick={() => setShowCatDrop(v => !v)}
-                    className={clsx(
-                      "w-full flex items-center justify-between border rounded-xl px-3 py-2.5 bg-white dark:bg-[#13151f] text-sm text-gray-800 dark:text-white transition-all",
-                      showCatDrop ? "border-orange-400 ring-2 ring-orange-100 dark:ring-orange-500/20" : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
-                    )}
+                    className="w-full flex items-center justify-between border border-gray-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-white/5 hover:border-orange-400 transition-colors"
                   >
                     <span className="font-medium">{category}</span>
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500" />
@@ -264,7 +261,7 @@ export default function ExpensesPage() {
               </div>
 
               {/* Right: Meta */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-sm min-w-0">
                 <div>
                   <p className="text-xs text-gray-400 dark:text-slate-500 font-medium mb-1">Expense No.</p>
                   <p className="font-semibold text-gray-400 dark:text-slate-500 text-sm">Auto</p>
@@ -289,9 +286,9 @@ export default function ExpensesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+          <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[650px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
                     <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-8">#</th>
@@ -569,8 +566,8 @@ export default function ExpensesPage() {
       </div>
 
       {/* Table */}
-      <div>
-        <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm">
+      <div className="w-full min-w-0">
+        <div className="bg-white dark:bg-card rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
           {loading ? (
             <div className="flex items-center justify-center py-24">
               <div className="flex flex-col items-center gap-3">
@@ -597,40 +594,42 @@ export default function ExpensesPage() {
             </div>
           ) : (
             <>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
-                    {["#", "Date", "Category", "Payee", "Payment Mode", "Status", "Amount"].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {filtered.map((exp, i) => {
-                    const statusKey = (exp.status || "PENDING").toUpperCase();
-                    const s = STATUS_STYLES[statusKey] || STATUS_STYLES.PENDING;
-                    return (
-                      <tr key={exp.id} className="hover:bg-orange-50/30 dark:hover:bg-white/[0.02] transition-colors">
-                        <td className="px-4 py-3 text-gray-400 dark:text-slate-500 text-xs">{i + 1}</td>
-                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{fmtDate(exp.date)}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 dark:bg-orange-500/10 text-orange-600 border border-orange-200 dark:border-orange-500/20">
-                            {exp.category}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-800 dark:text-white font-medium">{exp.payee || "—"}</td>
-                        <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{exp.paymentMode || "Cash"}</td>
-                        <td className="px-4 py-3">
-                          <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-bold border", s.bg, s.color, s.border)}>{s.label}</span>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
-                          ₹{(exp.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[700px]">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                      {["#", "Date", "Category", "Payee", "Payment Mode", "Status", "Amount"].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {filtered.map((exp, i) => {
+                      const statusKey = (exp.status || "PENDING").toUpperCase();
+                      const s = STATUS_STYLES[statusKey] || STATUS_STYLES.PENDING;
+                      return (
+                        <tr key={exp.id} className="hover:bg-orange-50/30 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3 text-gray-400 dark:text-slate-500 text-xs">{i + 1}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{fmtDate(exp.date)}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 dark:bg-orange-500/10 text-orange-600 border border-orange-200 dark:border-orange-500/20">
+                              {exp.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-800 dark:text-white font-medium">{exp.payee || "—"}</td>
+                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300">{exp.paymentMode || "Cash"}</td>
+                          <td className="px-4 py-3">
+                            <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-bold border", s.bg, s.color, s.border)}>{s.label}</span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+                            ₹{(exp.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
               <div className="border-t border-gray-100 dark:border-white/5 px-4 py-3 flex items-center justify-between text-sm bg-gray-50/50 dark:bg-white/[0.02]">
                 <span className="text-gray-500 dark:text-slate-400 text-xs">{filtered.length} record{filtered.length !== 1 ? "s" : ""}</span>
                 <span className="text-xs font-semibold" style={{ color: "#f58220" }}>

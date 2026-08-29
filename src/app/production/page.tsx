@@ -235,12 +235,11 @@ export default function ProductionPlanningPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-6 space-y-6">
+  return (    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-4 sm:p-6 space-y-4 sm:space-y-6 w-full min-w-0">
 
       {/* ── Page Actions ── */}
       {recipe && (
-        <div className="bg-white dark:bg-card p-4 rounded-lg border border-gray-200 dark:border-white/5 flex items-center justify-end gap-4 print:hidden">
+        <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-wrap items-center justify-end gap-3 sm:gap-4 print:hidden w-full min-w-0">
             <button
               onClick={handlePrint}
               className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-300 rounded-xl font-bold text-xs uppercase tracking-wider hover:border-gray-300 dark:hover:border-white/20 transition-all active:scale-[0.98]"
@@ -279,8 +278,8 @@ export default function ProductionPlanningPage() {
       )}
 
       {/* Controls Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-1.5 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 print:hidden w-full min-w-0">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
           <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400">
             Select Recipe
           </label>
@@ -298,35 +297,34 @@ export default function ProductionPlanningPage() {
           </select>
         </div>
 
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-1.5 shadow-sm">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
           <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400">
             Target Batch Yield
           </label>
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="number"
-                value={targetYield || ""}
-                onChange={(e) => setTargetYield(Number(e.target.value))}
-                placeholder="Enter yield quantity"
-                className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg pl-3 pr-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
-              />
-            </div>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="0"
+              step="any"
+              value={targetYield || ""}
+              onChange={(e) => setTargetYield(parseFloat(e.target.value) || 0)}
+              className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
+              placeholder="e.g. 50"
+            />
             <select
-              value={targetUnit || recipe?.yieldUnit || "KG"}
+              value={targetUnit}
               onChange={(e) => setTargetUnit(e.target.value)}
-              title="Unit"
-              className="px-3 py-2 rounded-md bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-[#F97316] text-xs font-bold uppercase focus:outline-none focus:border-[#f58220]"
+              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-2 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
             >
-              {RECIPE_UNITS.map((u) => (
+              {RECIPE_UNITS.map(u => (
                 <option key={u} value={u} className="dark:bg-card">{u}</option>
               ))}
             </select>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-1.5 shadow-sm">
-          <div className="flex items-center justify-between mb-1">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
+          <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-gray-500 dark:text-slate-400 flex items-center gap-1.5">
               <Warehouse size={12} className="text-[#f58220]" />
               Warehouse / Stock Location
@@ -354,14 +352,14 @@ export default function ProductionPlanningPage() {
 
       {/* Two-Column Layout */}
       {recipe ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
 
           {/* Left Column: Recipe Yield details & Instructions */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm">
+          <div className="lg:col-span-1 space-y-4 sm:space-y-6 min-w-0">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm min-w-0">
               <div className="flex items-center gap-2.5 mb-3">
                 <ChefHat className="text-[#F97316]" size={18} />
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white">{recipe.name}</h3>
+                <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">{recipe.name}</h3>
               </div>
               <div className="space-y-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300">
                 <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
@@ -375,7 +373,7 @@ export default function ProductionPlanningPage() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm space-y-2">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm space-y-2 min-w-0">
               <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                 Production Instructions
               </h4>
@@ -386,8 +384,8 @@ export default function ProductionPlanningPage() {
           </div>
 
           {/* Right Column: Ingredients Needed Table */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm overflow-hidden">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden min-w-0">
               
               {/* Header */}
               <div className="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-white/[0.02]">

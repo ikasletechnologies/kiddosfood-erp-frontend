@@ -651,13 +651,13 @@ export default function PurchaseBillsPage() {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4 custom-scrollbar w-full min-w-0">
 
           {/* Vendor + Bill Details */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5 shadow-sm">
-            <div className="grid grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-sm w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               {/* Left: Vendor */}
-              <div className="space-y-3">
+              <div className="space-y-3 min-w-0">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vendor / Party *</label>
                   <div className="relative" ref={vendorDropRef}>
@@ -723,7 +723,7 @@ export default function PurchaseBillsPage() {
               </div>
 
               {/* Right: Bill Details */}
-              <div className="space-y-3">
+              <div className="space-y-3 min-w-0">
                 <div className="flex items-center justify-between py-1">
                   <span className="text-xs font-medium text-gray-500 dark:text-slate-400">Bill Number</span>
                   <span className="text-sm font-semibold text-gray-700 dark:text-slate-200">Auto</span>
@@ -796,7 +796,7 @@ export default function PurchaseBillsPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <div className="relative" ref={priceDropRef}>
@@ -815,8 +815,8 @@ export default function PurchaseBillsPage() {
               </div>
             </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table className="w-full text-sm border-collapse">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                     <th className="w-8 px-3 py-2.5 text-center">#</th>
@@ -934,8 +934,8 @@ export default function PurchaseBillsPage() {
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex gap-4 items-start pb-2">
-            <div className="flex-1 space-y-2.5">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start pb-2 w-full min-w-0">
+            <div className="flex-1 space-y-2.5 min-w-0">
               <div className="flex flex-wrap gap-2">
                 {!showTerms && (
                   <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 transition-colors">
@@ -1008,7 +1008,7 @@ export default function PurchaseBillsPage() {
             </div>
 
             {/* Summary Panel */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4.5 w-72 shrink-0 space-y-2.5 shadow-sm">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4.5 w-full lg:w-72 shrink-0 space-y-2.5 shadow-sm">
               <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-300">
                 <span className="font-medium">Subtotal</span>
                 <span className="font-semibold text-gray-900 dark:text-white">₹ {subtotal.toFixed(2)}</span>
@@ -1256,8 +1256,9 @@ export default function PurchaseBillsPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02] text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="px-4 py-3">Date</th>
@@ -1324,6 +1325,7 @@ export default function PurchaseBillsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

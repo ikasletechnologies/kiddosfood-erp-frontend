@@ -158,32 +158,32 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-300">
       <div 
-        className="bg-white dark:bg-[#0A0D14] rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 dark:border-white/5 animate-in zoom-in-95 duration-300"
+        className="bg-white dark:bg-[#0A0D14] rounded-2xl sm:rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 dark:border-white/5 animate-in zoom-in-95 duration-300 max-h-[92vh] sm:max-h-[90vh] flex flex-col min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-slate-50 dark:bg-slate-900/50 px-8 py-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-           <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2">
-                 <User className="text-[#7C3AED]" /> New Vendor Identity
+        <div className="bg-slate-50 dark:bg-slate-900/50 px-4 sm:px-8 py-4 sm:py-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between gap-3">
+           <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight flex items-center gap-2 truncate">
+                 <User className="text-[#7C3AED] shrink-0" size={20} /> <span className="truncate">New Vendor Identity</span>
               </h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Onboard a new supplier to the ERP ecosystem</p>
+              <p className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 truncate">Onboard a new supplier to the ERP ecosystem</p>
            </div>
            <button 
              onClick={onClose}
-             className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-full text-slate-400 transition-all"
+             className="p-1.5 sm:p-2 hover:bg-white dark:hover:bg-slate-800 rounded-full text-slate-400 transition-all shrink-0"
            >
-              <X size={20} />
+              <X size={18} />
            </button>
         </div>
 
         {/* Form Body */}
-        <div className="p-8 space-y-8">
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-4 sm:p-8 space-y-4 sm:space-y-8 overflow-y-auto custom-scrollbar flex-1 min-w-0">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 min-w-0">
               {/* Primary Info */}
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6 min-w-0">
                  <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 ml-1">
                        <User size={12} /> Vendor Legal Name
@@ -193,7 +193,7 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                        placeholder="e.g. Reliance Fresh"
                        value={form.name}
                        onChange={(e) => setForm({...form, name: e.target.value})}
-                       className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
+                       className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
                     />
                  </div>
 
@@ -206,7 +206,7 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                        maxLength={10}
                        value={form.contact}
                        onChange={(e) => setForm({...form, contact: e.target.value.replace(/\D/g, "")})}
-                       className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
+                       className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
                     />
                  </div>
 
@@ -218,13 +218,13 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                        placeholder="vendor@company.com"
                        value={form.email}
                        onChange={(e) => setForm({...form, email: e.target.value})}
-                       className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
+                       className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
                     />
                  </div>
               </div>
 
               {/* Advanced Info */}
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6 min-w-0">
                  <div className="space-y-1.5">
                     <div className="flex justify-between items-center ml-1">
                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -248,9 +248,9 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                               fetchGstDetails(val);
                             }
                           }}
-                          className="w-full pl-4 pr-16 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all font-mono tracking-wider"
+                          className="w-full pl-3.5 sm:pl-4 pr-16 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all font-mono tracking-wider"
                        />
-                       <span className="absolute left-4 bottom-[-16px] text-[9px] font-bold text-slate-400">{form.gstNumber.length}/15</span>
+                       <span className="absolute left-3.5 sm:left-4 bottom-[-16px] text-[9px] font-bold text-slate-400">{form.gstNumber.length}/15</span>
                        {form.gstNumber.length === 15 && !fetchingGst && (
                           <button
                              type="button"
@@ -270,7 +270,7 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                     <select 
                        value={form.paymentTerms}
                        onChange={(e) => setForm({...form, paymentTerms: e.target.value as any})}
-                       className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
+                       className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all"
                     >
                        <option value="IMMEDIATE">Immediate</option>
                        <option value="NET_7">Net 7 Days</option>
@@ -288,7 +288,7 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
                        rows={2}
                        value={form.address}
                        onChange={(e) => setForm({...form, address: e.target.value})}
-                       className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-2xl font-bold text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all resize-none"
+                       className="w-full px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-50 dark:bg-white/5 border border-transparent dark:border-white/10 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm outline-none focus:ring-2 ring-[#7C3AED]/20 focus:bg-white transition-all resize-none"
                     />
                  </div>
               </div>
@@ -296,17 +296,17 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
         </div>
 
         {/* Footer Actions */}
-        <div className="px-8 py-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-white/5 flex gap-4">
+        <div className="px-4 sm:px-8 py-3.5 sm:py-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-white/5 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-4">
            <button 
              onClick={onClose}
-             className="px-6 py-3 text-xs font-black text-slate-500 uppercase tracking-widest hover:bg-white rounded-xl transition-all"
+             className="px-4 sm:px-6 py-2.5 sm:py-3 text-xs font-black text-slate-500 uppercase tracking-widest hover:bg-white rounded-xl transition-all text-center"
            >
               Discard
            </button>
            <button 
              onClick={handleSave}
              disabled={saving}
-             className="flex-1 bg-[#7C3AED] text-white py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-purple-200 active:scale-95 transition-all flex items-center justify-center gap-2"
+             className="w-full sm:w-auto sm:min-w-[180px] bg-[#7C3AED] text-white py-2.5 sm:py-3 px-6 rounded-xl sm:rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-purple-200 active:scale-95 transition-all flex items-center justify-center gap-2"
            >
               {saving ? <Loader2 size={16} className="animate-spin" /> : "Confirm Registration"}
            </button>

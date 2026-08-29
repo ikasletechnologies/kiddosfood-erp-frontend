@@ -54,16 +54,16 @@ export default function BalanceSheetPage() {
   const totalLiabilities = (data?.liabilities || []).reduce((s, l) => s + (l.amount || 0), 0);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 py-4 animate-in fade-in duration-700 text-gray-800 dark:text-slate-100">
-      <div className="flex flex-col md:flex-row justify-between md:items-end gap-6 border-b border-gray-100 dark:border-white/5 pb-8">
-        <div className="space-y-2">
+    <div className="max-w-5xl mx-auto space-y-6 sm:space-y-8 p-4 sm:p-6 py-4 animate-in fade-in duration-700 text-gray-800 dark:text-slate-100 w-full min-w-0">
+      <div className="flex flex-col md:flex-row justify-between md:items-end gap-4 sm:gap-6 border-b border-gray-100 dark:border-white/5 pb-6 sm:pb-8 w-full min-w-0">
+        <div className="space-y-2 min-w-0">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-blue-500 rounded-full" />
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Balance Sheet</h1>
+            <div className="w-2 h-8 bg-blue-500 rounded-full shrink-0" />
+            <h1 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">Balance Sheet</h1>
           </div>
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">What the business owns versus what it owes, as of a point in time.</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">What the business owns versus what it owes, as of a point in time.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">As of</label>
           <input
             type="date"
@@ -95,7 +95,7 @@ export default function BalanceSheetPage() {
           <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No data available.</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full min-w-0">
           {/* Assets */}
           <div className="bg-white dark:bg-card border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm">
             <div className="bg-slate-50 dark:bg-white/[0.02] px-6 py-3.5 border-b border-gray-100 dark:border-white/5">

@@ -275,7 +275,7 @@ export default function ActiveProductionRunsClient() {
 
                 {/* Section 2: Production Operational Details */}
                 <div className="border-b border-gray-200 dark:border-white/5 pb-5">
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div>
                       <p className="text-xs text-gray-500 dark:text-slate-400">Recipe</p>
                       <p className="text-xs font-semibold text-gray-800 dark:text-white mt-1 uppercase">
@@ -433,7 +433,7 @@ export default function ActiveProductionRunsClient() {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="p-4 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5 text-center">
               <p className="text-xs text-gray-500 dark:text-slate-400">Expected Yield</p>
               <p className="text-base font-bold text-gray-850 dark:text-white mt-1 tabular-nums">

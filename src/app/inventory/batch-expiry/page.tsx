@@ -22,11 +22,11 @@ export default function BatchExpiryReport() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8 font-sans">
-      <div className="p-8 space-y-6">
+    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-3 sm:-m-4 md:-m-6 p-3 sm:p-4 md:p-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0 font-sans">
+      <div className="space-y-4 sm:space-y-6 w-full min-w-0">
         {/* Breadcrumbs & Header */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest overflow-x-auto custom-scrollbar max-w-full whitespace-nowrap">
             <Link href="/" className="hover:text-[#7C3AED]">Azeez</Link>
             <ChevronRight size={10} />
             <Link href="/inventory" className="hover:text-[#7C3AED]">Inventory</Link>
@@ -35,20 +35,20 @@ export default function BatchExpiryReport() {
           </div>
           
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-black text-[#1A1A1A] dark:text-white flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-black text-[#1A1A1A] dark:text-white flex items-center gap-2">
               Inventory 
             </h1>
           </div>
         </div>
 
         {/* Primary Tabs */}
-        <div className="flex items-center gap-8 border-b border-[#F0EAF0] dark:border-slate-800">
+        <div className="flex items-center gap-4 sm:gap-8 border-b border-[#F0EAF0] dark:border-slate-800 overflow-x-auto custom-scrollbar max-w-full">
           {["All Items", "Warehouses", "Reports & More"].map((tab) => (
             <button
                key={tab}
                onClick={() => setActiveTab(tab)}
                className={clsx(
-                 "pb-3 text-[13px] font-bold transition-all relative flex items-center gap-2",
+                 "pb-3 text-xs sm:text-[13px] font-bold transition-all relative flex items-center gap-2 whitespace-nowrap shrink-0",
                  activeTab === tab 
                   ? "text-[#7C3AED]" 
                   : "text-[#666] dark:text-slate-500 hover:text-[#1A1A1A] dark:hover:text-white"
@@ -64,34 +64,34 @@ export default function BatchExpiryReport() {
         </div>
 
         {/* Section Title */}
-        <h2 className="text-lg font-black text-[#1A1A1A] dark:text-white">Batch Expiry Report</h2>
+        <h2 className="text-base sm:text-lg font-black text-[#1A1A1A] dark:text-white">Batch Expiry Report</h2>
 
         {/* Search & Export Actions */}
-        <div className="flex items-center justify-between gap-4 pt-4 pb-2">
-           <span className="text-[12px] font-bold text-[#666]">No item Found</span>
-           <div className="flex items-center gap-3">
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#F0EAF0] dark:border-slate-800 rounded-lg text-[12px] font-bold text-[#666] hover:bg-slate-50 transition-colors bg-white dark:bg-slate-900 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-2 w-full min-w-0">
+           <span className="text-xs font-bold text-[#666]">No item Found</span>
+           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto min-w-0">
+              <button className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-[#F0EAF0] dark:border-slate-800 rounded-xl text-xs font-bold text-[#666] hover:bg-slate-50 transition-colors bg-white dark:bg-slate-900 shadow-sm">
                  <Download size={14} />
-                 Download CSV
+                 <span>Download CSV</span>
               </button>
-              <div className="relative group min-w-[300px]">
-                 <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#999]" />
+              <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
+                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
                  <input 
                    type="text" 
-                   placeholder="Search Items"
-                   className="w-full pl-10 pr-10 py-2 border border-[#F0EAF0] dark:border-slate-800 rounded-lg text-[13px] font-medium outline-none focus:border-[#7C3AED] transition-colors bg-white dark:bg-slate-900 shadow-sm"
+                   placeholder="Search Items..."
+                   className="w-full pl-9 pr-3 py-2 border border-[#F0EAF0] dark:border-slate-800 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#7C3AED] transition-colors bg-white dark:bg-slate-900 shadow-sm"
                  />
               </div>
-              <button className="flex items-center gap-2 px-4 py-2 border border-[#7C3AED] dark:border-slate-800 rounded-lg text-[12px] font-bold text-[#7C3AED] hover:bg-purple-50 transition-colors bg-white dark:bg-slate-900 shadow-sm">
+              <button className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-[#7C3AED] dark:border-slate-800 rounded-xl text-xs font-bold text-[#7C3AED] hover:bg-purple-50 transition-colors bg-white dark:bg-slate-900 shadow-sm">
                  <Columns size={14} />
-                 Show/Hide Columns
+                 <span>Columns</span>
               </button>
            </div>
         </div>
 
         {/* Expiry Report Table */}
-        <div className="bg-white dark:bg-slate-900 border border-[#F0EAF0] dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto min-h-[500px]">
+        <div className="bg-white dark:bg-slate-900 border border-[#F0EAF0] dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[400px]">
             <table className="w-full text-left border-collapse min-w-[2500px]">
               <thead>
                 {/* Level 1 Header */}

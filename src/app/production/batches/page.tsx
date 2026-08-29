@@ -160,16 +160,15 @@ function ProductBatchesRegistry() {
   const gridClasses = isSuper 
     ? "grid grid-cols-[1fr_1.2fr_1.2fr_0.6fr_1fr_1fr_1fr] px-5 py-3.5 gap-2" 
     : "grid grid-cols-[1fr_1.5fr_0.7fr_1fr_1fr_1fr] px-5 py-3.5 gap-2";
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 p-3 sm:p-4 md:p-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
 
       {/* ── Main Content ── */}
 
-      <div className="max-w-screen-2xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-screen-2xl mx-auto space-y-4 sm:space-y-5 w-full min-w-0">
 
         {/* ── Tab Bar ── */}
-        <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card w-fit">
+        <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full bg-white dark:bg-card w-full sm:w-fit custom-scrollbar">
           {([
             { key: "REGISTRY", label: "Batch Registry" },
             { key: "ACTIVE_RUNS", label: "Active Runs" },
@@ -184,7 +183,7 @@ function ProductBatchesRegistry() {
                 }
               }}
               className={clsx(
-                "px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer",
+                "px-3.5 sm:px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer shrink-0",
                 activeTab === tab.key ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
               )}
             >
@@ -198,30 +197,30 @@ function ProductBatchesRegistry() {
       ) : activeTab === "CONSUMPTION" ? (
         <RawMaterialConsumptionClient />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5 w-full min-w-0">
 
           {/* ── Summary Strip ── */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
             {stats.map(s => (
-              <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
-                <div className={clsx("w-2.5 h-2.5 rounded-full", s.bg.replace('/10', ''))} />
-                <div>
-                  <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
-                  <p className="text-lg font-bold text-gray-700 dark:text-slate-200">{s.value}</p>
+              <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 shadow-sm min-w-0">
+                <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.bg.replace('/10', ''))} />
+                <div className="min-w-0">
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{s.label}</p>
+                  <p className="text-base sm:text-lg font-bold text-gray-700 dark:text-slate-200 truncate">{s.value}</p>
                 </div>
               </div>
             ))}
           </div>
 
           {/* ── Filters Row ── */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+            <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
               <input
                 type="text"
                 placeholder="Search batch, product, date..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-3 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                className="w-full pl-3 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
             {search && (
               <X 
@@ -245,6 +244,24 @@ function ProductBatchesRegistry() {
                   <option key={p.id} value={p.id} className="dark:bg-card">{p.name}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Expiry filter tabs */}
+            <div className="flex border border-gray-200 dark:border-white/10 rounded-lg overflow-x-auto max-w-full custom-scrollbar bg-white dark:bg-card">
+              {FILTER_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setExpiryFilter(tab)}
+                  className={clsx(
+                    "px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                    expiryFilter === tab
+                      ? "bg-[#f58220] text-white"
+                      : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
+                  )}
+                >
+                  {tab.replace("_", " ")}
+                </button>
+              ))}
             </div>
 
             {/* Franchise select for Super Admin */}
@@ -288,8 +305,9 @@ function ProductBatchesRegistry() {
               </div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-x-auto">
-              <table className="w-full text-sm min-w-[980px]">
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-sm">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[980px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-3">Batch ID</th>
@@ -417,6 +435,7 @@ function ProductBatchesRegistry() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>

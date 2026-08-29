@@ -65,7 +65,7 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
          </div>
 
         <form onSubmit={handleCreate} className="space-y-6 relative z-10">
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vendor *</label>
               <select required value={form.vendorId} onChange={(e) => setForm({ ...form, vendorId: e.target.value })} className="w-full px-4 py-3.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-2xl text-sm font-bold outline-none ring-orange-500/10 focus:ring-4 dark:text-white transition-all">

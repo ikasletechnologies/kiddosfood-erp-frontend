@@ -62,11 +62,11 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
       size="sm"
       zIndex={100}
       footer={
-        <div className="flex justify-end gap-3 w-full">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 w-full">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-all"
+            className="px-4 sm:px-5 py-2.5 text-xs font-bold text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-all text-center"
           >
             Cancel
           </button>
@@ -74,7 +74,7 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
             type="button"
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center gap-2 transition-all"
+            className="px-5 sm:px-6 py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : null}
             {saving ? "Creating..." : "Save Account"}
@@ -82,9 +82,9 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
         </div>
       }
     >
-      <form onSubmit={handleSave} className="space-y-5">
+      <form onSubmit={handleSave} className="space-y-4 sm:space-y-5">
         <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 sm:mb-2">
             Account Name <span className="text-red-500">*</span>
           </label>
           <input
@@ -93,15 +93,15 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
             value={form.name}
             onChange={e => setForm({ ...form, name: e.target.value })}
             required
-            className="w-full px-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-gray-50 dark:bg-slate-900 text-sm font-semibold text-gray-800 dark:text-gray-100 transition-all"
+            className="w-full px-3.5 sm:px-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-gray-50 dark:bg-slate-900 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-100 transition-all"
           />
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 sm:mb-2">
             Account Type
           </label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {[
               { id: "BANK", label: "Bank", icon: Building2 },
               { id: "CASH", label: "Cash", icon: Wallet },
@@ -115,14 +115,14 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
                   type="button"
                   onClick={() => setForm({ ...form, type: type.id as any })}
                   className={clsx(
-                    "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-1.5",
+                    "flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-xl border-2 transition-all gap-1 sm:gap-1.5",
                     isSelected
                       ? "border-orange-500 bg-orange-50/50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 font-bold"
                       : "border-gray-200 dark:border-white/10 hover:border-gray-300 text-gray-500 font-medium"
                   )}
                 >
-                  <Icon size={18} />
-                  <span className="text-xs">{type.label}</span>
+                  <Icon size={16} className="sm:w-[18px] sm:h-[18px]" />
+                  <span className="text-[11px] sm:text-xs">{type.label}</span>
                 </button>
               );
             })}
@@ -130,17 +130,17 @@ export default function AccountFormModal({ isOpen, onClose, onSuccess }: Account
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 sm:mb-2">
             Opening Balance (Optional)
           </label>
           <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-xs sm:text-sm">₹</span>
             <input
               type="number"
               placeholder="0.00"
               value={form.balance}
               onChange={e => setForm({ ...form, balance: e.target.value })}
-              className="w-full pl-8 pr-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-gray-50 dark:bg-slate-900 text-sm font-semibold text-gray-800 dark:text-gray-100 transition-all"
+              className="w-full pl-7 sm:pl-8 pr-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-gray-50 dark:bg-slate-900 text-xs sm:text-sm font-semibold text-gray-800 dark:text-gray-100 transition-all"
             />
           </div>
         </div>

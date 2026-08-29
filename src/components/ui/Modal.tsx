@@ -54,7 +54,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md', h
 
   return createPortal(
     <div 
-      className="fixed inset-0 flex items-center justify-center p-4 sm:p-6 transition-all animate-in fade-in duration-200"
+      className="fixed inset-0 flex items-center justify-center p-3 sm:p-6 transition-all animate-in fade-in duration-200"
       style={{ zIndex: zIndex || 50 }}
     >
       {/* Backdrop */}
@@ -65,44 +65,44 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md', h
       
       {/* Modal Content */}
       <div className={clsx(
-        "relative w-full bg-white dark:bg-[#020617] rounded-[32px] shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300",
+        "relative w-full bg-white dark:bg-[#020617] rounded-2xl sm:rounded-[32px] shadow-2xl border border-slate-100 dark:border-slate-800 flex flex-col max-h-[92vh] sm:max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-300 min-w-0",
         sizes[size]
       )}>
         {/* Header */}
         {!hideHeader && (
-          <div className="px-8 py-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-            <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{title}</h2>
-            <div className="flex items-center gap-1.5">
+          <div className="px-4 sm:px-8 py-4 sm:py-6 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 gap-3">
+            <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight truncate flex-1">{title}</h2>
+            <div className="flex items-center gap-1.5 shrink-0">
               {onMinimize && (
                 <button 
                   type="button"
                   onClick={onMinimize}
-                  className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
+                  className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
                   title="Minimize"
                 >
-                  <Minus size={20} />
+                  <Minus size={18} />
                 </button>
               )}
               <button 
                 type="button"
                 onClick={onClose}
-                className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
+                className="p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all active:scale-95 cursor-pointer"
                 title="Close"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
           </div>
         )}
 
         {/* Body */}
-        <div className="px-8 py-8 overflow-y-auto custom-scrollbar flex-1">
+        <div className="px-4 sm:px-8 py-4 sm:py-8 overflow-y-auto custom-scrollbar flex-1 min-w-0">
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="px-8 py-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+          <div className="px-4 sm:px-8 py-3.5 sm:py-5 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
             {footer}
           </div>
         )}

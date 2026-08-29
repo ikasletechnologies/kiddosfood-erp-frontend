@@ -47,21 +47,21 @@ export function SlideOver({ isOpen, onClose, title, children, size = 'md' }: Sli
       />
       <div 
         className={clsx(
-          "fixed top-0 right-0 h-full w-full bg-white dark:bg-slate-900 shadow-2xl z-[60] transform transition-transform duration-300 ease-in-out flex flex-col border-l border-slate-100 dark:border-white/10",
+          "fixed top-0 right-0 h-full w-full max-w-full bg-white dark:bg-slate-900 shadow-2xl z-[60] transform transition-transform duration-300 ease-in-out flex flex-col border-l border-slate-100 dark:border-white/10 min-w-0",
           sizes[size],
           isOpen ? "translate-x-0" : "translate-x-full"
         )}
       >
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 dark:border-slate-800">
-          <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">{title}</h2>
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-100 dark:border-slate-800 gap-3">
+          <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight truncate flex-1">{title}</h2>
           <button 
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors bg-slate-50 dark:bg-white/5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10"
+            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors bg-slate-50 dark:bg-white/5 rounded-xl hover:bg-slate-100 dark:hover:bg-white/10 shrink-0"
           >
-            <X size={20} strokeWidth={3} />
+            <X size={18} strokeWidth={2.5} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 min-w-0">
           {children}
         </div>
       </div>

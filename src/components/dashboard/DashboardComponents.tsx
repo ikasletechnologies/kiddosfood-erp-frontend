@@ -81,26 +81,26 @@ export function KPICard({
   return (
     <div
       onClick={onClick}
-      className="bg-white dark:bg-[#12141c] rounded-2xl p-5 border border-slate-200 dark:border-white/10 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition-colors cursor-pointer flex flex-col justify-between min-h-[135px]"
+      className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition-colors cursor-pointer flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0"
     >
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 min-w-0">
         <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center border shrink-0", iconStyles[colorClass])}>
           <Icon size={16} strokeWidth={2.2} />
         </div>
-        <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+        <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate flex-1 min-w-0">
           {title}
         </p>
       </div>
 
-      <div className="my-2.5">
-        <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+      <div className="my-2 sm:my-2.5 min-w-0">
+        <h3 className="text-xl xs:text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
           {value}
         </h3>
       </div>
 
-      <div className="min-h-[18px]">
+      <div className="min-h-[18px] min-w-0">
         {footerText && (
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          <p className="text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
             {footerText}
           </p>
         )}
@@ -143,14 +143,14 @@ export function InvoiceReportTable({
   };
 
   return (
-    <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden flex flex-col justify-between w-full min-w-0">
       {/* Table Header */}
-      <div className="px-5 py-3.5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/30 text-[#F58220] flex items-center justify-center border border-orange-200/50 dark:border-orange-500/20">
+      <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02] gap-2">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/30 text-[#F58220] flex items-center justify-center border border-orange-200/50 dark:border-orange-500/20 shrink-0">
             <Icon size={15} />
           </div>
-          <h3 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
+          <h3 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider truncate">
             {title}
           </h3>
         </div>
@@ -158,7 +158,7 @@ export function InvoiceReportTable({
         {actionHref && (
           <Link
             href={actionHref}
-            className="text-[11px] font-bold text-[#F58220] hover:underline flex items-center gap-1"
+            className="text-[11px] font-bold text-[#F58220] hover:underline flex items-center gap-1 shrink-0"
           >
             <span>View All</span>
             <ChevronRight size={12} />
@@ -167,7 +167,7 @@ export function InvoiceReportTable({
       </div>
 
       {/* Table Content */}
-      <div className="overflow-x-auto custom-scrollbar">
+      <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
         {data.length === 0 ? (
           <div className="py-6 px-4 text-center space-y-2">
             <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
@@ -184,11 +184,11 @@ export function InvoiceReportTable({
             )}
           </div>
         ) : (
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-full">
             <thead>
               <tr className="bg-slate-50/80 dark:bg-white/[0.03] border-b border-slate-200 dark:border-white/10 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {headers.map((h, i) => (
-                  <th key={i} className="px-4 py-2.5">
+                  <th key={i} className="px-3 sm:px-4 py-2 sm:py-2.5 whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -208,12 +208,12 @@ export function InvoiceReportTable({
                     return (
                       <td
                         key={j}
-                        className="px-4 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200"
+                        className="px-3 sm:px-4 py-2 sm:py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap"
                       >
                         {isBadge ? (
                           <span
                             className={clsx(
-                              "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
+                              "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border inline-block",
                               badgeMap[valStr.toUpperCase()]
                             )}
                           >
@@ -339,25 +339,25 @@ export function BusinessPerformanceChart({
     data.some((d: any) => d.sales > 0 || d.purchase > 0 || d.profit !== 0);
 
   return (
-    <div className="bg-white dark:bg-[#12141c] p-5 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between">
+    <div className="bg-white dark:bg-[#12141c] p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between w-full max-w-full min-w-0">
       {/* Header with Title & Legend Toggles */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
-        <div>
-          <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 w-full min-w-0">
+        <div className="w-full sm:w-auto min-w-0">
+          <h3 className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             {title}
           </h3>
-          <p className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+          <p className="text-sm sm:text-base lg:text-lg font-bold text-slate-900 dark:text-white mt-0.5 leading-snug break-words">
             Sales, Procurement & Profit Trajectory
           </p>
         </div>
 
-        {/* Legend Metric Toggles */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200/60 dark:border-white/5">
+        {/* Legend Metric Toggles - Responsive Grid on Mobile, Flex on Desktop */}
+        <div className="w-full sm:w-auto grid grid-cols-2 xs:grid-cols-3 sm:flex items-center gap-1 sm:gap-1.5 bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200/60 dark:border-white/5">
           {[
             { id: "sales", label: "Sales", color: "#F58220" },
             { id: "purchase", label: "Procurement", color: "#EF4444" },
             { id: "profit", label: "Net Margin", color: "#10B981" },
-          ].map((m) => {
+          ].map((m, idx) => {
             const isActive = visibleMetrics.includes(m.id);
             return (
               <button
@@ -365,17 +365,18 @@ export function BusinessPerformanceChart({
                 type="button"
                 onClick={() => toggleMetric(m.id)}
                 className={clsx(
-                  "px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center gap-1.5 border select-none",
+                  "px-2.5 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1.5 border select-none min-h-[30px] sm:min-h-0",
+                  idx === 2 && "col-span-2 xs:col-span-1 sm:col-auto",
                   isActive
-                    ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-200 dark:border-white/10 shadow-sm"
+                    ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-200 dark:border-white/10 shadow-sm font-black"
                     : "bg-transparent text-slate-400 border-transparent hover:text-slate-600"
                 )}
               >
                 <span
-                  className="w-1.5 h-1.5 rounded-full"
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ backgroundColor: isActive ? m.color : "#94A3B8" }}
                 />
-                {m.label}
+                <span className="truncate">{m.label}</span>
               </button>
             );
           })}
@@ -383,10 +384,10 @@ export function BusinessPerformanceChart({
       </div>
 
       {/* Chart Area */}
-      <div className="h-[270px] sm:h-[300px] w-full relative">
+      <div className="h-[230px] xs:h-[260px] sm:h-[300px] w-full min-w-0 relative">
         {hasData ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 8, left: -24, bottom: 0 }}>
               <defs>
                 <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#F58220" stopOpacity={0.2} />
@@ -402,13 +403,14 @@ export function BusinessPerformanceChart({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" className="dark:stroke-white/5" />
-              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94A3B8" }} dy={8} />
+              <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#94A3B8" }} dy={6} />
               <YAxis
                 axisLine={false}
                 tickLine={false}
-                tick={{ fontSize: 10, fill: "#94A3B8" }}
+                tick={{ fontSize: 9, fill: "#94A3B8" }}
                 tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`}
                 domain={["auto", "auto"]}
+                width={36}
               />
               <Tooltip cursor={{ stroke: "#94A3B8", strokeWidth: 1, strokeDasharray: "4 4" }} content={<CustomChartTooltip />} />
 
@@ -498,7 +500,7 @@ export function CompactLiveActivity() {
   ];
 
   return (
-    <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm space-y-3">
+    <div className="bg-white dark:bg-[#12141c] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm space-y-3 w-full min-w-0">
       <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2.5">
         <div className="flex items-center gap-2">
           <Activity size={15} className="text-[#F58220]" />
@@ -517,7 +519,7 @@ export function CompactLiveActivity() {
           return (
             <div
               key={i}
-              className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 space-y-1"
+              className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 space-y-1 min-w-0"
             >
               <div className="flex items-center justify-between">
                 <div className={clsx("w-6 h-6 rounded-lg flex items-center justify-center border", act.color)}>
@@ -548,7 +550,7 @@ interface PremiumFilterProps {
 
 export function PremiumFilter({ options, active, onChange }: PremiumFilterProps) {
   return (
-    <div className="flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5">
+    <div className="w-full sm:w-auto grid grid-cols-4 sm:flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5 gap-0.5 sm:gap-1">
       {options.map((opt) => {
         const isActive = active === opt.value;
         return (
@@ -557,7 +559,7 @@ export function PremiumFilter({ options, active, onChange }: PremiumFilterProps)
             type="button"
             onClick={() => onChange(opt.value)}
             className={clsx(
-              "px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all select-none",
+              "px-1.5 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold uppercase tracking-wider transition-all select-none text-center flex items-center justify-center truncate",
               isActive
                 ? "bg-white dark:bg-slate-800 text-[#F58220] shadow-sm border border-slate-200 dark:border-white/10"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-white"

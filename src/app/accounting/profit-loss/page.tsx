@@ -141,16 +141,16 @@ export default function ProfitLossPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0 w-full min-w-0">
       
       {/* Header controls (hidden on Print) */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-5">
-        <div className="space-y-1.5">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-5 w-full min-w-0">
+        <div className="space-y-1.5 min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-2">
               Profit and Loss Report
             </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400">
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 shrink-0">
               <Sparkles size={12} className="animate-pulse" /> Live Audit
             </span>
           </div>
@@ -213,11 +213,11 @@ export default function ProfitLossPage() {
       </div>
 
       {/* View Switcher (hidden on Print) */}
-      <div className="flex items-center gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 p-3 rounded-xl shadow-sm print:hidden">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 p-3 rounded-xl shadow-sm print:hidden w-full min-w-0">
         <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none">
           View :
         </span>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           <label className="flex items-center gap-2 cursor-pointer group select-none">
             <input 
               type="radio" 
@@ -249,7 +249,7 @@ export default function ProfitLossPage() {
       {/* Main Report Container */}
       <div 
         ref={printRef}
-        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden p-4 sm:p-6 print:border-none print:shadow-none print:p-0"
+        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden p-4 sm:p-6 print:border-none print:shadow-none print:p-0 w-full min-w-0"
       >
         
         {/* Print Header Block */}
@@ -271,8 +271,8 @@ export default function ProfitLossPage() {
           /* =========================================================================
              VYAPAR SHEET VIEW
              ========================================================================= */
-          <div className="overflow-x-auto select-text">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full select-text">
+            <table className="w-full text-left border-collapse min-w-[500px]">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-700/60">
                   <th className="px-4 py-3 text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">

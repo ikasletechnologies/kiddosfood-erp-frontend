@@ -251,10 +251,10 @@ export default function EmployeesClient() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8 p-2 sm:p-1">
+    <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8 p-4 sm:p-6 w-full min-w-0">
       {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-end gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
-        <div className="flex flex-wrap justify-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 pb-2 border-b border-slate-200 dark:border-white/10 w-full min-w-0">
+        <div className="flex flex-wrap justify-end gap-2 w-full sm:w-auto">
           <button onClick={loadData} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-50 transition-colors">
             <RefreshCw size={16} className={clsx("text-gray-400", loading && "animate-spin")} />
           </button>
@@ -268,7 +268,7 @@ export default function EmployeesClient() {
       </div>
 
       {/* Stats Section */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
         <div className="bg-white/70 dark:bg-card/70 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-white/5 p-4 sm:p-6 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-orange-50 dark:bg-orange-500/10 rounded-xl"><User size={20} className="text-orange-500" /></div>

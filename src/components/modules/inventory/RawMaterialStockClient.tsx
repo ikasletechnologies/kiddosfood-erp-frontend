@@ -267,65 +267,65 @@ export default function RawMaterialStockClient() {
   });
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 p-4 md:p-8">
+    <div className="max-w-[1600px] mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 p-3 sm:p-4 md:p-8 w-full min-w-0">
 
       {/* No big header here since Stock Hub has its own page header */}
-      <div className="flex justify-end gap-3">
+      <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
         <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
         <button
           onClick={() => setShowImportModal(true)}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-250 hover:bg-gray-50 rounded-lg text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+          className="flex items-center gap-2 px-3.5 sm:px-4 py-2 border border-gray-250 hover:bg-gray-50 rounded-xl text-xs font-bold text-slate-600 transition-colors cursor-pointer"
         >
           <Upload size={14} /> Bulk Import (Excel)
         </button>
-        <button onClick={fetchItems} className="p-2 border border-gray-250 hover:bg-gray-50 rounded-lg text-slate-500 transition-colors">
+        <button onClick={fetchItems} className="p-2 border border-gray-250 hover:bg-gray-50 rounded-xl text-slate-500 transition-colors">
           <RefreshCw size={16} className={clsx("text-slate-400", loading && "animate-spin")} />
         </button>
       </div>
 
       {/* Analytics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 w-full min-w-0">
         {[
           { label: "Inventory Valuation", value: `₹${(totalValue / 1000).toFixed(1)}K`, sub: "Live Asset Value", icon: Calculator, color: "text-orange-500", bg: "bg-orange-500/10" },
           { label: "Raw Materials", value: rawMaterialsCount, sub: "Production Inputs", icon: Layers, color: "text-blue-500", bg: "bg-blue-500/10" },
           { label: "Packaging & Assets", value: packagingAssetsCount, sub: "Packaging & Supplies", icon: Package, color: "text-emerald-500", bg: "bg-emerald-500/10" },
           { label: "Low Stock Alerts", value: lowStockCount, sub: "Reorder Required", icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
         ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{stat.label}</p>
+          <div key={i} className="bg-white dark:bg-slate-900/50 p-4 sm:p-6 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between min-w-0">
+            <div className="space-y-1 min-w-0">
+              <p className="text-[10px] sm:text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">{stat.label}</p>
               <div className="flex items-baseline gap-2">
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">{stat.value}</h3>
+                <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate">{stat.value}</h3>
               </div>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{stat.sub}</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate">{stat.sub}</p>
             </div>
-            <div className={clsx("p-3.5 rounded-xl shrink-0 flex items-center justify-center", stat.bg, stat.color)}>
-              <stat.icon size={20} className="stroke-[2px]" />
+            <div className={clsx("p-3 sm:p-3.5 rounded-xl shrink-0 flex items-center justify-center", stat.bg, stat.color)}>
+              <stat.icon size={18} className="stroke-[2px] sm:w-5 sm:h-5" />
             </div>
           </div>
         ))}
       </div>
 
       {/* Critical Stock Alerts List */}
-      <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-850 rounded-xl shadow-sm overflow-hidden p-6 mt-6">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+      <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-850 rounded-2xl shadow-sm overflow-hidden p-4 sm:p-6 w-full min-w-0">
+        <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
           <AlertTriangle className="text-red-500" size={18} />
           Critical & Low Stock Alerts
         </h3>
         {items.filter(i => (i.currentStock || 0) <= (i.minimumStock || 0)).length === 0 ? (
-          <p className="text-sm text-slate-500">All raw materials are currently adequately stocked.</p>
+          <p className="text-xs sm:text-sm text-slate-500">All raw materials are currently adequately stocked.</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
             {items
               .filter(i => (i.currentStock || 0) <= (i.minimumStock || 0))
               .slice(0, 12)
               .map(item => {
                 const status = getStockStatus(item.currentStock || 0, item.minimumStock);
                 return (
-                  <div key={item.id} className="p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5 flex flex-col gap-2">
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate">{item.name}</span>
-                      <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full", status.color)}>
+                  <div key={item.id} className="p-3.5 sm:p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5 flex flex-col gap-2 min-w-0">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 truncate">{item.name}</span>
+                      <span className={clsx("text-[9px] sm:text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0", status.color)}>
                         {status.label}
                       </span>
                     </div>
@@ -341,16 +341,16 @@ export default function RawMaterialStockClient() {
       </div>
 
       {/* All Raw Materials */}
-      <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-850 rounded-xl shadow-sm overflow-hidden">
-        <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-white/5">
-          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+      <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-850 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
+        <div className="p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 border-b border-slate-100 dark:border-white/5">
+          <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Layers className="text-blue-500" size={18} />
             All Raw Materials & Assets
             <span className="text-xs font-semibold text-slate-400 bg-slate-50 dark:bg-white/5 px-2 py-0.5 rounded-full">{filteredItems.length}</span>
           </h3>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-850 rounded-lg w-full sm:w-64">
-              <Search size={14} className="text-slate-400" />
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-850 rounded-xl w-full sm:w-64">
+              <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 type="text"
                 value={searchTerm}
@@ -362,7 +362,7 @@ export default function RawMaterialStockClient() {
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-850 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer focus:border-[#f58220]"
+              className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-850 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer focus:border-[#f58220]"
             >
               <option value="ALL">All Categories</option>
               <option value="RAW_MATERIAL">Raw Materials</option>
@@ -376,16 +376,16 @@ export default function RawMaterialStockClient() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-left min-w-[650px]">
+            <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="px-6 py-3">Item</th>
-                <th className="px-6 py-3">Category</th>
-                <th className="px-6 py-3 text-center">Stock</th>
-                <th className="px-6 py-3 text-center">Min Stock</th>
-                <th className="px-6 py-3 text-center">Status</th>
-                <th className="px-6 py-3 text-right">Actions</th>
+                <th className="px-4 sm:px-6 py-3.5">Item</th>
+                <th className="px-4 sm:px-6 py-3.5">Category</th>
+                <th className="px-4 sm:px-6 py-3.5 text-center">Stock</th>
+                <th className="px-4 sm:px-6 py-3.5 text-center">Min Stock</th>
+                <th className="px-4 sm:px-6 py-3.5 text-center">Status</th>
+                <th className="px-4 sm:px-6 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">

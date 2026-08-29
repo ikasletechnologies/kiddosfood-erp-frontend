@@ -249,9 +249,9 @@ export default function FormulaScalingTab() {
   }
 
   return (
-    <div className="space-y-6 print:bg-white text-gray-800 dark:text-slate-100">
+    <div className="space-y-4 sm:space-y-6 print:bg-white text-gray-800 dark:text-slate-100 w-full min-w-0">
       {recipe && (
-        <div className="flex justify-end gap-2 print:hidden">
+        <div className="flex flex-wrap justify-end gap-2 print:hidden w-full min-w-0">
           <button
             onClick={handlePrint}
             className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-300 rounded-xl font-bold text-xs uppercase tracking-wider hover:border-gray-300 dark:hover:border-white/20 transition-all active:scale-[0.98]"
@@ -288,8 +288,8 @@ export default function FormulaScalingTab() {
       )}
 
       {/* Controls */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 print:hidden">
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-1.5 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 print:hidden w-full min-w-0">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
           <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400">
             Select Recipe
           </label>
@@ -443,32 +443,35 @@ export default function FormulaScalingTab() {
         )}
       </div>
 
-      {recipe ? (
+        {recipe ? (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
             {/* Instructions and Summary Card */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm">
+            <div className="lg:col-span-1 space-y-4 sm:space-y-6 min-w-0">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm min-w-0">
                 <div className="flex items-center gap-2.5 mb-3">
                   <ChefHat className="text-[#F97316]" size={18} />
-                  <h3 className="text-sm font-bold text-gray-800 dark:text-white">
+                  <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">
                     {recipe.name}
                   </h3>
                 </div>
-
                 <div className="space-y-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300">
                   <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
-                    <span className="uppercase text-gray-400 dark:text-slate-500">Recipe Yield:</span>
-                    <span className="text-gray-800 dark:text-white">{recipe.yieldQty} {recipe.yieldUnit || ""}</span>
+                    <span className="uppercase text-gray-400 dark:text-slate-500">Base Recipe Yield:</span>
+                    <span className="text-gray-800 dark:text-white">{recipe.yieldQty} {recipe.yieldUnit || "Units"}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                    <span className="uppercase text-gray-400 dark:text-slate-500">Target Batch Yield:</span>
+                    <span className="text-[#F97316] font-black">{targetYield} {targetUnit || recipe.yieldUnit || ""}</span>
                   </div>
                   <div className="flex justify-between pb-0.5">
-                    <span className="uppercase text-gray-400 dark:text-slate-500">Scaled Yield:</span>
-                    <span className="text-[#F97316] font-black">{targetYield} {targetUnit || recipe.yieldUnit || ""}</span>
+                    <span className="uppercase text-gray-400 dark:text-slate-500">Scaling Factor:</span>
+                    <span className="text-gray-800 dark:text-white">{multiplier.toFixed(2)}x</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm space-y-2">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm space-y-2 min-w-0">
                 <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   Production Instructions
                 </h4>
@@ -479,8 +482,8 @@ export default function FormulaScalingTab() {
             </div>
 
             {/* Scaled Ingredients Table */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm overflow-hidden">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
+              <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden min-w-0">
                 <div className="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center print:border-b-2 print:pb-4">
                   <div>
                     <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -498,8 +501,8 @@ export default function FormulaScalingTab() {
                   )}
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                  <table className="w-full text-left border-collapse min-w-[650px]">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
                         <th className="py-3 px-6">Ingredient</th>

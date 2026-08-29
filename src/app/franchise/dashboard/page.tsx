@@ -76,21 +76,26 @@ export default function FranchiseDashboardPage() {
         </div>
 
         {/* ── High-Velocity Quick Actions ── */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          <Link href={monitorId ? `/franchise/analytics?id=${monitorId}` : "/franchise/analytics"} className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-white/10 whitespace-nowrap">
-            <BarChart3 size={13} /> View Analytics
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
+          <Link href={monitorId ? `/franchise/analytics?id=${monitorId}` : "/franchise/analytics"} className="justify-center flex items-center gap-1 bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-slate-800 dark:text-white px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all border border-slate-200 dark:border-white/10 whitespace-nowrap text-center">
+            <BarChart3 size={13} className="shrink-0" />
+            <span>Analytics</span>
           </Link>
-          <Link href="/pos" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
-            <Plus size={13} /> New Invoice
+          <Link href="/pos" className="justify-center flex items-center gap-1 bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap text-center">
+            <Plus size={13} className="shrink-0" />
+            <span>New Invoice</span>
           </Link>
-          <Link href="/purchases/inward" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
-            <Plus size={13} /> Receive Stock
+          <Link href="/purchases/inward" className="justify-center flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap text-center">
+            <Plus size={13} className="shrink-0" />
+            <span>Receive Stock</span>
           </Link>
-          <Link href="/accounting/ledgers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
-            <Plus size={13} /> Record Payment
+          <Link href="/accounting/ledgers" className="justify-center flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap text-center">
+            <Plus size={13} className="shrink-0" />
+            <span>Record Payment</span>
           </Link>
-          <Link href="/franchise/dealers" className="flex-1 sm:flex-initial justify-center flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap">
-            <Plus size={13} /> Create Dealer
+          <Link href="/franchise/dealers" className="col-span-2 sm:col-span-1 justify-center flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all shadow-sm whitespace-nowrap text-center">
+            <Plus size={13} className="shrink-0" />
+            <span>Create Dealer</span>
           </Link>
         </div>
       </div>
@@ -114,13 +119,13 @@ export default function FranchiseDashboardPage() {
       )}
 
       {/* ── Operational KPI Cards Grid ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4 w-full min-w-0">
         {kpis.map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{stat.label}</span>
-              <p className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">{stat.val}</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">{stat.sub}</p>
+          <div key={i} className="bg-white dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between min-w-0">
+            <div className="space-y-1 min-w-0">
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block truncate">{stat.label}</span>
+              <p className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white tracking-tight truncate">{stat.val}</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium truncate">{stat.sub}</p>
             </div>
             <div className={clsx("p-2.5 rounded-xl shrink-0 flex items-center justify-center", stat.bg)}>
               <stat.icon size={16} className={clsx(stat.color, "stroke-[2px]")} />
@@ -130,21 +135,21 @@ export default function FranchiseDashboardPage() {
       </div>
 
       {/* ── Row 2: Recent Invoices & Clickable Today's Operations ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 w-full min-w-0">
         
         {/* Left: Recent Invoices */}
-        <div className="lg:col-span-2 bg-white dark:bg-card border border-slate-200/60 dark:border-white/5 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-white/5 pb-2">
-            <div>
-              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Recent Sales Invoices</h3>
-              <p className="text-[10px] text-slate-500 font-medium">Today's billing pipeline overview.</p>
+        <div className="lg:col-span-2 bg-white dark:bg-card border border-slate-200/60 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col justify-between w-full min-w-0">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 dark:border-white/5 pb-2 gap-2">
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider truncate">Recent Sales Invoices</h3>
+              <p className="text-[10px] text-slate-500 font-medium truncate">Today's billing pipeline overview.</p>
             </div>
-            <Link href="/pos/invoices" className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:underline flex items-center gap-1">
-              View All <ChevronRight size={10} />
+            <Link href="/pos/invoices" className="text-[10px] font-black text-indigo-500 uppercase tracking-widest hover:underline flex items-center gap-1 shrink-0">
+              <span>View All</span> <ChevronRight size={10} />
             </Link>
           </div>
 
-          <div className="overflow-x-auto min-h-[220px]">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[220px]">
             <table className="w-full min-w-[500px] text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-100 dark:border-white/5">

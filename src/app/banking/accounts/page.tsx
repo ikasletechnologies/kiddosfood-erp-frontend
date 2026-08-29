@@ -86,9 +86,9 @@ export default function AccountsPage() {
   const cashDigital = accounts.filter(a => a.type !== 'BANK').reduce((acc, curr) => acc + curr.balance, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end w-full min-w-0">
         <button
           onClick={() => setShowAddForm(true)}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
@@ -97,9 +97,9 @@ export default function AccountsPage() {
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {/* Summary Strip */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: "Total Liquidity", value: `₹${totalLiquidity.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
             { label: "Bank Holdings", value: `₹${bankHoldings.toLocaleString("en-IN")}`, sub: `${accounts.filter(a => a.type === 'BANK').length} accounts`, color: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" },

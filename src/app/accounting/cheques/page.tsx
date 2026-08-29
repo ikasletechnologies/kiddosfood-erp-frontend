@@ -178,21 +178,21 @@ export default function ChequeRegistryPage() {
   });
 
   return (
-    <div className="space-y-6 max-w-[1400px] mx-auto p-4 md:p-6 animate-in fade-in duration-700">
+    <div className="space-y-6 sm:space-y-8 max-w-[1400px] mx-auto p-4 sm:p-6 animate-in fade-in duration-700 w-full min-w-0 text-slate-800 dark:text-slate-100">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full min-w-0">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
             <Stamp className="text-orange-500" size={32} />
             Cheque Registry
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
             Manage Post-Dated Cheques (PDC), clearance cycles and bouncing records
           </p>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-95"
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-orange-500/20 active:scale-95 shrink-0"
         >
           <Plus size={18} strokeWidth={3} />
           Record New Cheque
@@ -200,14 +200,14 @@ export default function ChequeRegistryPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full min-w-0">
         {[
           { label: "Total Volume", value: `₹${stats.totalVolume.toLocaleString()}`, icon: Banknote, color: "text-slate-600" },
           { label: "Pending Clearance", value: `₹${stats.pendingClearance.toLocaleString()}`, icon: Clock, color: "text-amber-500" },
           { label: "Cleared Today", value: `₹${stats.clearedToday.toLocaleString()}`, icon: CheckCircle2, color: "text-emerald-500" },
           { label: "Bounced (Risk)", value: `₹${stats.bouncedRisk.toLocaleString()}`, icon: AlertCircle, color: "text-rose-500" },
         ].map((stat, i) => (
-          <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm">
+          <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-sm min-w-0">
             <div className="flex items-center justify-between mb-3">
               <div className={`p-2 rounded-xl bg-slate-50 dark:bg-slate-800 ${stat.color}`}>
                 <stat.icon size={20} />
@@ -215,20 +215,20 @@ export default function ChequeRegistryPage() {
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live</span>
             </div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
-            <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{stat.value}</p>
+            <p className="text-2xl font-black text-slate-900 dark:text-white tracking-tight truncate">{stat.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filters & Tabs */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full min-w-0">
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl w-fit overflow-x-auto custom-scrollbar max-w-full">
           {["ALL", "PENDING", "CLEARED", "BOUNCED"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
               className={clsx(
-                "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all",
+                "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
                 activeTab === tab 
                   ? "bg-white dark:bg-slate-900 text-orange-500 shadow-sm" 
                   : "text-slate-500 hover:text-slate-900 dark:hover:text-white"
@@ -258,15 +258,15 @@ export default function ChequeRegistryPage() {
       </div>
 
       {/* Cheque Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden shadow-sm w-full min-w-0">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
           {loading ? (
             <div className="p-20 flex flex-col items-center justify-center gap-4">
               <Loader2 className="animate-spin text-orange-500" size={40} />
               <p className="text-sm font-bold text-slate-500">Syncing with registry...</p>
             </div>
           ) : (
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                   <th className="px-8 py-5 text-[11px] font-black uppercase tracking-widest text-slate-500">Cheque Info</th>

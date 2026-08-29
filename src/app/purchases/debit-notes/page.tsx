@@ -334,12 +334,12 @@ export default function DebitNotesPage() {
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {/* Vendor + Meta Header */}
-          <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-5 shadow-sm">
-            <div className="flex flex-col lg:flex-row gap-6 justify-between">
-              {/* Left: Vendor */}
-              <div className="flex-1 max-w-sm">
+        <div className="flex-1 overflow-y-auto custom-scrollbar w-full min-w-0">
+          {/* Form Header Card */}
+          <div className="mx-4 sm:mx-6 mt-4 sm:mt-5 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-sm w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+              {/* Left: Vendor Selector */}
+              <div className="min-w-0">
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Vendor / Party</label>
                 <div className="relative" ref={vendorDropRef}>
                   <div
@@ -376,7 +376,7 @@ export default function DebitNotesPage() {
                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                   </div>
                   {showVendorDrop && (
-                    <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto custom-scrollbar">
+                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto custom-scrollbar">
                       {filteredVendors.length === 0 ? (
                         <div className="px-4 py-3 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
                       ) : filteredVendors.map(v => (
@@ -401,7 +401,7 @@ export default function DebitNotesPage() {
               </div>
 
               {/* Right: Meta */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm min-w-0">
                 <div>
                   <p className="text-xs text-gray-400 dark:text-slate-400 font-medium mb-1">Return No.</p>
                   <p className="font-semibold text-gray-800 dark:text-slate-200">{returnNo}</p>
@@ -412,7 +412,7 @@ export default function DebitNotesPage() {
                     value={billNumber}
                     onChange={e => setBillNumber(e.target.value)}
                     placeholder="Enter bill no."
-                    className="border-b border-gray-200 dark:border-white/10 focus:border-orange-400 outline-none text-sm text-gray-800 dark:text-white bg-transparent py-0.5 w-36 transition-colors"
+                    className="border-b border-gray-200 dark:border-white/10 focus:border-orange-400 outline-none text-sm text-gray-800 dark:text-white bg-transparent py-0.5 w-full sm:w-36 transition-colors"
                   />
                 </div>
                 <div className="relative" ref={billDateCalRef}>
@@ -450,9 +450,9 @@ export default function DebitNotesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="mx-6 my-4 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+          <div className="mx-4 sm:mx-6 my-4 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
                     <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-8">#</th>
@@ -462,11 +462,7 @@ export default function DebitNotesPage() {
                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-32">Price / Unit</th>
                     <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-32">Tax</th>
                     <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide w-28">Amount</th>
-                    <th className="px-3 py-3 w-8">
-                      <button onClick={addRow} className="text-orange-500 hover:text-orange-700 transition-colors">
-                        <Plus size={15} />
-                      </button>
-                    </th>
+                    <th className="px-3 py-3 w-8"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-white/5">
@@ -519,21 +515,26 @@ export default function DebitNotesPage() {
                                   className={clsx("w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 dark:hover:bg-white/5 transition-colors",
                                     item.unit === u ? "text-orange-600 dark:text-orange-400 font-semibold" : "text-gray-700 dark:text-slate-300"
                                   )}
-                                >{u}</button>
+                                >
+                                  {u}
+                                </button>
                               ))}
                             </div>
                           )}
                         </div>
                       </td>
                       <td className="px-2 py-2.5">
-                        <input
-                          type="number"
-                          value={item.priceWithoutTax}
-                          onChange={e => updateItem(item.id, "priceWithoutTax", e.target.value)}
-                          className="w-full outline-none bg-transparent text-center text-sm text-gray-800 dark:text-white"
-                          min="0"
-                          placeholder="0.00"
-                        />
+                        <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 focus-within:border-orange-400 transition-colors">
+                          <span className="text-xs text-gray-400 dark:text-slate-500 mr-1">₹</span>
+                          <input
+                            type="number"
+                            value={item.priceWithoutTax}
+                            onChange={e => updateItem(item.id, "priceWithoutTax", e.target.value)}
+                            className="w-full outline-none bg-transparent text-sm text-gray-800 dark:text-white"
+                            min="0"
+                            placeholder="0.00"
+                          />
+                        </div>
                       </td>
                       <td className="px-2 py-2.5">
                         <select
@@ -561,17 +562,20 @@ export default function DebitNotesPage() {
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-3 border-t border-gray-50 dark:border-white/5">
-              <button onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-500 hover:text-orange-700 transition-colors">
-                <Plus size={13} /> Add Row
+            <div className="border-t border-gray-100 dark:border-white/5 px-4 py-2.5 bg-gray-50/50 dark:bg-white/[0.01] flex items-center justify-between">
+              <button onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 transition-colors">
+                <Plus size={13} /> Add Item
               </button>
+              <span className="text-xs text-gray-400 dark:text-slate-400">
+                {items.length} item{items.length !== 1 ? "s" : ""} · Total Qty: {items.reduce((s, i) => s + (Number(i.qty) || 0), 0)}
+              </span>
             </div>
           </div>
 
           {/* Bottom Section: Payment Type + Summary */}
-          <div className="mx-6 mb-6 flex gap-4 flex-col lg:flex-row">
+          <div className="mx-4 sm:mx-6 mb-6 flex gap-4 flex-col lg:flex-row items-stretch lg:items-start w-full min-w-0">
             {/* Left: Notes + Payment */}
-            <div className="flex-1 space-y-3">
+            <div className="flex-1 space-y-3 min-w-0">
               <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 shadow-sm">
                 <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Payment Type</p>
                 <select
@@ -604,7 +608,7 @@ export default function DebitNotesPage() {
             </div>
 
             {/* Right: Summary */}
-            <div className="w-64 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 self-start shadow-sm">
+            <div className="w-full lg:w-72 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 self-start shadow-sm shrink-0">
               <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Summary</p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600 dark:text-slate-400">
@@ -784,8 +788,8 @@ export default function DebitNotesPage() {
       </div>
 
       {/* Table */}
-      <div className="px-6 pb-8">
-        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
+      <div className="px-4 sm:px-6 pb-8 w-full min-w-0">
+        <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
           {loading ? (
             <div className="flex items-center justify-center py-24">
               <div className="flex flex-col items-center gap-3">
@@ -811,8 +815,8 @@ export default function DebitNotesPage() {
               </button>
             </div>
           ) : (
-            <>
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[800px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
                     {["#", "Date", "Ref No.", "Vendor", "Type", "Status", "Total", "Settled", "Balance", ""].map(h => (
@@ -855,7 +859,7 @@ export default function DebitNotesPage() {
                             className="p-1.5 text-gray-300 dark:text-slate-500 hover:text-gray-500 dark:hover:text-white rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
                             title="Print"
                           >
-                            <Printer size={13} />
+                            <Printer size={15} />
                           </button>
                         </td>
                       </tr>
@@ -869,7 +873,7 @@ export default function DebitNotesPage() {
                   <span className="text-gray-600 dark:text-slate-400">Total: <span className="text-gray-900 dark:text-white">₹{totalAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></span>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

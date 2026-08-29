@@ -60,24 +60,24 @@ export default function ProductDemandDrawer({ item, onClose }: ProductDemandDraw
   const totalDemandQty = item.pendingDemandQuantity + item.approvedDemandQuantity;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white dark:bg-[#12141c] rounded-[2.5rem] shadow-2xl w-full max-w-2xl border border-slate-100 dark:border-white/10 max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+      <div className="bg-white dark:bg-[#12141c] rounded-2xl sm:rounded-[2.5rem] shadow-2xl w-full max-w-2xl border border-slate-100 dark:border-white/10 max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 min-w-0">
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-start justify-between gap-4 bg-slate-50/50 dark:bg-white/[0.02]">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
-              <Send size={24} />
+        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-white/5 flex items-start justify-between gap-3 bg-slate-50/50 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+              <Package size={20} className="sm:w-6 sm:h-6" />
             </div>
-            <div>
-              <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white tracking-tight truncate">
                 {item.productName}
               </h2>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <span className="text-xs font-mono font-bold text-slate-400 uppercase">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-mono font-bold text-slate-400">
                   SKU: {item.sku || "N/A"}
                 </span>
-                <span className="text-slate-300 dark:text-slate-700">•</span>
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span className="text-slate-300 dark:text-white/20">•</span>
+                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">
                   Unit: <strong>{item.unit}</strong>
                 </span>
               </div>
@@ -86,46 +86,46 @@ export default function ProductDemandDrawer({ item, onClose }: ProductDemandDraw
 
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-2xl text-slate-400 transition-colors"
+            className="p-1.5 sm:p-2 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl sm:rounded-2xl text-slate-400 transition-colors shrink-0"
           >
             <X size={18} />
           </button>
         </div>
 
         {/* Stock & Demand Metrics Bar */}
-        <div className="p-6 border-b border-slate-100 dark:border-white/5 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/30 dark:bg-white/[0.01]">
-          <div className="p-3.5 bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5">
-            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">HQ Available</p>
-            <p className="text-base font-black text-slate-900 dark:text-white mt-0.5">
-              {item.hqAvailableStock} <span className="text-[10px] font-bold text-slate-400">{item.unit}</span>
+        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-white/5 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 bg-slate-50/30 dark:bg-white/[0.01]">
+          <div className="p-3 sm:p-3.5 bg-white dark:bg-card rounded-xl sm:rounded-2xl border border-slate-100 dark:border-white/5">
+            <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-slate-400">HQ Available</p>
+            <p className="text-sm sm:text-base font-black text-slate-900 dark:text-white mt-0.5">
+              {item.hqAvailableStock} <span className="text-[9px] sm:text-[10px] font-bold text-slate-400">{item.unit}</span>
             </p>
           </div>
 
-          <div className="p-3.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-2xl border border-purple-100 dark:border-purple-900/30">
-            <p className="text-[9px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">HQ Reserved</p>
-            <p className="text-base font-black text-purple-600 dark:text-purple-400 mt-0.5">
-              {item.hqReservedStock} <span className="text-[10px] font-bold">{item.unit}</span>
+          <div className="p-3 sm:p-3.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl sm:rounded-2xl border border-purple-100 dark:border-purple-900/30">
+            <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">HQ Reserved</p>
+            <p className="text-sm sm:text-base font-black text-purple-600 dark:text-purple-400 mt-0.5">
+              {item.hqReservedStock} <span className="text-[9px] sm:text-[10px] font-bold">{item.unit}</span>
             </p>
           </div>
 
-          <div className="p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
-            <p className="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">In-Transit</p>
-            <p className="text-base font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
-              {item.inTransitStock} <span className="text-[10px] font-bold">{item.unit}</span>
+          <div className="p-3 sm:p-3.5 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-xl sm:rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+            <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">In-Transit</p>
+            <p className="text-sm sm:text-base font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
+              {item.inTransitStock} <span className="text-[9px] sm:text-[10px] font-bold">{item.unit}</span>
             </p>
           </div>
 
-          <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30">
-            <p className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Pending Demand</p>
-            <p className="text-base font-black text-amber-600 dark:text-amber-400 mt-0.5">
-              {item.pendingDemandQuantity} <span className="text-[10px] font-bold">{item.unit}</span>
+          <div className="p-3 sm:p-3.5 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl sm:rounded-2xl border border-amber-100 dark:border-amber-900/30">
+            <p className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Pending Demand</p>
+            <p className="text-sm sm:text-base font-black text-amber-600 dark:text-amber-400 mt-0.5">
+              {item.pendingDemandQuantity} <span className="text-[9px] sm:text-[10px] font-bold">{item.unit}</span>
             </p>
           </div>
         </div>
 
         {/* Demand Records List */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          <div className="flex items-center justify-between">
+        <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-4 flex-1 min-w-0">
+          <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-1.5">
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-2">
               <FileText size={14} /> Active Demand Records ({item.demandRecords.length})
             </h3>
@@ -135,8 +135,8 @@ export default function ProductDemandDrawer({ item, onClose }: ProductDemandDraw
           </div>
 
           {item.demandRecords.length === 0 ? (
-            <div className="py-16 text-center space-y-2 bg-slate-50 dark:bg-white/[0.02] rounded-3xl border border-dashed border-slate-200 dark:border-white/5">
-              <Package size={36} className="mx-auto text-slate-300" />
+            <div className="py-12 sm:py-16 text-center space-y-2 bg-slate-50 dark:bg-white/[0.02] rounded-2xl sm:rounded-3xl border border-dashed border-slate-200 dark:border-white/5">
+              <Package size={32} className="mx-auto text-slate-300 sm:w-9 sm:h-9" />
               <p className="text-xs font-bold text-slate-500">No active franchise requests or orders for this product.</p>
             </div>
           ) : (

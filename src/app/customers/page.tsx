@@ -200,10 +200,10 @@ export default function PartiesPage() {
   });
 
   return (
-    <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white dark:bg-background text-slate-800 dark:text-foreground">
+    <div className="flex flex-col md:flex-row min-h-screen md:h-[calc(100vh-64px)] w-full overflow-hidden bg-white dark:bg-background text-slate-800 dark:text-foreground min-w-0">
 
       {/* Left Sidebar - Party List */}
-      <div className="w-[300px] border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-card relative z-10">
+      <div className="w-full md:w-[300px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-card relative z-10 min-w-0 max-h-[320px] md:max-h-full">
 
         {/* HQ / Franchise Scope Selector — Super Admin only */}
         {isSuper && (

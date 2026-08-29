@@ -99,34 +99,34 @@ export default function TransitStockPage() {
   }, [rows]);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-background text-slate-800 dark:text-slate-100">
-      <div className="px-6 py-5 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-card shrink-0 space-y-4">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Active Transit (Challans)</p>
-              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{stats.activeTransit}</p>
+    <div className="flex-1 flex flex-col h-full bg-slate-50/50 dark:bg-background text-slate-800 dark:text-slate-100 w-full min-w-0">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-card shrink-0 space-y-4 w-full min-w-0">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">Active Transit (Challans)</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400 truncate">{stats.activeTransit}</p>
             </div>
           </div>
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">In Transit Qty (all items)</p>
-              <p className="text-lg font-bold text-orange-600 dark:text-orange-400">{stats.inTransitQty}</p>
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">In Transit Qty (all items)</p>
+              <p className="text-lg font-bold text-orange-600 dark:text-orange-400 truncate">{stats.inTransitQty}</p>
             </div>
           </div>
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg px-4 py-3 flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">Delayed (past expected delivery)</p>
-              <p className="text-lg font-bold text-rose-600 dark:text-rose-400">{stats.delayed}</p>
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">Delayed (past expected)</p>
+              <p className="text-lg font-bold text-rose-600 dark:text-rose-400 truncate">{stats.delayed}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="relative w-72">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full min-w-0">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={16} />
             <input
               value={search}
@@ -137,7 +137,7 @@ export default function TransitStockPage() {
           </div>
           <button
             onClick={fetchTransitStock}
-            className="p-2 border border-gray-300 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-slate-300"
+            className="p-2 border border-gray-300 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-gray-600 dark:text-slate-300 shrink-0"
             title="Refresh"
           >
             <RefreshCw size={16} className={clsx(loading && "animate-spin")} />
@@ -145,8 +145,8 @@ export default function TransitStockPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden">
+      <div className="flex-1 overflow-auto p-4 sm:p-6 w-full min-w-0">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
           {loading ? (
             <div className="flex justify-center items-center h-48 text-gray-400 dark:text-slate-500 text-sm">Loading Transit Stock...</div>
           ) : filtered.length === 0 ? (
@@ -155,8 +155,8 @@ export default function TransitStockPage() {
               <div className="text-sm">No items currently in transit</div>
             </div>
           ) : (
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="w-full max-w-full overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left border-collapse min-w-[850px]">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-white/[0.02] border-b border-slate-200 dark:border-white/5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="px-5 py-3 font-medium whitespace-nowrap">DC No</th>

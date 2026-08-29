@@ -392,20 +392,20 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200">
       <div 
-        className="bg-white dark:bg-[#13151f] rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[90vh] border border-slate-200 dark:border-white/10"
+        className="bg-white dark:bg-[#13151f] rounded-2xl sm:rounded-[2rem] shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden max-h-[92vh] sm:max-h-[90vh] border border-slate-200 dark:border-white/10 min-w-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f]">
-          <h2 className="text-base font-semibold text-gray-800 dark:text-white">{displayTitle}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
-            <X size={20} />
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] gap-3">
+          <h2 className="text-sm sm:text-base font-semibold text-gray-800 dark:text-white truncate flex-1">{displayTitle}</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4 sm:space-y-6 min-w-0">
 
           {/* Target Scope — read-only */}
           {scopeLabel && (
@@ -738,10 +738,10 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017]">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017]">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+            className="px-4 py-2 text-xs sm:text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white transition-colors text-center"
           >
             Cancel
           </button>
@@ -749,7 +749,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           <button
             onClick={handleConfirm}
             disabled={saving}
-            className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
+            className="px-6 py-2.5 sm:py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : saveLabel}
           </button>

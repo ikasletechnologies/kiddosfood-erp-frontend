@@ -76,7 +76,7 @@ export default function WarehousesPage() {
   );
 
   return (
-    <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
+    <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-3 sm:-m-4 md:-m-6 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors w-full min-w-0 max-w-full">
       <WarehouseFormSidebar 
         isOpen={showSidebar}
         onClose={() => {
@@ -93,26 +93,26 @@ export default function WarehousesPage() {
         }}
       />
 
-      <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6 md:p-8 space-y-4 sm:space-y-6 custom-scrollbar w-full min-w-0">
         {/* Header Toolbar */}
-        <div className="flex items-center justify-end gap-4 pb-4 border-b border-slate-200 dark:border-white/5">
+        <div className="flex items-center justify-end gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200 dark:border-white/5 w-full min-w-0">
 
           <button 
             onClick={() => setShowSidebar(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-orange-500/20 active:scale-95"
+            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-lg shadow-orange-500/20 active:scale-95 cursor-pointer"
           >
             <Plus size={16} /> Add Location
           </button>
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-col md:flex-row items-center gap-4">
-          <div className="flex-1 relative w-full">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full min-w-0">
+          <div className="flex-1 relative w-full min-w-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text"
               placeholder="Search by name or location..."
-              className="w-full bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 rounded-xl py-3 pl-10 pr-4 text-xs font-bold outline-none focus:ring-2 ring-orange-500/20 transition-all text-slate-900 dark:text-white"
+              className="w-full bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 text-xs font-bold outline-none focus:ring-2 ring-orange-500/20 transition-all text-slate-900 dark:text-white"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -125,33 +125,35 @@ export default function WarehousesPage() {
             )}
           </div>
           
-          <div className="flex items-center gap-2 p-1 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-white/5">
+          <div className="flex items-center justify-between sm:justify-start gap-2">
+            <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-white/5">
+              <button 
+                onClick={() => setViewMode("grid")}
+                className={clsx(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === "grid" ? "bg-slate-100 dark:bg-white/10 text-orange-600 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                )}
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button 
+                onClick={() => setViewMode("list")}
+                className={clsx(
+                  "p-2 rounded-lg transition-all",
+                  viewMode === "list" ? "bg-slate-100 dark:bg-white/10 text-orange-600 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                )}
+              >
+                <List size={16} />
+              </button>
+            </div>
+
             <button 
-              onClick={() => setViewMode("grid")}
-              className={clsx(
-                "p-2 rounded-lg transition-all",
-                viewMode === "grid" ? "bg-slate-100 dark:bg-white/10 text-orange-600 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              )}
+              onClick={fetchWarehouses}
+              className="p-2.5 sm:p-3 bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 text-slate-400 hover:text-orange-500 rounded-xl transition-all"
             >
-              <LayoutGrid size={16} />
-            </button>
-            <button 
-              onClick={() => setViewMode("list")}
-              className={clsx(
-                "p-2 rounded-lg transition-all",
-                viewMode === "list" ? "bg-slate-100 dark:bg-white/10 text-orange-600 dark:text-white shadow-sm" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              )}
-            >
-              <List size={16} />
+              <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
-
-          <button 
-            onClick={fetchWarehouses}
-            className="p-3 bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 text-slate-400 hover:text-orange-500 rounded-xl transition-all"
-          >
-            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
-          </button>
         </div>
 
         {/* Content */}
@@ -161,7 +163,7 @@ export default function WarehousesPage() {
             <p className="text-[11px] font-bold uppercase tracking-[0.2em]">Loading Locations...</p>
           </div>
         ) : filteredWarehouses.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 rounded-2xl p-16 flex flex-col items-center text-center space-y-4">
+          <div className="bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 rounded-2xl p-8 sm:p-16 flex flex-col items-center text-center space-y-4">
             <div className="p-6 bg-slate-50 dark:bg-white/5 rounded-full">
               <Warehouse size={40} className="text-slate-300" />
             </div>
@@ -173,13 +175,13 @@ export default function WarehousesPage() {
             </div>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {filteredWarehouses.map((w) => (
               <div 
                 key={w.id}
-                className="bg-white dark:bg-slate-900/40 rounded-2xl p-6 border border-slate-200 dark:border-white/5 shadow-sm hover:shadow-md transition-all group relative"
+                className="bg-white dark:bg-slate-900/40 rounded-2xl p-5 sm:p-6 border border-slate-200 dark:border-white/5 shadow-sm hover:shadow-md transition-all group relative"
               >
-                <div className="absolute top-6 right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-5 sm:top-6 right-5 sm:right-6 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button 
                     onClick={() => handleEdit(w)}
                     className="p-1.5 text-slate-400 hover:text-orange-500 transition-colors"
@@ -226,17 +228,18 @@ export default function WarehousesPage() {
             ))}
           </div>
         ) : (
-          <div className="bg-white dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
-                  <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Warehouse</th>
-                  <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Type</th>
-                  <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em]">Location</th>
-                  <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+          <div className="bg-white dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-left min-w-[600px]">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-white/5 border-b border-slate-200 dark:border-white/5">
+                    <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] min-w-[180px]">Warehouse</th>
+                    <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] min-w-[100px]">Type</th>
+                    <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] min-w-[160px]">Location</th>
+                    <th className="p-4 text-[11px] font-bold text-slate-500 uppercase tracking-[0.2em] text-right min-w-[110px]">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                 {filteredWarehouses.map((w) => (
                   <tr key={w.id} className="group hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
                     <td className="p-4">
@@ -285,6 +288,7 @@ export default function WarehousesPage() {
               </tbody>
             </table>
           </div>
+        </div>
         )}
       </div>
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Package, AlertTriangle, TrendingUp, TrendingDown,
   RefreshCw, Search, Loader2, BarChart3, ArrowUpRight, ArrowDownRight, X } from "lucide-react";
+import { clsx } from "clsx";
 import { inventoryApi, rawMaterialsApi } from "@/lib/api";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -99,47 +100,49 @@ export default function InventoryDashboardPage() {
     Math.min(100, Math.round((item.currentStock / Math.max(item.minimumStock * 2, 1)) * 100));
 
   return (
-    <div className="min-h-screen bg-[#FAFAF9] p-4 sm:p-6 md:p-10">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-[#FAFAF9] dark:bg-background -m-3 sm:-m-4 md:-m-6 p-4 sm:p-6 md:p-10 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+      <div className="max-w-6xl mx-auto w-full min-w-0">
 
         {/* Header */}
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-[#999] hover:text-[#1A1A1A] text-sm font-medium mb-4 sm:mb-8">
-          <ArrowLeft size={16} /> Back
-        </button>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <button onClick={() => router.back()} className="flex items-center gap-2 text-[#999] hover:text-[#1A1A1A] dark:hover:text-white text-sm font-medium">
+            <ArrowLeft size={16} /> Back
+          </button>
 
-        <div className="flex items-center justify-end gap-4 mb-6">
-          <div className="flex gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={fetchData}
-              className="p-3 bg-white border border-[#F0EAF0] rounded-xl text-[#666] hover:bg-slate-50 transition-all shrink-0"
+              className="p-3 bg-white dark:bg-card border border-[#F0EAF0] dark:border-white/10 rounded-xl text-[#666] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0 shadow-sm"
+              title="Refresh telemetry"
             >
-              <RefreshCw size={16} />
+              <RefreshCw size={16} className={clsx(loading && "animate-spin text-purple-600")} />
             </button>
             <button
               onClick={() => router.push("/purchases/grn")}
-              className="flex-1 sm:flex-initial justify-center px-5 py-3 bg-[#7C3AED] text-white rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-purple-200 hover:bg-[#6D28D9] transition-all whitespace-nowrap"
+              className="flex-1 sm:flex-initial justify-center px-4 sm:px-5 py-3 bg-[#7C3AED] text-white rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-purple-200 dark:shadow-none hover:bg-[#6D28D9] transition-all whitespace-nowrap text-center"
             >
-              <Package size={16} /> Receive Goods (GRN)
+              <Package size={16} className="shrink-0" />
+              <span>Receive Goods (GRN)</span>
             </button>
           </div>
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 w-full min-w-0">
           {[
-            { label: "Total SKUs",     value: items.length,                                     icon: Package,       color: "text-[#7C3AED]", bg: "bg-purple-50"  },
-            { label: "Low Stock",      value: lowStockCount,                                    icon: AlertTriangle, color: "text-red-600",    bg: "bg-red-50"     },
-            { label: "Categories",     value: Array.from(new Set(items.map(i => i.category))).length,  icon: BarChart3,     color: "text-blue-600",   bg: "bg-blue-50"    },
-            { label: "Total Units",    value: totalValue.toFixed(0),                            icon: TrendingUp,    color: "text-green-600",  bg: "bg-green-50"   },
+            { label: "Total SKUs",     value: items.length,                                     icon: Package,       color: "text-[#7C3AED]", bg: "bg-purple-50 dark:bg-purple-950/20"  },
+            { label: "Low Stock",      value: lowStockCount,                                    icon: AlertTriangle, color: "text-red-600",    bg: "bg-red-50 dark:bg-red-950/20"     },
+            { label: "Categories",     value: Array.from(new Set(items.map(i => i.category))).length,  icon: BarChart3,     color: "text-blue-600",   bg: "bg-blue-50 dark:bg-blue-950/20"    },
+            { label: "Total Units",    value: totalValue.toFixed(0),                            icon: TrendingUp,    color: "text-green-600",  bg: "bg-green-50 dark:bg-green-950/20"   },
           ].map(kpi => {
             const Icon = kpi.icon;
             return (
-              <div key={kpi.label} className="bg-white rounded-2xl p-4 sm:p-5 border border-[#F0EAF0] shadow-sm">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 ${kpi.bg} rounded-xl flex items-center justify-center mb-3`}>
+              <div key={kpi.label} className="bg-white dark:bg-card rounded-2xl p-4 sm:p-5 border border-[#F0EAF0] dark:border-white/10 shadow-sm min-w-0">
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 ${kpi.bg} rounded-xl flex items-center justify-center mb-2.5 sm:mb-3 shrink-0`}>
                   <Icon className={kpi.color} size={16} />
                 </div>
-                <p className="text-[9px] sm:text-[10px] font-bold text-[#999] uppercase tracking-widest mb-1">{kpi.label}</p>
-                <p className={`text-2xl sm:text-3xl font-black ${kpi.color}`}>{kpi.value}</p>
+                <p className="text-[9px] sm:text-[10px] font-bold text-[#999] dark:text-slate-400 uppercase tracking-widest mb-1 truncate">{kpi.label}</p>
+                <p className={`text-xl xs:text-2xl sm:text-3xl font-black truncate ${kpi.color}`}>{kpi.value}</p>
               </div>
             );
           })}

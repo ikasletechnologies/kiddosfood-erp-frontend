@@ -41,11 +41,11 @@ export default function ProductsPage() {
   const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 py-4 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto space-y-6 sm:space-y-12 p-4 sm:p-6 py-4 animate-in fade-in duration-700 w-full min-w-0">
       {/* Refined Header */}
-      <div className="flex items-center justify-end gap-4 border-b border-gray-100 pb-4">
+      <div className="flex flex-wrap items-center justify-end gap-3 sm:gap-4 border-b border-gray-100 pb-4 w-full min-w-0">
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <button
             onClick={fetchProducts}
             className="w-12 h-12 flex items-center justify-center rounded-2xl bg-slate-50 text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-all active:scale-90"
@@ -54,7 +54,7 @@ export default function ProductsPage() {
           </button>
           <Link
             href="/products/add"
-            className="flex items-center gap-3 bg-slate-900 text-white pl-6 pr-8 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-black hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-slate-900/10"
+            className="flex items-center gap-3 bg-slate-900 text-white px-5 sm:pl-6 sm:pr-8 py-3.5 sm:py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-black hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-slate-900/10"
           >
             <Plus size={16} strokeWidth={3} /> Register Item
           </Link>
@@ -62,28 +62,28 @@ export default function ProductsPage() {
       </div>
 
       {/* Elegant Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-12 px-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-12 px-2 w-full min-w-0">
         {[
           { label: "Total Items", value: products.length, color: "text-slate-900" },
           { label: "Available", value: activeCount, color: "text-emerald-500" },
           { label: "Categories", value: categories.length, color: "text-blue-500" },
           { label: "Low Stock", value: 0, color: "text-red-400" },
         ].map((s) => (
-          <div key={s.label} className="space-y-1">
-            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{s.label}</p>
+          <div key={s.label} className="space-y-1 min-w-0">
+            <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest truncate">{s.label}</p>
             <p className={clsx("text-2xl font-black transition-all tabular-nums", s.color)}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Minimalist Search */}
-      <div className="relative group max-w-2xl">
+      <div className="relative group max-w-2xl w-full min-w-0">
         <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-orange-500 transition-colors" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Quick search by name, category, or SKU..."
-          className="w-full pl-14 pr-6 py-5 bg-slate-50/50 border-none rounded-2xl font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-4 focus:ring-slate-100 outline-none transition-all"
+          className="w-full pl-14 pr-6 py-4 sm:py-5 bg-slate-50/50 border-none rounded-2xl font-bold text-slate-900 placeholder:text-slate-300 focus:bg-white focus:ring-4 focus:ring-slate-100 outline-none transition-all text-sm"
         />
             {search && (
               <X 
@@ -112,7 +112,7 @@ export default function ProductsPage() {
           <p className="text-slate-400 font-medium">No matches found for your current filter.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20 w-full min-w-0">
           {filtered.map((product) => (
             <div
               key={product.id}

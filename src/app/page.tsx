@@ -181,39 +181,49 @@ export default function Dashboard() {
 
   const getExportRows = () => {
     const s = data?.stats || {};
-    return [
+    const rows: [string, string][] = [
+      ["Report Type", "Executive Dashboard Telemetry"],
       ["Report Generated", new Date().toLocaleString()],
-      ["Period", period.toUpperCase()],
       ["Outlet Scope", selectedOutletName],
+      ["Time Period", period.toUpperCase()],
       ["Today Revenue", formatCurrency(s.revenueToday || 0)],
-      ["Net Operating Profit", formatCurrency((s.totalSales || 0) - (s.totalPurchase || 0))],
-      ["Inventory Value", formatCurrency(s.inventoryValue || 0)],
-      ["Today Collection", formatCurrency(s.todayCollection || 0)],
-      ["Pending Receivables", formatCurrency(s.outstandingAmount || 0)],
-      ["Vendor Payables", formatCurrency(s.vendorPayables || 0)],
-      ["Production Quantity", `${(s.productionQuantity || 0).toLocaleString()} units`],
-      ["Yield Percentage", `${s.yieldPercentage || 100}%`],
-      ["Wastage / Rejections", `${(s.wastage || 0).toLocaleString()} units`],
+      ["Today Orders Count", String(s.orderCountToday || 0)],
+      ["Gross Sales Revenue", formatCurrency(s.totalSales || 0)],
+      ["Total Procurement Bills", formatCurrency(s.totalPurchase || 0)],
+      ["Net Operating Margin", formatCurrency((s.totalSales || 0) - (s.totalPurchase || 0))],
+      ["Total Inventory Value", formatCurrency(s.inventoryValue || 0)],
+      ["Active Inventory SKUs", String(s.inventoryItemCount || 0)],
+      ["Daily Cash Position", formatCurrency(s.dailyCashPosition || 0)],
+      ["Today Cash/UPI Collection", formatCurrency(s.todayCollection || 0)],
+      ["Pending Customer Receivables", formatCurrency(s.outstandingAmount || 0)],
+      ["Overdue Accounts Count", String(s.overdueDealersCount || 0)],
+      ["Pending Vendor Payables", formatCurrency(s.vendorPayables || 0)],
+      ["Production Output Quantity", `${(s.productionQuantity || 0).toLocaleString()} units`],
+      ["Production Yield Rate", `${s.yieldPercentage || 100}%`],
+      ["Recorded Wastage / Scrap", `${(s.wastage || 0).toLocaleString()} units`],
     ];
+
+    return rows;
   };
 
   const handleExportExcel = () => {
     setExportDropdownOpen(false);
     const rows = getExportRows();
     const csvContent = [
-      "Metric,Value",
-      ...rows.map(([label, value]) => `"${label}","${String(value).replace(/"/g, '""')}"`),
+      "Metric / KPI,Recorded Telemetry Value",
+      ...rows.map(([label, value]) => `"${String(label).replace(/"/g, '""')}","${String(value).replace(/"/g, '""')}"`),
     ].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement("a");
     downloadAnchor.href = url;
-    downloadAnchor.download = `Kiddos_ERP_Dashboard_${period}.csv`;
+    const scopeSlug = selectedOutletName.toLowerCase().replace(/[^a-z0-9]/g, "_").replace(/__+/g, "_");
+    downloadAnchor.download = `Kiddos_ERP_Executive_Dashboard_${scopeSlug}_${period}.csv`;
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
     URL.revokeObjectURL(url);
-    toast.success("CSV export downloaded!");
+    toast.success("Executive Dashboard CSV report downloaded!");
   };
 
   const handleExportPDF = () => {
@@ -224,37 +234,107 @@ export default function Dashboard() {
       toast.error("Please allow pop-ups to export as PDF");
       return;
     }
+    const recentPurchases = data?.recentPurchases || [];
+    const recentB2B = data?.recentB2BSales || [];
+    const topSellers = data?.topSellers || [];
+    const lowStock = data?.lowStock || [];
+
     printWindow.document.write(`
+      <!DOCTYPE html>
       <html>
         <head>
-          <title>Kiddos ERP Executive Dashboard (${period.toUpperCase()})</title>
+          <meta charset="utf-8" />
+          <title>Kiddos ERP — Executive Report (${selectedOutletName} - ${period.toUpperCase()})</title>
           <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 32px; color: #0f172a; }
-            h1 { font-size: 18px; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
-            p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 20px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-            th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
-            th { text-transform: uppercase; font-size: 10px; color: #64748b; background: #f8fafc; font-weight: bold; }
-            td:last-child { text-align: right; font-weight: bold; }
+            @media print {
+              body { margin: 0; padding: 20px; font-size: 11px; }
+              .no-print { display: none !important; }
+              .page-break { page-break-before: always; }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              padding: 32px;
+              color: #0f172a;
+              background: #fff;
+              line-height: 1.4;
+            }
+            .header-bar {
+              border-bottom: 2px solid #F58220;
+              padding-bottom: 12px;
+              margin-bottom: 20px;
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-end;
+            }
+            h1 { font-size: 18px; font-weight: 800; text-transform: uppercase; margin: 0 0 4px 0; color: #0f172a; }
+            .meta { font-size: 11px; color: #64748b; margin: 0; }
+            .badge { display: inline-block; background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 24px; font-size: 11px; }
+            th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+            th { text-transform: uppercase; font-size: 10px; color: #475569; background: #f8fafc; font-weight: 700; }
+            td:last-child { text-align: right; font-weight: 700; }
             th:last-child { text-align: right; }
+            .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #334155; margin-top: 20px; margin-bottom: 6px; }
+            .print-btn { background: #F58220; color: #fff; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 12px; }
+            .print-btn:hover { background: #ea580c; }
           </style>
         </head>
         <body>
-          <h1>Kiddos Foods — Executive Dashboard Telemetry</h1>
-          <p>Generated: ${new Date().toLocaleString()} | Scope: ${selectedOutletName} | Range: ${period.toUpperCase()}</p>
+          <div class="no-print" style="margin-bottom: 16px; display: flex; justify-content: flex-end;">
+            <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+          </div>
+          <div class="header-bar">
+            <div>
+              <h1>Kiddos Foods — Executive Dashboard Report</h1>
+              <p class="meta">Scope: <strong>${selectedOutletName}</strong> | Period: <strong>${period.toUpperCase()}</strong> | Generated: ${new Date().toLocaleString()}</p>
+            </div>
+            <div>
+              <span class="badge">Official ERP Telemetry</span>
+            </div>
+          </div>
+
+          <div class="section-title">Core Performance & Financial Metrics</div>
           <table>
-            <thead><tr><th>Metric</th><th>Recorded Value</th></tr></thead>
+            <thead>
+              <tr><th>Metric / Operational Indicator</th><th>Recorded Value</th></tr>
+            </thead>
             <tbody>
               ${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join("")}
             </tbody>
           </table>
+
+          ${topSellers.length > 0 ? `
+            <div class="section-title">Top Selling Products</div>
+            <table>
+              <thead><tr><th>Product Name</th><th>Units Sold</th></tr></thead>
+              <tbody>
+                ${topSellers.map((p: any) => `<tr><td>${p.name}</td><td>${p.value} ${p.unit || "units"}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          ` : ""}
+
+          ${lowStock.length > 0 ? `
+            <div class="section-title">Stock Alert & Reorder Items</div>
+            <table>
+              <thead><tr><th>Item SKU / Material</th><th>Current Stock</th></tr></thead>
+              <tbody>
+                ${lowStock.map((p: any) => `<tr><td>${p.name}</td><td>${p.currentStock} ${p.unit || "KG"}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          ` : ""}
+
+          <div style="margin-top: 30px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 10px; color: #94a3b8; text-align: center;">
+            Kiddos Foods Enterprise ERP System • Confidential Business Telemetry Report
+          </div>
         </body>
       </html>
     `);
     printWindow.document.close();
     printWindow.focus();
-    printWindow.onload = () => printWindow.print();
-    toast.success("Preparing printable report...");
+    setTimeout(() => {
+      printWindow.print();
+    }, 400);
+    toast.success("Preparing printable PDF report...");
   };
 
   if (error) {
@@ -381,49 +461,48 @@ export default function Dashboard() {
   return (
     <div className="min-h-full space-y-6 animate-in fade-in duration-200">
       {/* ── 1. TOP ACTION TOOLBAR ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-slate-200 dark:border-white/10 pb-4">
+        {/* Left / Scope Controls (Refresh, Outlet Selector, Export) */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Refresh button */}
           <button
             type="button"
             onClick={() => fetchDashboard(true)}
-            className="p-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 transition-colors flex items-center gap-1.5 text-xs font-bold"
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold shrink-0"
             title="Refresh telemetry"
           >
             <RefreshCw
               size={13}
-              className={clsx("transition-transform", isRefreshing && "animate-spin text-[#F58220]")}
+              className={clsx("transition-transform shrink-0", isRefreshing && "animate-spin text-[#F58220]")}
             />
             <span>Refresh</span>
           </button>
-        </div>
 
-        {/* Controls & Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
           {/* Outlet Dropdown */}
           <div className="relative" ref={outletDropdownRef}>
             <button
               type="button"
               onClick={() => setOutletDropdownOpen((o) => !o)}
-              className="px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5"
+              className="px-2.5 sm:px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5 shrink-0 max-w-[140px] xs:max-w-[190px] sm:max-w-none"
             >
-              <Building2 size={13} className="text-[#F58220]" />
-              <span className="max-w-[120px] truncate">{selectedOutletName}</span>
-              <ChevronDown size={12} className="text-slate-400" />
+              <Building2 size={13} className="text-[#F58220] shrink-0" />
+              <span className="truncate">{selectedOutletName}</span>
+              <ChevronDown size={12} className="text-slate-400 shrink-0" />
             </button>
 
             {outletDropdownOpen && (
-              <div className="absolute right-0 z-50 mt-1.5 w-60 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden p-1">
-                <div className="p-1.5 border-b border-slate-100 dark:border-white/5">
+              <div className="absolute right-0 sm:left-0 sm:right-auto z-50 mt-1.5 w-56 xs:w-60 sm:w-64 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden p-1.5 animate-in zoom-in-95 duration-150">
+                <div className="p-1 border-b border-slate-100 dark:border-white/5">
                   <input
                     type="text"
                     placeholder="Search outlet..."
                     value={outletSearch}
                     onChange={(e) => setOutletSearch(e.target.value)}
-                    className="w-full px-2.5 py-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-xs outline-none focus:border-[#F58220]"
+                    className="w-full px-3 py-2 sm:py-1.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-xs outline-none focus:border-[#F58220] text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
                 </div>
 
-                <div className="max-h-48 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
+                <div className="max-h-56 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -433,13 +512,13 @@ export default function Dashboard() {
                       toast.success("Scope: All Outlets");
                     }}
                     className={clsx(
-                      "w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                      "w-full text-left px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center min-h-[34px] truncate",
                       selectedOutletId === "all"
-                        ? "bg-[#F58220] text-white"
+                        ? "bg-[#F58220] text-white font-bold"
                         : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
                     )}
                   >
-                    All Outlets (HQ)
+                    <span className="truncate">All Outlets (HQ)</span>
                   </button>
 
                   {filteredOutletList.map((o) => (
@@ -453,15 +532,20 @@ export default function Dashboard() {
                         toast.success(`Scope: ${o.name}`);
                       }}
                       className={clsx(
-                        "w-full text-left px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                        "w-full text-left px-3 py-2 sm:py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center min-h-[34px] truncate",
                         selectedOutletId === o.id
-                          ? "bg-[#F58220] text-white"
+                          ? "bg-[#F58220] text-white font-bold"
                           : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
                       )}
                     >
-                      {o.name}
+                      <span className="truncate">{o.name}</span>
                     </button>
                   ))}
+                  {filteredOutletList.length === 0 && (
+                    <div className="py-3 text-center text-xs text-slate-400">
+                      No matching outlets found
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -472,34 +556,37 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => setExportDropdownOpen((o) => !o)}
-              className="px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5"
+              className="px-2.5 sm:px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5 shrink-0"
             >
               <span>Export</span>
               <ChevronDown size={12} className="text-slate-400" />
             </button>
 
             {exportDropdownOpen && (
-              <div className="absolute right-0 z-50 mt-1.5 w-44 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden p-1">
+              <div className="absolute left-0 z-50 mt-1.5 w-48 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden p-1.5 animate-in zoom-in-95 duration-150">
                 <button
                   type="button"
                   onClick={handleExportExcel}
-                  className="w-full flex items-center gap-2 text-left px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
+                  className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors min-h-[38px]"
                 >
-                  <FileSpreadsheet size={14} className="text-emerald-600" />
-                  <span>Export as Excel</span>
+                  <FileSpreadsheet size={15} className="text-emerald-600 shrink-0" />
+                  <span className="truncate">Export as Excel</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleExportPDF}
-                  className="w-full flex items-center gap-2 text-left px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
+                  className="w-full flex items-center gap-2.5 text-left px-3 py-2.5 sm:py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors min-h-[38px]"
                 >
-                  <FileText size={14} className="text-rose-600" />
-                  <span>Export as PDF</span>
+                  <FileText size={15} className="text-rose-600 shrink-0" />
+                  <span className="truncate">Export as PDF</span>
                 </button>
               </div>
             )}
           </div>
+        </div>
 
+        {/* Right Controls: Period Filter + Action Buttons */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-2 w-full lg:w-auto">
           {/* Segmented Period Filter */}
           <PremiumFilter
             options={[
@@ -513,21 +600,23 @@ export default function Dashboard() {
           />
 
           {/* Primary & Secondary Action Buttons */}
-          <Link
-            href="/purchases/new"
-            className="px-3.5 py-1.5 bg-[#F58220] hover:bg-[#e0751a] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap"
-          >
-            <Plus size={14} strokeWidth={2.5} />
-            <span>Create Purchase Order</span>
-          </Link>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Link
+              href="/purchases/new"
+              className="flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 bg-[#F58220] hover:bg-[#e0751a] text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap text-center"
+            >
+              <Plus size={14} strokeWidth={2.5} className="shrink-0" />
+              <span>Purchase Order</span>
+            </Link>
 
-          <Link
-            href="/franchise-orders"
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 whitespace-nowrap"
-          >
-            <Send size={13} strokeWidth={2.5} />
-            <span>Dispatch</span>
-          </Link>
+            <Link
+              href="/franchise-orders"
+              className="flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap text-center"
+            >
+              <Send size={13} strokeWidth={2.5} className="shrink-0" />
+              <span>Dispatch</span>
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -537,7 +626,7 @@ export default function Dashboard() {
           EXECUTIVE OVERVIEW
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
           {generalKPIs.map((kpi, i) => (
             <KPICard
               key={i}
@@ -555,7 +644,7 @@ export default function Dashboard() {
           FINANCIAL & OPERATIONAL HEALTH
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {secondaryKPIs.map((kpi, i) => (
             <KPICard
               key={i}
@@ -583,7 +672,7 @@ export default function Dashboard() {
           Reports & Transaction Ledgers
         </h2>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 sm:gap-4">
           {/* Table 1: Recent Purchase Report View */}
           <InvoiceReportTable
             title="Recent Purchase Report View"

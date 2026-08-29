@@ -2018,39 +2018,39 @@ function ReportsContent() {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-4 md:-m-6">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       {/* ── Top Header / Breadcrumb Bar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-4 flex items-center justify-between shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg shrink-0">
             <Receipt className="h-5 w-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
               <span>Reports</span>
               <span>/</span>
-              <span className="text-gray-900 dark:text-white font-semibold">{activeParent.label}</span>
+              <span className="text-gray-900 dark:text-white font-semibold truncate">{activeParent.label}</span>
             </div>
-            <h1 className="text-lg font-bold text-gray-900 dark:text-white tracking-tight">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
               {activeParent.label} — {activeChild?.label || "Report"}
             </h1>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => router.push("/sales/invoices/new")}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4 shrink-0" />
             <span>New Invoice</span>
           </button>
         </div>
       </div>
 
-      <div className="p-6 space-y-6 max-w-7xl mx-auto w-full">
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
         {/* ── Horizontal Navigation Tabs (Pill style) ── */}
-        <div className="bg-white dark:bg-card p-1.5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="bg-white dark:bg-card p-1.5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-1.5 overflow-x-auto custom-scrollbar max-w-full">
           {filteredChildren.map((child) => {
             const isActive = selectedChildId === child.id;
             return (
@@ -2058,7 +2058,7 @@ function ReportsContent() {
                 key={child.id}
                 onClick={() => handleSelectChild(child.id)}
                 className={clsx(
-                  "px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2",
+                  "px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 shrink-0",
                   isActive
                     ? "bg-[#f58220] text-white shadow-sm"
                     : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
@@ -2071,38 +2071,38 @@ function ReportsContent() {
         </div>
 
         {/* ── Top Summary / KPI Cards ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20" />
-            <div>
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
                 {currentMeta.kpiLabel}
               </div>
-              <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">
+              <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
                 {loading ? "..." : reportData?.kpiValue || "0"}
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20" />
-            <div>
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
                 Summary Details
               </div>
-              <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">
+              <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
                 {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
               </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20" />
-            <div>
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider">
+          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 sm:col-span-2 md:col-span-1">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
                 Current Period
               </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5">
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
                 {displayRange}
               </div>
             </div>
@@ -2110,9 +2110,9 @@ function ReportsContent() {
         </div>
 
         {/* ── Filters Row ── */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
@@ -2124,7 +2124,7 @@ function ReportsContent() {
           </div>
 
           {/* Date Preset Filter */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
@@ -2142,7 +2142,7 @@ function ReportsContent() {
 
           {/* Custom Date Pickers */}
           {dateFilter === "Custom" && (
-            <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm">
+            <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-sm shrink-0">
               <input
                 type="date"
                 value={customStartDate}
@@ -2159,73 +2159,75 @@ function ReportsContent() {
             </div>
           )}
 
-          <div className="flex-1" />
+          <div className="flex-1 hidden sm:block" />
 
           {/* CSV Export & Print */}
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
-            title="Export CSV"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>CSV</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleExportCSV}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
+              title="Export CSV"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              <span>CSV</span>
+            </button>
 
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
-            title="Print"
-          >
-            <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />
-            <span>Print</span>
-          </button>
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
+              title="Print"
+            >
+              <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+              <span>Print</span>
+            </button>
 
-          <button
-            onClick={() => {
-              const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
-              if (activeChild) {
-                setLoading(true);
-                fetchReport(activeChild.id, { startDate: from, endDate: to })
-                  .then((d) => setReportData(d))
-                  .finally(() => setLoading(false));
-              }
-            }}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
-          </button>
+            <button
+              onClick={() => {
+                const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+                if (activeChild) {
+                  setLoading(true);
+                  fetchReport(activeChild.id, { startDate: from, endDate: to })
+                    .then((d) => setReportData(d))
+                    .finally(() => setLoading(false));
+                }
+              }}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
+            </button>
+          </div>
         </div>
 
         {/* ── Unified Clean Data Table ── */}
-        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs">
-          <div className="px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02]">
-            <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
+        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0">
+          <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02]">
+            <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider truncate">
               {currentMeta.tableTitle}
             </span>
-            <span className="text-xs font-medium text-gray-400 dark:text-slate-500">
+            <span className="text-xs font-medium text-gray-400 dark:text-slate-500 shrink-0 ml-2">
               {filteredRows.length} entries
             </span>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
             {loading ? (
               <div className="py-16 flex justify-center items-center">
                 <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
               </div>
             ) : (
-              <table className="w-full text-left">
+              <table className="w-full text-left min-w-[720px]">
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
                     {currentMeta.columns.map((col, idx) => (
                       <th
                         key={idx}
-                        className="px-5 py-3.5 font-bold text-gray-500 dark:text-slate-400"
+                        className="px-4 sm:px-5 py-3.5 font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap"
                       >
                         {col.label}
                       </th>
                     ))}
-                    <th className="px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400">
+                    <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
                       Actions
                     </th>
                   </tr>

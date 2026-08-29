@@ -742,10 +742,11 @@ export default function SalesOrdersPage() {
         >
         <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           {/* Customer + Order Details */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
-            <div className="grid grid-cols-2 gap-8">
+          {/* Customer + Order Details */}
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               {/* Left: Party + Phone */}
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4 min-w-0">
                 <div className="relative" ref={customerDropRef}>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
                   <div
@@ -763,13 +764,13 @@ export default function SalesOrdersPage() {
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                       onClick={e => { e.stopPropagation(); if (!lockFromQuotation) setShowCustomerDrop(true); }}
                     />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
+                    {customerSearch && (
+                      <X 
+                        size={14} 
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                        onClick={(e) => { e.stopPropagation(); setCustomerSearch(""); }} 
+                      />
+                    )}
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
                   {showCustomerDrop && (
@@ -811,7 +812,7 @@ export default function SalesOrdersPage() {
               </div>
 
               {/* Right: Order No, Order Date, Due Date, State of Supply */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order No</label>
                   <div className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-white/[0.02] font-mono">{orderNo || "Auto"}</div>
@@ -851,7 +852,7 @@ export default function SalesOrdersPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
               <button
@@ -862,7 +863,8 @@ export default function SalesOrdersPage() {
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5">
                   <th className="text-left px-4 py-2.5 w-10 font-medium">#</th>
@@ -989,6 +991,7 @@ export default function SalesOrdersPage() {
                 })}
               </tbody>
             </table>
+            </div>
             <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
               <button
                 type="button"
@@ -1005,9 +1008,9 @@ export default function SalesOrdersPage() {
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex gap-4 items-start">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
             {/* Left: Add-ons */}
-            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3">
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3 min-w-0">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -1048,7 +1051,7 @@ export default function SalesOrdersPage() {
               {/* Payment Type */}
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Payment Type</label>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {["Cash", "Credit", "Cheque", "Online"].map(type => (
                     <button
                       key={type}
@@ -1094,7 +1097,7 @@ export default function SalesOrdersPage() {
             </div>
 
             {/* Right: Summary */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
                 <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{totalAmount.toFixed(2)}</span>
@@ -1193,133 +1196,128 @@ export default function SalesOrdersPage() {
                 className="px-4 py-2 text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-[#f58220] transition-colors"
               >
                 Share
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSave("OPEN")}
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
-              >
-                <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ════════════════════════════════════════════════════════════════════════════
-  // 2. LIST VIEW
-  // ════════════════════════════════════════════════════════════════════════════
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
-
-      {/* ── Page Header Toolbar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
-        <button
-          onClick={() => { resetForm(); setView("create"); }}
-          className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
-        >
-          <Plus className="h-4 w-4" /> New Order
-        </button>
-      </div>
-
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
-
-        {/* ── Summary Strip ── */}
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: "Total",    value: stats.total,   color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
-            { label: "Open",     value: stats.open,    color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
-            { label: "Overdue",  value: stats.overdue,  color: "text-orange-600 dark:text-orange-400",  dot: "bg-orange-500" },
-            { label: "Closed",   value: stats.closed,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-          ].map(s => (
-            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
-              <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
-              <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
-                <p className={clsx("text-lg font-bold", s.color)}>{s.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Filters Row ── */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search order or party..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-blue-500 bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-            />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
+                  <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
+                </button>
+              </>
             )}
           </div>
-          <select
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value)}
-            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
+        </div>
+      );
+    }
+  
+    // ════════════════════════════════════════════════════════════════════════════
+    // 2. LIST VIEW
+    // ════════════════════════════════════════════════════════════════════════════
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+
+        {/* ── Page Header Toolbar ── */}
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end w-full min-w-0">
+          <button
+            onClick={() => { resetForm(); setView("create"); }}
+            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-sm transition-colors whitespace-nowrap"
           >
-            <option value="THIS_MONTH">This Month</option>
-            <option value="TODAY">Today</option>
-            <option value="CUSTOM">Custom Range</option>
-          </select>
-          {dateFilter === "CUSTOM" && (
-            <>
-              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
-              <span className="text-gray-400 text-sm">to</span>
-              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-sm outline-none" />
-            </>
-          )}
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none"
-          >
-            <option value="ALL">All Orders</option>
-            <option value="DRAFT">Draft</option>
-            <option value="PENDING">Pending</option>
-            <option value="CONFIRMED">Confirmed</option>
-            <option value="PROCESSING">Processing</option>
-            <option value="SHIPPED">Shipped</option>
-            <option value="DELIVERED">Delivered</option>
-            <option value="CANCELLED">Cancelled</option>
-          </select>
-          <div className="flex-1" />
-          <button onClick={fetchAllData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
-            <RefreshCw className="h-4 w-4" />
+            <Plus className="h-4 w-4" /> New Order
           </button>
         </div>
 
-        {/* ── Empty State ── */}
-        {filteredOrders.length === 0 ? (
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-full flex items-center justify-center">
-              <ShoppingBag className="h-8 w-8 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-gray-800 dark:text-white font-semibold">No Sales Orders</p>
-              <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Record sales bookings and convert them to invoices.</p>
-            </div>
-            <button
-              onClick={() => { resetForm(); setView("create"); }}
-              className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-sm rounded-lg transition-colors"
-            >
-              Create Order
-            </button>
+        <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
+
+          {/* ── Summary Stats ── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
+            {[
+              { label: "Total Orders", value: stats.total, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+              { label: "Open Orders",  value: stats.open,  color: "text-blue-600 dark:text-blue-400",   dot: "bg-blue-500" },
+              { label: "Overdue",      value: stats.overdue, color: "text-red-600 dark:text-red-400",   dot: "bg-red-500" },
+              { label: "Closed",       value: stats.closed, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            ].map(s => (
+              <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-3 min-w-0">
+                <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
+                <div className="min-w-0">
+                  <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{s.label}</p>
+                  <p className={clsx("text-base sm:text-lg font-bold truncate", s.color)}>{s.value}</p>
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          /* ── Table ── */
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-            <table className="w-full text-sm">
+
+          {/* ── Filters Row ── */}
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search order or party..."
+                className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-blue-500 bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              />
+              {search && (
+                <X 
+                  size={14} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                  onClick={() => setSearch("")} 
+                />
+              )}
+            </div>
+            <select
+              value={dateFilter}
+              onChange={e => setDateFilter(e.target.value)}
+              className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none"
+            >
+              <option value="THIS_MONTH">This Month</option>
+              <option value="TODAY">Today</option>
+              <option value="CUSTOM">Custom Range</option>
+            </select>
+            {dateFilter === "CUSTOM" && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-xs outline-none" />
+                <span className="text-gray-400 text-xs">to</span>
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white text-xs outline-none" />
+              </div>
+            )}
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none"
+            >
+              <option value="ALL">All Orders</option>
+              <option value="DRAFT">Draft</option>
+              <option value="PENDING">Pending</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="PROCESSING">Processing</option>
+              <option value="SHIPPED">Shipped</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+            <div className="flex items-center gap-2 ml-auto">
+              <button onClick={fetchAllData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors" title="Refresh">
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Empty State ── */}
+          {filteredOrders.length === 0 ? (
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-16 sm:py-20 flex flex-col items-center justify-center text-center space-y-4 px-4">
+              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-full flex items-center justify-center">
+                <ShoppingBag className="h-8 w-8 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-gray-800 dark:text-white font-semibold text-sm sm:text-base">No Sales Orders</p>
+                <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Record sales bookings and convert them to invoices.</p>
+              </div>
+              <button
+                onClick={() => { resetForm(); setView("create"); }}
+                className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white font-semibold text-xs sm:text-sm rounded-xl transition-colors"
+              >
+                Create Order
+              </button>
+            </div>
+          ) : (
+            /* ── Table ── */
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Party</th>
@@ -1445,6 +1443,7 @@ export default function SalesOrdersPage() {
               </tbody>
             </table>
           </div>
+        </div>
         )}
       </div>
 

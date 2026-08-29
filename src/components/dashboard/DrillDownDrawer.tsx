@@ -57,22 +57,22 @@ export function DrillDownDrawer({
 
       {/* Slide-over Panel */}
       <div
-        className="relative w-full max-w-md bg-white dark:bg-[#10121a] h-full shadow-2xl border-l border-slate-200/80 dark:border-white/10 flex flex-col z-10 animate-in slide-in-from-right duration-300"
+        className="relative w-full max-w-full sm:max-w-md bg-white dark:bg-[#10121a] h-full shadow-2xl border-l border-slate-200/80 dark:border-white/10 flex flex-col z-10 animate-in slide-in-from-right duration-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}
-        <div className="p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             {Icon && (
-              <div className="w-10 h-10 rounded-2xl bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center border border-orange-200/40 dark:border-orange-500/20">
-                <Icon size={20} strokeWidth={2.2} />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 flex items-center justify-center border border-orange-200/40 dark:border-orange-500/20 shrink-0">
+                <Icon size={18} strokeWidth={2.2} />
               </div>
             )}
-            <div>
-              <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+            <div className="min-w-0">
+              <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest block">
                 Executive Drill-Down
               </span>
-              <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-tight">
+              <h3 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">
                 {item.title}
               </h3>
             </div>
@@ -80,14 +80,14 @@ export function DrillDownDrawer({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+            className="p-1.5 sm:p-2 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors shrink-0"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Drawer Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6 custom-scrollbar">
           {/* Main KPI Card */}
           <div className="p-5 rounded-3xl bg-slate-50/80 dark:bg-white/[0.02] border border-slate-200/70 dark:border-white/5 space-y-3">
             <div className="flex items-center justify-between">

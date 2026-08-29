@@ -47,14 +47,14 @@ export default function FranchiseAnalyticsPage() {
   }, [fetchAll]);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 py-6 px-4 pb-16 animate-in fade-in duration-300">
+    <div className="w-full max-w-7xl mx-auto space-y-6 sm:space-y-8 py-4 sm:py-6 px-3 sm:px-4 pb-16 min-w-0 animate-in fade-in duration-300">
       
       {/* ── Top Action Toolbar ── */}
-      <div className="flex items-center justify-between gap-4 pb-2 border-b border-slate-200 dark:border-white/10">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href={monitorId ? `/franchise/dashboard?id=${monitorId}` : "/franchise/dashboard"}
-            className="p-2 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300"
+            className="p-1.5 sm:p-2 bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl hover:bg-slate-50 transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300"
           >
             <ArrowLeft size={14} />
             <span>Back</span>
@@ -64,7 +64,7 @@ export default function FranchiseAnalyticsPage() {
 
         <button
           onClick={fetchAll}
-          className="flex items-center gap-1.5 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-50 transition-all"
+          className="flex items-center gap-1.5 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold shadow-sm hover:bg-slate-50 transition-all"
         >
           <RefreshCw size={13} />
           <span>Sync Analytics</span>
@@ -72,7 +72,7 @@ export default function FranchiseAnalyticsPage() {
       </div>
 
       {/* ── Premium High-Level Metrics ── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0">
         <KPICard 
           title="Period Sales" 
           value={fmt(summary?.stats?.totalSales ?? 0)} 
@@ -108,8 +108,8 @@ export default function FranchiseAnalyticsPage() {
       </div>
 
       {/* ── Revenue Intelligence Chart ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 min-h-[480px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
+        <div className="lg:col-span-2 w-full min-w-0">
           <RevenueIntelligence
             data={(summary?.historicalSales ?? []).map((s: any) => ({
               ...s,
@@ -125,9 +125,9 @@ export default function FranchiseAnalyticsPage() {
         </div>
 
         {/* Right: Revenue Breakdown & Top Sellers */}
-        <div className="space-y-6 flex flex-col">
+        <div className="space-y-4 sm:space-y-6 flex flex-col w-full min-w-0">
           {/* Pie Chart of Revenue Streams */}
-          <div className="bg-white dark:bg-card border border-slate-200/60 dark:border-white/5 rounded-[2rem] p-6 shadow-sm flex-1 flex flex-col justify-between">
+          <div className="bg-white dark:bg-card border border-slate-200/60 dark:border-white/5 rounded-2xl sm:rounded-[2rem] p-4 sm:p-6 shadow-sm flex-1 flex flex-col justify-between w-full min-w-0">
             <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-[0.2em] mb-4">
               Revenue Breakdown
             </h3>

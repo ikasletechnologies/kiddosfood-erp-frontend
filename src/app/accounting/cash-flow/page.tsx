@@ -63,9 +63,9 @@ export default function CashFlowPage() {
   const netCashFlow = totalInflows - totalOutflows;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 animate-in fade-in duration-500 w-full min-w-0">
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-5 w-full min-w-0">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
@@ -189,7 +189,7 @@ export default function CashFlowPage() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-md">Settled Transactions</span>
             </div>
             
-            <div className="overflow-x-auto min-w-full">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
               <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
