@@ -87,6 +87,18 @@ const formatMinStock = (minStockVal: number, unit: string, sku: string, category
   return `${minStockVal} Units`;
 };
 
+const isFinishedGood = (item: any) => {
+  const cat = (item?.category || "").toUpperCase();
+  const sku = (item?.sku || "").toUpperCase();
+  return (
+    cat === "FINISHED_GOOD" ||
+    cat === "FINISHED_PRODUCT" ||
+    cat === "FINISHED" ||
+    cat.includes("FINISHED") ||
+    sku.startsWith("FG-")
+  );
+};
+
 export default function RawMaterialStockClient() {
   const router = useRouter();
   const { user } = useAuth();
@@ -118,16 +130,15 @@ export default function RawMaterialStockClient() {
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await rawMaterialsApi.getAll(showInactive, user?.franchiseId);
-      setItems(res.data ?? []);
+      const res = await rawMaterialsApi.getAll(showInactive, user?.franchiseId, "FINISHED_GOOD");
+      const rawList = (res.data ?? []).filter((item: any) => !isFinishedGood(item));
+      setItems(rawList);
     } catch (e) {
       console.error("Failed to fetch inventory:", e);
     } finally {
       setLoading(false);
     }
   }, [showInactive, user?.franchiseId]);
-
-
 
   useEffect(() => { fetchItems(); }, [fetchItems, showInactive]);
 
@@ -230,9 +241,30 @@ export default function RawMaterialStockClient() {
     if (s < t) return { label: "LOW STOCK", color: "text-orange-600 bg-orange-50 dark:bg-orange-500/10" };
     if (s === t) return { label: "REORDER", color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10" };
     return { label: "SAFE", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10" };
-  };
+  };  const totalValue = items.reduce((acc, i) => acc + ((i.currentStock || 0) * (i.costPrice || 0)), 0);
+  const rawMaterialsCount = items.filter(i => {
+    const cat = (i.category || "").toUpperCase();
+    return cat.includes("RAW") || (!cat.includes("PACKAG") && !cat.includes("SEMI") && !cat.includes("ASSET"));
+  }).length;
+  const packagingAssetsCount = items.length - rawMaterialsCount;
+  const lowStockCount = items.filter(i => (i.currentStock || 0) <= (i.minimumStock || 0)).length;
 
-  const totalValue = items.reduce((acc, i) => acc + ((i.currentStock || 0) * (i.costPrice || 0)), 0);
+  const filteredItems = items.filter(i => {
+    if (categoryFilter !== "ALL") {
+      const cat = (i.category || "").toUpperCase();
+      if (categoryFilter === "RAW_MATERIAL" && !cat.includes("RAW")) return false;
+      if (categoryFilter === "PACKAGING" && !cat.includes("PACKAG")) return false;
+      if (categoryFilter === "SEMI_FINISHED" && !cat.includes("SEMI")) return false;
+    }
+    const q = searchTerm.trim().toLowerCase();
+    if (q) {
+      const matchName = i.name?.toLowerCase().includes(q);
+      const matchSku = i.sku?.toLowerCase().includes(q);
+      const matchCat = i.category?.toLowerCase().includes(q);
+      if (!matchName && !matchSku && !matchCat) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 animate-in fade-in duration-500 p-4 md:p-8">
@@ -255,9 +287,9 @@ export default function RawMaterialStockClient() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: "Inventory Valuation", value: `₹${(totalValue / 1000).toFixed(1)}K`, sub: "Live Asset Value", icon: Calculator, color: "text-orange-500", bg: "bg-orange-500/10" },
-          { label: "Finished Products", value: items.filter(i => i.category?.includes('FINISHED')).length, sub: "Market Ready SKUs", icon: Package, color: "text-emerald-500", bg: "bg-emerald-500/10" },
-          { label: "Low Stock Alerts", value: items.filter(i => getStockInPhysicalUnit(i.currentStock || 0, i.sku, i.category) <= (i.minimumStock || 0)).length, sub: "Reorder Required", icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
-          { label: "Raw Materials", value: items.filter(i => i.category?.includes('RAW')).length, sub: "Production Inputs", icon: Layers, color: "text-blue-500", bg: "bg-blue-500/10" },
+          { label: "Raw Materials", value: rawMaterialsCount, sub: "Production Inputs", icon: Layers, color: "text-blue-500", bg: "bg-blue-500/10" },
+          { label: "Packaging & Assets", value: packagingAssetsCount, sub: "Packaging & Supplies", icon: Package, color: "text-emerald-500", bg: "bg-emerald-500/10" },
+          { label: "Low Stock Alerts", value: lowStockCount, sub: "Reorder Required", icon: AlertTriangle, color: "text-red-500", bg: "bg-red-500/10" },
         ].map((stat, i) => (
           <div key={i} className="bg-white dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:border-slate-200 dark:hover:border-white/10 transition-all duration-200 flex items-center justify-between">
             <div className="space-y-1">
@@ -280,16 +312,15 @@ export default function RawMaterialStockClient() {
           <AlertTriangle className="text-red-500" size={18} />
           Critical & Low Stock Alerts
         </h3>
-        {items.filter(i => getStockInPhysicalUnit(i.currentStock || 0, i.sku, i.category) <= (i.minimumStock || 0)).length === 0 ? (
+        {items.filter(i => (i.currentStock || 0) <= (i.minimumStock || 0)).length === 0 ? (
           <p className="text-sm text-slate-500">All raw materials are currently adequately stocked.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {items
-              .filter(i => getStockInPhysicalUnit(i.currentStock || 0, i.sku, i.category) <= (i.minimumStock || 0))
+              .filter(i => (i.currentStock || 0) <= (i.minimumStock || 0))
               .slice(0, 12)
               .map(item => {
-                const physicalStock = getStockInPhysicalUnit(item.currentStock || 0, item.sku, item.category);
-                const status = getStockStatus(physicalStock, item.minimumStock);
+                const status = getStockStatus(item.currentStock || 0, item.minimumStock);
                 return (
                   <div key={item.id} className="p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5 flex flex-col gap-2">
                     <div className="flex justify-between items-start">
@@ -314,11 +345,11 @@ export default function RawMaterialStockClient() {
         <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-white/5">
           <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Layers className="text-blue-500" size={18} />
-            All Raw Materials
-            <span className="text-xs font-semibold text-slate-400 bg-slate-50 dark:bg-white/5 px-2 py-0.5 rounded-full">{items.length}</span>
+            All Raw Materials & Assets
+            <span className="text-xs font-semibold text-slate-400 bg-slate-50 dark:bg-white/5 px-2 py-0.5 rounded-full">{filteredItems.length}</span>
           </h3>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-800 rounded-lg w-full sm:w-64">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-850 rounded-lg w-full sm:w-64">
               <Search size={14} className="text-slate-400" />
               <input
                 type="text"
@@ -328,7 +359,17 @@ export default function RawMaterialStockClient() {
                 className="bg-transparent text-xs font-medium text-slate-700 dark:text-slate-300 outline-none w-full placeholder:text-slate-400"
               />
             </div>
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap">
+            <select
+              value={categoryFilter}
+              onChange={e => setCategoryFilter(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-850 rounded-lg px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none cursor-pointer focus:border-[#f58220]"
+            >
+              <option value="ALL">All Categories</option>
+              <option value="RAW_MATERIAL">Raw Materials</option>
+              <option value="PACKAGING">Packaging</option>
+              <option value="SEMI_FINISHED">Semi-Finished / Other</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 whitespace-nowrap cursor-pointer">
               <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="rounded" />
               Show Inactive
             </label>
@@ -350,47 +391,38 @@ export default function RawMaterialStockClient() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {loading ? (
                 <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 font-semibold">Loading raw materials…</td></tr>
-              ) : items.filter(i => {
-                  const q = searchTerm.trim().toLowerCase();
-                  return !q || i.name?.toLowerCase().includes(q) || i.sku?.toLowerCase().includes(q);
-                }).length === 0 ? (
+              ) : filteredItems.length === 0 ? (
                 <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 font-semibold">No raw materials found.</td></tr>
               ) : (
-                items
-                  .filter(i => {
-                    const q = searchTerm.trim().toLowerCase();
-                    return !q || i.name?.toLowerCase().includes(q) || i.sku?.toLowerCase().includes(q);
-                  })
-                  .map(item => {
-                    const physicalStock = getStockInPhysicalUnit(item.currentStock || 0, item.sku, item.category);
-                    const status = getStockStatus(physicalStock, item.minimumStock);
-                    return (
-                      <tr key={item.id} className={clsx("hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all", item.isActive === false && "opacity-50")}>
-                        <td className="px-6 py-3">
-                          <p className="font-semibold text-slate-800 dark:text-white">{item.name}</p>
-                          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">SKU: {item.sku || "N/A"}</p>
-                        </td>
-                        <td className="px-6 py-3 text-slate-500">{(item.category || "").replace(/_/g, " ")}</td>
-                        <td className="px-6 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">
-                          {(item.currentStock || 0).toFixed(2)} {item.unit}
-                        </td>
-                        <td className="px-6 py-3 text-center text-slate-500">{item.minimumStock} {item.unit}</td>
-                        <td className="px-6 py-3 text-center">
-                          <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full", status.color)}>
-                            {status.label}
-                          </span>
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <button
-                            onClick={() => openEditPage(item)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
-                          >
-                            <Edit2 size={12} /> Edit
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                filteredItems.map(item => {
+                  const status = getStockStatus(item.currentStock || 0, item.minimumStock);
+                  return (
+                    <tr key={item.id} className={clsx("hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all", item.isActive === false && "opacity-50")}>
+                      <td className="px-6 py-3">
+                        <p className="font-semibold text-slate-800 dark:text-white">{item.name}</p>
+                        <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">SKU: {item.sku || "N/A"}</p>
+                      </td>
+                      <td className="px-6 py-3 text-slate-500">{(item.category || "").replace(/_/g, " ")}</td>
+                      <td className="px-6 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">
+                        {(item.currentStock || 0).toFixed(2)} {item.unit}
+                      </td>
+                      <td className="px-6 py-3 text-center text-slate-500">{item.minimumStock} {item.unit}</td>
+                      <td className="px-6 py-3 text-center">
+                        <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full", status.color)}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-right">
+                        <button
+                          onClick={() => openEditPage(item)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
+                        >
+                          <Edit2 size={12} /> Edit
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
