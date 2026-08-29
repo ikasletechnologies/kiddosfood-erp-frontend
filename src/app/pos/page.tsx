@@ -41,14 +41,20 @@ interface CartItem {
 
 interface ReceiptData {
   orderId: string;
+  invoiceNum: string;
   party: any;
   partyType: PartyType;
   items: CartItem[];
   subtotal: number;
   gst: number;
   discount: number;
+  deliveryCharge: number;
   total: number;
   paymentMode: string;
+  // true when this was a Franchise Counter Billing order — billed to the
+  // franchise's credit ledger, not an actual payment. The receipt/print UI
+  // must not claim "Payment Successful" for these (see BUG 2).
+  isCredit: boolean;
   timestamp: Date;
 }
 
@@ -279,28 +285,52 @@ export default function POSPage() {
     setLoading(true);
     try {
       let orderId = "";
+      let invoiceNum = "";
+      let isCredit = false;
+      // Franchise credit orders are recomputed server-side (real per-product
+      // GST, plus a flat delivery charge never shown in this UI) — the
+      // receipt must reflect what the franchise is actually billed, not the
+      // locally-computed Counter Billing totals (see BUG 2).
+      let receiptSubtotal = subtotal;
+      let receiptGst = gst;
+      let receiptDelivery = 0;
+      let receiptTotal = total;
 
       if (partyType === "FRANCHISE" && selectedParty) {
-        // Franchise order flow
+        // Franchise order flow — this books an order against the
+        // franchise's credit ledger (see FranchiseOrderService.createOrder);
+        // it is NOT a payment, and the discount entered below is not
+        // honored by that endpoint (no discount field exists on
+        // FranchiseOrder), so it's intentionally not sent here — the UI
+        // warns the cashier separately when a discount is present.
         const res = await api.post("/api/franchise-orders", {
           franchiseId: selectedParty.id,
           items: cart.map(i => ({ productId: i.id, productName: i.name, quantity: i.quantity, unitPrice: i.price, totalPrice: i.price * i.quantity })),
-          totalAmount: total,
-          discountAmount: discAmt,
-          paymentMode: payMode,
-          accountId,
-          notes: `POS Sale - ${payMode}`,
+          notes: `POS Sale - Franchise Credit`,
         });
         orderId = res.data?.id || res.data?.orderId || "";
+        invoiceNum = res.data?.orderNumber || orderId;
+        isCredit = true;
+        receiptSubtotal = res.data?.subtotal ?? subtotal;
+        receiptGst = res.data?.taxAmount ?? gst;
+        receiptDelivery = res.data?.deliveryCharges ?? 0;
+        receiptTotal = res.data?.totalAmount ?? (receiptSubtotal + receiptGst + receiptDelivery);
       } else {
-        // Customer / Dealer → POS checkout
+        // Customer / Dealer → POS checkout (real payment)
         const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
         const user = userStr ? JSON.parse(userStr) : null;
+        const displayName = selectedParty?.name || "Walk-in Customer";
         const res = await posApi.checkout({
           franchiseId: user?.franchiseId || null,
           customerId: partyType === "CUSTOMER" ? selectedParty?.id : undefined,
+          // Dealer sales have no Customer.id, but they do have a real
+          // Dealer.id — pass it separately (Order.partyId/partyType) so the
+          // backend can attribute the sale/payment to the actual dealer
+          // instead of silently discarding the selection (see BUG 1).
+          partyType,
+          partyId: partyType === "DEALER" ? selectedParty?.id : undefined,
           accountId,
-          customerName: selectedParty?.name || "Walk-in",
+          customerName: displayName,
           customerPhone: selectedParty?.phone || selectedParty?.contactNum,
           paymentMode: payMode,
           orderType: partyType === "DEALER" ? "wholesale" : "counter",
@@ -317,20 +347,29 @@ export default function POSPage() {
           })),
         });
         orderId = res.data?.id || res.data?.orderId || "";
+        invoiceNum = res.data?.invoiceNum || orderId;
       }
 
       setReceipt({
         orderId,
+        invoiceNum,
         party: selectedParty,
         partyType,
         items: [...cart],
-        subtotal,
-        gst,
-        discount: discAmt,
-        total,
+        subtotal: receiptSubtotal,
+        gst: receiptGst,
+        discount: isCredit ? 0 : discAmt,
+        deliveryCharge: receiptDelivery,
+        total: receiptTotal,
         paymentMode: payMode,
+        isCredit,
         timestamp: new Date(),
       });
+
+      // Stock numbers shown on-screen go stale after a sale (server-side
+      // re-validation already prevents overselling — this is purely
+      // cosmetic) — refresh so the grid reflects the just-sold quantities.
+      fetchProducts();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Checkout failed");
     } finally {
@@ -366,12 +405,13 @@ export default function POSPage() {
       @media print{body{padding:0}}
     </style></head><body>
       <h1>HQ POS</h1>
+      ${receipt.isCredit ? `<div class="center" style="font-size:10px;font-weight:bold;margin-bottom:4px">*** BILLED TO FRANCHISE CREDIT — NOT PAID ***</div>` : ""}
       <div class="center" style="font-size:10px;margin-bottom:8px">
-        Bill #${receipt.orderId.slice(-8).toUpperCase()} &nbsp;·&nbsp;
+        Bill #${receipt.invoiceNum} &nbsp;·&nbsp;
         ${formatDate(receipt.timestamp)} ${new Date(receipt.timestamp).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}
       </div>
       <div class="center" style="font-size:11px;margin-bottom:8px">
-        ${receipt.partyType}: ${receipt.party?.name || "Walk-in"}
+        ${receipt.partyType}: ${receipt.party?.name || "Walk-in Customer"}
       </div>
       <div class="line"></div>
       <table><thead><tr><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amt</th></tr></thead>
@@ -379,9 +419,10 @@ export default function POSPage() {
       <div class="line"></div>
       <div class="total"><span>Subtotal</span><span>₹${receipt.subtotal.toLocaleString()}</span></div>
       <div class="total"><span>GST</span><span>₹${receipt.gst.toLocaleString()}</span></div>
+      ${receipt.deliveryCharge > 0 ? `<div class="total"><span>Delivery</span><span>₹${receipt.deliveryCharge.toLocaleString()}</span></div>` : ""}
       ${receipt.discount > 0 ? `<div class="total"><span>Discount</span><span>-₹${receipt.discount.toLocaleString()}</span></div>` : ""}
       <div class="total bold" style="border-top:1px solid #000;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>₹${receipt.total.toLocaleString()}</span></div>
-      <div class="center" style="margin-top:20px;font-size:11px;font-weight:bold">*** THANK YOU ***</div>
+      <div class="center" style="margin-top:20px;font-size:11px;font-weight:bold">${receipt.isCredit ? "*** CREDIT ORDER — PAYMENT DUE FROM FRANCHISE ***" : "*** THANK YOU ***"}</div>
       <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
     </body></html>`);
     w.document.close();
@@ -403,24 +444,26 @@ export default function POSPage() {
       <div className="-m-6 flex h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50 dark:bg-background">
         <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-4 overflow-hidden">
           {/* Header */}
-          <div className="px-6 py-5 text-center text-white" style={{ background: BRAND_ORANGE }}>
+          <div className="px-6 py-5 text-center text-white" style={{ background: receipt.isCredit ? "#8b5cf6" : BRAND_ORANGE }}>
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
               <ShoppingBag size={28} />
             </div>
-            <div className="text-lg font-bold">Payment Successful</div>
+            <div className="text-lg font-bold">{receipt.isCredit ? "Order Placed — Billed to Franchise Credit" : "Payment Successful"}</div>
             <div className="text-2xl font-black mt-1">{fmt(receipt.total)}</div>
-            <div className="text-xs opacity-80 mt-1">{receipt.paymentMode} · {receipt.partyType}</div>
+            <div className="text-xs opacity-80 mt-1">
+              {receipt.isCredit ? `Franchise Credit · ${receipt.partyType}` : `${receipt.paymentMode} · ${receipt.partyType}`}
+            </div>
           </div>
 
           {/* Details */}
           <div className="px-6 py-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">Bill No</span>
-              <span className="font-semibold text-gray-800 dark:text-white">#{receipt.orderId.slice(-8).toUpperCase()}</span>
+              <span className="font-semibold text-gray-800 dark:text-white">#{receipt.invoiceNum}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">{receipt.partyType}</span>
-              <span className="font-semibold text-gray-800 dark:text-white">{receipt.party?.name || "Walk-in"}</span>
+              <span className="font-semibold text-gray-800 dark:text-white">{receipt.party?.name || "Walk-in Customer"}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">Items</span>
@@ -429,9 +472,15 @@ export default function POSPage() {
             <div className="border-t border-gray-100 dark:border-white/5 pt-3 space-y-1">
               <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="dark:text-slate-200">{fmt(receipt.subtotal)}</span></div>
               <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>GST</span><span className="dark:text-slate-200">{fmt(receipt.gst)}</span></div>
+              {receipt.deliveryCharge > 0 && <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Delivery</span><span className="dark:text-slate-200">{fmt(receipt.deliveryCharge)}</span></div>}
               {receipt.discount > 0 && <div className="flex justify-between text-xs text-green-600 dark:text-green-400"><span>Discount</span><span>-{fmt(receipt.discount)}</span></div>}
               <div className="flex justify-between text-sm font-bold text-gray-800 dark:text-white pt-1 border-t border-gray-100 dark:border-white/5"><span>Total</span><span>{fmt(receipt.total)}</span></div>
             </div>
+            {receipt.isCredit && (
+              <div className="text-[11px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-lg px-3 py-2">
+                This was not a cash/card/UPI payment — it was billed to the franchise's outstanding credit balance. Collect payment separately via Franchise Orders.
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -769,6 +818,16 @@ export default function POSPage() {
                 />
               </div>
             </div>
+            {partyType === "FRANCHISE" && discAmt > 0 && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-snug">
+                Discount is not applied to Franchise credit orders — this order will be billed at full price.
+              </p>
+            )}
+            {partyType === "FRANCHISE" && (
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 leading-snug">
+                A delivery charge is added by the system for Franchise orders and isn't reflected in the total above until confirmed.
+              </p>
+            )}
             <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-white/10">
               <span className="text-xs font-medium text-gray-500 dark:text-slate-400">PAYABLE TOTAL</span>
               <span className="text-xl font-black text-gray-900 dark:text-white">{fmt(total)}</span>
@@ -848,6 +907,8 @@ export default function POSPage() {
           >
             {loading ? (
               <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Processing...</>
+            ) : partyType === "FRANCHISE" ? (
+              <>Place Order · Franchise Credit <ArrowRight size={16} /></>
             ) : (
               <>Confirm Payment · {payMode} <ArrowRight size={16} /></>
             )}
