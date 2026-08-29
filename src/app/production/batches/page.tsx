@@ -545,17 +545,18 @@ function ProductBatchesRegistry() {
                     <p className="text-base font-bold text-[#e8740e] mt-1 tabular-nums">₹{(selectedBatch.production?.materialCost ?? selectedBatch.totalCost ?? 0).toFixed(2)}</p>
                   </div>
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Unit Cost</p>
-                    <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">₹{(selectedBatch.unitCost ?? 0).toFixed(2)}</p>
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">Effective Bulk Cost</p>
+                    <p className="text-base font-bold text-emerald-700 dark:text-emerald-400 mt-1 tabular-nums">₹{(selectedBatch.unitCost ?? 0).toFixed(2)} / {selectedBatch.production?.recipe?.yieldUnit || "KG"}</p>
+                    <p className="text-[10px] text-emerald-600/70 mt-0.5">Initial: ₹{((selectedBatch.totalCost ?? selectedBatch.production?.materialCost ?? 0) / (selectedBatch.quantity || 1)).toFixed(2)}</p>
                   </div>
                   <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">QC Wastage Cost</p>
-                    <p className="text-base font-bold text-rose-700 dark:text-rose-400 mt-1 tabular-nums">₹{((selectedBatch.rejectionQty ?? 0) * (selectedBatch.unitCost ?? 0)).toFixed(2)}</p>
-                    <p className="text-[11px] text-rose-400 mt-0.5">{selectedBatch.rejectionQty ?? 0} {selectedBatch.production?.recipe?.yieldUnit || "KG"} rejected</p>
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">QC Rejected Waste</p>
+                    <p className="text-base font-bold text-rose-700 dark:text-rose-400 mt-1 tabular-nums">{selectedBatch.rejectionQty ?? 0} {selectedBatch.production?.recipe?.yieldUnit || "KG"}</p>
+                    <p className="text-[10px] text-rose-500 mt-0.5">Absorbed in effective cost</p>
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-2">
-                  Unit cost reflects the real price on whichever purchase bill(s) this run actually consumed (FIFO) — it can differ run-to-run of the same recipe as older, cheaper bills run out and newer purchase prices take over.
+                  Effective bulk unit cost absorbs QC rejections into approved output (Total Cost ÷ Approved Qty) so downstream inventory, packaging, and POS COGS carry the full manufacturing cost.
                 </p>
               </div>
 
