@@ -8,9 +8,21 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
-import api, { franchiseApi } from "@/lib/api";
+import api, { franchiseApi, posApi, settingsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { formatDate } from "@/lib/utils";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+import PartyStatement from "@/components/documents/PartyStatement";
+import TransactionActionsMenu from "@/components/documents/TransactionActionsMenu";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-3 pb-2 border-b border-gray-100 dark:border-white/5";
 
@@ -58,8 +70,23 @@ export default function DealersClient() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
+
+  // Read-only invoice viewer state — View/Print/Download all reuse the one
+  // fetched Order, they never create or alter anything.
+  const [invoiceDoc, setInvoiceDoc] = useState<any>(null);
+  const [invoiceAction, setInvoiceAction] = useState<'print' | 'download' | undefined>(undefined);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const currentCompany = companyProfile || FALLBACK_COMPANY;
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => { if (res.data) setCompanyProfile(res.data); })
+      .catch(() => {});
+  }, []);
+
+
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
   
@@ -96,13 +123,6 @@ export default function DealersClient() {
     inactive: false
   });
 
-  const [printOptions, setPrintOptions] = useState({
-    itemDetails: false,
-    description: false,
-    paymentInfo: false,
-    paymentStatus: false
-  });
-
   const fetchDealerTransactions = async (dealerId: string) => {
     setTransactionsLoading(true);
     try {
@@ -129,7 +149,8 @@ export default function DealersClient() {
     const q = transactionSearchQuery.trim().toLowerCase();
     return (
       (t.type && String(t.type).toLowerCase().includes(q)) ||
-      (t.number && String(t.number).toLowerCase().includes(q))
+      (t.number && String(t.number).toLowerCase().includes(q)) ||
+      (t.date && formatDate(t.date).toLowerCase().includes(q))
     );
   });
 
@@ -231,6 +252,22 @@ export default function DealersClient() {
   };
 
   const selectedDealer = dealers.find(d => d.id === selectedDealerId) || null;
+
+  // Read-only: fetches the exact existing Order (with its real invoiceNum
+  // and line items) and opens it in the shared GSTInvoice viewer — no new
+  // invoice/order is ever created here, this only reads GET /api/orders/:id.
+  const openInvoiceAction = async (orderId: string, action: 'print' | 'download' | undefined) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const res = await posApi.getOrderById(orderId);
+      setInvoiceDoc(res.data);
+      setInvoiceAction(action);
+    } catch (e) {
+      toast.error("Failed to load invoice");
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
 
   const handleDealerStatementReport = () => {
     if (!selectedDealer) {
@@ -618,8 +655,23 @@ export default function DealersClient() {
               ) : (
                 <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Search size={16} /></button>
               )}
-              <button onClick={() => setIsPrintModalOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Printer size={16} /></button>
-              <button className="text-emerald-600 hover:text-emerald-700 transition-colors"><ExcelIcon size={16} fill="currentColor" className="opacity-20" /></button>
+              <button
+                onClick={() => {
+                  if (!selectedDealer) { toast.error("Select a dealer first."); return; }
+                  setIsStatementOpen(true);
+                }}
+                title="Print Transaction Statement"
+                className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <Printer size={16} />
+              </button>
+              <button
+                onClick={handleDealerStatementReport}
+                title="Export Transactions (.xlsx)"
+                className="text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
+                <ExcelIcon size={16} fill="currentColor" className="opacity-20" />
+              </button>
             </div>
           </div>
 
@@ -700,20 +752,29 @@ export default function DealersClient() {
                     </td>
                   </tr>
                 ) : (
-                  transactions.map((t, idx) => (
-                    <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(t.date)}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.total || 0).toFixed(2)}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">{t.balance ? `₹ ${Number(t.balance).toFixed(2)}` : "₹ 0.00"}</td>
-                      <td className="px-2 py-4 text-center">
-                        <button className="text-slate-300 hover:text-slate-500 dark:hover:text-slate-200">
-                          <MoreVertical size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  transactions.map((t, idx) => {
+                    // Only a POS Sale row has a real backing Order/Invoice —
+                    // Delivery Challan rows have no invoice to view/print/download.
+                    const hasInvoice = t.type === 'POS Sale' && !!t.id;
+                    return (
+                      <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(t.date)}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.total || 0).toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.balance || 0).toFixed(2)}</td>
+                        <td className="px-2 py-4 text-center">
+                          <TransactionActionsMenu
+                            hasInvoice={hasInvoice}
+                            busy={loadingInvoiceId === t.id}
+                            onView={() => openInvoiceAction(t.id, undefined)}
+                            onPrint={() => openInvoiceAction(t.id, 'print')}
+                            onDownload={() => openInvoiceAction(t.id, 'download')}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -722,37 +783,48 @@ export default function DealersClient() {
 
       </div>
 
-      {/* Print Options Modal Overlay */}
-      {isPrintModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#13151f] border border-slate-100 dark:border-white/10 rounded-xl shadow-2xl w-[320px] overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Print Options</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              {[
-                { id: "itemDetails", label: "Item Details" },
-                { id: "description", label: "Description" },
-                { id: "paymentInfo", label: "Payment Info" },
-                { id: "paymentStatus", label: "Payment Status" }
-              ].map(opt => (
-                <label key={opt.id} className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white">{opt.label}</span>
-                  <input 
-                    type="checkbox" 
-                    checked={(printOptions as any)[opt.id]}
-                    onChange={(e) => setPrintOptions({...printOptions, [opt.id]: e.target.checked})}
-                    className="w-4 h-4 rounded-sm border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 bg-white dark:bg-white/5" 
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="px-6 py-4 flex items-center justify-end gap-6 border-t border-slate-100 dark:border-white/10">
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 uppercase tracking-wide">Cancel</button>
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 uppercase tracking-wide">OK</button>
-            </div>
-          </div>
-        </div>
+      {/* Dealer Transaction Statement — real print action, replaces the old no-op options dialog */}
+      {isStatementOpen && selectedDealer && (
+        <PartyStatement
+          title="Dealer Transaction Statement"
+          party={{
+            name: selectedDealer.name,
+            phone: selectedDealer.phone,
+            email: selectedDealer.email,
+            address: selectedDealer.address,
+            branch: selectedDealer.franchise?.name || "HQ",
+          }}
+          transactions={dealerTransactions}
+          onClose={() => setIsStatementOpen(false)}
+        />
+      )}
+
+      {/* Row-level View/Print/Download Invoice — reads the exact existing Order, never creates one */}
+      {invoiceDoc && (
+        <GSTInvoice
+          order={{
+            id: invoiceDoc.id,
+            poNumber: invoiceDoc.invoiceNum,
+            createdAt: invoiceDoc.createdAt,
+            discount: invoiceDoc.discountAmount || 0,
+            items: (invoiceDoc.orderItems || []).map((it: any) => ({
+              itemName: it.product?.name || "Item",
+              quantity: it.quantity,
+              price: it.price,
+              gstRate: it.taxAmount > 0 ? Number(((it.taxAmount / (it.quantity * it.price)) * 100).toFixed(0)) : 0,
+              hsnCode: it.product?.hsnCode || "—",
+            })),
+          }}
+          vendor={selectedDealer ? {
+            name: selectedDealer.name,
+            phone: selectedDealer.phone,
+            address: selectedDealer.address,
+          } : { name: "Dealer" }}
+          companyDetails={currentCompany}
+          documentType="TAX_INVOICE"
+          autoAction={invoiceAction}
+          onClose={() => { setInvoiceDoc(null); setInvoiceAction(undefined); }}
+        />
       )}
 
       {showAddModal && (

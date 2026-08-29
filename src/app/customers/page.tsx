@@ -9,9 +9,22 @@ import {
   X, Info, SlidersHorizontal
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import * as XLSX from "xlsx";
 import AddPartyModal from "@/components/modals/AddPartyModal";
-import { customersApi, franchiseApi } from "@/lib/api";
+import GSTInvoice from "@/components/documents/GSTInvoice";
+import PartyStatement from "@/components/documents/PartyStatement";
+import TransactionActionsMenu from "@/components/documents/TransactionActionsMenu";
+import { customersApi, franchiseApi, posApi, settingsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+
+const FALLBACK_COMPANY = {
+  name: "My Restaurant",
+  gstin: "",
+  address: "",
+  phone: "",
+  email: "",
+  state: "Tamil Nadu"
+};
 
 export default function PartiesPage() {
   const { user } = useAuth();
@@ -53,10 +66,24 @@ export default function PartiesPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Read-only invoice viewer state — View/Print/Download all reuse the one
+  // fetched Order, they never create or alter anything.
+  const [invoiceDoc, setInvoiceDoc] = useState<any>(null);
+  const [invoiceAction, setInvoiceAction] = useState<'print' | 'download' | undefined>(undefined);
+  const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  const currentCompany = companyProfile || FALLBACK_COMPANY;
+
+  useEffect(() => {
+    settingsApi.getCompanyProfile()
+      .then(res => { if (res.data) setCompanyProfile(res.data); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -101,14 +128,6 @@ export default function PartiesPage() {
     toPay: false
   });
 
-  // Fake state for print modal checkboxes
-  const [printOptions, setPrintOptions] = useState({
-    itemDetails: false,
-    description: false,
-    paymentInfo: false,
-    paymentStatus: false
-  });
-
   // Fake state for settings
   const [settings, setSettings] = useState({
     partyGrouping: false,
@@ -133,28 +152,38 @@ export default function PartiesPage() {
   // customer's stable id, not by name matching. Includes payments so the
   // outstanding balance per order reflects what has actually been recorded,
   // not a name-derived guess.
-  const transactions = React.useMemo(() => {
+  // Full, unfiltered list — used for the header Statement print and the
+  // export icon, so a live search in the table doesn't silently narrow what
+  // a printed/exported "party statement" contains.
+  const allTransactions = React.useMemo(() => {
     const orders: any[] = selectedCustomerDetail?.orders || [];
-    return orders
-      .map((o: any) => {
-        const paidAmount = (o.payments || [])
-          .filter((p: any) => !p.isCancelled && p.status !== 'CANCELLED')
-          .reduce((sum: number, p: any) => sum + (Number(p.paidAmount) || 0), 0);
-        const balance = Number(o.totalAmount || 0) - paidAmount;
-        return {
-          type: o.status === 'CANCELLED' ? 'Sale [Cancelled]' : 'Sale',
-          number: o.invoiceNum,
-          date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '',
-          total: Number(o.totalAmount || 0).toFixed(2),
-          balance: balance > 0.005 ? balance.toFixed(2) : undefined,
-        };
-      })
-      .filter((t) => {
-        if (!transactionSearchQuery.trim()) return true;
-        const q = transactionSearchQuery.trim().toLowerCase();
-        return (t.number || '').toLowerCase().includes(q);
-      });
-  }, [selectedCustomerDetail, transactionSearchQuery]);
+    return orders.map((o: any) => {
+      const paidAmount = (o.payments || [])
+        .filter((p: any) => !p.isCancelled && p.status !== 'CANCELLED')
+        .reduce((sum: number, p: any) => sum + (Number(p.paidAmount) || 0), 0);
+      const balance = Number(o.totalAmount || 0) - paidAmount;
+      return {
+        id: o.id,
+        type: o.status === 'CANCELLED' ? 'Sale [Cancelled]' : 'Sale',
+        number: o.invoiceNum,
+        date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '',
+        // Always a real number (0 for fully paid) — never undefined, so a
+        // fully-paid sale never renders as a blank Balance cell.
+        total: Number(o.totalAmount || 0),
+        balance: balance > 0.005 ? balance : 0,
+      };
+    });
+  }, [selectedCustomerDetail]);
+
+  const transactions = React.useMemo(() => {
+    if (!transactionSearchQuery.trim()) return allTransactions;
+    const q = transactionSearchQuery.trim().toLowerCase();
+    return allTransactions.filter((t) =>
+      (t.number || '').toLowerCase().includes(q) ||
+      (t.type || '').toLowerCase().includes(q) ||
+      (t.date || '').toLowerCase().includes(q)
+    );
+  }, [allTransactions, transactionSearchQuery]);
 
   const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
@@ -203,6 +232,51 @@ export default function PartiesPage() {
   }, [selectedCustomerId]);
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
+
+  // Read-only: fetches the exact existing Order (with its real invoiceNum
+  // and line items) and opens it in the shared GSTInvoice viewer — no new
+  // invoice/order is ever created here, this only reads GET /api/orders/:id.
+  const openInvoiceAction = async (orderId: string, action: 'print' | 'download' | undefined) => {
+    setLoadingInvoiceId(orderId);
+    try {
+      const res = await posApi.getOrderById(orderId);
+      setInvoiceDoc(res.data);
+      setInvoiceAction(action);
+    } catch (e) {
+      toast.error("Failed to load invoice");
+    } finally {
+      setLoadingInvoiceId(null);
+    }
+  };
+
+  const handleExportTransactions = () => {
+    if (!selectedCustomer) { toast.error("Select a customer first."); return; }
+    if (allTransactions.length === 0) { toast.error("No transactions to export."); return; }
+    const cleanName = selectedCustomer.name.replace(/[^a-zA-Z0-9]/g, "_");
+    const filename = `Customer_Transactions_${cleanName}_${new Date().toISOString().split("T")[0]}.xlsx`;
+
+    const headers = ["Type", "Number", "Date", "Total (₹)", "Balance (₹)"];
+    const rows = allTransactions.map((t) => [t.type, t.number, t.date, t.total, t.balance]);
+    const totalAmount = allTransactions.reduce((s, t) => s + t.total, 0);
+    const totalBalance = allTransactions.reduce((s, t) => s + t.balance, 0);
+
+    const aoa = [
+      ["CUSTOMER TRANSACTIONS"],
+      [`Customer: ${selectedCustomer.name}`, `Phone: ${selectedCustomerDetail?.phone || selectedCustomer.phone || "-"}`],
+      [`Generated: ${new Date().toLocaleDateString()}`],
+      [],
+      headers,
+      ...rows,
+      [],
+      ["TOTALS", "", "", totalAmount, totalBalance]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Transactions");
+    XLSX.writeFile(wb, filename);
+    toast.success("Transactions exported (.xlsx)");
+  };
 
   const filteredCustomers = customers.filter(c => {
     // 1. Search filter
@@ -513,8 +587,23 @@ export default function PartiesPage() {
               ) : (
                 <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Search size={16} /></button>
               )}
-              <button onClick={() => setIsPrintModalOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Printer size={16} /></button>
-              <button className="text-emerald-600 hover:text-emerald-700 transition-colors"><ExcelIcon size={16} fill="currentColor" className="opacity-20" /></button>
+              <button
+                onClick={() => {
+                  if (!selectedCustomer) { toast.error("Select a customer first."); return; }
+                  setIsStatementOpen(true);
+                }}
+                title="Print Transaction Statement"
+                className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              >
+                <Printer size={16} />
+              </button>
+              <button
+                onClick={handleExportTransactions}
+                title="Export Transactions (.xlsx)"
+                className="text-emerald-600 hover:text-emerald-700 transition-colors"
+              >
+                <ExcelIcon size={16} fill="currentColor" className="opacity-20" />
+              </button>
             </div>
           </div>
 
@@ -589,20 +678,27 @@ export default function PartiesPage() {
                     </td>
                   </tr>
                 ) : (
-                  transactions.map((t, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.date}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.total}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
-                      <td className="px-2 py-4 text-center">
-                        <button className="text-slate-300 hover:text-slate-500 dark:hover:text-slate-200">
-                          <MoreVertical size={14} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  transactions.map((t, idx) => {
+                    const hasInvoice = t.type.startsWith('Sale');
+                    return (
+                      <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.date}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.total.toFixed(2)}</td>
+                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.balance.toFixed(2)}</td>
+                        <td className="px-2 py-4 text-center">
+                          <TransactionActionsMenu
+                            hasInvoice={hasInvoice}
+                            busy={loadingInvoiceId === t.id}
+                            onView={() => openInvoiceAction(t.id, undefined)}
+                            onPrint={() => openInvoiceAction(t.id, 'print')}
+                            onDownload={() => openInvoiceAction(t.id, 'download')}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -611,37 +707,48 @@ export default function PartiesPage() {
 
       </div>
 
-      {/* Print Options Modal Overlay */}
-      {isPrintModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white dark:bg-[#13151f] border border-slate-100 dark:border-white/10 rounded-xl shadow-2xl w-[320px] overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 dark:border-white/10">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Print Options</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              {[
-                { id: "itemDetails", label: "Item Details" },
-                { id: "description", label: "Description" },
-                { id: "paymentInfo", label: "Payment Info" },
-                { id: "paymentStatus", label: "Payment Status" }
-              ].map(opt => (
-                <label key={opt.id} className="flex items-center justify-between cursor-pointer group">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 group-hover:text-slate-800 dark:group-hover:text-white">{opt.label}</span>
-                  <input
-                    type="checkbox"
-                    checked={(printOptions as any)[opt.id]}
-                    onChange={(e) => setPrintOptions({ ...printOptions, [opt.id]: e.target.checked })}
-                    className="w-4 h-4 rounded-sm border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 bg-white dark:bg-white/5"
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="px-6 py-4 flex items-center justify-end gap-6 border-t border-slate-100 dark:border-white/10">
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 uppercase tracking-wide">Cancel</button>
-              <button onClick={() => setIsPrintModalOpen(false)} className="text-xs font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 uppercase tracking-wide">OK</button>
-            </div>
-          </div>
-        </div>
+      {/* Customer Transaction Statement — real print action, replaces the old no-op options dialog */}
+      {isStatementOpen && selectedCustomer && (
+        <PartyStatement
+          title="Customer Transaction Statement"
+          party={{
+            name: selectedCustomer.name,
+            phone: selectedCustomerDetail?.phone || selectedCustomer.phone,
+            email: selectedCustomerDetail?.email || selectedCustomer.email,
+            address: selectedCustomerDetail?.address || selectedCustomer.address,
+          }}
+          transactions={allTransactions}
+          onClose={() => setIsStatementOpen(false)}
+        />
+      )}
+
+      {/* Row-level View/Print/Download Invoice — reads the exact existing Order, never creates one */}
+      {invoiceDoc && (
+        <GSTInvoice
+          order={{
+            id: invoiceDoc.id,
+            poNumber: invoiceDoc.invoiceNum,
+            createdAt: invoiceDoc.createdAt,
+            discount: invoiceDoc.discountAmount || 0,
+            items: (invoiceDoc.orderItems || []).map((it: any) => ({
+              itemName: it.product?.name || "Item",
+              quantity: it.quantity,
+              price: it.price,
+              gstRate: it.taxAmount > 0 ? Number(((it.taxAmount / (it.quantity * it.price)) * 100).toFixed(0)) : 0,
+              hsnCode: it.product?.hsnCode || "—",
+            })),
+          }}
+          vendor={selectedCustomer ? {
+            name: selectedCustomer.name,
+            phone: selectedCustomerDetail?.phone || selectedCustomer.phone,
+            address: selectedCustomerDetail?.address || selectedCustomer.address,
+            gstin: selectedCustomerDetail?.gstNumber || selectedCustomer.gstNumber,
+          } : { name: "Walk-in Customer" }}
+          companyDetails={currentCompany}
+          documentType="TAX_INVOICE"
+          autoAction={invoiceAction}
+          onClose={() => { setInvoiceDoc(null); setInvoiceAction(undefined); }}
+        />
       )}
 
       {/* Party Settings Slide-over */}

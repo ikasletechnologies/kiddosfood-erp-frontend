@@ -62,12 +62,12 @@ interface GSTInvoiceProps {
   // every pre-existing call site renders byte-identical unless it opts in.
   terms?: string[];
   notes?: string;
-  // Auto-fires Download or Share once the document has painted, for a row
-  // action that wants "download/share this document" without a second
-  // click inside the modal. The modal still stays open afterward so the
-  // buttons remain available (and so a failed auto-share has a visible
-  // retry point) — Print never auto-fires, only Download/Share do.
-  autoAction?: 'download' | 'share';
+  // Auto-fires Print, Download or Share once the document has painted, for
+  // a row action that wants "print/download/share this document" without a
+  // second click inside the modal. The modal still stays open afterward so
+  // the buttons remain available (and so a failed auto-share, or a
+  // dismissed print dialog, has a visible retry point).
+  autoAction?: 'print' | 'download' | 'share';
 }
 
 // Basic number to words converter for INR
@@ -242,9 +242,10 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
 
   useEffect(() => {
     if (!mounted || !autoAction) return;
-    // Let the DOM (and the logo image) finish painting before snapshotting.
+    // Let the DOM (and the logo image) finish painting before snapshotting/printing.
     const t = setTimeout(() => {
-      if (autoAction === 'download') handleDownload();
+      if (autoAction === 'print') window.print();
+      else if (autoAction === 'download') handleDownload();
       else handleShare();
     }, 350);
     return () => clearTimeout(t);
