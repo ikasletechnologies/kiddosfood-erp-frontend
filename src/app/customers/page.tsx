@@ -216,7 +216,12 @@ export default function PartiesPage() {
       statusMatch = (filters.active && c.status === 'ACTIVE') || (filters.inactive && c.status !== 'ACTIVE');
     }
 
-    const bal = Number(c.balance) || Number(c.closingBalance) || Number(c.openingBalance) || 0;
+    // c.balance is the real outstanding balance computed server-side by
+    // CustomerService.getAll (opening balance + unpaid amount across all of
+    // the customer's orders) — not a name-derived guess. A fully-paid order
+    // contributes 0, so a customer with only paid-in-full sales nets to
+    // whatever their opening balance was (0 by default).
+    const bal = Number(c.balance) || 0;
     const checkBalance = filters.toReceive || filters.toPay;
     let balanceMatch = true;
     if (checkBalance) {
@@ -359,7 +364,9 @@ export default function PartiesPage() {
           ) : (
             filteredCustomers.map((c) => {
               const isActive = c.id === selectedCustomerId;
-              const bal = Number(c.balance) || Number(c.closingBalance) || Number(c.openingBalance) || 0;
+              // See filteredCustomers above — c.balance is the real computed
+              // outstanding balance, not just the static openingBalance.
+              const bal = Number(c.balance) || 0;
               return (
                 <div
                   key={c.id}
