@@ -228,13 +228,13 @@ export default function PaymentOutPage() {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto min-h-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4 custom-scrollbar w-full min-w-0">
 
           {/* Vendor + Details */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5 shadow-sm">
-            <div className="grid grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-sm w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               {/* Left: Vendor */}
-              <div className="space-y-3">
+              <div className="space-y-3 min-w-0">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vendor / Party *</label>
                   <div className="relative" ref={vendorDropRef}>
@@ -472,53 +472,54 @@ export default function PaymentOutPage() {
             </button>
           </div>
         ) : (
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Receipt No</th>
-                  <th className="text-left px-4 py-3">Vendor / Party</th>
-                  <th className="text-left px-4 py-3">Payment Mode</th>
-                  <th className="text-left px-4 py-3">Note</th>
-                  <th className="text-center px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Amount</th>
-                  <th className="text-right px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {filtered.map((p, i) => {
-                  const style = STATUS_STYLES[p.status] || STATUS_STYLES.PAID;
-                  return (
-                    <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
-                        {formatDate(p.date)}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-white text-xs">
-                        {p.receiptNo || `REC-${String(i + 1).padStart(4, "0")}`}
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">{p.vendorName || "—"}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">{p.paymentMode}</td>
-                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 max-w-[160px] truncate">{p.note || "—"}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                          {style.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
-                        ₹ {p.amount.toLocaleString("en-IN")}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => setViewingPayment(p)} className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"><Printer className="h-4 w-4" /></button>
-                          <button className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"><Share2 className="h-4 w-4" /></button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-left px-4 py-3">Date</th>
+                    <th className="text-left px-4 py-3">Receipt No</th>
+                    <th className="text-left px-4 py-3">Vendor / Party</th>
+                    <th className="text-left px-4 py-3">Payment Mode</th>
+                    <th className="text-left px-4 py-3">Note</th>
+                    <th className="text-center px-4 py-3">Status</th>
+                    <th className="text-right px-4 py-3">Amount</th>
+                    <th className="text-right px-4 py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {filtered.map((p, i) => {
+                    const style = STATUS_STYLES[p.status] || STATUS_STYLES.PAID;
+                    return (
+                      <tr key={p.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                          {formatDate(p.date)}
+                        </td>
+                        <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-white text-xs">
+                          {p.receiptNo || `REC-${String(i + 1).padStart(4, "0")}`}
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">{p.vendorName || "—"}</td>
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">{p.paymentMode}</td>
+                        <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 max-w-[160px] truncate">{p.note || "—"}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
+                            {style.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
+                          ₹ {p.amount.toLocaleString("en-IN")}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => setViewingPayment(p)} className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors" title="Print / PDF"><Printer className="h-4 w-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             {/* Footer */}
             <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 bg-gray-50/40 dark:bg-white/[0.01] flex items-center justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">{filtered.length} transaction{filtered.length !== 1 ? "s" : ""}</span>

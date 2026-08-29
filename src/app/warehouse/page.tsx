@@ -182,33 +182,33 @@ export default function WarehousePage() {
   const noWarehousesAtAll = listLoaded && warehouseList.length === 0;
 
   return (
-    <div className="bg-slate-50 dark:bg-background min-h-screen pb-12 text-slate-800 dark:text-slate-100">
+    <div className="bg-slate-50 dark:bg-background min-h-screen pb-12 text-slate-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-full min-w-0 max-w-full">
       {/* Top Bar with Warehouse Selector */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 sticky top-0 z-10 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-4 gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 sticky top-0 z-10 shadow-2xs w-full min-w-0">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between py-3.5 sm:py-4 gap-3.5 sm:gap-4 w-full min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg shrink-0">
                 <Building2 className="h-5 w-5" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+              <div className="min-w-0">
+                <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white leading-tight truncate">
                   {warehouse?.name || (listLoaded && warehouseList.length === 0 ? "Warehouse" : "Loading Warehouse...")}
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-slate-400">
+                <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
                   {(warehouse as any)?.location || "Storage, Bins & Stock Location Management"}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 w-full lg:w-auto min-w-0">
               {isSuperAdmin ? (
                 // SUPER_ADMIN: picker across all warehouses in the system.
                 <select
                   value={selectedWarehouseId}
                   onChange={(e) => setSelectedWarehouseId(e.target.value)}
                   disabled={warehouseList.length === 0}
-                  className="px-4 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-700 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full sm:w-auto max-w-full truncate px-3 sm:px-4 py-2.5 sm:py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-slate-200 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
                 >
                   {warehouseList.length === 0 ? (
                     <option value="">No warehouses found</option>
@@ -224,7 +224,7 @@ export default function WarehousePage() {
                 <select
                   value={selectedWarehouseId}
                   disabled
-                  className="px-4 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-600 dark:text-slate-400 cursor-not-allowed"
+                  className="w-full sm:w-auto max-w-full truncate px-3 sm:px-4 py-2.5 sm:py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm text-gray-600 dark:text-slate-400 cursor-not-allowed"
                 >
                   {warehouseList.length === 0 ? (
                     <option value="">No warehouse assigned</option>
@@ -235,79 +235,82 @@ export default function WarehousePage() {
                   )}
                 </select>
               )}
-              {isSuperAdmin && (
-                <button
-                  onClick={() => setShowAddWarehouse(true)}
-                  className="px-4 py-2 bg-[#f58220] text-white hover:bg-[#e8740e] rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Warehouse
-                </button>
-              )}
-              {warehouse && (
-                <button
-                  onClick={() => setShowManageBins(true)}
-                  className="px-4 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-[#f58220] hover:border-orange-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-                >
-                  <MapPin className="h-4 w-4 text-[#f58220]" />
-                  Manage Bins
-                </button>
-              )}
+              
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setShowAddWarehouse(true)}
+                    className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2.5 sm:py-2 bg-[#f58220] text-white hover:bg-[#e8740e] rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap cursor-pointer shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Warehouse
+                  </button>
+                )}
+                {warehouse && (
+                  <button
+                    onClick={() => setShowManageBins(true)}
+                    className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2.5 sm:py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-[#f58220] hover:border-orange-200 rounded-lg text-xs sm:text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap cursor-pointer shrink-0"
+                  >
+                    <MapPin className="h-4 w-4 text-[#f58220]" />
+                    Manage Bins
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {warehouse ? (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6 w-full min-w-0">
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white dark:bg-card rounded-xl p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Total Items</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{totalDistinctItems}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
+          <div className="bg-white dark:bg-card rounded-xl p-4 sm:p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between min-w-0">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-slate-400 truncate">Total Items</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 truncate">{totalDistinctItems}</p>
             </div>
-            <div className="h-12 w-12 bg-indigo-50 dark:bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-              <Package className="h-6 w-6" />
-            </div>
-          </div>
-          <div className="bg-white dark:bg-card rounded-xl p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Occupied Bins</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{occupiedBins}</p>
-            </div>
-            <div className="h-12 w-12 bg-amber-50 dark:bg-amber-500/10 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400">
-              <Layers className="h-6 w-6" />
+            <div className="h-10 sm:h-12 w-10 sm:w-12 bg-indigo-50 dark:bg-indigo-500/10 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+              <Package className="h-5 sm:h-6 w-5 sm:w-6" />
             </div>
           </div>
-          <div className="bg-white dark:bg-card rounded-xl p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-slate-400">Available Bins</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{availableBins}</p>
+          <div className="bg-white dark:bg-card rounded-xl p-4 sm:p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between min-w-0">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-slate-400 truncate">Occupied Bins</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 truncate">{occupiedBins}</p>
             </div>
-            <div className="h-12 w-12 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-6 w-6" />
+            <div className="h-10 sm:h-12 w-10 sm:w-12 bg-amber-50 dark:bg-amber-500/10 rounded-full flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+              <Layers className="h-5 sm:h-6 w-5 sm:w-6" />
+            </div>
+          </div>
+          <div className="bg-white dark:bg-card rounded-xl p-4 sm:p-5 border border-gray-200 dark:border-white/5 shadow-sm flex items-center justify-between min-w-0">
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-slate-400 truncate">Available Bins</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1 truncate">{availableBins}</p>
+            </div>
+            <div className="h-10 sm:h-12 w-10 sm:w-12 bg-emerald-50 dark:bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+              <CheckCircle2 className="h-5 sm:h-6 w-5 sm:w-6" />
             </div>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-sm flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+        <div className="bg-white dark:bg-card p-3.5 sm:p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-sm flex flex-col sm:flex-row gap-2.5 sm:gap-4 w-full min-w-0">
+          <div className="relative flex-1 min-w-0 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               placeholder="Search stock..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
           <select
             value={binFilter}
             onChange={(e) => setBinFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-w-[150px]"
+            className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-w-0 sm:min-w-[150px] truncate"
           >
             <option value="ALL" className="dark:bg-card">All Bins</option>
             <option value="UNASSIGNED" className="dark:bg-card">Not Assigned</option>
@@ -318,7 +321,7 @@ export default function WarehousePage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-w-[150px]"
+            className="w-full sm:w-auto px-3 sm:px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-w-0 sm:min-w-[150px] truncate"
           >
             <option value="ALL" className="dark:bg-card">All Statuses</option>
             {statuses.map(s => (
@@ -328,17 +331,17 @@ export default function WarehousePage() {
         </div>
 
         {/* Data Table */}
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-white/5">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead className="bg-gray-50 dark:bg-white/[0.02]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Item</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Batch</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Bin</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Qty</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[180px]">Item</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[100px]">Batch</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[110px]">Bin</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[100px] whitespace-nowrap">Qty</th>
+                  <th className="px-4 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[110px] whitespace-nowrap">Status</th>
+                  <th className="px-4 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider min-w-[100px] whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-card divide-y divide-gray-200 dark:divide-white/5">
@@ -356,7 +359,7 @@ export default function WarehousePage() {
                           className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors cursor-pointer"
                           onClick={() => toggleExpanded(g.itemId)}
                         >
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               {isExpanded ? (
                                 <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
@@ -364,36 +367,36 @@ export default function WarehousePage() {
                                 <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
                               )}
                               <div>
-                                <div className="text-sm font-medium text-gray-900 dark:text-white">{g.itemName}</div>
-                                <div className="text-xs text-gray-500 dark:text-slate-400">{g.itemSku}</div>
+                                <div className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white">{g.itemName}</div>
+                                <div className="text-[11px] text-gray-500 dark:text-slate-400 font-mono">{g.itemSku}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-slate-400">
                             {g.rows.length} {g.rows.length === 1 ? 'lot' : 'lots'}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-slate-400">
                             {binCount > 0 ? `${binCount} bin${binCount === 1 ? '' : 's'}` : (
                               <span className="text-gray-400 dark:text-slate-500">Not Assigned</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right font-semibold">
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs sm:text-sm text-gray-900 dark:text-white text-right font-semibold">
                             {g.totalBalance.toLocaleString()} {g.unit}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4 whitespace-nowrap text-xs text-gray-400 dark:text-slate-500">
                             {g.rows.length > 1 ? 'Mixed' : g.rows[0].status.replace('_', ' ')}
                           </td>
-                          <td className="px-6 py-4" />
+                          <td className="px-4 sm:px-6 py-3.5 sm:py-4" />
                         </tr>
                         {isExpanded && g.rows.map((s, idx) => (
                           <tr key={`${s.itemId}-${s.batchId}-${s.binId}-${idx}`} className="bg-gray-50/60 dark:bg-white/[0.02] hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                            <td className="pl-14 pr-6 py-3 whitespace-nowrap text-xs text-gray-400">
+                            <td className="pl-10 sm:pl-14 pr-4 sm:pr-6 py-2.5 sm:py-3 whitespace-nowrap text-xs text-gray-400">
                               {/* Item identity already shown on the parent row */}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500 dark:text-slate-400">
+                            <td className="px-4 sm:px-6 py-2.5 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-500 dark:text-slate-400 font-mono">
                               {s.batchCode}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-4 sm:px-6 py-2.5 sm:py-3 whitespace-nowrap">
                               {s.binId ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400">
                                   {s.binCode}
@@ -404,10 +407,10 @@ export default function WarehousePage() {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-900 dark:text-white text-right font-medium">
+                            <td className="px-4 sm:px-6 py-2.5 sm:py-3 whitespace-nowrap text-xs sm:text-sm text-gray-900 dark:text-white text-right font-medium">
                               {s.balance.toLocaleString()} {s.unit}
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap">
+                            <td className="px-4 sm:px-6 py-2.5 sm:py-3 whitespace-nowrap">
                               <span className={clsx(
                                 "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
                                 s.status === 'READY' || s.status === 'AVAILABLE' ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-400' :
@@ -417,11 +420,11 @@ export default function WarehousePage() {
                                 {s.status.replace('_', ' ')}
                               </span>
                             </td>
-                            <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium">
+                            <td className="px-4 sm:px-6 py-2.5 sm:py-3 whitespace-nowrap text-right text-xs sm:text-sm font-medium">
                               {!s.binId && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setAssignBinItem(s); }}
-                                  className="text-orange-700 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 border border-orange-200 dark:border-orange-500/20 px-3 py-1 rounded-md text-xs font-bold transition-colors shadow-sm"
+                                  className="text-orange-700 dark:text-orange-400 hover:text-orange-800 dark:hover:text-orange-300 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 border border-orange-200 dark:border-orange-500/20 px-3 py-1 rounded-md text-xs font-bold transition-colors shadow-sm cursor-pointer"
                                 >
                                   Assign Bin
                                 </button>

@@ -374,9 +374,9 @@ export default function FranchisePage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0 w-full min-w-0">
       {/* Header Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4 w-full min-w-0">
 
         {currentUser.role === "SUPER_ADMIN" && (
           <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -501,7 +501,7 @@ export default function FranchisePage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full min-w-0">
           {filtered.map((f) => {
             const isActive = f.status === "ACTIVE";
             const conf = STATUS_STYLES[f.status ?? "ACTIVE"] ?? STATUS_STYLES.ACTIVE;

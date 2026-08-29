@@ -147,15 +147,15 @@ export default function RawMaterialStockDashboard() {
   const totalValue = items.reduce((acc, i) => acc + ((i.availableStock || 0) * (i.costPrice || 0)), 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-4 md:-m-6">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-4 md:-m-6 w-full min-w-0">
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-lg border border-gray-200 dark:border-white/10">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex bg-gray-100 dark:bg-white/5 p-1 rounded-xl border border-gray-200 dark:border-white/10">
             <button
               onClick={() => setActiveCategory("RAW_MATERIAL")}
               className={clsx(
-                "px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                "px-3 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all",
                 activeCategory === "RAW_MATERIAL"
                   ? "bg-white dark:bg-card text-[#f58220] shadow-sm"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white"
@@ -166,7 +166,7 @@ export default function RawMaterialStockDashboard() {
             <button
               onClick={() => setActiveCategory("FINISHED_GOOD")}
               className={clsx(
-                "px-4 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                "px-3 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all",
                 activeCategory === "FINISHED_GOOD"
                   ? "bg-white dark:bg-card text-[#f58220] shadow-sm"
                   : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white"
@@ -179,45 +179,45 @@ export default function RawMaterialStockDashboard() {
         <div className="flex items-center gap-2">
           <button
             onClick={downloadCSV}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 bg-white dark:bg-card transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 sm:py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 bg-white dark:bg-card transition-colors"
           >
             <Download className="h-3.5 w-3.5" /> Export
           </button>
-          <button onClick={fetchItems} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">
+          <button onClick={fetchItems} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {deleteError && (
-          <div className="flex items-center justify-between p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg text-rose-600 dark:text-rose-400 text-sm">
+          <div className="flex items-center justify-between p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl text-rose-600 dark:text-rose-400 text-sm">
             <div className="flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{deleteError}</div>
             <button onClick={() => setDeleteError(null)}><X className="h-4 w-4" /></button>
           </div>
         )}
 
         {/* Summary Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: "Available Stock Value", value: `₹${(totalValue / 1000).toFixed(1)}K`, dot: "bg-blue-500" },
             { label: "Reserved Stock Items", value: items.filter(i => (i.reservedStock || 0) > 0).length, dot: "bg-amber-500" },
             { label: "Low Stock Alerts", value: items.filter(i => (i.availableStock || 0) <= (i.minimumStock || 0)).length, dot: "bg-rose-500" },
             { label: "Near Expiry Items", value: items.filter(i => (i.nearExpiryStock || 0) > 0).length, dot: "bg-orange-500" },
           ].map((s) => (
-            <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
+            <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 min-w-0">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
-              <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
-                <p className="text-lg font-bold text-gray-700 dark:text-slate-100">{s.value}</p>
+              <div className="min-w-0">
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{s.label}</p>
+                <p className="text-base sm:text-lg font-bold text-gray-700 dark:text-slate-100 truncate">{s.value}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-card">
             <button className="px-3 py-2 text-xs font-medium bg-[#f58220] text-white whitespace-nowrap">
               {activeCategory === "FINISHED_GOOD" ? "Finished Goods Only" : "Raw Materials Only"}
             </button>
@@ -225,21 +225,21 @@ export default function RawMaterialStockDashboard() {
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
+            className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
           >
             <option value="">All Warehouses</option>
             {warehouses.map((w) => (
               <option key={w.id} value={w.id}>{w.name}</option>
             ))}
           </select>
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
               placeholder="Search SKU / Product Name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
@@ -252,9 +252,9 @@ export default function RawMaterialStockDashboard() {
         </div>
 
         {/* Table */}
-        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Product</th>

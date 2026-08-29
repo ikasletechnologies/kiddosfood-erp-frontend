@@ -217,15 +217,18 @@ export default function WastagePage() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6">
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
-
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full min-w-0">
         <div className="flex items-center gap-2">
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">Wastage Management</h1>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full sm:w-auto">
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
+            className="w-full sm:w-auto max-w-full truncate border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-[#13151f] text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] cursor-pointer"
           >
             {warehouses.map((w) => (
               <option key={w.id} value={w.id} className="dark:bg-card">
@@ -236,38 +239,38 @@ export default function WastagePage() {
 
           <button
             onClick={() => setShowLogModal(true)}
-            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 sm:py-2 rounded-lg shadow-sm transition-colors cursor-pointer shrink-0"
           >
-            <Plus className="h-4 w-4" /> Log Spoilage
+            <Plus className="h-4 w-4" /> Log Spoilage / Wastage
           </button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-5 w-full min-w-0">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
 
           {/* Left Side: Stats and Log Form */}
-          <div className="lg:col-span-1 space-y-5">
-            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-                <ShieldAlert className="h-3.5 w-3.5 text-[#f58220]" />
+          <div className="lg:col-span-1 space-y-4 sm:space-y-5 w-full min-w-0">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-sm w-full min-w-0">
+              <h3 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide mb-3 sm:mb-4 flex items-center gap-1.5">
+                <ShieldAlert className="h-4 w-4 text-[#f58220]" />
                 Wastage Statistics
               </h3>
 
               <div className="space-y-3 text-sm">
-                <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2">
-                  <span className="text-gray-500 dark:text-slate-400">Total Logged Entries</span>
-                  <span className="font-semibold text-gray-800 dark:text-white">{wasteLogs.length}</span>
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                  <span className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Total Logged Entries</span>
+                  <span className="text-sm font-bold text-gray-900 dark:text-white">{wasteLogs.length}</span>
                 </div>
-                <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2">
-                  <span className="text-gray-500 dark:text-slate-400">Spoiled / Damaged</span>
-                  <span className="font-semibold text-gray-800 dark:text-white">
+                <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                  <span className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Spoiled / Damaged</span>
+                  <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
                     {wasteLogs.filter(w => w.reason === 'SPOILAGE' || w.reason === 'DAMAGED').length}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500 dark:text-slate-400">QC Failures</span>
-                  <span className="font-semibold text-rose-600 dark:text-rose-400">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">QC Failures</span>
+                  <span className="text-sm font-bold text-rose-600 dark:text-rose-400">
                     {wasteLogs.filter(w => w.reason === 'QC_FAIL').length}
                   </span>
                 </div>
@@ -275,18 +278,18 @@ export default function WastagePage() {
             </div>
 
             {showLogModal && (
-              <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
+              <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-sm w-full min-w-0">
                 <div className="flex justify-between items-center border-b border-gray-100 dark:border-white/5 pb-3 mb-4">
                   <h3 className="text-sm font-bold text-gray-800 dark:text-white">Log Wastage / Spoilage</h3>
                   <button
                     onClick={() => setShowLogModal(false)}
-                    className="text-xs font-semibold text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300"
+                    className="text-xs font-semibold text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 p-1"
                   >
                     Cancel
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmitWaste} className="space-y-3">
+                <form onSubmit={handleSubmitWaste} className="space-y-3.5 w-full min-w-0">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Warehouse</label>
                     <select
@@ -297,7 +300,7 @@ export default function WastagePage() {
                         setFormData(prev => ({ ...prev, warehouseId: wId, itemId: "" }));
                         loadInventoryForWarehouse(wId, wh?.franchiseId || undefined);
                       }}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] truncate"
                     >
                       <option value="" disabled className="dark:bg-card">Choose Warehouse...</option>
                       {warehouses.map(w => (
@@ -313,7 +316,7 @@ export default function WastagePage() {
                     <select
                       value={formData.itemId}
                       onChange={(e) => setFormData({ ...formData, itemId: e.target.value })}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] truncate"
                       disabled={!formData.warehouseId}
                     >
                       <option value="" disabled className="dark:bg-card">
@@ -335,7 +338,7 @@ export default function WastagePage() {
                       step="0.01"
                       value={formData.quantity || ""}
                       onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                     />
                   </div>
 
@@ -344,7 +347,7 @@ export default function WastagePage() {
                     <select
                       value={formData.reason}
                       onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                     >
                       <option value="SPOILAGE" className="dark:bg-card">Spoilage & Rotting</option>
                       <option value="DAMAGED" className="dark:bg-card">Damaged in House</option>
@@ -360,14 +363,14 @@ export default function WastagePage() {
                       value={formData.note}
                       onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                       placeholder="Enter reason details..."
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-60"
+                    className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-xs sm:text-sm shadow-sm transition-colors disabled:opacity-60 cursor-pointer"
                   >
                     {submitting ? "Submitting..." : "Submit Wastage Log"}
                   </button>
@@ -377,11 +380,11 @@ export default function WastagePage() {
           </div>
 
           {/* Right Side: Wastage History List */}
-          <div className="lg:col-span-2">
-            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
-                  <FileText className="h-3.5 w-3.5 text-[#f58220]" />
+          <div className="lg:col-span-2 w-full min-w-0">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden w-full min-w-0">
+              <div className="p-3.5 sm:p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02] flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full min-w-0">
+                <h3 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5 shrink-0">
+                  <FileText className="h-4 w-4 text-[#f58220]" />
                   Wastage Audit History
                 </h3>
 
@@ -392,35 +395,35 @@ export default function WastagePage() {
                     placeholder="Search logs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
+                  {searchQuery && (
+                    <X 
+                      size={14} 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                      onClick={() => setSearchQuery("")} 
+                    />
+                  )}
                 </div>
               </div>
 
               {loading ? (
                 <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
               ) : filteredLogs.length === 0 ? (
-                <div className="py-20 text-center text-sm text-gray-400 dark:text-slate-500">
+                <div className="py-20 px-4 text-center text-sm text-gray-400 dark:text-slate-500">
                   No wastage records found for selected filters.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                  <table className="w-full text-sm text-left border-collapse min-w-[700px]">
                     <thead>
                       <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                        <th className="text-left px-4 py-3">Item</th>
-                        <th className="text-left px-4 py-3">Warehouse</th>
-                        <th className="text-center px-4 py-3">Reason</th>
-                        <th className="text-right px-4 py-3">Qty Loss</th>
-                        <th className="text-left px-4 py-3">Notes / Date</th>
-                        <th className="text-center px-4 py-3">Actions</th>
+                        <th className="text-left px-4 py-3 min-w-[160px]">Item</th>
+                        <th className="text-left px-4 py-3 min-w-[130px]">Warehouse</th>
+                        <th className="text-center px-4 py-3 min-w-[110px] whitespace-nowrap">Reason</th>
+                        <th className="text-right px-4 py-3 min-w-[110px] whitespace-nowrap">Qty Loss</th>
+                        <th className="text-left px-4 py-3 min-w-[160px]">Notes / Date</th>
+                        <th className="text-center px-4 py-3 min-w-[90px] whitespace-nowrap">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -429,38 +432,38 @@ export default function WastagePage() {
 
                         return (
                           <tr key={log.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                            <td className="px-4 py-3">
-                              <div className="font-medium text-gray-800 dark:text-white">{log.inventoryItem?.name}</div>
-                              <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">SKU: {log.inventoryItem?.sku}</div>
+                            <td className="px-4 py-3 min-w-[160px]">
+                              <div className="font-semibold text-gray-800 dark:text-white text-xs sm:text-sm">{log.inventoryItem?.name}</div>
+                              <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 font-mono">SKU: {log.inventoryItem?.sku}</div>
                             </td>
-                            <td className="px-4 py-3 text-gray-600 dark:text-slate-300">
+                            <td className="px-4 py-3 text-xs sm:text-sm text-gray-600 dark:text-slate-300 min-w-[130px]">
                               {log.warehouse?.name || 'N/A'}
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              <span className={clsx("inline-block px-2.5 py-1 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
                                 {log.reason}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="font-semibold text-rose-600 dark:text-rose-400">
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              <div className="font-semibold text-rose-600 dark:text-rose-400 text-xs sm:text-sm">
                                 -{log.quantity} <span className="text-xs text-gray-400 dark:text-slate-500">{log.inventoryItem?.unit}</span>
                               </div>
                               {typeof log.costAtTime === "number" && (
-                                <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Cost: ₹{log.costAtTime.toFixed(2)}</div>
+                                <div className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5">Cost: ₹{log.costAtTime.toFixed(2)}</div>
                               )}
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="text-gray-700 dark:text-slate-300">{log.note || 'N/A'}</div>
-                              <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
+                            <td className="px-4 py-3 min-w-[160px]">
+                              <div className="text-xs sm:text-sm text-gray-700 dark:text-slate-300">{log.note || '—'}</div>
+                              <div className="text-[11px] text-gray-400 dark:text-slate-500 mt-0.5 flex items-center gap-1">
+                                <Calendar className="h-3 w-3 shrink-0" />
                                 {format(new Date(log.createdAt), 'dd MMM yyyy HH:mm')}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-center">
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
                               <button
                                 onClick={() => openEdit(log)}
                                 title="Edit reason / notes"
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-500 dark:text-slate-400 hover:text-[#f58220] dark:hover:text-[#f58220] border border-gray-200 dark:border-white/10 hover:border-orange-200 dark:hover:border-orange-500/30 rounded-lg transition-colors"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-gray-600 dark:text-slate-300 hover:text-[#f58220] dark:hover:text-[#f58220] border border-gray-200 dark:border-white/10 hover:border-orange-200 dark:hover:border-orange-500/30 rounded-lg transition-colors cursor-pointer"
                               >
                                 <Pencil className="h-3 w-3" /> Edit
                               </button>
@@ -480,57 +483,67 @@ export default function WastagePage() {
 
       {/* Edit Wastage Log Modal */}
       {editingLog && (
-        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/10 p-5 w-full max-w-sm space-y-4 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 dark:bg-black/60 flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/10 p-4 sm:p-5 w-full max-w-sm space-y-4 shadow-xl my-auto">
             <div className="flex justify-between items-center border-b border-gray-100 dark:border-white/5 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">Edit Wastage Log</h3>
-                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{editingLog.inventoryItem?.name}</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 font-semibold">{editingLog.inventoryItem?.name}</p>
               </div>
               <button
                 onClick={() => setEditingLog(null)}
-                className="text-xs font-semibold text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300"
+                className="text-xs font-semibold text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-300 p-1"
               >
                 Cancel
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Wastage Reason</label>
-              <select
-                value={editReason}
-                onChange={(e) => setEditReason(e.target.value)}
-                className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Wastage Reason</label>
+                <select
+                  value={editReason}
+                  onChange={(e) => setEditReason(e.target.value)}
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                >
+                  <option value="SPOILAGE" className="dark:bg-card">Spoilage & Rotting</option>
+                  <option value="DAMAGED" className="dark:bg-card">Damaged in House</option>
+                  <option value="QC_FAIL" className="dark:bg-card">Failed QC Inspection</option>
+                  <option value="EXPIRED" className="dark:bg-card">Expired Shelf Life</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Remarks / Notes</label>
+                <input
+                  type="text"
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                  placeholder="Enter reason details..."
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                />
+              </div>
+
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 leading-relaxed">
+                Quantity can't be changed here — it already deducted real stock when this entry was logged.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={() => setEditingLog(null)}
+                className="flex-1 py-2 text-xs font-semibold text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
               >
-                <option value="SPOILAGE" className="dark:bg-card">Spoilage & Rotting</option>
-                <option value="DAMAGED" className="dark:bg-card">Damaged in House</option>
-                <option value="QC_FAIL" className="dark:bg-card">Failed QC Inspection</option>
-                <option value="EXPIRED" className="dark:bg-card">Expired Shelf Life</option>
-              </select>
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={editSubmitting}
+                className="flex-1 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-xs shadow-sm transition-colors disabled:opacity-60 cursor-pointer"
+              >
+                {editSubmitting ? "Saving..." : "Save Changes"}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Remarks / Notes</label>
-              <input
-                type="text"
-                value={editNote}
-                onChange={(e) => setEditNote(e.target.value)}
-                placeholder="Enter reason details..."
-                className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500"
-              />
-            </div>
-
-            <p className="text-[11px] text-gray-400 dark:text-slate-500">
-              Quantity can't be changed here — it already deducted real stock when this entry was logged.
-            </p>
-
-            <button
-              onClick={handleSaveEdit}
-              disabled={editSubmitting}
-              className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-60"
-            >
-              {editSubmitting ? "Saving..." : "Save Changes"}
-            </button>
           </div>
         </div>
       )}

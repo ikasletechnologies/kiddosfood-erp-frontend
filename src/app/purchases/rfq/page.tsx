@@ -88,83 +88,85 @@ export default function RequestForQuotationPage() {
         </button>
       </div>
 
-      <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">RFQ #</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Linked PR</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Deadline</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Quotes</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">Loading...</td></tr>
-            ) : rfqs.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">No RFQs found</td></tr>
-            ) : rfqs.map((r) => (
-              <React.Fragment key={r.id}>
-                <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02] bg-white dark:bg-card">
-                  <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400 font-medium">{r.rfqNumber}</td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-xs">{r.purchaseRequest?.prNumber || '—'}</td>
-                  <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{formatDate(r.deadline)}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{r.quotations?.length || 0}</td>
-                  <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status]}`}>{r.status}</span></td>
-                  <td className="px-4 py-3 text-right">
-                    {r.status === 'OPEN' && (
-                       <button onClick={() => setShowQuoteForm(r.id)} className="text-[#f58220] hover:text-[#e8740e] font-semibold text-xs cursor-pointer">
-                          Add Quote
-                       </button>
-                    )}
-                  </td>
-                </tr>
-                {r.quotations && r.quotations.length > 0 && (
-                   <tr className="bg-gray-50/50 dark:bg-white/[0.01]">
-                      <td colSpan={6} className="px-8 py-3">
-                         <div className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] overflow-hidden">
-                            <table className="w-full text-xs">
-                               <thead className="bg-gray-100/50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400">
-                                  <tr>
-                                     <th className="px-3 py-2 text-left font-medium">Vendor</th>
-                                     <th className="px-3 py-2 text-left font-medium">Total Amount</th>
-                                     <th className="px-3 py-2 text-left font-medium">Valid Until</th>
-                                     <th className="px-3 py-2 text-left font-medium">Status</th>
-                                     <th className="px-3 py-2 text-right font-medium">Action</th>
-                                  </tr>
-                               </thead>
-                               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                                  {r.quotations.map((q: any) => (
-                                     <tr key={q.id}>
-                                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{q.vendor?.name}</td>
-                                        <td className="px-3 py-2 text-gray-800 dark:text-slate-200">₹{q.totalAmount.toLocaleString()}</td>
-                                        <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{formatDate(q.validUntil)}</td>
-                                        <td className="px-3 py-2">
-                                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide
-                                              ${q.status === 'ACCEPTED' ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400' : 
-                                                q.status === 'REJECTED' ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400' : 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'}`}>
-                                              {q.status}
-                                           </span>
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                           {q.status === 'PENDING' && r.status === 'OPEN' && (
-                                              <button onClick={() => convertToPO(q.id)} className="text-green-600 dark:text-green-400 font-medium hover:underline cursor-pointer">Accept & Create Purchase Order</button>
-                                           )}
-                                        </td>
-                                     </tr>
-                                  ))}
-                               </tbody>
-                            </table>
-                         </div>
-                      </td>
-                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden w-full min-w-0">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-sm min-w-[700px]">
+            <thead className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">RFQ #</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Linked PR</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Deadline</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Quotes</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Status</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-slate-400 uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+              {loading ? (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">Loading...</td></tr>
+              ) : rfqs.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">No RFQs found</td></tr>
+              ) : rfqs.map((r) => (
+                <React.Fragment key={r.id}>
+                  <tr className="hover:bg-gray-50 dark:hover:bg-white/[0.02] bg-white dark:bg-card">
+                    <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400 font-medium">{r.rfqNumber}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400 font-mono text-xs">{r.purchaseRequest?.prNumber || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-slate-400">{formatDate(r.deadline)}</td>
+                    <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{r.quotations?.length || 0}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[r.status]}`}>{r.status}</span></td>
+                    <td className="px-4 py-3 text-right">
+                      {r.status === 'OPEN' && (
+                         <button onClick={() => setShowQuoteForm(r.id)} className="text-[#f58220] hover:text-[#e8740e] font-semibold text-xs cursor-pointer">
+                            Add Quote
+                         </button>
+                      )}
+                    </td>
+                  </tr>
+                  {r.quotations && r.quotations.length > 0 && (
+                     <tr className="bg-gray-50/50 dark:bg-white/[0.01]">
+                        <td colSpan={6} className="px-8 py-3">
+                           <div className="rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] overflow-hidden">
+                              <table className="w-full text-xs">
+                                 <thead className="bg-gray-100/50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400">
+                                    <tr>
+                                       <th className="px-3 py-2 text-left font-medium">Vendor</th>
+                                       <th className="px-3 py-2 text-left font-medium">Total Amount</th>
+                                       <th className="px-3 py-2 text-left font-medium">Valid Until</th>
+                                       <th className="px-3 py-2 text-left font-medium">Status</th>
+                                       <th className="px-3 py-2 text-right font-medium">Action</th>
+                                    </tr>
+                                 </thead>
+                                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                                    {r.quotations.map((q: any) => (
+                                       <tr key={q.id}>
+                                          <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">{q.vendor?.name}</td>
+                                          <td className="px-3 py-2 text-gray-800 dark:text-slate-200">₹{q.totalAmount.toLocaleString()}</td>
+                                          <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{formatDate(q.validUntil)}</td>
+                                          <td className="px-3 py-2">
+                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide
+                                                ${q.status === 'ACCEPTED' ? 'bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400' : 
+                                                  q.status === 'REJECTED' ? 'bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400' : 'bg-yellow-100 dark:bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'}`}>
+                                                {q.status}
+                                             </span>
+                                          </td>
+                                          <td className="px-3 py-2 text-right">
+                                             {q.status === 'PENDING' && r.status === 'OPEN' && (
+                                                <button onClick={() => convertToPO(q.id)} className="text-green-600 dark:text-green-400 font-medium hover:underline cursor-pointer">Accept & Create Purchase Order</button>
+                                             )}
+                                          </td>
+                                       </tr>
+                                    ))}
+                                 </tbody>
+                              </table>
+                           </div>
+                        </td>
+                     </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {showRFQForm && (
@@ -201,7 +203,7 @@ export default function RequestForQuotationPage() {
           <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-2xl w-full max-w-2xl shadow-xl my-4 text-gray-800 dark:text-slate-100">
             <div className="p-6 border-b border-gray-100 dark:border-white/5"><h2 className="text-lg font-semibold text-gray-900 dark:text-white">Log Vendor Quotation</h2></div>
             <form onSubmit={handleAddQuote} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Vendor *</label>
                     <select required value={quoteForm.vendorId} onChange={e => setQuoteForm({...quoteForm, vendorId: e.target.value})} className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none">

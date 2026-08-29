@@ -24,7 +24,7 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
           {/* Header Info */}
-          <div className="grid grid-cols-2 gap-6 bg-gray-50 dark:bg-white/5 rounded-2xl p-6 border border-gray-100 dark:border-white/5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 bg-gray-50 dark:bg-white/5 rounded-2xl p-4 sm:p-6 border border-gray-100 dark:border-white/5">
             <div>
               <p className="text-[10px] font-black tracking-widest text-gray-400 dark:text-slate-400 uppercase mb-1">Vendor</p>
               <p className="font-bold text-sm text-gray-900 dark:text-white">{data.vendor?.name}</p>

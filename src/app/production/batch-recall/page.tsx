@@ -331,7 +331,7 @@ export default function BatchRecallPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3 w-full min-w-0">
         <div className="relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
           <input
@@ -351,11 +351,11 @@ export default function BatchRecallPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {/* Recall Workflow Steps */}
-        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
+        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full min-w-0">
           <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Recall Workflow Pipeline</h3>
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 overflow-x-auto custom-scrollbar max-w-full">
             {STEPS.map((step, idx) => {
               const Icon = step.icon;
               const isFailed = recall && failedStep === step.key;
@@ -363,7 +363,7 @@ export default function BatchRecallPage() {
               const isCurrent = !!recall && idx === stepIdx && isActive;
               const isRunning = runningAction === step.key;
               return (
-                <div key={step.key} className="flex flex-col lg:flex-row items-center gap-2 w-full lg:w-auto">
+                <div key={step.key} className="flex flex-col lg:flex-row items-center gap-2 w-full lg:w-auto shrink-0">
                   <div
                     className={clsx(
                       "flex items-center gap-2 px-3 py-2 rounded-lg border w-full lg:w-auto transition-all text-xs font-medium",
@@ -385,7 +385,7 @@ export default function BatchRecallPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-5 w-full min-w-0">
           {/* Batch Selection List */}
           <div className="xl:col-span-5 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
             <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02]">

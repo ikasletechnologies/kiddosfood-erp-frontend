@@ -5,8 +5,8 @@ import Link from "next/link";
 
 export default function PayrollPage() {
   return (
-    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] -m-8 font-sans">
-      <div className="p-8 space-y-6">
+    <div className="min-h-screen bg-[#FDFCFD] dark:bg-[#020617] font-sans w-full min-w-0">
+      <div className="p-4 sm:p-8 space-y-6 w-full min-w-0">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-[10px] font-bold text-[#999] uppercase tracking-widest">
            <Link href="/" className="hover:text-[#7C3AED]">Dashboard</Link>
@@ -14,8 +14,8 @@ export default function PayrollPage() {
            <span className="text-[#666]">Payroll & HRMS</span>
         </div>
 
-        <div className="flex items-center justify-center pt-4">
-           <div className="max-w-xl w-full bg-white dark:bg-slate-900 rounded-[32px] border border-[#F0EAF0] dark:border-slate-800 shadow-2xl overflow-hidden p-12 space-y-8">
+        <div className="flex items-center justify-center pt-4 w-full min-w-0">
+           <div className="max-w-xl w-full bg-white dark:bg-slate-900 rounded-3xl sm:rounded-[32px] border border-[#F0EAF0] dark:border-slate-800 shadow-2xl overflow-hidden p-6 sm:p-12 space-y-6 sm:space-y-8 min-w-0">
               <div className="text-center space-y-4">
                  <h1 className="text-2xl font-black text-[#1A1A1A] dark:text-white">HR and Payroll Management</h1>
                  <p className="text-[13px] font-medium text-[#666] dark:text-slate-400">

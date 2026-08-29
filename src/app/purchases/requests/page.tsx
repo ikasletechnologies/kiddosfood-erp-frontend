@@ -95,8 +95,9 @@ export default function PurchaseRequestsPage() {
         </select>
       </div>
 
-      <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden w-full min-w-0">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-sm min-w-[700px]">
           <thead className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wide">PR #</th>
@@ -146,6 +147,7 @@ export default function PurchaseRequestsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showForm && (
@@ -159,7 +161,7 @@ export default function PurchaseRequestsPage() {
                <button onClick={() => setShowForm(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white">✕</button>
             </div>
             <form onSubmit={handleCreate} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Department</label>
                   <select required value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm bg-gray-50 dark:bg-[#13151f] text-gray-800 dark:text-white focus:bg-white transition-colors outline-none">

@@ -50,9 +50,9 @@ export default function ShiftsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 text-slate-800 dark:text-slate-100">
-      <div className="flex items-center justify-end">
-        <div className="flex gap-2">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 text-slate-800 dark:text-slate-100 w-full min-w-0">
+      <div className="flex flex-wrap items-center justify-end gap-2 w-full min-w-0">
+        <div className="flex flex-wrap gap-2">
           <button onClick={() => setShowAssignForm(true)} className="border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 bg-white dark:bg-card px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Assign Shift</button>
           <button onClick={() => setShowShiftForm(true)} className="flex items-center gap-2 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> New Shift
@@ -60,7 +60,7 @@ export default function ShiftsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
         {loading ? (
           <div className="col-span-3 text-center py-8 text-gray-400 dark:text-slate-500">Loading...</div>
         ) : shifts.length === 0 ? (

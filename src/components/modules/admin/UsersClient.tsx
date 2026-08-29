@@ -151,12 +151,12 @@ export default function UsersClient() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 w-full min-w-0">
       {/* Header Toolbar */}
-      <div className="flex items-center justify-end pb-2 border-b border-slate-200 dark:border-white/10">
+      <div className="flex items-center justify-end pb-2 border-b border-slate-200 dark:border-white/10 w-full min-w-0">
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/20 active:scale-95"
+          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-lg shadow-orange-500/20 active:scale-95 text-xs uppercase tracking-wider"
         >
           <UserPlus size={18} />
           Add User
@@ -164,15 +164,15 @@ export default function UsersClient() {
       </div>
 
       {/* Stats & Search */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-3 relative">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 w-full min-w-0">
+        <div className="sm:col-span-3 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input
             type="text"
             placeholder="Search by name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all"
+            className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none transition-all text-sm"
           />
             {searchQuery && (
               <X 
@@ -182,16 +182,16 @@ export default function UsersClient() {
               />
             )}
         </div>
-        <div className="bg-orange-50 dark:bg-orange-500/5 border border-orange-100 dark:border-orange-500/10 rounded-2xl p-4 flex items-center justify-between">
-          <span className="text-sm font-bold text-orange-600 dark:text-orange-400">Total Users</span>
+        <div className="bg-orange-50 dark:bg-orange-500/5 border border-orange-100 dark:border-orange-500/10 rounded-2xl p-4 flex items-center justify-between min-w-0">
+          <span className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">Total Users</span>
           <span className="text-2xl font-black text-orange-700 dark:text-orange-300">{users.length}</span>
         </div>
       </div>
 
       {/* Users Table */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-sm w-full min-w-0">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
                 <th className="px-6 py-4 text-[11px] font-black uppercase tracking-wider text-slate-500">User Details</th>

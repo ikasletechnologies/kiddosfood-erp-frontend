@@ -679,9 +679,9 @@ export default function FinishedGoodsStockClient() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 w-full min-w-0">
       {/* Top Metric Cards Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full min-w-0">
         <InventoryMetricCard
           label="Total Finished Goods"
           value={`${stats.totalProducts} SKU${stats.totalProducts === 1 ? "" : "s"}`}
@@ -728,10 +728,10 @@ export default function FinishedGoodsStockClient() {
       </div>
 
       {/* ── Toolbar: Search, Filters & View Toggle ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-[#0A0D14] p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 bg-white dark:bg-[#0A0D14] p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full min-w-0">
         {/* Search */}
-        <div className="flex items-center gap-3 px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg w-full md:w-80 shadow-sm">
-          <Search size={16} className="text-slate-400" />
+        <div className="flex items-center gap-2.5 px-3.5 sm:px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full lg:w-80 shadow-sm">
+          <Search size={15} className="text-slate-400 shrink-0" />
           <input
             type="text"
             value={searchTerm}
@@ -741,9 +741,9 @@ export default function FinishedGoodsStockClient() {
           />
         </div>
 
-        {/* Demand Filter Buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+        {/* Demand Filter Buttons & View Switcher */}
+        <div className="flex items-center gap-2 flex-wrap justify-between lg:justify-end w-full lg:w-auto min-w-0">
+          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
             {[
               { id: "ALL", label: "All" },
               { id: "SELLABLE", label: "Sellable" },
@@ -752,10 +752,10 @@ export default function FinishedGoodsStockClient() {
                 key={f.id}
                 onClick={() => setCatalogFilter(f.id as any)}
                 className={clsx(
-                  "px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all",
+                  "px-3 sm:px-4 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap",
                   catalogFilter === f.id
-                    ? "bg-white dark:bg-card text-orange-500 shadow-sm"
-                    : "text-slate-450 hover:text-slate-805 dark:hover:text-slate-200"
+                    ? "bg-white dark:bg-card text-orange-500 shadow-sm font-black"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                 )}
               >
                 {f.label}
@@ -763,7 +763,7 @@ export default function FinishedGoodsStockClient() {
             ))}
           </div>
 
-          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto custom-scrollbar max-w-full">
             {[
               { id: "ALL", label: "All Finished Goods" },
               { id: "IN_STOCK", label: "In Stock" },
@@ -777,7 +777,7 @@ export default function FinishedGoodsStockClient() {
                 key={f.id}
                 onClick={() => setDemandFilter(f.id as any)}
                 className={clsx(
-                  "px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all",
+                  "px-3 sm:px-4 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all whitespace-nowrap shrink-0",
                   demandFilter === f.id
                     ? "bg-white dark:bg-card text-orange-500 shadow-sm"
                     : "text-slate-450 hover:text-slate-805 dark:hover:text-slate-200"
@@ -788,47 +788,51 @@ export default function FinishedGoodsStockClient() {
             ))}
           </div>
 
-          {/* View Mode Switcher */}
-          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* View Mode Switcher */}
+            <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => setViewMode("GRID")}
+                className={clsx(
+                  "p-2 rounded-md text-slate-400 transition-all",
+                  viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
+                )}
+                title="Grid Cards View"
+              >
+                <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode("TABLE")}
+                className={clsx(
+                  "p-2 rounded-md text-slate-400 transition-all",
+                  viewMode === "TABLE" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
+                )}
+                title="Dense Ledger Table View"
+              >
+                <List size={16} />
+              </button>
+            </div>
+
+            {/* Bulk Import */}
+            <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
             <button
-              onClick={() => setViewMode("GRID")}
-              className={clsx(
-                "p-2 rounded-md text-slate-400 transition-all",
-                viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
-              )}
-              title="Grid Cards View"
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors cursor-pointer whitespace-nowrap"
             >
-              <LayoutGrid size={16} />
+              <Upload size={14} className="shrink-0" />
+              <span className="hidden sm:inline">Bulk Import (Excel)</span>
+              <span className="sm:hidden">Import</span>
             </button>
+
+            {/* Refresh Button */}
             <button
-              onClick={() => setViewMode("TABLE")}
-              className={clsx(
-                "p-2 rounded-md text-slate-400 transition-all",
-                viewMode === "TABLE" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
-              )}
-              title="Dense Ledger Table View"
+              onClick={fetchDemandData}
+              className="p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-gray-400 hover:text-orange-500 transition-colors shrink-0"
+              title="Refresh Data"
             >
-              <List size={16} />
+              <RefreshCw size={16} className={clsx(loading && "animate-spin text-orange-500")} />
             </button>
           </div>
-
-          {/* Bulk Import */}
-          <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors cursor-pointer"
-          >
-            <Upload size={14} /> Bulk Import (Excel)
-          </button>
-
-          {/* Refresh Button */}
-          <button
-            onClick={fetchDemandData}
-            className="p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-gray-400 hover:text-orange-500 transition-colors"
-            title="Refresh Data"
-          >
-            <RefreshCw size={16} className={clsx(loading && "animate-spin text-orange-500")} />
-          </button>
         </div>
       </div>
 
@@ -993,18 +997,18 @@ export default function FinishedGoodsStockClient() {
 
       {/* ── View 2: Dense Ledger Table View ── */}
       {viewMode === "TABLE" && (
-        <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left table-fixed">
-              <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+        <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-left table-auto min-w-[760px]">
+              <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
                 <tr>
-                  <th className={clsx("px-6 py-4", hasAnyBranchHoldings ? "w-[26%]" : "w-[30%]")}>Finished Product Specification</th>
-                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>HQ Available</th>
-                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>HQ Reserved</th>
-                  <th className={clsx("px-6 py-4 text-center", hasAnyBranchHoldings ? "w-[14%]" : "w-[15%]")}>In-Transit</th>
-                  {hasAnyBranchHoldings && <th className="w-[16%] px-6 py-4 text-center">Branch Holdings</th>}
-                  <th className={clsx("px-6 py-4 text-right", hasAnyBranchHoldings ? "w-[12%]" : "w-[20%]")}>Franchise Demand</th>
-                  <th className="w-[70px] px-6 py-4 text-right">Edit</th>
+                  <th className="px-4 sm:px-6 py-3.5 sm:py-4">Finished Product Specification</th>
+                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Available</th>
+                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Reserved</th>
+                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">In-Transit</th>
+                  {hasAnyBranchHoldings && <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">Branch Holdings</th>}
+                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Franchise Demand</th>
+                  <th className="w-[70px] px-4 sm:px-6 py-3.5 sm:py-4 text-right">Edit</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">

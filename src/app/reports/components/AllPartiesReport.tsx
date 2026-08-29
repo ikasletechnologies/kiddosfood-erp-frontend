@@ -471,8 +471,8 @@ export default function CentralAllPartiesReport({
           </div>
         </div>
 
-        <div className="overflow-auto flex-1">
-          <table className="w-full text-left border-collapse min-w-[1100px]">
+        <div className="overflow-auto custom-scrollbar flex-1 w-full max-w-full">
+          <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead className="sticky top-0 bg-slate-50 dark:bg-slate-800/40 z-10 shadow-sm border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th className="px-4 py-3 border-r border-slate-100 dark:border-slate-800 w-12 text-center no-print">

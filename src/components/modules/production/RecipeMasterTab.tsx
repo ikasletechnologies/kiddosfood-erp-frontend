@@ -115,17 +115,16 @@ export default function RecipeMasterTab() {
   // rather than the trigger's left edge, so it stays inside the modal
   // instead of spilling past its right border into the backdrop.
   const computeSideDropdownPos = (rect: DOMRect) => {
-    const dropdownWidth = Math.max(rect.width, 240);
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+    const dropdownWidth = Math.min(Math.max(rect.width, 240), Math.max(200, screenWidth - 24));
     let left = rect.right - dropdownWidth;
     if (left < 8) left = Math.max(8, rect.left);
+    if (left + dropdownWidth > screenWidth - 8) {
+      left = Math.max(8, screenWidth - dropdownWidth - 8);
+    }
 
-    // Search box + list + "Add New" row — roughly constant regardless of
-    // how many materials/categories match. When the trigger sits low in the
-    // viewport, opening straight down from it pushes the panel past the
-    // bottom edge (behind the taskbar/off-screen); clamp so it always stays
-    // fully visible, sliding it up above the trigger if needed.
     const estimatedHeight = 280;
-    const viewportHeight = window.innerHeight;
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 600;
     let top = rect.top - 6;
     if (top + estimatedHeight > viewportHeight - 8) {
       top = Math.max(8, viewportHeight - estimatedHeight - 8);
@@ -459,36 +458,37 @@ export default function RecipeMasterTab() {
   );
 
   return (
-    <div className="space-y-6 text-gray-800 dark:text-slate-100">
+    <div className="space-y-4 sm:space-y-6 text-gray-800 dark:text-slate-100 w-full min-w-0">
       {/* ── Top Bar ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 flex-1 w-full min-w-0">
           {[
             { label: "Total Recipes", value: recipes.length, color: "text-gray-800 dark:text-white", dot: "bg-gray-400" },
             { label: "Packaged Products", value: recipes.filter(r => r.productId).length, color: "text-green-700 dark:text-green-400", dot: "bg-green-500" },
             { label: "Bulk Formulas", value: recipes.filter(r => !r.productId).length, color: "text-blue-700 dark:text-blue-400", dot: "bg-blue-500" },
             { label: "Avg Ingredients", value: recipes.length ? (recipes.reduce((acc, r) => acc + (r.recipeItems?.length ?? 0), 0) / recipes.length).toFixed(1) : 0, color: "text-orange-700 dark:text-orange-400", dot: "bg-[#f58220]" },
           ].map(stat => (
-            <div key={stat.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-2.5 flex items-center gap-3 shadow-sm">
+            <div key={stat.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-3 sm:px-4 py-2.5 flex items-center gap-2.5 sm:gap-3 shadow-sm min-w-0">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
-              <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">{stat.label}</p>
-                <p className={clsx("text-base font-bold mt-0.5", stat.color)}>{stat.value}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 font-medium truncate" title={stat.label}>{stat.label}</p>
+                <p className={clsx("text-sm sm:text-base font-bold mt-0.5", stat.color)}>{stat.value}</p>
               </div>
             </div>
           ))}
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <div className="relative w-full md:w-64">
+        {/* Toolbar */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto shrink-0">
+          <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
             <input
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search recipes..."
-              className="w-full pl-9 pr-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-8 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
@@ -498,20 +498,22 @@ export default function RecipeMasterTab() {
               />
             )}
           </div>
-          <button
-            onClick={fetchAll}
-            className="p-2 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400 transition-colors bg-white dark:bg-white/5 shrink-0"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
-          </button>
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors shadow-sm shrink-0"
-          >
-            <Plus size={14} />
-            New Recipe
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={fetchAll}
+              className="p-2 border border-gray-200 dark:border-white/10 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-gray-500 dark:text-slate-400 transition-colors bg-white dark:bg-white/5 shrink-0"
+              title="Refresh"
+            >
+              <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
+            </button>
+            <button
+              onClick={openCreate}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors shadow-sm whitespace-nowrap"
+            >
+              <Plus size={14} />
+              <span>New Recipe</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -536,70 +538,78 @@ export default function RecipeMasterTab() {
           </button>
         </div>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid gap-3 w-full min-w-0">
           {filtered.map(recipe => {
             const isExpanded = expandedId === recipe.id;
             return (
               <div
                 key={recipe.id}
-                className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden hover:border-gray-300 dark:hover:border-white/10 transition-all shadow-sm"
+                className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden hover:border-gray-300 dark:hover:border-white/10 transition-all shadow-sm w-full min-w-0"
               >
                 <div
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors"
+                  className="p-3.5 sm:p-4 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors space-y-3 md:space-y-0 md:flex md:items-center md:justify-between gap-4"
                   onClick={() => setExpandedId(isExpanded ? null : recipe.id)}
                 >
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-slate-200 font-bold text-xs shrink-0">
+                  {/* Left Side: Avatar + Details */}
+                  <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-700 dark:text-slate-200 font-bold text-xs shrink-0 mt-0.5 sm:mt-0">
                       {recipe.name.substring(0, 2).toUpperCase()}
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">{recipe.name}</h3>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate" title={recipe.name}>
+                        {recipe.name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 flex-wrap">
                         {recipe.product?.name && (
-                          <span className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1 font-medium">
-                            <Package size={12} className="text-[#f58220]" /> {recipe.product.name}
+                          <span className="text-xs text-gray-500 dark:text-slate-400 flex items-center gap-1 font-medium bg-gray-100/70 dark:bg-white/5 px-2 py-0.5 rounded">
+                            <Package size={12} className="text-[#f58220] shrink-0" />
+                            <span className="truncate max-w-[140px] sm:max-w-[200px]">{recipe.product.name}</span>
                           </span>
                         )}
-                        <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded border border-green-200 dark:border-green-500/20">
+                        <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded border border-green-200 dark:border-green-500/20 shrink-0">
                           Yield: {recipe.yieldQty} {recipe.yieldUnit || "units"}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-slate-400">
+                        <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">
                           {recipe.recipeItems?.length ?? 0} ingredients
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  {/* Right Side: Actions (Stacked on mobile, inline on desktop) */}
+                  <div className="flex items-center justify-between md:justify-end gap-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-white/5 shrink-0">
                     <button
                       onClick={e => { e.stopPropagation(); router.push(`/production?recipeId=${recipe.id}`); }}
-                      className="px-2.5 py-1 rounded text-xs font-semibold bg-orange-50 dark:bg-orange-500/10 text-[#f58220] border border-orange-200 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors flex items-center gap-1"
+                      className="flex-1 md:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-50 dark:bg-orange-500/10 text-[#f58220] border border-orange-200 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors flex items-center justify-center gap-1.5"
                       title="Start Production"
                     >
                       <Play size={11} fill="currentColor" /> Produce
                     </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); downloadRecipePDF(recipe); }}
-                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-                      title="Download PDF"
-                    >
-                      <Download size={14} />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); openEdit(recipe); }}
-                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDelete(recipe.id); }}
-                      disabled={deleting === recipe.id}
-                      className="p-1.5 rounded text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-500/10 transition-colors"
-                      title="Delete"
-                    >
-                      {deleting === recipe.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </button>
+                    
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={e => { e.stopPropagation(); downloadRecipePDF(recipe); }}
+                        className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                        title="Download PDF"
+                      >
+                        <Download size={14} />
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); openEdit(recipe); }}
+                        className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDelete(recipe.id); }}
+                        disabled={deleting === recipe.id}
+                        className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-500/10 transition-colors"
+                        title="Delete"
+                      >
+                        {deleting === recipe.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -838,8 +848,8 @@ export default function RecipeMasterTab() {
 
             <div id="ingredients-container" className="space-y-2 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
               {form.items.map((item, idx) => (
-                <div key={idx} className="flex flex-wrap sm:flex-nowrap items-end gap-3 p-3 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
-                  <div className="flex-1 space-y-1 min-w-[120px] relative material-selector-container">
+                <div key={idx} className="flex flex-wrap sm:flex-nowrap items-end gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
+                  <div className="w-full sm:flex-1 space-y-1 min-w-0 relative material-selector-container">
                     <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Material</label>
                     <div
                       onClick={(e) => {
@@ -916,7 +926,7 @@ export default function RecipeMasterTab() {
                     )}
                   </div>
 
-                  <div className="w-20 space-y-1">
+                  <div className="flex-1 sm:w-20 sm:flex-initial space-y-1 min-w-[70px]">
                     <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Qty</label>
                     <input
                       type="number"
@@ -928,7 +938,7 @@ export default function RecipeMasterTab() {
                     />
                   </div>
 
-                  <div className="w-20 space-y-1">
+                  <div className="flex-1 sm:w-20 sm:flex-initial space-y-1 min-w-[70px]">
                     <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Unit</label>
                     <select
                       value={item.unit}
@@ -941,7 +951,7 @@ export default function RecipeMasterTab() {
 
                   <button
                     onClick={() => removeItem(idx)}
-                    className="p-2 mb-[1px] text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-white/10 rounded transition-colors"
+                    className="p-2 mb-[1px] text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-white/10 rounded transition-colors shrink-0"
                   >
                     <Trash2 size={15} />
                   </button>

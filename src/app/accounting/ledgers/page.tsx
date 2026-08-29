@@ -163,9 +163,9 @@ export default function BranchLedgerPage() {
   const totalOwed = activeFranchise?.outstandingAmount ?? 0;
 
   return (
-    <div className="h-[calc(100vh-80px)] flex flex-col md:flex-row gap-4 sm:gap-6 p-4 sm:p-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 animate-in fade-in duration-500">
+    <div className="min-h-screen md:h-[calc(100vh-80px)] flex flex-col md:flex-row gap-4 sm:gap-6 -m-3 sm:-m-4 md:-m-6 p-3 sm:p-4 md:p-6 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 animate-in fade-in duration-500 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       {/* LEFT: BRANCH DIRECTORY */}
-      <div className="w-full md:w-80 flex flex-col bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shrink-0 shadow-sm md:h-full">
+      <div className="w-full md:w-80 flex flex-col bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shrink-0 shadow-sm max-h-96 md:max-h-none md:h-full min-w-0">
         <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-bold uppercase tracking-widest text-slate-900 dark:text-white flex items-center gap-2">
@@ -332,9 +332,9 @@ export default function BranchLedgerPage() {
             </div>
 
             {/* Ledger Table */}
-            <div className="flex-1 overflow-auto flex flex-col bg-white dark:bg-slate-800">
-              <div className="overflow-x-auto min-w-full inline-block align-middle">
-                <table className="min-w-full text-left border-collapse">
+            <div className="flex-1 overflow-auto flex flex-col bg-white dark:bg-slate-800 w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-left border-collapse min-w-[650px]">
                   <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 z-10 border-b border-slate-200 dark:border-slate-700 shadow-sm">
                     <tr className="text-xs uppercase font-bold tracking-wider text-slate-500 dark:text-slate-400">
                       <th className="px-6 py-4 whitespace-nowrap">Date</th>

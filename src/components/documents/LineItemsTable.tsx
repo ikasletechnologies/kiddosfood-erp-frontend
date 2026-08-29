@@ -165,9 +165,9 @@ export default function LineItemsTable() {
   });
 
   return (
-    <div className="w-full">
+    <div className="w-full min-w-0">
       <div className={clsx(
-        "w-full transition-all overflow-x-auto",
+        "w-full max-w-full transition-all overflow-x-auto custom-scrollbar",
         activeSearchId ? "min-h-[460px] pb-80" : ""
       )}>
         <table className="w-full text-left border-collapse table-auto min-w-[760px]">

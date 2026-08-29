@@ -892,20 +892,20 @@ export default function SalesInvoicesPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4 w-full min-w-0">
           {/* Party + Invoice Meta */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
-            <div className="grid grid-cols-2 gap-8">
-              <div className="space-y-2">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+              <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Party</p>
                 <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white">{inv.partyType || "CUSTOMER"}</span></p>
-                <p className="text-base font-bold text-gray-800 dark:text-white">{customer.name || inv.customerName || "—"}</p>
+                <p className="text-base font-bold text-gray-800 dark:text-white truncate">{customer.name || inv.customerName || "—"}</p>
                 {customer.contact && <p className="text-sm text-gray-500 dark:text-slate-400">{customer.contact}</p>}
                 {customer.phone && <p className="text-sm text-gray-500 dark:text-slate-400">{customer.phone}</p>}
-                {customer.email && <p className="text-xs text-gray-400 dark:text-slate-500">{customer.email}</p>}
+                {customer.email && <p className="text-xs text-gray-400 dark:text-slate-500 truncate">{customer.email}</p>}
                 {customer.gstNumber && <p className="text-xs text-gray-400 dark:text-slate-500">GSTIN: {customer.gstNumber}</p>}
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Invoice Details</p>
                 <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-800 dark:text-white">{inv.invoiceNum || "—"}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Date</span><span className="text-gray-700 dark:text-slate-300">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
@@ -917,11 +917,12 @@ export default function SalesInvoicesPage() {
           </div>
 
           {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
             <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
             </div>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[650px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                   <th className="px-4 py-2.5 text-left w-8">#</th>
@@ -954,12 +955,13 @@ export default function SalesInvoicesPage() {
               </tbody>
             </table>
           </div>
+        </div>
 
           {/* Totals + Payment */}
-          <div className="flex gap-4 items-start">
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
             {/* Payment history */}
             {payments.length > 0 && (
-              <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4">
+              <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase mb-2">Payment History</p>
                 <div className="space-y-1">
                   {payments.map((p: any, i: number) => (
@@ -975,13 +977,13 @@ export default function SalesInvoicesPage() {
               </div>
             )}
 
-            {/* Summary */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-72 shrink-0 space-y-2 ml-auto">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono text-gray-800 dark:text-slate-200">₹{Number(inv.subTotal || 0).toFixed(2)}</span></div>
+            {/* Summary card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2">
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(inv.subTotal || 0).toFixed(2)}</span></div>
               {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Tax</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
-              {(inv.discountAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Discount</span><span className="font-mono text-red-500 dark:text-red-400">-₹{Number(inv.discountAmount || 0).toFixed(2)}</span></div>}
-              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between font-bold text-base"><span className="dark:text-slate-200">Total</span><span className="font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400">Paid</span><span className="font-mono text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Round Off</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span></div>
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between"><span className="font-bold text-gray-800 dark:text-white">Total</span><span className="text-lg font-bold font-mono text-orange-500">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400 font-medium">Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm font-semibold"><span className={balanceAmt > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>Balance</span><span className={clsx("font-mono", balanceAmt > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>₹{balanceAmt.toFixed(2)}</span></div>
             </div>
           </div>
@@ -994,19 +996,18 @@ export default function SalesInvoicesPage() {
   // CREATE VIEW — Vyapar-style full-page form
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
-
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100" style={{ height: 'calc(100vh - 104px)' }}>
 
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors cursor-pointer">
               <ArrowLeft size={17} />
             </button>
-            <h2 className="text-base font-semibold text-gray-800 dark:text-white">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
+            <h2 className="text-sm sm:text-base font-semibold text-gray-800 dark:text-white">{draftId ? "Edit Draft Invoice" : "New Sale Invoice"}</h2>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {!isFranchiseUser && (
               <select
                 value={selectedFranchiseId}
@@ -1024,13 +1025,13 @@ export default function SalesInvoicesPage() {
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4 w-full min-w-0">
 
           {/* Customer + Invoice Details */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5">
-            <div className="grid grid-cols-2 gap-8">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               {/* Left: Customer */}
-              <div className="space-y-3">
+              <div className="space-y-3 min-w-0">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Customer *</label>
                   <div className="relative" ref={customerDropRef}>
@@ -1178,8 +1179,8 @@ export default function SalesInvoicesPage() {
               </div>
             </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <table className="w-full text-sm border-collapse">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
                     <th className="w-8 px-3 py-2.5 text-center">#</th>
@@ -1438,9 +1439,9 @@ export default function SalesInvoicesPage() {
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex justify-between items-start pt-4 px-4 pb-8 bg-gray-50/30 dark:bg-white/[0.01] rounded-xl border border-gray-200/50 dark:border-white/5">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-start gap-4 pt-4 px-4 pb-8 bg-gray-50/30 dark:bg-white/[0.01] rounded-xl border border-gray-200/50 dark:border-white/5 w-full min-w-0">
             {/* Left: Terms and Conditions */}
-            <div className="w-64">
+            <div className="w-full lg:w-64 min-w-0">
               {!showTerms ? (
                 <button onClick={() => setShowTerms(true)} className="flex items-center gap-2 text-xs font-bold text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded px-4 py-2 transition-colors uppercase w-full justify-center shadow-sm cursor-pointer">
                   <AlignLeft size={14} /> ADD TERMS AND CONDITIONS
@@ -1451,7 +1452,7 @@ export default function SalesInvoicesPage() {
             </div>
 
             {/* Middle: Payment Type and Attachments */}
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex flex-col items-start w-32 relative mt-2">
                 <span className="text-[10px] text-gray-500 dark:text-slate-400 absolute -top-2 left-2 bg-gray-50 dark:bg-card px-1 z-10">Payment Type</span>
                 <select
@@ -1479,7 +1480,7 @@ export default function SalesInvoicesPage() {
             </div>
 
             {/* Right: Summary */}
-            <div className="w-72 flex flex-col items-end gap-2 text-xs font-semibold text-gray-700 dark:text-slate-200">
+            <div className="w-full lg:w-80 flex flex-col items-end gap-2 text-xs font-semibold text-gray-700 dark:text-slate-200">
               <div className="flex items-center gap-3 w-full justify-end">
                 <label className="flex items-center gap-1.5 cursor-pointer mr-2">
                   <input type="checkbox" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-blue-500" />
@@ -1735,8 +1736,9 @@ export default function SalesInvoicesPage() {
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>
@@ -1814,8 +1816,8 @@ export default function SalesInvoicesPage() {
                             <>
                               <button
                                 onClick={(e) => { 
-                                  e.stopPropagation(); 
-                                  router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
+                                   e.stopPropagation(); 
+                                   router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
                                 }}
                                 className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
                                 title="Create Delivery Challan"
@@ -1845,6 +1847,7 @@ export default function SalesInvoicesPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 

@@ -104,97 +104,100 @@ export default function RawMaterialConsumptionClient() {
   const expiryValue = filtered.filter(i => i.consumptionType === "Expiry").reduce((acc, i) => acc + (i.value || 0), 0);
 
   return (
-    <div className="space-y-5 text-gray-800 dark:text-slate-100">
+    <div className="space-y-4 sm:space-y-5 text-gray-800 dark:text-slate-100 w-full min-w-0">
       {/* Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
         {[
           { label: "Total Consumption", value: `₹${totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,      dot: "bg-gray-400" },
           { label: "Production Usage",  value: `₹${productionValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, dot: "bg-emerald-500" },
           { label: "Damage Disposal",   value: `₹${damageValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,     dot: "bg-amber-500" },
           { label: "Expiry Loss",       value: `₹${expiryValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,     dot: "bg-rose-500" },
         ].map((s) => (
-          <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
+          <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 min-w-0">
             <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
-            <div>
-              <p className="text-xs text-gray-500 dark:text-slate-400">{s.label}</p>
-              <p className="text-lg font-bold text-gray-700 dark:text-slate-100">{s.value}</p>
+            <div className="min-w-0">
+              <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 truncate">{s.label}</p>
+              <p className="text-base sm:text-lg font-bold text-gray-700 dark:text-slate-100 truncate">{s.value}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input
             type="text"
             placeholder="Search batch / material / reason..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+            className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
           />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
-            )}
+          {search && (
+            <X 
+              size={14} 
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+              onClick={() => setSearch("")} 
+            />
+          )}
         </div>
-        <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
-          {TYPE_FILTERS.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setTypeFilter(f.id)}
-              className={clsx(
-                "px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap",
-                typeFilter === f.id ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="overflow-x-auto custom-scrollbar max-w-full">
+          <div className="inline-flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-card">
+            {TYPE_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setTypeFilter(f.id)}
+                className={clsx(
+                  "px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap",
+                  typeFilter === f.id ? "bg-[#f58220] text-white font-bold" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
         <select
           value={selectedWarehouseId}
           onChange={(e) => setSelectedWarehouseId(e.target.value)}
-          className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 bg-white dark:bg-card text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
+          className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
         >
           <option value="">All Warehouses</option>
           {warehouses.map((w) => (
             <option key={w.id} value={w.id}>{w.name}</option>
           ))}
         </select>
-        <div className="flex-1" />
-        <button
-          onClick={downloadCSV}
-          className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 bg-white dark:bg-card transition-colors"
-        >
-          <Download className="h-3.5 w-3.5" /> Export
-        </button>
-        <button onClick={fetchItems} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">
-          <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
-        </button>
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={downloadCSV}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-medium text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 bg-white dark:bg-card transition-colors"
+          >
+            <Download className="h-3.5 w-3.5" /> Export
+          </button>
+          <button onClick={fetchItems} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors">
+            <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+          </button>
+        </div>
       </div>
 
       {/* Table */}
       {loading ? (
         <div className="py-20 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" /></div>
       ) : filtered.length === 0 ? (
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg py-20 flex flex-col items-center justify-center text-center space-y-4">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-20 flex flex-col items-center justify-center text-center space-y-4">
           <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
             <Database className="h-8 w-8 text-[#f58220]" />
           </div>
           <div>
-            <p className="text-gray-800 dark:text-white font-semibold">No Consumption Records Found</p>
-            <p className="text-gray-500 dark:text-slate-400 text-sm mt-1">Outward material movements will show up here.</p>
+            <p className="text-gray-800 dark:text-white font-semibold text-sm sm:text-base">No Consumption Records Found</p>
+            <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">Outward material movements will show up here.</p>
           </div>
         </div>
       ) : (
-        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">Date</th>

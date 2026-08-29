@@ -102,9 +102,9 @@ export default function DispatchTrackingPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-background min-h-screen text-slate-800 dark:text-slate-100">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-background min-h-screen text-slate-800 dark:text-slate-100 w-full min-w-0">
       {/* Header Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center border-b border-slate-200 dark:border-white/10 pb-4">
+      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center border-b border-slate-200 dark:border-white/10 pb-4 w-full min-w-0">
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <div className="flex items-center bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-lg p-1 shadow-sm">
             <div className="flex items-center px-2 text-slate-400 dark:text-slate-500"><Search size={14} /></div>
@@ -116,12 +116,12 @@ export default function DispatchTrackingPage() {
               className="bg-transparent border-none text-slate-700 dark:text-white focus:ring-0 p-1 font-semibold text-sm outline-none w-64 placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
-          <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
+          <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-lg overflow-x-auto custom-scrollbar max-w-full bg-white dark:bg-card">
             {["ALL", "IN_TRANSIT", "DELIVERED", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={clsx("px-3 py-2 text-xs font-semibold transition-colors", statusFilter === s ? "bg-orange-500 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5")}
+                className={clsx("px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap", statusFilter === s ? "bg-orange-500 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5")}
               >
                 {s === "ALL" ? "All" : getConf(s).label}
               </button>
@@ -130,7 +130,7 @@ export default function DispatchTrackingPage() {
           <button
             onClick={fetchTracking}
             title="Refresh Data"
-            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 shadow-sm transition-all duration-150 active:scale-95"
+            className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 shadow-sm transition-all duration-150 active:scale-95 shrink-0"
           >
             <RotateCcw size={16} className={clsx(loading && "animate-spin")} />
           </button>
@@ -138,14 +138,14 @@ export default function DispatchTrackingPage() {
       </div>
 
       {/* Stats Row — real record counts only */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap w-full min-w-0">
         {[
           { label: "Total Dispatches", value: stats.total, icon: Package, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-500/10", borderColor: "border-indigo-200 dark:border-indigo-500/20" },
           { label: "In Transit", value: stats.inTransit, icon: Truck, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-500/10", borderColor: "border-blue-200 dark:border-blue-500/20" },
           { label: "Delivered", value: stats.delivered, icon: CheckCircle2, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", borderColor: "border-emerald-200 dark:border-emerald-500/20" },
           { label: "Delayed", value: stats.delayed, icon: AlertTriangle, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", borderColor: "border-rose-200 dark:border-rose-500/20" },
         ].map((s) => (
-          <div key={s.label} className={clsx("flex items-center gap-3 px-4 py-3 rounded-xl border shadow-sm bg-white dark:bg-card", s.borderColor)}>
+          <div key={s.label} className={clsx("flex items-center gap-3 px-4 py-3 rounded-xl border shadow-sm bg-white dark:bg-card flex-1 min-w-[150px]", s.borderColor)}>
             <div className={clsx("p-2 rounded-lg", s.bg)}><s.icon size={16} className={s.color} /></div>
             <div>
               <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{s.label}</p>
@@ -156,7 +156,7 @@ export default function DispatchTrackingPage() {
       </div>
 
       {/* Shipments Table */}
-      <div className="bg-white dark:bg-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-card border border-slate-200 dark:border-white/5 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
         {loading ? (
           <div className="py-20 text-center space-y-3">
             <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -168,8 +168,8 @@ export default function DispatchTrackingPage() {
             <p className="text-sm font-semibold text-slate-400 dark:text-slate-500">{search || statusFilter !== "ALL" ? "No dispatches match your filters." : "No dispatches yet."}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="bg-slate-50 dark:bg-white/[0.02] border-y border-slate-200 dark:border-white/5">
                   <th className="px-4 sm:px-5 py-3 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">Dispatch ID</th>

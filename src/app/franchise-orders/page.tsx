@@ -533,10 +533,10 @@ export default function FranchiseOrdersPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0 animate-in fade-in duration-500">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0 animate-in fade-in duration-500 w-full min-w-0">
       
       {/* Header Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4">
+      <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4 w-full min-w-0">
 
         {isFranchiseAdmin && franchiseData && (
           <div className="hidden lg:flex items-center gap-4 text-xs font-semibold px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
@@ -599,7 +599,7 @@ export default function FranchiseOrdersPage() {
       )}
 
       {/* Stats Summary Row */}
-      <div className="flex flex-col lg:flex-row gap-4 print:hidden">
+      <div className="flex flex-col lg:flex-row gap-4 print:hidden w-full min-w-0">
         <div className="flex items-center gap-3 flex-1 flex-wrap">
           {[
             { label: "Pending", value: statsMap.PENDING, icon: Clock, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/20", border: "border-amber-200 dark:border-amber-900/30" },
@@ -622,7 +622,7 @@ export default function FranchiseOrdersPage() {
       </div>
 
       {/* Status Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-2 print:hidden">
+      <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2 print:hidden max-w-full">
         {["ALL", "PENDING", "APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED", "CANCELLED"].map(s => (
           <button
             key={s}

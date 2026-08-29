@@ -211,23 +211,23 @@ export default function StockReconciliationPage() {
       </div>
 
       {/* Summary Stats Bar */}
-      <div className="flex items-center gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 p-3 rounded-xl shadow-sm print:hidden">
-        <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none">
+      <div className="flex items-center gap-3 sm:gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 p-3 rounded-xl shadow-sm print:hidden overflow-x-auto custom-scrollbar max-w-full">
+        <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none shrink-0">
           Summary :
         </span>
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex items-center gap-4 sm:gap-6 text-xs sm:text-sm shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Total Items</span>
+            <span className="text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">Total Items</span>
             <span className="font-black text-slate-900 dark:text-white">{sheet.length}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Counted</span>
+            <span className="text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">Counted</span>
             <span className="font-black text-orange-600 dark:text-orange-400">
               {enteredCount}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 dark:text-slate-400 font-semibold">Remaining</span>
+            <span className="text-slate-500 dark:text-slate-400 font-semibold whitespace-nowrap">Remaining</span>
             <span className="font-black text-slate-900 dark:text-white">
               {sheet.length - enteredCount}
             </span>
@@ -236,7 +236,7 @@ export default function StockReconciliationPage() {
       </div>
 
       {/* Main Report Container */}
-      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden print:border-none print:shadow-none print:p-0">
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden print:border-none print:shadow-none print:p-0 w-full min-w-0">
         {/* Print Header Block */}
         <div className="hidden print:block text-center mb-8 border-b-2 border-slate-900 pb-5 p-6">
           <h1 className="text-2xl font-black uppercase text-slate-900">
@@ -263,8 +263,8 @@ export default function StockReconciliationPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto select-text">
-            <table className="w-full text-left border-collapse">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full select-text">
+            <table className="w-full text-left border-collapse min-w-[580px]">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-700/60">
                   <th className="px-4 sm:px-5 py-3 text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">

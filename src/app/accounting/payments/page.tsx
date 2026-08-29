@@ -249,72 +249,75 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-12 py-4 animate-in fade-in duration-700 text-slate-800 dark:text-slate-100">
+    <div className="max-w-6xl mx-auto space-y-6 sm:space-y-12 p-4 sm:p-6 py-4 animate-in fade-in duration-700 text-slate-800 dark:text-slate-100 w-full min-w-0">
       {/* Refined Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 border-b border-gray-100 dark:border-white/5 pb-10">
-        <div className="space-y-3">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 sm:gap-8 border-b border-gray-100 dark:border-white/5 pb-6 sm:pb-10 w-full min-w-0">
+        <div className="space-y-3 min-w-0">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-8 bg-orange-500 rounded-full" />
-            <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Payments</h1>
+            <div className="w-2 h-8 bg-orange-500 rounded-full shrink-0" />
+            <h1 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">Payments</h1>
           </div>
-          <p className="text-sm font-medium text-slate-400 dark:text-slate-400 max-w-md leading-relaxed">
+          <p className="text-xs sm:text-sm font-medium text-slate-400 dark:text-slate-400 max-w-md leading-relaxed">
             Unified money control centre tracing all income and accounts payable.
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
           <button
             onClick={fetchFinancials}
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all active:scale-90"
+            className="w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-all active:scale-90 shrink-0"
+            title="Refresh payments"
           >
             <RefreshCw size={18} className={clsx(loading && "animate-spin")} />
           </button>
           <button
             onClick={() => { setTransferForm({ fromAccountId: "", toAccountId: "", amount: "", note: "" }); setShowTransferModal(true); }}
-            className="flex items-center gap-3 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white px-6 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 shadow-sm"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-2 sm:gap-3 bg-white dark:bg-card border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white px-4 sm:px-6 py-3 sm:py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 shadow-sm whitespace-nowrap text-center"
           >
-            <RefreshCw size={16} /> Internal Transfer
+            <RefreshCw size={16} className="shrink-0" />
+            <span>Internal Transfer</span>
           </button>
           <button
             onClick={openModal}
-            className="flex items-center gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 pl-6 pr-8 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-black dark:hover:bg-slate-200 hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-slate-900/10"
+            className="flex-1 sm:flex-initial justify-center flex items-center gap-2 sm:gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 sm:px-6 py-3 sm:py-4 rounded-2xl text-xs font-black uppercase tracking-[0.15em] transition-all hover:bg-black dark:hover:bg-slate-200 hover:-translate-y-0.5 active:translate-y-0 shadow-lg shadow-slate-900/10 whitespace-nowrap text-center"
           >
-            <Plus size={16} strokeWidth={3} /> Record Payment
+            <Plus size={16} strokeWidth={3} className="shrink-0" />
+            <span>Record Payment</span>
           </button>
         </div>
       </div>
 
       {/* Elegant Metrics Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-8 px-2">
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest">Total Inflow</p>
-          <p className="text-xl font-black tabular-nums text-emerald-500 dark:text-emerald-400">₹{totalIn.toLocaleString()}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-8 px-1 sm:px-2 w-full min-w-0">
+        <div className="space-y-1 min-w-0">
+          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest truncate">Total Inflow</p>
+          <p className="text-lg sm:text-xl font-black tabular-nums text-emerald-500 dark:text-emerald-400 truncate">₹{totalIn.toLocaleString()}</p>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest">Total Outflow</p>
-          <p className="text-xl font-black tabular-nums text-orange-500 dark:text-orange-400">₹{totalOut.toLocaleString()}</p>
+        <div className="space-y-1 min-w-0">
+          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest truncate">Total Outflow</p>
+          <p className="text-lg sm:text-xl font-black tabular-nums text-orange-500 dark:text-orange-400 truncate">₹{totalOut.toLocaleString()}</p>
         </div>
-        <div className="space-y-1 border-l border-slate-100 dark:border-white/5 pl-8">
-          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest">Cash Balance</p>
-          <p className="text-xl font-black tabular-nums text-slate-900 dark:text-white">₹{cashFlow?.breakdown?.cash.toLocaleString() || "0"}</p>
+        <div className="space-y-1 sm:border-l border-slate-100 dark:border-white/5 sm:pl-8 min-w-0">
+          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest truncate">Cash Balance</p>
+          <p className="text-lg sm:text-xl font-black tabular-nums text-slate-900 dark:text-white truncate">₹{cashFlow?.breakdown?.cash.toLocaleString() || "0"}</p>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest">Bank Balance</p>
-          <p className="text-xl font-black tabular-nums text-slate-900 dark:text-white">₹{cashFlow?.breakdown?.bank.toLocaleString() || "0"}</p>
+        <div className="space-y-1 min-w-0">
+          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest truncate">Bank Balance</p>
+          <p className="text-lg sm:text-xl font-black tabular-nums text-slate-900 dark:text-white truncate">₹{cashFlow?.breakdown?.bank.toLocaleString() || "0"}</p>
         </div>
-        <div className="space-y-1">
-          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest">UPI Wallet</p>
-          <p className="text-xl font-black tabular-nums text-slate-900 dark:text-white">₹{cashFlow?.breakdown?.upi.toLocaleString() || "0"}</p>
+        <div className="space-y-1 min-w-0 col-span-2 sm:col-span-1">
+          <p className="text-[10px] font-black text-slate-300 dark:text-slate-500 uppercase tracking-widest truncate">UPI Wallet</p>
+          <p className="text-lg sm:text-xl font-black tabular-nums text-slate-900 dark:text-white truncate">₹{cashFlow?.breakdown?.upi.toLocaleString() || "0"}</p>
         </div>
       </div>
 
       {/* Minimalist Search & Filter */}
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-          <div className="flex p-1 bg-slate-50 dark:bg-white/5 rounded-2xl shrink-0">
+      <div className="flex flex-col gap-4 sm:gap-6 w-full min-w-0">
+        <div className="flex flex-col md:flex-row gap-3 sm:gap-4 justify-between items-stretch md:items-center w-full min-w-0">
+          <div className="flex p-1 bg-slate-50 dark:bg-white/5 rounded-2xl shrink-0 overflow-x-auto custom-scrollbar max-w-full">
             {(["ALL", "IN", "OUT"] as FlowType[]).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={clsx("px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all",
+                className={clsx("flex-1 sm:flex-initial px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all whitespace-nowrap",
                   activeTab === tab ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 )}>
                 {tab === "ALL" ? "All History" : tab === "IN" ? "Customer (IN)" : "Vendor (OUT)"}
@@ -322,19 +325,19 @@ export default function PaymentsPage() {
             ))}
           </div>
 
-          <div className="relative group w-full md:w-auto md:min-w-[400px]">
-            <Search size={16} className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-500 group-focus-within:text-orange-500 transition-colors" />
+          <div className="relative group w-full md:w-auto md:min-w-[320px] lg:min-w-[400px]">
+            <Search size={16} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-500 group-focus-within:text-orange-500 transition-colors" />
             <input 
               type="text" 
               placeholder="Search payment # or entity..." 
               value={search} 
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-14 pr-6 py-4 bg-slate-50/50 dark:bg-white/5 border border-transparent dark:border-white/5 rounded-2xl font-bold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-card focus:ring-4 focus:ring-slate-100 dark:focus:ring-white/5 outline-none transition-all" 
+              className="w-full pl-11 sm:pl-14 pr-10 py-3 sm:py-4 bg-slate-50/50 dark:bg-white/5 border border-transparent dark:border-white/5 rounded-2xl font-bold text-xs sm:text-sm text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:bg-white dark:focus:bg-card focus:ring-4 focus:ring-slate-100 dark:focus:ring-white/5 outline-none transition-all" 
             />
             {search && (
               <X 
                 size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
                 onClick={() => setSearch("")} 
               />
             )}
@@ -423,9 +426,9 @@ export default function PaymentsPage() {
           <p className="text-slate-400 font-medium">No payment history matches your filters.</p>
         </div>
       ) : (
-        <div className="border border-slate-100 dark:border-white/5 rounded-[2rem] overflow-hidden bg-white dark:bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+        <div className="border border-slate-100 dark:border-white/5 rounded-[2rem] overflow-hidden bg-white dark:bg-card shadow-sm w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02]">
                   <th className="px-6 py-5 text-[10px] uppercase font-black tracking-widest text-slate-400 dark:text-slate-400">Date & No</th>

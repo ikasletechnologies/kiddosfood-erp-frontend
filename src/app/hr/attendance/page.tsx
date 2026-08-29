@@ -67,9 +67,9 @@ export default function AttendancePage() {
   const fmtTime = (iso?: string) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : null;
 
   return (
-    <div className="p-6 space-y-6 text-slate-800 dark:text-slate-100">
-      <div className="flex items-center justify-end">
-        <div className="relative w-64">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 text-slate-800 dark:text-slate-100 w-full min-w-0">
+      <div className="flex items-center justify-end w-full min-w-0">
+        <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 dark:text-slate-500" />
           <input
             type="text"
@@ -88,8 +88,9 @@ export default function AttendancePage() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white dark:bg-card rounded-xl border border-gray-100 dark:border-white/5 shadow-sm overflow-hidden w-full min-w-0">
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-sm min-w-[500px]">
           <thead className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
             <tr>
               {["Employee", "Clock In", "Clock Out", "Action"].map((h) => (
@@ -140,5 +141,6 @@ export default function AttendancePage() {
         </table>
       </div>
     </div>
+  </div>
   );
 }

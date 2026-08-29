@@ -484,11 +484,12 @@ export default function GRNPage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {view === "HISTORY" ? (
           /* ── HISTORY VIEW ── */
-          <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="px-4 py-3 text-left">GRN #</th>
@@ -561,6 +562,7 @@ export default function GRNPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         ) : step === 1 ? (
           /* ── STEP 1: SELECT PO ── */
@@ -631,25 +633,25 @@ export default function GRNPage() {
           /* ── STEP 2: VERIFY QUANTITIES ── */
           <div className="space-y-5">
             {/* ── Summary KPI Strip (Top) ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
               {[
                 { label: "Ordered Quantity", value: grnItems.reduce((s, i) => s + i.quantity, 0), color: "text-gray-800 dark:text-slate-200", dot: "bg-gray-400" },
                 { label: "Received Quantity", value: grnItems.reduce((s, i) => s + i.receivedQty, 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
                 { label: "Rejected Quantity", value: grnItems.reduce((s, i) => s + i.rejectedQty, 0), color: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
                 { label: "Accepted Quantity", value: grnItems.reduce((s, i) => s + i.acceptedQty, 0), color: "text-green-600 dark:text-green-400", dot: "bg-green-500" },
               ].map(stat => (
-                <div key={stat.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
+                <div key={stat.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
                   <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">{stat.label}</p>
-                    <p className={clsx("text-lg font-bold mt-0.5", stat.color)}>{stat.value}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">{stat.label}</p>
+                    <p className={clsx("text-base sm:text-lg font-bold mt-0.5 truncate", stat.color)}>{stat.value}</p>
                   </div>
                 </div>
               ))}
             </div>
 
             {/* Verify Shipment Header Card */}
-            <div className="bg-white dark:bg-card p-4 rounded-lg border border-gray-200 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4 w-full min-w-0">
               <div>
                 <h2 className="text-sm font-bold text-gray-800 dark:text-white">Verify Shipment Content</h2>
                 <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
@@ -689,9 +691,9 @@ export default function GRNPage() {
             </div>
 
             {/* Materials Table */}
-            <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[850px]">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                       <th className="px-4 py-3 text-left">Material</th>

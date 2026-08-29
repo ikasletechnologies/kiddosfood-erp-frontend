@@ -1058,10 +1058,10 @@ export default function VendorsClient() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] -m-4 overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors">
+    <div className="flex flex-col md:flex-row min-h-screen md:h-[calc(100vh-100px)] bg-slate-50 dark:bg-[#0b0c14] overflow-hidden selection:bg-orange-500/30 selection:text-orange-500 transition-colors w-full min-w-0">
 
       {/* Sidebar */}
-      <div className="w-[300px] border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-[#0b0c14] relative z-10">
+      <div className="w-full md:w-[300px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-[#0b0c14] relative z-10 min-w-0 max-h-[300px] md:max-h-full">
         
         {/* Search & Action Header */}
         <div className="p-3 border-b border-slate-200 dark:border-white/5 flex items-center gap-2">

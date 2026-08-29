@@ -137,16 +137,16 @@ export default function ApprovalsPage() {
   };
 
   return (
-    <div className="space-y-6 text-slate-900 dark:text-white p-2">
+    <div className="space-y-4 sm:space-y-6 text-slate-900 dark:text-white p-4 sm:p-6 w-full min-w-0">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full min-w-0">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500 shrink-0">
               <Workflow size={20} />
             </div>
             <div>
-              <h1 className="text-2xl font-black uppercase tracking-tight">Approval Workflow System</h1>
+              <h1 className="text-xl sm:text-2xl font-black uppercase tracking-tight">Approval Workflow System</h1>
               <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">Control operational accountability & sign-off gates</p>
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Your Access */}
-      <div className="bg-white dark:bg-card/40 backdrop-blur-xl border border-slate-100 dark:border-white/5 rounded-3xl p-5 shadow-sm">
+      <div className="bg-white dark:bg-card/40 backdrop-blur-xl border border-slate-100 dark:border-white/5 rounded-3xl p-4 sm:p-5 shadow-sm w-full min-w-0">
         <div className="flex items-center gap-2 mb-3">
           <ShieldCheck className="text-orange-500" size={18} />
           <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Your Access</h2>
@@ -173,13 +173,13 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Main Workflow Switch Tabs */}
-      <div className="flex gap-2 border-b border-slate-200 dark:border-white/10 pb-px">
+      <div className="flex gap-2 border-b border-slate-200 dark:border-white/10 pb-px overflow-x-auto custom-scrollbar max-w-full">
         {[
           { key: "PURCHASE", label: "Purchase Approvals", desc: "Procurement & vendor chain" },
           { key: "PRODUCTION", label: "Production Approvals", desc: "Formulation to finished goods" },
           { key: "EXPENSE", label: "Expense Approvals", desc: "Operational spending releases" },
         ].map((tab) => {
-          const active = activeTab === tab.key;
+          const isActive = activeTab === tab.key;
           return (
             <button
               key={tab.key}
@@ -188,23 +188,26 @@ export default function ApprovalsPage() {
                 setSelectedItem(null);
               }}
               className={clsx(
-                "pb-3.5 px-4 text-left border-b-2 font-black text-xs uppercase tracking-wider transition-all",
-                active
-                  ? "border-orange-500 text-orange-500 dark:text-white"
-                  : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                "pb-3 pt-1 px-4 text-left transition-all relative shrink-0 whitespace-nowrap",
+                isActive
+                  ? "text-orange-500 dark:text-orange-400 font-black"
+                  : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold"
               )}
             >
-              <span>{tab.label}</span>
-              <span className="block text-[9px] font-semibold text-slate-400 dark:text-slate-500 mt-0.5 capitalize tracking-normal">{tab.desc}</span>
+              <span className="text-xs uppercase tracking-wider block">{tab.label}</span>
+              <span className="text-[9px] text-slate-400 font-normal block mt-0.5">{tab.desc}</span>
+              {isActive && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500 rounded-full" />
+              )}
             </button>
           );
         })}
       </div>
 
       {/* Visual Workflow Steps Panel */}
-      <div className="bg-slate-50 dark:bg-white/[0.01] rounded-3xl p-6 border border-slate-100 dark:border-white/5">
+      <div className="bg-slate-50 dark:bg-white/[0.01] rounded-3xl p-4 sm:p-6 border border-slate-100 dark:border-white/5 w-full min-w-0">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Pipeline Steps Flow</h3>
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 overflow-x-auto pb-2 scrollbar-thin">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 overflow-x-auto custom-scrollbar pb-2 max-w-full">
           {getStagesForCategory(activeTab).map((s, idx, arr) => {
             const isLast = idx === arr.length - 1;
             return (

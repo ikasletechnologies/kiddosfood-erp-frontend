@@ -441,8 +441,8 @@ export default function POSPage() {
 
   if (receipt) {
     return (
-      <div className="-m-6 flex h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50 dark:bg-background">
-        <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-4 overflow-hidden">
+      <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50 dark:bg-background p-4 w-full min-w-0">
+        <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-auto overflow-hidden">
           {/* Header */}
           <div className="px-6 py-5 text-center text-white" style={{ background: receipt.isCredit ? "#8b5cf6" : BRAND_ORANGE }}>
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -504,15 +504,15 @@ export default function POSPage() {
   const activeTab = PARTY_TABS.find(t => t.type === partyType)!;
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden bg-[#F5F6FA] dark:bg-background">
+    <div className="flex flex-col lg:flex-row min-h-screen lg:h-[calc(100vh-3.5rem)] bg-[#F5F6FA] dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
 
       {/* ── LEFT: Products ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         {/* Search bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 py-3 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 py-3 shrink-0 w-full min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
               <input
                 ref={searchRef}
@@ -532,29 +532,29 @@ export default function POSPage() {
             </div>
             <button
               onClick={() => { setShowScanner(true); setScannedProduct(null); }}
-              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-[#f58220] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs"
+              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-[#f58220] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0"
             >
               <Barcode size={15} /> Scan Barcode
             </button>
             <button
               onClick={handleReturnProduct}
-              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs"
+              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0"
             >
               <RotateCcw size={15} /> Return Product
             </button>
-            <button onClick={fetchProducts} className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+            <button onClick={fetchProducts} className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shrink-0">
               <RefreshCw size={15} className={productsLoading ? "animate-spin" : ""} />
             </button>
           </div>
 
           {/* Category tabs */}
-          <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex items-center gap-2 mt-3 overflow-x-auto custom-scrollbar pb-1 max-w-full">
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setActiveCat(cat)}
                 className={clsx(
-                  "shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors",
+                  "shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap",
                   activeCategory === cat
                     ? "bg-blue-600 text-white"
                     : "bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-white/10"
@@ -567,7 +567,7 @@ export default function POSPage() {
         </div>
 
         {/* Products grid */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
           {productsLoading ? (
             <div className="flex items-center justify-center h-40">
               <RefreshCw size={20} className="animate-spin text-blue-500" />
@@ -578,7 +578,7 @@ export default function POSPage() {
               <p className="text-sm">No products found</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
               {filtered.map(p => {
                 const inCart = cart.find(i => i.id === p.id);
 
@@ -588,7 +588,7 @@ export default function POSPage() {
                     onClick={() => addToCart(p)}
                     style={inCart ? { borderColor: BRAND_ORANGE, borderWidth: "1.5px" } : {}}
                     className={clsx(
-                      "group relative bg-white dark:bg-card border rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-95",
+                      "group relative bg-white dark:bg-card border rounded-2xl p-3 sm:p-4 text-left transition-all hover:shadow-md active:scale-95",
                       inCart ? "shadow-md" : "border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10",
                       p.noPrice && "opacity-50 cursor-not-allowed"
                     )}
@@ -634,7 +634,7 @@ export default function POSPage() {
       </div>
 
       {/* ── RIGHT: Order Panel ─────────────────────────────────────────────── */}
-      <div className="w-80 xl:w-96 bg-white dark:bg-card border-l border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0">
+      <div className="w-full lg:w-80 xl:w-96 bg-white dark:bg-card border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0 min-w-0">
 
         {/* Party type tabs */}
         <div className="border-b border-gray-100 dark:border-white/5 px-3 pt-3 pb-0 shrink-0">

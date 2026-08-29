@@ -113,13 +113,13 @@ export default function PurchaseOrdersClient() {
   const closeConfirm = () => setConfirmConfig({ ...confirmConfig, isOpen: false });
 
   useEffect(() => {
-    if (showPaymentModal || viewingDetailsPO) {
+    if (showPaymentModal || viewingDetailsPO || showSettings) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => { document.body.style.overflow = 'unset'; };
-  }, [showPaymentModal, viewingDetailsPO]);
+  }, [showPaymentModal, viewingDetailsPO, showSettings]);
 
   const currentCompany = companyProfile || FALLBACK_COMPANY;
   const isProfileComplete = !!(companyProfile?.name && companyProfile?.gstin && companyProfile?.address);
@@ -360,33 +360,33 @@ export default function PurchaseOrdersClient() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-5 space-y-5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {/* ── Summary Strip ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: "Total Spend", value: formatCurrency(totalSpend), color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
             { label: "Pending GRNs", value: String(orders.filter(o => o.status === 'APPROVED' || o.status === 'SENT').length), color: "text-[#f58220]", dot: "bg-[#f58220]" },
             { label: "All Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), color: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
           ].map((card) => (
-            <div key={card.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm">
+            <div key={card.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", card.dot)} />
-              <div>
-                <p className="text-xs text-gray-500 dark:text-slate-400">{card.label}</p>
-                <p className={clsx("text-lg font-bold mt-0.5", card.color)}>{card.value}</p>
+              <div className="min-w-0">
+                <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{card.label}</p>
+                <p className={clsx("text-base sm:text-lg font-bold mt-0.5 truncate", card.color)}>{card.value}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* ── Filters Row ── */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[240px] max-w-sm">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search orders..."
-              className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
               <X 
@@ -397,13 +397,13 @@ export default function PurchaseOrdersClient() {
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
+          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto custom-scrollbar bg-white dark:bg-card max-w-full">
             {["ALL", "PENDING_APPROVAL", "APPROVED", "RECEIVED", "CLOSED"].map(s => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
                 className={clsx(
-                  "px-3 py-2 text-xs font-medium transition-colors",
+                  "px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap",
                   filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
@@ -414,9 +414,9 @@ export default function PurchaseOrdersClient() {
         </div>
 
         {/* ── Table ── */}
-        <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+        <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <table className="w-full text-sm min-w-[800px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                   <th className="text-left px-4 py-3">PO No</th>
@@ -574,38 +574,47 @@ export default function PurchaseOrdersClient() {
       {viewingPO && <GSTInvoice order={viewingPO} vendor={viewingPO.vendor} companyDetails={currentCompany} documentType="PURCHASE_ORDER" onClose={() => setViewingPO(null)} />}
 
       {showSettings && mounted && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-          <div className="bg-white dark:bg-[#0f1117] w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-slate-100 dark:border-white/5 overflow-hidden">
-            <div className="p-8">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg" style={{ background: "linear-gradient(135deg, #f58220, #e8740e)", boxShadow: "0 8px 24px rgba(245,130,32,0.25)" }}>
-                    <Settings size={22} className="text-white" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Company Profile</h2>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Required for GST Invoices</p>
-                  </div>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
+          <div className="bg-white dark:bg-[#0f1117] w-full max-w-lg rounded-2xl sm:rounded-[2rem] shadow-2xl border border-slate-100 dark:border-white/5 overflow-hidden flex flex-col max-h-[calc(100dvh-24px)] sm:max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-4 sm:px-8 py-4 sm:py-5 border-b border-slate-100 dark:border-white/5 flex items-center justify-between shrink-0 bg-white dark:bg-[#0f1117]">
+              <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-lg shrink-0" style={{ background: "linear-gradient(135deg, #f58220, #e8740e)", boxShadow: "0 8px 24px rgba(245,130,32,0.25)" }}>
+                  <Settings size={20} className="text-white sm:w-[22px] sm:h-[22px]" />
                 </div>
-                <button onClick={() => { setShowSettings(false); setProfileRequiredForInvoice(false); setProfileErrors({}); }} className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400"><X size={18} /></button>
+                <div className="min-w-0">
+                  <h2 className="text-base sm:text-xl font-black text-slate-900 dark:text-white uppercase tracking-tight truncate">Company Profile</h2>
+                  <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5 truncate">Required for GST Invoices</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => { setShowSettings(false); setProfileRequiredForInvoice(false); setProfileErrors({}); }}
+                className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
 
+            {/* Modal Body */}
+            <div className="p-4 sm:p-8 overflow-y-auto custom-scrollbar flex-1 space-y-4">
               {profileRequiredForInvoice && !profileErrors._api && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-800 font-semibold">
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-900/40 rounded-xl text-xs text-amber-800 dark:text-amber-300 font-semibold">
                   Complete your company profile to generate GST Invoices. Fields marked * are required.
                 </div>
               )}
 
               {profileErrors._api && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-300 rounded-xl text-xs text-red-700 font-semibold">
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-900/40 rounded-xl text-xs text-red-700 dark:text-red-300 font-semibold">
                   {profileErrors._api}
                 </div>
               )}
 
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
                       Company Name <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -613,13 +622,13 @@ export default function PurchaseOrdersClient() {
                       value={editingProfile.name}
                       placeholder="My Restaurant"
                       onChange={(e) => { setEditingProfile({ ...editingProfile, name: e.target.value }); setProfileErrors({ ...profileErrors, name: "" }); }}
-                      className={clsx("w-full h-11 bg-slate-50 dark:bg-white/5 px-4 rounded-xl font-bold text-xs border", profileErrors.name ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10")}
+                      className={clsx("w-full h-10 sm:h-11 bg-slate-50 dark:bg-white/5 px-3.5 sm:px-4 rounded-xl font-bold text-xs border outline-none transition-colors", profileErrors.name ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                     />
-                    {profileErrors.name && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.name}</p>}
+                    {profileErrors.name && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.name}</p>}
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
                       GSTIN <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -628,28 +637,28 @@ export default function PurchaseOrdersClient() {
                       placeholder="22AAAAA0000A1Z5"
                       maxLength={15}
                       onChange={(e) => { setEditingProfile({ ...editingProfile, gstin: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15) }); setProfileErrors({ ...profileErrors, gstin: "" }); }}
-                      className={clsx("w-full h-11 bg-slate-50 dark:bg-white/5 px-4 rounded-xl font-bold text-xs border font-mono tracking-widest", profileErrors.gstin ? "border-red-400" : "border-slate-200 dark:border-white/10")}
+                      className={clsx("w-full h-10 sm:h-11 bg-slate-50 dark:bg-white/5 px-3.5 sm:px-4 rounded-xl font-bold text-xs border font-mono tracking-widest outline-none transition-colors", profileErrors.gstin ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                     />
-                    {profileErrors.gstin && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.gstin}</p>}
+                    {profileErrors.gstin && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.gstin}</p>}
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
                     Address <span className="text-red-500">*</span>
                   </label>
                   <textarea
                     value={editingProfile.address}
                     placeholder="Full registered address..."
                     onChange={(e) => { setEditingProfile({ ...editingProfile, address: e.target.value }); setProfileErrors({ ...profileErrors, address: "" }); }}
-                    className={clsx("w-full h-20 bg-slate-50 dark:bg-white/5 p-4 rounded-xl font-bold text-xs border resize-none", profileErrors.address ? "border-red-400" : "border-slate-200 dark:border-white/10")}
+                    className={clsx("w-full h-20 bg-slate-50 dark:bg-white/5 p-3.5 sm:p-4 rounded-xl font-bold text-xs border resize-none outline-none transition-colors", profileErrors.address ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                   />
-                  {profileErrors.address && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.address}</p>}
+                  {profileErrors.address && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.address}</p>}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
                       Phone <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -658,26 +667,26 @@ export default function PurchaseOrdersClient() {
                       placeholder="10-digit mobile"
                       maxLength={10}
                       onChange={(e) => { const v = e.target.value.replace(/\D/g, "").slice(0, 10); setEditingProfile({ ...editingProfile, phone: v }); setProfileErrors({ ...profileErrors, phone: "" }); }}
-                      className={clsx("w-full h-11 bg-slate-50 dark:bg-white/5 px-4 rounded-xl font-bold text-xs border", profileErrors.phone ? "border-red-400" : "border-slate-200 dark:border-white/10")}
+                      className={clsx("w-full h-10 sm:h-11 bg-slate-50 dark:bg-white/5 px-3.5 sm:px-4 rounded-xl font-bold text-xs border outline-none transition-colors", profileErrors.phone ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                     />
-                    {profileErrors.phone && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.phone}</p>}
+                    {profileErrors.phone && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.phone}</p>}
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Email</label>
                     <input
                       type="email"
                       value={editingProfile.email}
                       placeholder="Enter company email..."
                       onChange={(e) => { setEditingProfile({ ...editingProfile, email: e.target.value }); setProfileErrors({ ...profileErrors, email: "" }); }}
-                      className={clsx("w-full h-11 bg-slate-50 dark:bg-white/5 px-4 rounded-xl font-bold text-xs border", profileErrors.email ? "border-red-400" : "border-slate-200 dark:border-white/10")}
+                      className={clsx("w-full h-10 sm:h-11 bg-slate-50 dark:bg-white/5 px-3.5 sm:px-4 rounded-xl font-bold text-xs border outline-none transition-colors", profileErrors.email ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                     />
-                    {profileErrors.email && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.email}</p>}
+                    {profileErrors.email && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.email}</p>}
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">
                     State <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -685,23 +694,31 @@ export default function PurchaseOrdersClient() {
                     value={editingProfile.state}
                     placeholder="Tamil Nadu"
                     onChange={(e) => { setEditingProfile({ ...editingProfile, state: e.target.value }); setProfileErrors({ ...profileErrors, state: "" }); }}
-                    className={clsx("w-full h-11 bg-slate-50 dark:bg-white/5 px-4 rounded-xl font-bold text-xs border", profileErrors.state ? "border-red-400" : "border-slate-200 dark:border-white/10")}
+                    className={clsx("w-full h-10 sm:h-11 bg-slate-50 dark:bg-white/5 px-3.5 sm:px-4 rounded-xl font-bold text-xs border outline-none transition-colors", profileErrors.state ? "border-red-400 focus:ring-red-200" : "border-slate-200 dark:border-white/10 focus:border-[#f58220]")}
                   />
-                  {profileErrors.state && <p className="text-[10px] text-red-500 ml-1 mt-0.5">{profileErrors.state}</p>}
+                  {profileErrors.state && <p className="text-[10px] text-red-500 ml-1 mt-0.5 font-medium">{profileErrors.state}</p>}
                 </div>
               </div>
+            </div>
 
-              <div className="mt-8 flex gap-3">
-                <button onClick={() => { setShowSettings(false); setProfileRequiredForInvoice(false); setProfileErrors({}); }} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Cancel</button>
-                <button
-                  onClick={handleSaveProfile}
-                  disabled={profileSaving}
-                  className="flex-[2] py-4 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
-                  style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}
-                >
-                  {profileSaving ? "Saving..." : "Save Changes"}
-                </button>
-              </div>
+            {/* Modal Footer */}
+            <div className="px-4 sm:px-8 py-3 sm:py-5 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.02] flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => { setShowSettings(false); setProfileRequiredForInvoice(false); setProfileErrors({}); }}
+                className="px-4 sm:px-6 py-2.5 sm:py-3 text-[10px] sm:text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveProfile}
+                disabled={profileSaving}
+                className="px-5 sm:px-8 py-2.5 sm:py-3 text-white rounded-xl sm:rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest shadow-xl disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
+                style={{ background: "linear-gradient(135deg, #f58220, #e8740e)" }}
+              >
+                {profileSaving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </div>
         </div>,

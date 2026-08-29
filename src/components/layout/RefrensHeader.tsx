@@ -267,11 +267,11 @@ export default function RefrensHeader() {
     <>
       {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
 
-      <header className="w-full h-16 bg-white/95 dark:bg-[#0b0c10]/95 backdrop-blur-md border-b border-slate-200/70 dark:border-white/5 flex items-center px-4 sm:px-6 gap-3 sticky top-0 z-40">
+      <header className="w-full h-16 bg-white/95 dark:bg-[#0b0c10]/95 backdrop-blur-md border-b border-slate-200/70 dark:border-white/5 flex items-center px-3 sm:px-6 gap-1.5 sm:gap-3 sticky top-0 z-40">
         {/* ── Left: Hamburger toggles ──────────────────── */}
         <button
           onClick={toggleMobileOpen}
-          className="lg:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+          className="lg:hidden p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors shrink-0"
           aria-label="Toggle Navigation"
         >
           <MenuIcon size={19} />
@@ -279,7 +279,7 @@ export default function RefrensHeader() {
 
         <button
           onClick={toggleCollapsed}
-          className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+          className="hidden lg:flex p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors shrink-0"
           title="Toggle Sidebar"
         >
           <MenuIcon size={19} />
@@ -287,25 +287,27 @@ export default function RefrensHeader() {
 
         {/* Dynamic Page Title */}
         {pageTitle && (
-          <div className="flex items-center gap-3 pl-1 animate-in fade-in duration-200">
-            <div className="w-px h-5 bg-slate-200 dark:bg-white/10" />
-            <h1 className="text-[14px] font-black text-slate-900 dark:text-white tracking-tight uppercase">
-              {pageTitle}
+          <div className="flex items-center gap-2 sm:gap-3 pl-0.5 sm:pl-1 min-w-0 animate-in fade-in duration-200">
+            <div className="w-px h-5 bg-slate-200 dark:bg-white/10 shrink-0" />
+            <h1 className="text-xs sm:text-[14px] font-black text-slate-900 dark:text-white tracking-tight uppercase truncate">
+              <span className="sm:hidden">{pageTitle === "Executive Dashboard" ? "Executive" : pageTitle}</span>
+              <span className="hidden sm:inline">{pageTitle}</span>
             </h1>
           </div>
         )}
 
-        <div className="flex-1" />
+        <div className="flex-1 min-w-0" />
 
         {/* ── Right Navigation & User Controls ──────────── */}
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Spotlight Search Trigger */}
           <button
             type="button"
             onClick={() => setShowSearch(true)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/80 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white hover:border-slate-300 transition-all group"
+            className="flex items-center gap-2 p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/80 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white hover:border-slate-300 transition-all group"
+            title="Quick search (Ctrl+K)"
           >
-            <Search size={14} className="text-slate-400 group-hover:text-[#F58220] transition-colors" />
+            <Search size={14} className="text-slate-400 group-hover:text-[#F58220] transition-colors shrink-0" />
             <span className="hidden sm:inline font-medium">Quick search...</span>
             <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded px-1.5 py-0.5 shadow-sm">
               <Command size={10} /> K
@@ -336,7 +338,7 @@ export default function RefrensHeader() {
             </HBtn>
 
             {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/5">
                   <div className="flex items-center gap-2">
                     <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
@@ -427,13 +429,13 @@ export default function RefrensHeader() {
           </div>
 
           {/* User Profile Avatar & Menu */}
-          <div className="relative ml-1" ref={profileRef}>
+          <div className="relative ml-0.5 sm:ml-1" ref={profileRef}>
             <button
               onClick={() => {
                 setShowProfile((v) => !v);
                 setShowNotifications(false);
               }}
-              className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-white/10 group"
+              className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-white/10 group"
               aria-label="User profile options"
             >
               <div className="w-8 h-8 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 font-black text-xs group-hover:scale-105 transition-all shadow-sm uppercase">
@@ -457,7 +459,7 @@ export default function RefrensHeader() {
             </button>
 
             {showProfile && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
+              <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1.5rem)] max-w-xs sm:w-64 bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden z-50 animate-in zoom-in-95 duration-150">
                 <div className="px-5 py-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black text-sm flex items-center justify-center uppercase shadow-md">
                     {initials}

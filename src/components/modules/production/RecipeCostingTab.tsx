@@ -88,9 +88,9 @@ export default function RecipeCostingTab() {
     : 0;
 
   return (
-    <div className="space-y-6 text-gray-800 dark:text-slate-100">
+    <div className="space-y-4 sm:space-y-6 text-gray-800 dark:text-slate-100 w-full min-w-0">
       {/* Recipe selector */}
-      <div className="flex justify-between items-center bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 shadow-sm">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm w-full min-w-0">
         <div>
           <h3 className="text-sm font-bold text-gray-800 dark:text-white">Select Recipe to Cost</h3>
           <p className="text-xs text-gray-500 dark:text-slate-400">Analyze ingredient costs, simulate price changes and profit margin</p>
@@ -114,12 +114,12 @@ export default function RecipeCostingTab() {
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Recalculating rollups...</p>
         </div>
       ) : costData ? (
-        <div className="space-y-6 md:space-y-8">
+        <div className="space-y-6 md:space-y-8 w-full min-w-0">
 
           {/* Cost Rollup metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
 
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-5 space-y-2 relative overflow-hidden">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 space-y-2 relative overflow-hidden min-w-0 shadow-sm">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cost per Yield</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900 dark:text-white">₹{costData.costPerYieldUnit.toFixed(2)}</span>
@@ -128,7 +128,7 @@ export default function RecipeCostingTab() {
               <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold uppercase">Recipe Yield: {costData.yieldQty} {costData.yieldUnit || 'units'}</p>
             </div>
 
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-5 space-y-2 relative overflow-hidden">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 space-y-2 relative overflow-hidden min-w-0 shadow-sm">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Sale Price</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black text-slate-900 dark:text-white">₹{salePrice.toFixed(2)}</span>
@@ -137,7 +137,7 @@ export default function RecipeCostingTab() {
               <p className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold uppercase">From product pricing</p>
             </div>
 
-            <div className={`border rounded-2xl p-5 space-y-2 relative overflow-hidden ${grossMargin > 40 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : grossMargin > 20 ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
+            <div className={`border rounded-2xl p-4 sm:p-5 space-y-2 relative overflow-hidden min-w-0 shadow-sm ${grossMargin > 40 ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400' : grossMargin > 20 ? 'bg-amber-500/5 border-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-rose-500/5 border-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
               <span className="text-[9px] font-black uppercase tracking-widest opacity-80">Gross Profit Margin</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-black">{grossMargin.toFixed(1)}%</span>
@@ -151,16 +151,16 @@ export default function RecipeCostingTab() {
           </div>
 
           {/* Cost Rollup Breakdown table */}
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm">
-            <div className="p-6 border-b border-gray-200 dark:border-white/5">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm w-full min-w-0">
+            <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-white/5">
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <BarChart2 size={16} className="text-[#F97316]" />
                 Ingredient Cost Breakdown
               </h3>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-left border-collapse min-w-[550px]">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-white/[0.02] text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
                     <th className="py-4 px-6">Ingredient</th>

@@ -260,9 +260,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           </div>
         )}
 
-        <div className="grid grid-cols-12 gap-5">
+        <div className="grid grid-cols-12 gap-4 sm:gap-5 w-full min-w-0">
           {/* Left Main Content */}
-          <div className="col-span-12 lg:col-span-9 space-y-5">
+          <div className="col-span-12 lg:col-span-9 space-y-4 sm:space-y-5 min-w-0">
 
             {/* Meta Information Card */}
             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs">
@@ -501,7 +501,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           </div>
 
           {/* Right Sticky Sidebar */}
-          <div className="col-span-12 lg:col-span-3">
+          <div className="col-span-12 lg:col-span-3 min-w-0">
             <div className="sticky top-20 space-y-4">
               <DocumentSummary />
             </div>
