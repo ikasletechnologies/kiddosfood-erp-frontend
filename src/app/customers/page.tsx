@@ -255,20 +255,24 @@ export default function PartiesPage() {
     const cleanName = selectedCustomer.name.replace(/[^a-zA-Z0-9]/g, "_");
     const filename = `Customer_Transactions_${cleanName}_${new Date().toISOString().split("T")[0]}.xlsx`;
 
-    const headers = ["Type", "Number", "Date", "Total (₹)", "Balance (₹)"];
-    const rows = allTransactions.map((t) => [t.type, t.number, t.date, t.total, t.balance]);
+    const partyName = selectedCustomer.name;
+    const partyPhone = selectedCustomerDetail?.phone || selectedCustomer.phone || "-";
+    const partyEmail = selectedCustomerDetail?.email || selectedCustomer.email || "-";
+
+    const headers = ["Party Name", "Phone", "Email", "Transaction Type", "Invoice/Transaction Number", "Date", "Total (₹)", "Balance (₹)"];
+    const rows = allTransactions.map((t) => [partyName, partyPhone, partyEmail, t.type, t.number, t.date, t.total, t.balance]);
     const totalAmount = allTransactions.reduce((s, t) => s + t.total, 0);
     const totalBalance = allTransactions.reduce((s, t) => s + t.balance, 0);
 
     const aoa = [
       ["CUSTOMER TRANSACTIONS"],
-      [`Customer: ${selectedCustomer.name}`, `Phone: ${selectedCustomerDetail?.phone || selectedCustomer.phone || "-"}`],
+      [`Customer: ${partyName}`, `Phone: ${partyPhone}`, `Email: ${partyEmail}`],
       [`Generated: ${new Date().toLocaleDateString()}`],
       [],
       headers,
       ...rows,
       [],
-      ["TOTALS", "", "", totalAmount, totalBalance]
+      ["TOTALS", "", "", "", "", "", totalAmount, totalBalance]
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);

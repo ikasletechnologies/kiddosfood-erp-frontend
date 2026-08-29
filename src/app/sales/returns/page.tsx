@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Plus, Search, RefreshCw, ArrowLeft, Trash2, 
-  User, Building2, AlertTriangle, Receipt, Undo2, 
-  ChevronRight, Printer, FileSpreadsheet, Check, 
-  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, MoreVertical, X } from "lucide-react";
+import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
+  User, Building2, AlertTriangle, Receipt, Undo2,
+  ChevronRight, Printer, FileSpreadsheet, Check,
+  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X } from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
@@ -44,10 +44,9 @@ interface ReturnOrder {
   reason: string;
   refundAmount: number;
   refundMethod: string;
-  status: 'PENDING' | 'APPROVED' | 'COMPLETED' | 'REJECTED' | 'DRAFT';
+  status: 'PENDING' | 'APPROVED' | 'COMPLETED' | 'REJECTED';
   createdAt: string;
   items: ReturnItem[];
-  _rawState?: any;
 }
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -64,7 +63,7 @@ export default function SalesReturnsPage() {
   const { showToast } = useToast();
 
   // Navigation
-  const [view, setView] = useState<"list" | "create" | "edit">("list");
+  const [view, setView] = useState<"list" | "create">("list");
   const [returns, setReturns] = useState<ReturnOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -83,12 +82,20 @@ export default function SalesReturnsPage() {
   const [reason, setReason] = useState("");
   const [refundMethod, setRefundMethod] = useState("Original Method");
   const [submitting, setSubmitting] = useState(false);
-  const [draftId, setDraftId] = useState<string | null>(null);
-  const [returnNo, setReturnNo] = useState("1");
-  const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
   const [previewingReturn, setPreviewingReturn] = useState<ReturnOrder | null>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const currentCompany = companyProfile || FALLBACK_COMPANY;
+
+  // One idempotency key per "in-progress form" — stable across re-renders
+  // and across a Save-as-Draft→Submit retry of the SAME form, but replaced
+  // whenever a fresh create form is opened (resetForm). A double-click or
+  // network retry that fires handleSave twice sends the identical key both
+  // times, so the backend collapses it to the one return it already
+  // created instead of posting a second row. `submittingRef` is a second,
+  // synchronous guard: `submitting` state only blocks the button after a
+  // re-render, which a same-tick double click can slip past.
+  const submitKeyRef = useRef<string>(crypto.randomUUID());
+  const submittingRef = useRef(false);
 
   // ── Data Syncing ─────────────────────────────────────────────────────────────
 
@@ -98,27 +105,49 @@ export default function SalesReturnsPage() {
       .catch(() => {});
   }, []);
 
+  // The backend (POST/GET /api/sales/returns) is the single source of
+  // truth — there used to be a parallel localStorage "fallback" that wrote
+  // its own fake copy of every submitted return alongside the real backend
+  // row, which is exactly what produced two rows (a fully-populated local
+  // one and a real-but-unmapped backend one) from a single submit. Backend
+  // rows come back with relations (customer/salesOrder/franchiseOrder/
+  // posOrder), not the flat display fields this UI wants, so normalize them
+  // here instead of resurrecting a client-side shadow copy.
+  const normalizeReturn = (r: any): ReturnOrder => {
+    const orderRef = r.posOrder || r.salesOrder || r.franchiseOrder;
+    return {
+      id: r.id,
+      returnNumber: r.returnNumber,
+      source: r.franchiseId ? 'FRANCHISE' : 'PARTNER',
+      entityId: r.customerId || r.franchiseId || '',
+      entityName: r.customer?.name || r.franchise?.name || 'Walk-in Partner',
+      entityPhone: r.customer?.phone || '',
+      orderRefId: r.posOrderId || r.salesOrderId || r.franchiseOrderId || '',
+      orderRefNumber: orderRef?.invoiceNum || orderRef?.orderNumber || orderRef?.challanNumber || 'Direct',
+      reason: r.reason,
+      refundAmount: Number(r.refundAmount) || 0,
+      refundMethod: r.refundMethod || 'Original Method',
+      status: r.status,
+      createdAt: r.createdAt,
+      items: (r.items || []).map((it: any) => ({
+        productId: it.productId || '',
+        productName: it.productName,
+        orderQuantity: it.quantity,
+        returnQuantity: it.quantity,
+        rate: it.rate,
+        condition: it.condition || 'Good',
+      })),
+    };
+  };
+
   const fetchReturns = useCallback(async () => {
     setLoading(true);
     try {
-      let fetched: ReturnOrder[] = [];
-      try {
-        const res = await salesApi.getReturns();
-        fetched = res.data || [];
-      } catch (err) {
-        console.log("No backend returns endpoint active. Using LocalStorage fallback.");
-      }
-
-      // Merge with LocalStorage
-      const localData = localStorage.getItem("sales_returns");
-      if (localData) {
-        const locals = JSON.parse(localData);
-        const apiIds = new Set(fetched.map(x => x.id));
-        const uniqueLocals = locals.filter((l: any) => !apiIds.has(l.id));
-        fetched = [...uniqueLocals, ...fetched];
-      }
-
+      const res = await salesApi.getReturns();
+      const fetched = (res.data || []).map(normalizeReturn);
       setReturns(fetched);
+    } catch (err) {
+      showToast("Failed to load returns", "error");
     } finally {
       setLoading(false);
     }
@@ -154,21 +183,10 @@ export default function SalesReturnsPage() {
   };
 
   useEffect(() => {
-    if (view === "create" || view === "edit") {
+    if (view === "create") {
       loadFormSelections(returnSource);
     }
   }, [view, returnSource]);
-
-  // Auto increment Return No
-  useEffect(() => {
-    if (view === "create" && !draftId) {
-      const numericNos = returns
-        .map(o => parseInt(o.returnNumber.replace(/[^0-9]/g, "")))
-        .filter(n => !isNaN(n));
-      const nextNo = numericNos.length > 0 ? Math.max(...numericNos) + 1 : 1;
-      setReturnNo(`RT-${nextNo}`);
-    }
-  }, [view, returns, draftId]);
 
   // ── Form Selection Triggers ──────────────────────────────────────────────────
 
@@ -292,7 +310,8 @@ export default function SalesReturnsPage() {
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const resetForm = () => {
-    setDraftId(null);
+    // Fresh idempotency key per form session — see submitKeyRef declaration.
+    submitKeyRef.current = crypto.randomUUID();
     setReturnSource("PARTNER");
     setSelectedEntity(null);
     setSelectedOrder(null);
@@ -322,143 +341,68 @@ export default function SalesReturnsPage() {
       return;
     }
 
+    // Synchronous guard: `submitting` only disables the button after a
+    // re-render, which a same-tick double click can slip past. This ref
+    // blocks re-entrancy immediately; the idempotencyKey below is the
+    // server-side backstop for a genuine network retry.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
 
-    const payload: ReturnOrder = {
-      id: draftId || `rt_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      returnNumber: returnNo,
-      source: returnSource,
-      entityId: selectedEntity?.id || null,
-      entityName: selectedEntity?.name || "Walk-in Partner",
-      entityPhone: selectedEntity?.phone || "",
-      orderRefId: selectedOrder?.id || "",
-      orderRefNumber: selectedOrder?.orderNumber || selectedOrder?.orderNo || "Direct",
-      reason,
-      refundAmount: estimatedRefund,
-      refundMethod,
-      status,
-      createdAt: new Date().toISOString(),
-      items: activeItems,
-      _rawState: {
-        returnSource,
-        selectedEntity,
-        selectedOrder,
-        returnItems,
-        reason,
-        refundMethod,
-        ordersList
-      }
-    };
-
     try {
-      try {
-        await salesApi.createReturn({
-          reason,
-          items: activeItems.map(i => ({
-            productId: i.productId,
-            productName: i.productName,
-            quantity: i.returnQuantity,
-            rate: i.rate,
-            condition: i.condition
-          })),
-          ...(returnSource === 'FRANCHISE'
-            ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
-            : {
-                // ReturnOrder.customerId is a Customer FK — a Dealer party
-                // has no matching column yet, so only attach it for customers.
-                ...(selectedEntity._kind !== 'DEALER' ? { customerId: selectedEntity.id } : {}),
-                ...(selectedOrder._source === 'POS'
-                  ? { posOrderId: selectedOrder.id }
-                  : { salesOrderId: selectedOrder.id }),
-              }
-          )
-        });
-      } catch (err) {
-        console.log("Saving locally to local storage fallback.");
-      }
-
-      // Save locally
-      const localData = localStorage.getItem("sales_returns");
-      let locals = localData ? JSON.parse(localData) : [];
-      if (draftId) {
-        locals = locals.filter((x: any) => x.id !== draftId);
-      }
-      locals.unshift(payload);
-      localStorage.setItem("sales_returns", JSON.stringify(locals));
+      await salesApi.createReturn({
+        reason,
+        idempotencyKey: submitKeyRef.current,
+        items: activeItems.map(i => ({
+          productId: i.productId,
+          productName: i.productName,
+          quantity: i.returnQuantity,
+          rate: i.rate,
+          condition: i.condition
+        })),
+        ...(returnSource === 'FRANCHISE'
+          ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
+          : {
+              // ReturnOrder.customerId is a Customer FK — a Dealer party
+              // has no matching column yet, so only attach it for customers.
+              ...(selectedEntity._kind !== 'DEALER' ? { customerId: selectedEntity.id } : {}),
+              ...(selectedOrder._source === 'POS'
+                ? { posOrderId: selectedOrder.id }
+                : { salesOrderId: selectedOrder.id }),
+            }
+        )
+      });
 
       showToast(status === "DRAFT" ? "Return draft request saved" : "Sales Return logged successfully!", "success");
       fetchReturns();
       setView("list");
       resetForm();
-    } catch (e) {
-      showToast("Failed to record return request", "error");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Failed to record return request", "error");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (ret: ReturnOrder) => {
-    setDraftId(ret.id);
-    setReturnNo(ret.returnNumber);
-    const raw = ret._rawState || {};
-    setReturnSource(raw.returnSource || ret.source);
-    setSelectedEntity(raw.selectedEntity || { id: ret.entityId, name: ret.entityName, phone: ret.entityPhone });
-    setSelectedOrder(raw.selectedOrder || { id: ret.orderRefId, orderNumber: ret.orderRefNumber });
-    setReturnItems(raw.returnItems || ret.items);
-    setReason(raw.reason || ret.reason);
-    setRefundMethod(raw.refundMethod || ret.refundMethod || "Original Method");
-    setOrdersList(raw.ordersList || []);
-    setView("edit");
-  };
-
-  const handleDelete = (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this Sales Return entry?")) return;
-    try {
-      const localData = localStorage.getItem("sales_returns");
-      if (localData) {
-        let locals = JSON.parse(localData);
-        locals = locals.filter((x: any) => x.id !== id);
-        localStorage.setItem("sales_returns", JSON.stringify(locals));
-      }
-      showToast("Return record removed", "success");
-      fetchReturns();
-    } catch (e) {
-      showToast("Failed to remove return", "error");
-    }
-  };
+  // Edit and Delete were previously local-only actions (they mutated the
+  // localStorage shadow copy and never touched the real backend row at
+  // all) — "Edit" in particular would resubmit through handleSave, which
+  // only ever POSTs a new return, so "editing" a real return actually
+  // created a second backend row for it. The backend has no update-items
+  // or delete endpoint for ReturnOrder (only create + status PATCH), so
+  // both actions are removed rather than left as fake/misleading no-ops.
+  // Rejecting (processStatusChange) is the supported way to invalidate one.
 
   const processStatusChange = async (id: string, nextStatus: 'APPROVED' | 'COMPLETED' | 'REJECTED') => {
     try {
-      const localData = localStorage.getItem("sales_returns");
-      if (localData) {
-        const locals = JSON.parse(localData);
-        const updated = locals.map((x: any) => {
-          if (x.id === id) {
-            return { 
-              ...x, 
-              status: nextStatus,
-              // If completed, set refund amount active
-              refundAmount: nextStatus === 'COMPLETED' ? x.refundAmount : 0 
-            };
-          }
-          return x;
-        });
-        localStorage.setItem("sales_returns", JSON.stringify(updated));
-      }
-
-      // Backend status sync fallback
-      try {
-        const userStr = localStorage.getItem("user");
-        const user = userStr ? JSON.parse(userStr) : null;
-        await salesApi.updateReturnStatus(id, nextStatus, user?.fullName || 'Admin');
-      } catch (err) {
-        console.log("No backend status handler active.");
-      }
-
+      const userStr = localStorage.getItem("user");
+      const user = userStr ? JSON.parse(userStr) : null;
+      await salesApi.updateReturnStatus(id, nextStatus, user?.fullName || 'Admin');
       showToast(`Return status successfully set to: ${nextStatus}!`, "success");
       fetchReturns();
-    } catch (e) {
-      showToast("Status transition failed", "error");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Status transition failed", "error");
     }
   };
 
@@ -488,9 +432,9 @@ export default function SalesReturnsPage() {
   };
 
   // ════════════════════════════════════════════════════════════════════════════
-  // 1. CREATE/EDIT VIEW (Locked viewport height calc(100vh - 56px))
+  // 1. CREATE VIEW (Locked viewport height calc(100vh - 56px))
   // ════════════════════════════════════════════════════════════════════════════
-  if (view === "create" || view === "edit") {
+  if (view === "create") {
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
 
@@ -512,7 +456,7 @@ export default function SalesReturnsPage() {
           </button>
           <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
             <Undo2 className="h-5 w-5 text-[#f58220]" />
-            {view === "create" ? "Sales Return / Credit Note" : `Edit Return #${returnNo}`}
+            Sales Return / Credit Note
           </h2>
         </div>
 
@@ -902,36 +846,13 @@ export default function SalesReturnsPage() {
                               <CheckCircle2 className="h-3 w-3" /> Settled
                             </span>
                           )}
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowRowMenu(showRowMenu === r.id ? null : r.id)}
-                              className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                            {showRowMenu === r.id && (
-                              <div className="absolute right-0 top-8 z-50 w-32 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg py-1 text-left">
-                                <button
-                                  onClick={() => { handleEdit(r); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => { setPreviewingReturn(r); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
-                                >
-                                  Print
-                                </button>
-                                <button
-                                  onClick={() => { handleDelete(r.id); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 text-left border-t border-gray-100 dark:border-white/5"
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          <button
+                            onClick={() => setPreviewingReturn(r)}
+                            title="Print"
+                            className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>

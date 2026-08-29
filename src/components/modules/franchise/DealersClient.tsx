@@ -282,8 +282,15 @@ export default function DealersClient() {
     const todayStr = new Date().toISOString().split("T")[0];
     const filename = `Dealer_Statement_${cleanName}_${todayStr}.xlsx`;
 
-    const headers = ["Type", "Number", "Date", "Total (₹)", "Balance (₹)"];
+    const partyName = selectedDealer.name;
+    const partyPhone = selectedDealer.phone || "-";
+    const partyEmail = selectedDealer.email || "-";
+
+    const headers = ["Party Name", "Phone", "Email", "Transaction Type", "Invoice/Transaction Number", "Date", "Total (₹)", "Balance (₹)"];
     const rows = dealerTransactions.map((t) => [
+      partyName,
+      partyPhone,
+      partyEmail,
       t.type || "",
       t.number || "",
       formatDate(t.date),
@@ -295,14 +302,14 @@ export default function DealersClient() {
 
     const aoa = [
       ["DEALER STATEMENT"],
-      [`Dealer Name: ${selectedDealer.name}`, `Branch: ${selectedDealer.franchise?.name || "HQ"}`],
-      [`Phone: ${selectedDealer.phone || "-"}`, `Email: ${selectedDealer.email || "-"}`],
+      [`Dealer Name: ${partyName}`, `Branch: ${selectedDealer.franchise?.name || "HQ"}`],
+      [`Phone: ${partyPhone}`, `Email: ${partyEmail}`],
       [`Generated Date: ${formatDate(new Date())}`],
       [],
       headers,
       ...rows,
       [],
-      ["TOTALS", "", "", totalAmount, totalBalance]
+      ["TOTALS", "", "", "", "", "", totalAmount, totalBalance]
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
