@@ -95,7 +95,7 @@ export const productionApi = {
   // physical packaging run. Only now is bulk deducted and Finished Goods created.
   verifyPackaging: (packagingId: string, data: { stickersPrinted: number; physicalChecked: boolean; goodQty: number; damagedQty: number; spoiledQty: number }) =>
     api.put(`/api/production/packagings/${packagingId}/verify`, data),
-  confirmPackaging: (packagingId: string, data: { goodQty: number; damagedQty: number; spoiledQty: number }) =>
+  confirmPackaging: (packagingId: string, data: { goodQty: number; damagedQty: number; spoiledQty: number; productId?: string }) =>
     api.post(`/api/production/packagings/${packagingId}/confirm`, data),
   getPackagings: (franchiseId?: string) => api.get('/api/production/packagings', { params: { franchiseId } }),
   getAllBatches: (franchiseId?: string) => api.get('/api/production/batches-all', { params: { franchiseId } }),

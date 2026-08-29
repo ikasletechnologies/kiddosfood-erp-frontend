@@ -668,32 +668,6 @@ export default function RecipeMasterTab() {
               className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Linked Sellable Product (Optional)</label>
-            <select
-              value={form.productId || ""}
-              onChange={(e) => {
-                const selectedId = e.target.value || "";
-                const selectedProd = products.find((p) => p.id === selectedId);
-                setForm((f) => ({
-                  ...f,
-                  productId: selectedId,
-                  shelfLifeDays: selectedProd?.shelfLifeDays ?? f.shelfLifeDays,
-                }));
-              }}
-              className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all cursor-pointer"
-            >
-              <option value="" className="dark:bg-card">-- No Linked Product (Uncatalogued / Bulk Recipe) --</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id} className="dark:bg-card">
-                  {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-400 dark:text-slate-500">
-              Link to an existing sellable Product catalog entry so packaged output inherits this identity.
-            </p>
-          </div>
 
           <div className="space-y-1.5 relative category-selector-container">
             <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Category</label>

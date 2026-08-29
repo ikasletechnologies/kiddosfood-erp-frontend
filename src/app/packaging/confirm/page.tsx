@@ -6,7 +6,7 @@ import {
   ClipboardCheck, Search, RefreshCw, CheckCircle2, AlertTriangle, Package
 } from "lucide-react";
 import { clsx } from "clsx";
-import { productionApi, franchiseApi } from "@/lib/api";
+import { productionApi, franchiseApi, productsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
 
@@ -26,7 +26,7 @@ interface PackagingTicket {
     batchCode: string;
     expiryDate: string;
     recall?: { status: string } | null;
-    product: { name: string; sku: string };
+    product?: { id?: string; name: string; sku: string } | null;
     // Batch/output unit lives on the recipe that produced it (Recipe.yieldUnit),
     // not on Product — Product has no unit field. This page only sums packet
     // counts and never does unit math, so this typing exists for accuracy only.
@@ -52,7 +52,9 @@ export default function ConfirmPackagingPage() {
   const [historyTickets, setHistoryTickets] = useState<PackagingTicket[]>([]);
   const [historyQuery, setHistoryQuery] = useState("");
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<PackagingTicket | null>(null);
@@ -65,16 +67,17 @@ export default function ConfirmPackagingPage() {
   useEffect(() => {
     async function initData() {
       try {
-        const fRes = await franchiseApi.getAll();
+        const [fRes, pRes] = await Promise.all([franchiseApi.getAll(), productsApi.getAll()]);
         const list = fRes.data || [];
         setFranchises(list);
+        setProducts(pRes.data || []);
         if (list.length > 0) {
           const hq = list.find((f: any) => f.isHQ);
           const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
           setSelectedFranchiseId((hq || fallback).id);
         }
       } catch (err) {
-        toast.error("Failed to load franchises");
+        toast.error("Failed to load initial metadata");
       }
     }
     initData();
@@ -112,6 +115,7 @@ export default function ConfirmPackagingPage() {
 
   const selectTicket = (ticket: PackagingTicket) => {
     setSelectedTicket(ticket);
+    setSelectedProductId(ticket.batch?.product?.id || "");
     setGoodQty(ticket.goodQty ?? 0);
     setDamagedQty(ticket.damagedQty ?? 0);
     setSpoiledQty(ticket.spoiledQty ?? 0);
@@ -119,12 +123,12 @@ export default function ConfirmPackagingPage() {
 
   const filteredTickets = tickets.filter((t) =>
     t.batch?.batchCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.batch?.product?.name.toLowerCase().includes(searchQuery.toLowerCase())
+    t.batch?.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredHistory = historyTickets.filter((t) =>
     t.batch?.batchCode?.toLowerCase().includes(historyQuery.toLowerCase()) ||
-    t.batch?.product?.name.toLowerCase().includes(historyQuery.toLowerCase())
+    t.batch?.product?.name?.toLowerCase().includes(historyQuery.toLowerCase())
   );
 
   const total = goodQty + damagedQty + spoiledQty;
@@ -134,6 +138,10 @@ export default function ConfirmPackagingPage() {
 
   const handleConfirm = async () => {
     if (!selectedTicket) return;
+    if (!selectedProductId) {
+      toast.error("No sellable product selected");
+      return;
+    }
     if (goodQty < 0 || damagedQty < 0 || spoiledQty < 0) {
       toast.error("Quantities cannot be negative");
       return;
@@ -145,7 +153,12 @@ export default function ConfirmPackagingPage() {
 
     setSubmitting(true);
     try {
-      await productionApi.confirmPackaging(selectedTicket.id, { goodQty, damagedQty, spoiledQty });
+      await productionApi.confirmPackaging(selectedTicket.id, {
+        goodQty,
+        damagedQty,
+        spoiledQty,
+        productId: selectedProductId,
+      });
       toast.success(`Packaging confirmed — ${goodQty} packets added to Finished Goods.`);
       setSelectedTicket(null);
       loadTickets();
@@ -394,6 +407,24 @@ export default function ConfirmPackagingPage() {
                     </p>
 
                     <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-800 dark:text-white mb-1.5">
+                          Sellable Product *
+                        </label>
+                        <select
+                          value={selectedProductId}
+                          onChange={(e) => setSelectedProductId(e.target.value)}
+                          className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                        >
+                          <option value="" className="dark:bg-card">-- Select Product / SKU --</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} className="dark:bg-card">
+                              {p.name} {p.sku ? `(${p.sku})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
                       <div>
                         <label className="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">Good (→ Finished Goods)</label>
                         <input

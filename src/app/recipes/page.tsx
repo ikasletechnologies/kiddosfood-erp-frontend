@@ -647,26 +647,7 @@ export default function RecipesPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Linked Product</label>
-                <select
-                  value={formData.productId}
-                  onChange={(e) => {
-                    if (e.target.value === "___NEW___") {
-                      setIsAddingProduct(true);
-                    } else {
-                      setFormData({ ...formData, productId: e.target.value });
-                    }
-                  }}
-                  className="w-full h-10 bg-slate-50 dark:bg-white/5 border-0 px-4 rounded-xl font-bold text-sm outline-none focus:ring-2 focus:ring-orange-500/50 transition-all text-slate-900 dark:text-white"
-                >
-                  <option value="">Select Product (Optional)</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  <option value="___NEW___">+ Add New Product</option>
-                </select>
-              </div>
-
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Yield *</label>
                 <div className="flex gap-2">
