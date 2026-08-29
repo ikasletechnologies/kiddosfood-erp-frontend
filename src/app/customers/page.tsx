@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
   Edit3, MessageSquare, Phone as PhoneIcon, Clock,
@@ -14,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 
 export default function PartiesPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isSuper = user?.role === "SUPER_ADMIN";
 
   // HQ / Franchise scope — Super Admin only. Franchise Admin is always
@@ -125,7 +127,34 @@ export default function PartiesPage() {
     field3Print: false,
   });
 
-  const transactions: any[] = [];
+  // Sourced from selectedCustomerDetail.orders, which GET /api/customers/:id
+  // (CustomerService.getById) already returns via the real Order.customerId
+  // relation on Customer — i.e. completed POS sales are linked by the
+  // customer's stable id, not by name matching. Includes payments so the
+  // outstanding balance per order reflects what has actually been recorded,
+  // not a name-derived guess.
+  const transactions = React.useMemo(() => {
+    const orders: any[] = selectedCustomerDetail?.orders || [];
+    return orders
+      .map((o: any) => {
+        const paidAmount = (o.payments || [])
+          .filter((p: any) => !p.isCancelled && p.status !== 'CANCELLED')
+          .reduce((sum: number, p: any) => sum + (Number(p.paidAmount) || 0), 0);
+        const balance = Number(o.totalAmount || 0) - paidAmount;
+        return {
+          type: o.status === 'CANCELLED' ? 'Sale [Cancelled]' : 'Sale',
+          number: o.invoiceNum,
+          date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '',
+          total: Number(o.totalAmount || 0).toFixed(2),
+          balance: balance > 0.005 ? balance.toFixed(2) : undefined,
+        };
+      })
+      .filter((t) => {
+        if (!transactionSearchQuery.trim()) return true;
+        const q = transactionSearchQuery.trim().toLowerCase();
+        return (t.number || '').toLowerCase().includes(q);
+      });
+  }, [selectedCustomerDetail, transactionSearchQuery]);
 
   const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
@@ -404,17 +433,17 @@ export default function PartiesPage() {
                     {/* More Options Menu */}
                     {isMoreMenuOpen && (
                       <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5 overflow-hidden">
-                        {[
-                          "Import from Excel",
-                          "Import from Phone",
-                          "Import Via Google Contacts",
-                          "Party Statement (Report)",
-                          "All Parties (Report)"
-                        ].map((item, i) => (
-                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                            {item}
-                          </button>
-                        ))}
+                        <button
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            const params = new URLSearchParams({ parent: "franchise", report: "Party Statement" });
+                            if (selectedCustomer?.name) params.set("partyName", selectedCustomer.name);
+                            router.push(`/reports?${params.toString()}`);
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                        >
+                          Party Statement (Report)
+                        </button>
                       </div>
                     )}
                   </div>

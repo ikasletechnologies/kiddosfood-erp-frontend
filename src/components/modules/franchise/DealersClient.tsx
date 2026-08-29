@@ -7,8 +7,10 @@ import {
   MapPin, Phone as PhoneIcon, Mail, Building2, XCircle
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import * as XLSX from "xlsx";
 import api, { franchiseApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { formatDate } from "@/lib/utils";
 
 const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-3 pb-2 border-b border-gray-100 dark:border-white/5";
 
@@ -68,6 +70,8 @@ export default function DealersClient() {
   
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editDealerId, setEditDealerId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -76,6 +80,9 @@ export default function DealersClient() {
     address: "",
     franchiseId: ""
   });
+
+  const [dealerTransactions, setDealerTransactions] = useState<any[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
 
   const transactionTypes = [
     "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note", 
@@ -96,7 +103,35 @@ export default function DealersClient() {
     paymentStatus: false
   });
 
-  const transactions: any[] = [];
+  const fetchDealerTransactions = async (dealerId: string) => {
+    setTransactionsLoading(true);
+    try {
+      const res = await api.get(`/api/dealers/${dealerId}/transactions`);
+      setDealerTransactions(res.data || []);
+    } catch (error) {
+      console.error(error);
+      setDealerTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedDealerId) {
+      fetchDealerTransactions(selectedDealerId);
+    } else {
+      setDealerTransactions([]);
+    }
+  }, [selectedDealerId]);
+
+  const transactions = dealerTransactions.filter((t) => {
+    if (!transactionSearchQuery.trim()) return true;
+    const q = transactionSearchQuery.trim().toLowerCase();
+    return (
+      (t.type && String(t.type).toLowerCase().includes(q)) ||
+      (t.number && String(t.number).toLowerCase().includes(q))
+    );
+  });
 
   const fetchDealers = async () => {
     if (isSuper && franchisesLoading) return;
@@ -135,6 +170,29 @@ export default function DealersClient() {
       return;
     }
 
+    // Editing an existing dealer only updates its own fields — no franchise
+    // scope re-validation needed (a dealer's franchise assignment doesn't
+    // change from this form).
+    if (isEditMode && editDealerId) {
+      try {
+        await api.patch(`/api/dealers/${editDealerId}`, {
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address
+        });
+        toast.success("Dealer updated successfully");
+        setShowAddModal(false);
+        setIsEditMode(false);
+        setEditDealerId(null);
+        setFormData({ name: "", email: "", phone: "", address: "", franchiseId: "" });
+        fetchDealers();
+      } catch (error: any) {
+        toast.error(error.response?.data?.error || "Failed to update dealer");
+      }
+      return;
+    }
+
     if (isSuper && scope === "HQ" && !hqFranchiseId) {
       toast.error("HQ is not configured.");
       return;
@@ -159,7 +217,99 @@ export default function DealersClient() {
     }
   };
 
+  const handleOpenEdit = (dealer: Dealer) => {
+    setIsEditMode(true);
+    setEditDealerId(dealer.id);
+    setFormData({
+      name: dealer.name || "",
+      email: dealer.email || "",
+      phone: dealer.phone || "",
+      address: dealer.address || "",
+      franchiseId: dealer.franchiseId || ""
+    });
+    setShowAddModal(true);
+  };
+
   const selectedDealer = dealers.find(d => d.id === selectedDealerId) || null;
+
+  const handleDealerStatementReport = () => {
+    if (!selectedDealer) {
+      toast.error("Select a dealer first.");
+      return;
+    }
+    if (dealerTransactions.length === 0) {
+      toast.error("No transactions to include in the statement.");
+      return;
+    }
+    const cleanName = selectedDealer.name.replace(/[^a-zA-Z0-9]/g, "_");
+    const todayStr = new Date().toISOString().split("T")[0];
+    const filename = `Dealer_Statement_${cleanName}_${todayStr}.xlsx`;
+
+    const headers = ["Type", "Number", "Date", "Total (₹)", "Balance (₹)"];
+    const rows = dealerTransactions.map((t) => [
+      t.type || "",
+      t.number || "",
+      formatDate(t.date),
+      Number(t.total || 0),
+      Number(t.balance || 0)
+    ]);
+    const totalAmount = dealerTransactions.reduce((s, t) => s + Number(t.total || 0), 0);
+    const totalBalance = dealerTransactions.reduce((s, t) => s + Number(t.balance || 0), 0);
+
+    const aoa = [
+      ["DEALER STATEMENT"],
+      [`Dealer Name: ${selectedDealer.name}`, `Branch: ${selectedDealer.franchise?.name || "HQ"}`],
+      [`Phone: ${selectedDealer.phone || "-"}`, `Email: ${selectedDealer.email || "-"}`],
+      [`Generated Date: ${formatDate(new Date())}`],
+      [],
+      headers,
+      ...rows,
+      [],
+      ["TOTALS", "", "", totalAmount, totalBalance]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Dealer Statement");
+    XLSX.writeFile(wb, filename);
+    toast.success(`Dealer Statement for ${selectedDealer.name} downloaded (.xlsx)`);
+    setIsMoreMenuOpen(false);
+  };
+
+  const handleAllDealersReport = () => {
+    if (dealers.length === 0) {
+      toast.error("No dealer data available to download.");
+      return;
+    }
+    const todayStr = new Date().toISOString().split("T")[0];
+    const filename = `All_Dealers_Report_${todayStr}.xlsx`;
+
+    const headers = ["#", "Dealer Name", "Phone", "Email", "Address", "Branch", "Status"];
+    const rows = dealers.map((d, idx) => [
+      idx + 1,
+      d.name || "",
+      d.phone || "—",
+      d.email || "—",
+      d.address || "—",
+      d.franchise?.name || "HQ",
+      d.status || "ACTIVE"
+    ]);
+
+    const aoa = [
+      ["ALL DEALERS REPORT"],
+      [`Generated Date: ${formatDate(new Date())}`, `Total Dealers: ${dealers.length}`],
+      [],
+      headers,
+      ...rows
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "All Dealers");
+    XLSX.writeFile(wb, filename);
+    toast.success("All Dealers report downloaded (.xlsx)");
+    setIsMoreMenuOpen(false);
+  };
 
   const filteredDealers = dealers.filter(d => {
     if (searchQuery && !d.name.toLowerCase().includes(searchQuery.toLowerCase())) {
@@ -350,11 +500,13 @@ export default function DealersClient() {
                 toast.error("HQ is not configured.");
                 return;
               }
+              setIsEditMode(false);
+              setEditDealerId(null);
               setFormData({
                 name: "", email: "", phone: "", address: "", franchiseId: ""
               });
               setShowAddModal(true);
-            }} 
+            }}
             disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
             className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
               (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
@@ -373,7 +525,10 @@ export default function DealersClient() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{selectedDealer.name}</h2>
-                  <button className="text-orange-500 hover:text-orange-600 transition-colors">
+                  <button
+                    onClick={() => handleOpenEdit(selectedDealer)}
+                    className="text-orange-500 hover:text-orange-600 transition-colors"
+                  >
                     <Edit3 size={16} />
                   </button>
                 </div>
@@ -384,11 +539,15 @@ export default function DealersClient() {
                     {isMoreMenuOpen && (
                       <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5">
                         {[
-                          "Dealer Statement (Report)",
-                          "All Dealers (Report)"
+                          { label: "Dealer Statement (Report)", onClick: handleDealerStatementReport },
+                          { label: "All Dealers (Report)", onClick: handleAllDealersReport }
                         ].map((item, i) => (
-                          <button key={i} className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                            {item}
+                          <button
+                            key={i}
+                            onClick={item.onClick}
+                            className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                          >
+                            {item.label}
                           </button>
                         ))}
                       </div>
@@ -528,7 +687,13 @@ export default function DealersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {transactions.length === 0 ? (
+                {transactionsLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                      Loading transactions...
+                    </td>
+                  </tr>
+                ) : transactions.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
                       No transactions yet
@@ -536,12 +701,12 @@ export default function DealersClient() {
                   </tr>
                 ) : (
                   transactions.map((t, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
+                    <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
                       <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
                       <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.date}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.total}</td>
-                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">{t.balance ? `₹ ${t.balance}` : ""}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(t.date)}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.total || 0).toFixed(2)}</td>
+                      <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">{t.balance ? `₹ ${Number(t.balance).toFixed(2)}` : "₹ 0.00"}</td>
                       <td className="px-2 py-4 text-center">
                         <button className="text-slate-300 hover:text-slate-500 dark:hover:text-slate-200">
                           <MoreVertical size={14} />
@@ -594,14 +759,17 @@ export default function DealersClient() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
             <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10">
-              <h2 className="text-base font-semibold text-gray-800 dark:text-white">ADD DEALER</h2>
-              <button onClick={() => setShowAddModal(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors">
+              <h2 className="text-base font-semibold text-gray-800 dark:text-white">{isEditMode ? "EDIT DEALER" : "ADD DEALER"}</h2>
+              <button
+                onClick={() => { setShowAddModal(false); setIsEditMode(false); setEditDealerId(null); }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
+              >
                 <XCircle size={20} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-              {isSuper && (
+              {isSuper && !isEditMode && (
                 <div>
                   <label className={dealerSectionLabelClass}>Target Scope</label>
                   <div className="w-full border border-orange-200 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-400">
@@ -666,7 +834,7 @@ export default function DealersClient() {
             <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.02]">
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setIsEditMode(false); setEditDealerId(null); }}
                 className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
               >
                 Cancel
@@ -676,7 +844,7 @@ export default function DealersClient() {
                 onClick={handleCreate}
                 className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
               >
-                Save Dealer
+                {isEditMode ? "Update Dealer" : "Save Dealer"}
               </button>
             </div>
           </div>
