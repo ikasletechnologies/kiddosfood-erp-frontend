@@ -28,7 +28,22 @@ export default function GSTR9Report() {
   }, [financialYear]);
 
   const handlePrint = () => window.print();
-  const handleExportCSV = () => {};
+  const handleExportCSV = () => {
+    const rows = [
+      ["Field", "Value"],
+      ["Financial Year", reportData?.basicDetails?.financialYear || financialYear],
+      ["GSTIN", reportData?.basicDetails?.gstin || ""],
+      ["Legal Name", reportData?.basicDetails?.legalName || "My Company"],
+      ["Trade Name", reportData?.basicDetails?.tradeName || ""],
+    ];
+    const csv = rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `GSTR9_${financialYear}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f1f5f9] dark:bg-[#090a0f] p-6 space-y-6 overflow-y-auto">

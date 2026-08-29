@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { X, 
   FileTextIcon, PrinterIcon, AlertCircleIcon, SearchIcon
 } from "lucide-react";
+import { reportsApi } from "@/lib/api/accounting.api";
 
 interface ItemDetailRow {
   date: string;
@@ -25,24 +26,15 @@ export default function ItemDetailReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token") || "";
         const franchiseId = localStorage.getItem("selectedFranchiseId") || "";
         
-        let queryParams = "";
         const params = new URLSearchParams();
         if (franchiseId) params.append("franchiseId", franchiseId);
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
         if (searchTerm) params.append("itemName", searchTerm);
-        if (params.toString()) queryParams = `?${params.toString()}`;
-
-        const res = await fetch(`/api/reports/item-detail${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch item detail");
-        
-        const data = await res.json();
+        const res = await reportsApi.getItemDetail(Object.fromEntries(params.entries()));
+        const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted = rows.map((r: any) => ({

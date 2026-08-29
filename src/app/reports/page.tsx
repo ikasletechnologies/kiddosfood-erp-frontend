@@ -1039,18 +1039,34 @@ function getDateRange(
     y.setDate(y.getDate() - 1);
     return { from: iso(y), to: iso(y) };
   }
+  if (filter === "This Week") {
+    const start = new Date(now);
+    const day = start.getDay();
+    const offset = day === 0 ? 6 : day - 1;
+    start.setDate(start.getDate() - offset);
+    return { from: iso(start), to: today };
+  }
   if (filter === "Last 7 Days") {
-    const w = new Date(now);
-    w.setDate(w.getDate() - 7);
-    return { from: iso(w), to: today };
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    return { from: iso(start), to: today };
+  }
+  if (filter === "Last Month") {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: iso(start), to: iso(end) };
+  }
+  if (filter === "This Quarter") {
+    const startMonth = Math.floor(now.getMonth() / 3) * 3;
+    const start = new Date(now.getFullYear(), startMonth, 1);
+    return { from: iso(start), to: today };
   }
   if (filter === "This Year") {
     return { from: `${now.getFullYear()}-01-01`, to: today };
   }
   // Default: This Month
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { from: iso(start), to: iso(end) };
+  return { from: iso(start), to: today };
 }
 
 function formatCategory(cat: any): string {
@@ -1069,6 +1085,19 @@ function fmtDisplayDate(iso: string): string {
 function fmtCurrency(val: any): string {
   const num = Number(val) || 0;
   return `₹ ${num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
+  const escapeCsv = (value: string | number | null | undefined) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+  const csvContent = [headers.map(escapeCsv).join(","), ...rows.map((row) => row.map(escapeCsv).join(","))].join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
 }
 
 function fmtDate(val: any): string {
@@ -1902,22 +1931,28 @@ function ReportsContent() {
     const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
     setLoading(true);
     setReportData(null);
-
-    fetchReport(activeChild.id, { startDate: from, endDate: to })
-      .then((d) => {
-        if (!cancelled) setReportData(d);
+    const timeout = window.setTimeout(() => {
+      fetchReport(activeChild.id, {
+        startDate: from,
+        endDate: to,
+        search: tableSearchTerm.trim() || undefined,
       })
-      .catch(() => {
-        if (!cancelled) setReportData(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+        .then((d) => {
+          if (!cancelled) setReportData(d);
+        })
+        .catch(() => {
+          if (!cancelled) setReportData(null);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 250);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
     };
-  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate]);
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm]);
 
   const currentMeta = activeChild ? REPORT_METADATA[activeChild.id] ?? DEFAULT_META : DEFAULT_META;
   const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -1990,27 +2025,18 @@ function ReportsContent() {
   };
 
   const handleExportCSV = () => {
-    if (!reportData || reportData.rows.length === 0) {
+    if (!filteredRows || filteredRows.length === 0) {
       toast.error("No data to export");
       return;
     }
     const toastId = toast.loading("Generating CSV...");
     try {
       const cols = currentMeta.columns;
-      const header = cols.map((c) => c.label).join(",");
-      const rowLines = reportData.rows.map((row) =>
-        cols.map((c) => `"${String(row[c.key] ?? "").replace(/"/g, '""')}"`).join(",")
+      downloadCsv(
+        `${(activeChild?.label || "report").replace(/\s+/g, "_").toLowerCase()}_${from}_${to}.csv`,
+        cols.map((c) => c.label),
+        filteredRows.map((row) => cols.map((c) => row[c.key] ?? ""))
       );
-      const csvContent = "data:text/csv;charset=utf-8," + [header, ...rowLines].join("\n");
-      const link = document.createElement("a");
-      link.setAttribute("href", encodeURI(csvContent));
-      link.setAttribute(
-        "download",
-        `${(activeChild?.label || "report").replace(/\s+/g, "_").toLowerCase()}_${from}_${to}.csv`
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
       toast.success("CSV Exported", { id: toastId });
     } catch {
       toast.error("Export failed", { id: toastId });
@@ -2130,12 +2156,14 @@ function ReportsContent() {
               onChange={(e) => setDateFilter(e.target.value)}
               className="appearance-none pl-3 pr-8 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-medium text-gray-700 dark:text-slate-200 outline-none cursor-pointer focus:border-[#f58220]"
             >
-              <option className="dark:bg-card">This Month</option>
-              <option className="dark:bg-card">Today</option>
-              <option className="dark:bg-card">Yesterday</option>
-              <option className="dark:bg-card">Last 7 Days</option>
-              <option className="dark:bg-card">This Year</option>
-              <option className="dark:bg-card">Custom</option>
+              <option value="Today" className="dark:bg-card">Today</option>
+              <option value="Yesterday" className="dark:bg-card">Yesterday</option>
+              <option value="This Week" className="dark:bg-card">This Week</option>
+              <option value="This Month" className="dark:bg-card">This Month</option>
+              <option value="Last Month" className="dark:bg-card">Last Month</option>
+              <option value="This Quarter" className="dark:bg-card">This Quarter</option>
+              <option value="This Year" className="dark:bg-card">This Year</option>
+              <option value="Custom" className="dark:bg-card">Custom Date Range</option>
             </select>
             <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" />
           </div>
@@ -2186,7 +2214,11 @@ function ReportsContent() {
                 const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
                 if (activeChild) {
                   setLoading(true);
-                  fetchReport(activeChild.id, { startDate: from, endDate: to })
+                  fetchReport(activeChild.id, {
+                    startDate: from,
+                    endDate: to,
+                    search: tableSearchTerm.trim() || undefined,
+                  })
                     .then((d) => setReportData(d))
                     .finally(() => setLoading(false));
                 }

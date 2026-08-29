@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { 
   FileTextIcon, PrinterIcon, AlertCircleIcon
 } from "lucide-react";
+import { reportsApi } from "@/lib/api/accounting.api";
 
 interface CategoryRow {
   itemCategory: string;
@@ -24,24 +25,15 @@ export default function SalePurchaseByCategoryReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token") || "";
         const franchiseId = localStorage.getItem("selectedFranchiseId") || "";
         
-        let queryParams = "";
         const params = new URLSearchParams();
         if (franchiseId) params.append("franchiseId", franchiseId);
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
         if (partyName) params.append("partyName", partyName);
-        if (params.toString()) queryParams = `?${params.toString()}`;
-
-        const res = await fetch(`/api/reports/sale-purchase-by-category${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch data");
-        
-        const data = await res.json();
+        const res = await reportsApi.getSalePurchaseByCategory(Object.fromEntries(params.entries()));
+        const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted = rows.map((r: any) => ({

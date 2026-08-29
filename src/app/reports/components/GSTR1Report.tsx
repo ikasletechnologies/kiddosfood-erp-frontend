@@ -1,5 +1,7 @@
 "use client";
 
+"use client";
+
 import React, { useState, useEffect } from "react";
 import { 
   FileTextIcon, PrinterIcon
@@ -8,9 +10,12 @@ import { reportsApi } from "@/lib/api/accounting.api";
 
 interface GSTR1Row {
   gstin: string;
+  customerGstin?: string;
+  b2bType?: string;
   partyName: string;
   invoiceNo: string;
   date: string;
+  placeOfSupply?: string;
   value: number;
   taxRate: number;
   cessRate: number;
@@ -34,7 +39,7 @@ export default function GSTR1Report() {
       try {
         setLoading(true);
         const res = await reportsApi.getGSTR1({ startDate, endDate });
-        setReportData(res.data || { sale: [], saleReturn: [] });
+        setReportData(res.data || res || { sale: [], saleReturn: [] });
       } catch (err) {
         console.error(err);
         setReportData({ sale: [], saleReturn: [] });
@@ -46,7 +51,45 @@ export default function GSTR1Report() {
   }, [startDate, endDate]);
 
   const handlePrint = () => window.print();
-  const handleExportCSV = () => {}; // Stub
+  const handleExportCSV = () => {
+    const headers = [
+      "Invoice No",
+      "Invoice Date",
+      "Customer Name",
+      "Customer GSTIN",
+      "B2B / B2C",
+      "Place of Supply",
+      "Invoice Total",
+      "Tax Rate (%)",
+      "Taxable Value",
+      "Integrated Tax (IGST)",
+      "Central Tax (CGST)",
+      "State Tax (SGST)",
+      "Cess Amount"
+    ];
+    const rows = currentData.map((r) => [
+      r.invoiceNo,
+      r.date,
+      r.partyName,
+      r.customerGstin || r.gstin || "—",
+      r.b2bType || (r.gstin && r.gstin !== "—" ? "B2B" : "B2C"),
+      r.placeOfSupply || "—",
+      r.value ?? r.taxableValue,
+      r.taxRate || 0,
+      r.taxableValue || 0,
+      r.integratedTax || 0,
+      r.centralTax || 0,
+      r.stateTax || 0,
+      r.cessAmount || 0
+    ]);
+    const csv = [headers.join(","), ...rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `GSTR1_${activeTab.replace(/\s+/g, "_")}_${startDate || "all"}_${endDate || "all"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const currentData = activeTab === "Sale" ? reportData.sale : reportData.saleReturn;
 

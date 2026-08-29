@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { 
   FileTextIcon, PrinterIcon, ChevronDownIcon, SearchIcon
 } from "lucide-react";
+import { reportsApi } from "@/lib/api/accounting.api";
 
 interface DiscountRow {
   itemName: string;
@@ -26,21 +27,16 @@ export default function ItemWiseDiscountReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token") || "";
         const franchiseId = localStorage.getItem("selectedFranchiseId") || "";
         
-        let queryParams = "";
         const params = new URLSearchParams();
         if (franchiseId) params.append("franchiseId", franchiseId);
-        if (params.toString()) queryParams = `?${params.toString()}`;
-
-        const res = await fetch(`/api/reports/item-discount${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch data");
-        
-        const data = await res.json();
+        if (itemName) params.append("itemName", itemName);
+        if (partyFilter) params.append("partyName", partyFilter);
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+        const res = await reportsApi.getItemDiscount(Object.fromEntries(params.entries()));
+        const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted = rows.map((r: any) => ({
@@ -68,7 +64,15 @@ export default function ItemWiseDiscountReport() {
 
   const handlePrint = () => window.print();
   const handleExportCSV = () => {
-    // Empty implementation
+    const headers = ["Item Name", "Total Qty Sold", "Total Sale Amount", "Total Discount Amount", "Average Discount %"];
+    const rows = reportData.map((r) => [r.itemName, r.totalQtySold, r.totalSaleAmount.toFixed(2), r.totalDiscAmount.toFixed(2), r.avgDiscPct.toFixed(2)]);
+    const csv = [headers.join(","), ...rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `Item_Wise_Discount_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (

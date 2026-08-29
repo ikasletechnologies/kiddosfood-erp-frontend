@@ -16,8 +16,22 @@ interface SalesOrder {
   id: string;
   orderNumber: string;
   customerName?: string;
-  status: string; // PENDING, CONFIRMED, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  customerPhone?: string;
+  customerGstin?: string;
+  stateOfSupply?: string;
+  status: string;
+  paymentStatus?: string;
+  paymentMode?: string;
+  subTotal?: number;
+  discountAmount?: number;
+  taxableValue?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  taxAmount?: number;
   totalAmount: number;
+  paidAmount?: number;
+  balanceAmount?: number;
   createdAt: string;
   deliveryDate?: string;
 }
@@ -39,7 +53,7 @@ export default function CentralSaleOrdersReport({
   });
 
   const [partySearch, setPartySearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL"); // ALL, OPEN, CLOSED, CANCELLED
+  const [statusFilter, setStatusFilter] = useState("ALL");
   const [orders, setOrders] = useState<SalesOrder[]>([]);
   const [fetching, setFetching] = useState(false);
 
@@ -51,7 +65,7 @@ export default function CentralSaleOrdersReport({
         endDate,
       })
       .then((res: any) => {
-        setOrders(res.data || []);
+        setOrders(res.orders || res.data || []);
       })
       .catch(() => {
         toast.error("Failed to load sale orders");
@@ -71,7 +85,36 @@ export default function CentralSaleOrdersReport({
   };
 
   const handleExcel = () => {
-    toast.success("Excel report exported successfully!");
+    if (filteredOrders.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    const headers = ["Date", "Order No", "Customer Name", "State of Supply", "Status", "Payment Mode", "Subtotal", "Discount", "Taxable Value", "CGST", "SGST", "IGST", "Total Tax", "Grand Total"];
+    const rows = filteredOrders.map(o => [
+      o.createdAt ? o.createdAt.split("T")[0] : "",
+      `"${o.orderNumber || ""}"`,
+      `"${o.customerName || "Walk-in"}"`,
+      `"${o.stateOfSupply || "—"}"`,
+      `"${o.status || ""}"`,
+      `"${o.paymentMode || "CASH"}"`,
+      o.subTotal || 0,
+      o.discountAmount || 0,
+      o.taxableValue || 0,
+      o.cgst || 0,
+      o.sgst || 0,
+      o.igst || 0,
+      o.taxAmount || 0,
+      o.totalAmount || 0
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `sales_summary_${startDate}_to_${endDate}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("Sales Summary CSV exported successfully!");
   };
 
   // Client-side filters

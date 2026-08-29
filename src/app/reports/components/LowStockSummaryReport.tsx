@@ -5,6 +5,7 @@ import { X,
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
   AlertCircleIcon, PackageMinusIcon, TrendingDownIcon
 } from "lucide-react";
+import { inventoryApi } from "@/lib/api/inventory.api";
 
 interface LowStockRow {
   itemName: string;
@@ -22,21 +23,9 @@ export default function LowStockSummaryReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        // We registered /api/reports/low-stock-summary, but the SDK isn't updated.
-        // We will fetch from /api/reports/low-stock-summary manually or via generic fetch if accountingApi is missing it
-        const token = localStorage.getItem("token") || "";
         const franchiseId = localStorage.getItem("selectedFranchiseId") || "";
-        
-        let queryParams = "";
-        if (franchiseId) queryParams = `?franchiseId=${franchiseId}`;
-        
-        const res = await fetch(`/api/reports/low-stock-summary${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch low stock summary");
-        
-        const data = await res.json();
+        const res = await inventoryApi.getAlerts(franchiseId ? { franchiseId } : undefined);
+        const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted = rows.map((r: any) => ({
@@ -62,6 +51,20 @@ export default function LowStockSummaryReport() {
   );
 
   const totalValue = filtered.reduce((sum, r) => sum + r.stockValue, 0);
+
+  const downloadCsv = () => {
+    const headers = ["Item Name", "Minimum Stock Qty", "Stock Qty", "Stock Value"];
+    const csv = [
+      headers.join(","),
+      ...filtered.map((r) => [r.itemName, r.minimumStock, r.stockQty, r.stockValue.toFixed(2)].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `Low_Stock_Summary_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handlePrint = () => {
     window.print();
@@ -120,7 +123,7 @@ export default function LowStockSummaryReport() {
           </div>
 
           <button 
-            onClick={handleExportCSV}
+            onClick={downloadCsv}
             className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50"
             title="Excel Export"
           >

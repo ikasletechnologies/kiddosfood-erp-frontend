@@ -5,6 +5,7 @@ import { X,
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
   AlertCircleIcon
 } from "lucide-react";
+import { reportsApi } from "@/lib/api/accounting.api";
 
 interface StockDetailRow {
   itemName: string;
@@ -27,23 +28,14 @@ export default function StockDetailReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        const token = localStorage.getItem("token") || "";
         const franchiseId = localStorage.getItem("selectedFranchiseId") || "";
         
-        let queryParams = "";
         const params = new URLSearchParams();
         if (franchiseId) params.append("franchiseId", franchiseId);
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
-        if (params.toString()) queryParams = `?${params.toString()}`;
-
-        const res = await fetch(`/api/reports/stock-detail${queryParams}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch stock detail");
-        
-        const data = await res.json();
+        const res = await reportsApi.getStockDetail(Object.fromEntries(params.entries()));
+        const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted = rows.map((r: any) => ({

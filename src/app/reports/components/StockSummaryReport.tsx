@@ -15,6 +15,8 @@ interface StockRow {
   purchasePrice: number;
   stockQty: number;
   stockValue: number;
+  potentialRetailValue: number;
+  potentialMargin: number;
 }
 
 const CATEGORY_OPTIONS = [
@@ -36,23 +38,29 @@ export default function StockSummaryReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        // Uses the newly registered endpoint /api/reports/stock-summary
         const res = await reportsApi.getStockSummary();
-        // Fallback to stock-summary service or fallback response
         const data = await res.data;
-
-        // If the return is not an array (e.g. wrapper), try to extract array
         const rows = Array.isArray(data) ? data : (data?.rows || []);
 
-        // Match the columns expected: Item Name, Sale Price, Purchase Price, Stock Qty, Stock Value
-        const formatted = rows.map((r: any) => ({
-          itemName: r.itemName || r.name || "—",
-          category: (r.category || r.categoryName || "Uncategorized").toUpperCase(),
-          salePrice: Number(r.salePrice ?? r.customerPrice ?? r.basePrice ?? 0),
-          purchasePrice: Number(r.purchasePrice ?? r.costPrice ?? 0),
-          stockQty: Number(r.stockQty ?? r.currentStock ?? 0),
-          stockValue: Number(r.stockValue ?? 0)
-        }));
+        const formatted = rows.map((r: any) => {
+          const salePrice = Number(r.salePrice ?? r.sellingPrice ?? r.customerPrice ?? r.basePrice ?? 0);
+          const purchasePrice = Number(r.purchasePrice ?? r.costPrice ?? 0);
+          const stockQty = Number(r.stockQty ?? r.currentStock ?? 0);
+          const stockValue = Number(r.stockValue ?? (stockQty * purchasePrice));
+          const potentialRetailValue = Number(r.potentialRetailValue ?? (stockQty * salePrice));
+          const potentialMargin = Number(r.potentialMargin ?? (potentialRetailValue - stockValue));
+
+          return {
+            itemName: r.itemName || r.name || "—",
+            category: (r.category || r.categoryName || "Uncategorized").toUpperCase(),
+            salePrice,
+            purchasePrice,
+            stockQty,
+            stockValue,
+            potentialRetailValue,
+            potentialMargin
+          };
+        });
 
         setReportData(formatted);
       } catch (err) {
@@ -88,19 +96,24 @@ export default function StockSummaryReport() {
 
   const totalStockQty = filtered.reduce((sum, r) => sum + r.stockQty, 0);
   const totalStockValue = filtered.reduce((sum, r) => sum + r.stockValue, 0);
+  const totalRetailValue = filtered.reduce((sum, r) => sum + r.potentialRetailValue, 0);
+  const totalMargin = filtered.reduce((sum, r) => sum + r.potentialMargin, 0);
 
   const handlePrint = () => {
     window.print();
   };
 
   const handleExportExcel = () => {
-    const headers = ["Item Name", "Sale Price", "Purchase Price", "Stock Qty", "Stock Value"];
+    const headers = ["Item Name", "Category", "Avg Cost Price", "Selling Price / MRP", "Current Stock Qty", "Cost Stock Value", "Potential Retail Value", "Potential Margin"];
     const rows = filtered.map(r => [
-      r.itemName,
-      r.salePrice.toFixed(2),
+      `"${r.itemName}"`,
+      `"${r.category}"`,
       r.purchasePrice.toFixed(2),
+      r.salePrice.toFixed(2),
       r.stockQty,
-      r.stockValue
+      r.stockValue.toFixed(2),
+      r.potentialRetailValue.toFixed(2),
+      r.potentialMargin.toFixed(2)
     ]);
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
@@ -132,13 +145,6 @@ export default function StockSummaryReport() {
             <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
               <ChevronDownIcon size={10} />
             </div>
-          </div>
-
-          {/* Date Filter */}
-          <div className="relative">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-200 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700">
-              Date Filter <ChevronDownIcon size={12} />
-            </button>
           </div>
 
           {/* Toggle */}
@@ -191,34 +197,44 @@ export default function StockSummaryReport() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3.5 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-xl">
-            <PackageIcon size={24} />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-[#12141c] p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-3">
+          <div className="p-3 bg-orange-50 dark:bg-orange-950/20 text-orange-600 rounded-xl">
+            <PackageIcon size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Items Listed</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{filtered.length}</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Stock Quantity</span>
+            <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">{totalStockQty}</span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3.5 bg-sky-50 dark:bg-sky-950/20 text-sky-600 rounded-xl">
-            <TrendingUpIcon size={24} />
+        <div className="bg-white dark:bg-[#12141c] p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-3">
+          <div className="p-3 bg-sky-50 dark:bg-sky-950/20 text-sky-600 rounded-xl">
+            <CalculatorIcon size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Stock Qty</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">{totalStockQty}</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Cost Stock Value</span>
+            <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">₹ {totalStockValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#12141c] p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-4">
-          <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 rounded-xl">
-            <CalculatorIcon size={24} />
+        <div className="bg-white dark:bg-[#12141c] p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-3">
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 rounded-xl">
+            <TrendingUpIcon size={20} />
           </div>
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Total Stock Value</span>
-            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">₹ {totalStockValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Potential Retail Value</span>
+            <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">₹ {totalRetailValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#12141c] p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm flex items-center gap-3">
+          <div className="p-3 bg-purple-50 dark:bg-purple-950/20 text-purple-600 rounded-xl">
+            <TrendingUpIcon size={20} />
+          </div>
+          <div>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Potential Margin</span>
+            <span className="text-xl font-black text-purple-600 dark:text-purple-400 tracking-tight">₹ {totalMargin.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
       </div>
@@ -226,7 +242,7 @@ export default function StockSummaryReport() {
       {/* Table Container */}
       <div className="bg-white dark:bg-[#12141c] border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden flex flex-col flex-1">
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Stock Valuation Ledger</h3>
+          <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Stock Valuation & Retail Potential Ledger</h3>
         </div>
 
         <div className="overflow-x-auto flex-1">
@@ -237,14 +253,16 @@ export default function StockSummaryReport() {
               ))}
             </div>
           ) : (
-            <table className="w-full text-left border-collapse min-w-[700px]">
+            <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Item Name</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Sale Price</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Purchase Price</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Qty</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Value</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Item Name</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Avg Cost</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Selling Price / MRP</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Qty</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Cost Stock Value</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Potential Retail Value</th>
+                  <th className="px-5 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Potential Margin</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,18 +272,20 @@ export default function StockSummaryReport() {
                       key={idx}
                       className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors"
                     >
-                      <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">{row.itemName}</td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">₹ {row.salePrice.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">₹ {row.purchasePrice.toFixed(2)}</td>
-                      <td className={`px-6 py-4 text-xs font-black text-right ${row.stockQty < 0 ? 'text-rose-500' : 'text-slate-700 dark:text-slate-300'}`}>
+                      <td className="px-5 py-3.5 text-xs font-bold text-slate-800 dark:text-slate-200">{row.itemName}</td>
+                      <td className="px-5 py-3.5 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">₹ {row.purchasePrice.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-xs font-bold text-blue-600 dark:text-blue-400 text-right">₹ {row.salePrice.toFixed(2)}</td>
+                      <td className={`px-5 py-3.5 text-xs font-black text-right ${row.stockQty < 0 ? 'text-rose-500' : 'text-slate-700 dark:text-slate-300'}`}>
                         {row.stockQty}
                       </td>
-                      <td className="px-6 py-4 text-xs font-black text-slate-800 dark:text-white text-right">₹ {row.stockValue.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-xs font-black text-slate-800 dark:text-white text-right">₹ {row.stockValue.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-xs font-black text-emerald-600 dark:text-emerald-400 text-right">₹ {row.potentialRetailValue.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-xs font-black text-purple-600 dark:text-purple-400 text-right">₹ {row.potentialMargin.toFixed(2)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-16 text-center">
+                    <td colSpan={7} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <AlertCircleIcon size={24} className="opacity-40" />
                         <span className="text-xs font-bold">No items found matching criteria.</span>
@@ -281,10 +301,12 @@ export default function StockSummaryReport() {
         {/* Totals Summary Footer */}
         {!loading && filtered.length > 0 && (
           <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between shrink-0 font-black text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            <span>Total</span>
-            <div className="flex items-center gap-8">
+            <span>Total Summary</span>
+            <div className="flex items-center gap-6">
               <span>Qty: <strong className="text-slate-900 dark:text-white text-sm font-black">{totalStockQty}</strong></span>
-              <span>Value: <strong className="text-emerald-600 dark:text-emerald-400 text-sm font-black">₹ {totalStockValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+              <span>Cost Value: <strong className="text-slate-900 dark:text-white text-sm font-black">₹ {totalStockValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+              <span>Retail Value: <strong className="text-emerald-600 dark:text-emerald-400 text-sm font-black">₹ {totalRetailValue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
+              <span>Potential Margin: <strong className="text-purple-600 dark:text-purple-400 text-sm font-black">₹ {totalMargin.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></span>
             </div>
           </div>
         )}

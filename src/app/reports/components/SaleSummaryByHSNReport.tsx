@@ -39,7 +39,17 @@ export default function SaleSummaryByHSNReport() {
   }, [startDate, endDate]);
 
   const handlePrint = () => window.print();
-  const handleExportCSV = () => {};
+  const handleExportCSV = () => {
+    const headers = ["HSN", "Total Value", "Taxable Value", "IGST Amount", "CGST Amount", "SGST Amount", "Add. Cess"];
+    const rows = filteredData.map((r) => [r.hsn, r.totalValue, r.taxableValue, r.igstAmount ?? "", r.cgstAmount ?? "", r.sgstAmount ?? "", r.addCess ?? ""]);
+    const csv = [headers.join(","), ...rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `HSN_Summary_${startDate || "all"}_${endDate || "all"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const filteredData = reportData.filter(row => 
     row.hsn.toLowerCase().includes(searchQuery.toLowerCase())

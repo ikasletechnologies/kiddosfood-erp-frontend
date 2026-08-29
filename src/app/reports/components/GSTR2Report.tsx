@@ -43,7 +43,17 @@ export default function GSTR2Report() {
   }, [startDate, endDate]);
 
   const handlePrint = () => window.print();
-  const handleExportCSV = () => {};
+  const handleExportCSV = () => {
+    const headers = ["GSTIN/UIN", "Party Name", "Bill No", "Date", "Value", "Rate", "Cess Rate", "Taxable Value", "Reverse Charge"];
+    const rows = reportData.map((r) => [r.gstin, r.partyName, r.billNo, r.date, r.value, r.rate, r.cessRate, r.taxableValue, r.reverseCharge]);
+    const csv = [headers.join(","), ...rows.map((row) => row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    link.download = `GSTR2_${startDate || "all"}_${endDate || "all"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f1f5f9] dark:bg-[#090a0f] p-6 space-y-6 overflow-y-auto">
