@@ -5,7 +5,7 @@ import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2, 
   ChevronRight, Printer, FileSpreadsheet, Check, 
   CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, MoreVertical, X } from "lucide-react";
-import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi } from "@/lib/api";
+import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
 import api from "@/lib/api/base";
@@ -76,7 +76,9 @@ export default function SalesReturnsPage() {
   const [ordersList, setOrdersList] = useState<any[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<any>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  
+  const [existingReturns, setExistingReturns] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
   const [reason, setReason] = useState("");
   const [refundMethod, setRefundMethod] = useState("Original Method");
@@ -137,13 +139,13 @@ export default function SalesReturnsPage() {
           customersApi.getAll(),
           api.get("/api/dealers").catch(() => ({ data: [] }))
         ]);
-        const customers = custRes.data?.data || custRes.data || [];
-        const dealers = dealerRes.data?.data || dealerRes.data || [];
-        
+        const customers = (custRes.data?.data || custRes.data || []).map((c: any) => ({ ...c, _kind: 'CUSTOMER' }));
+        const dealers = (dealerRes.data?.data || dealerRes.data || []).map((d: any) => ({ ...d, _kind: 'DEALER' }));
+
         // Merge and deduplicate by ID just in case
         const merged = [...customers, ...dealers];
         const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
-        
+
         setEntities(unique);
       }
     } catch (err) {
@@ -176,41 +178,73 @@ export default function SalesReturnsPage() {
     setSelectedOrder(null);
     setReturnItems([]);
     setOrdersList([]);
+    setExistingReturns([]);
 
     if (!entity) return;
 
+    setLoadingOrders(true);
     try {
       if (returnSource === 'FRANCHISE') {
         const res = await franchiseOrdersApi.getAll({ franchiseId: entityId });
         setOrdersList(res.data || []);
       } else {
-        // Fallback or api search for sales orders
-        try {
-          const res = await salesApi.getSalesOrders({ customerId: entityId });
-          setOrdersList(res.data || []);
-        } catch (e) {
-          // If endpoint fails, synthesize some sample mock orders in local storage
-          const localOrdersStr = localStorage.getItem("sale_orders");
-          if (localOrdersStr) {
-            const allSales = JSON.parse(localOrdersStr);
-            const matches = allSales.filter((o: any) => o.customerId === entityId || o.customerName === entity.name);
-            setOrdersList(matches.map((o: any) => ({
-              id: o.id,
-              orderNumber: o.orderNo,
-              totalAmount: o.finalAmount,
-              createdAt: o.createdAt,
-              items: o.items.map((i: any) => ({
-                productId: i.productId,
-                productName: i.description,
-                quantity: i.qty,
-                unitPrice: i.rate,
-              }))
-            })));
-          }
-        }
+        // Dealer/Retailer party: eligible invoices can come from either the
+        // formal Sales Order pipeline (SalesOrder) or a direct POS/Tax
+        // Invoice (Order) — a POS cash sale never creates a SalesOrder row,
+        // so both sources must be queried or POS-originated invoices never
+        // show up here.
+        const isDealer = entity._kind === 'DEALER';
+
+        const [soRes, posRes, returnsRes] = await Promise.all([
+          isDealer ? Promise.resolve({ data: [] }) : salesApi.getSalesOrders({ customerId: entityId }).catch(() => ({ data: [] })),
+          posApi.getOrders().catch(() => ({ data: [] })),
+          // ReturnOrder has no dealerId column yet — prior-return tracking
+          // (for the over-return guard below) only works for Customer parties.
+          isDealer ? Promise.resolve({ data: [] }) : salesApi.getReturns({ customerId: entityId }).catch(() => ({ data: [] })),
+        ]);
+
+        const salesOrders = (soRes.data?.data || soRes.data || []).map((o: any) => ({
+          id: o.id,
+          _source: 'SALES_ORDER',
+          orderNumber: o.orderNumber,
+          totalAmount: o.totalAmount,
+          createdAt: o.createdAt,
+          items: (o.items || []).map((i: any) => ({
+            productId: i.productId,
+            productName: i.productName || i.description,
+            quantity: i.quantity || i.qty,
+            unitPrice: i.unitPrice ?? i.rate,
+          })),
+        }));
+
+        const allPosOrders = posRes.data?.data || posRes.data || [];
+        const posOrders = allPosOrders
+          .filter((o: any) =>
+            o.status !== 'CANCELLED' &&
+            (isDealer ? o.partyId === entityId : (o.customerId === entityId || o.customer?.id === entityId))
+          )
+          .map((o: any) => ({
+            id: o.id,
+            _source: 'POS',
+            orderNumber: o.invoiceNum,
+            totalAmount: o.totalAmount,
+            createdAt: o.createdAt,
+            items: (o.orderItems || []).map((i: any) => ({
+              productId: i.productId,
+              productName: i.product?.name,
+              quantity: i.quantity,
+              unitPrice: i.price,
+            })),
+          }));
+
+        setOrdersList([...posOrders, ...salesOrders]);
+
+        setExistingReturns(returnsRes.data?.data || returnsRes.data || []);
       }
     } catch (err) {
       showToast("Could not load associated orders", "error");
+    } finally {
+      setLoadingOrders(false);
     }
   };
 
@@ -223,15 +257,33 @@ export default function SalesReturnsPage() {
       return;
     }
 
+    // Already-returned quantities for this specific invoice, so a partially
+    // or fully returned line can't be over-returned by a second request.
+    const alreadyReturned: Record<string, number> = {};
+    existingReturns.forEach((r: any) => {
+      const matchesOrder = order._source === 'POS' ? r.posOrderId === order.id : r.salesOrderId === order.id;
+      if (!matchesOrder || r.status === 'REJECTED') return;
+      (r.items || []).forEach((it: any) => {
+        const key = it.productId || it.productName;
+        alreadyReturned[key] = (alreadyReturned[key] || 0) + Number(it.quantity || 0);
+      });
+    });
+
     // Populate order items
-    const populated = (order.items || []).map((i: any) => ({
-      productId: i.productId || `prod_${Math.random().toString(36).substr(2,4)}`,
-      productName: i.productName || i.description || "Custom Item",
-      orderQuantity: i.quantity || i.qty || 1,
-      returnQuantity: 0,
-      rate: i.unitPrice || i.rate || 0,
-      condition: "Good",
-    }));
+    const populated = (order.items || []).map((i: any) => {
+      const productId = i.productId || `prod_${Math.random().toString(36).substr(2,4)}`;
+      const productName = i.productName || i.description || "Custom Item";
+      const boughtQuantity = i.quantity || i.qty || 1;
+      const returned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
+      return {
+        productId,
+        productName,
+        orderQuantity: Math.max(0, boughtQuantity - returned),
+        returnQuantity: 0,
+        rate: i.unitPrice || i.rate || 0,
+        condition: "Good",
+      };
+    });
     setReturnItems(populated);
   };
 
@@ -309,9 +361,16 @@ export default function SalesReturnsPage() {
             rate: i.rate,
             condition: i.condition
           })),
-          ...(returnSource === 'FRANCHISE' 
+          ...(returnSource === 'FRANCHISE'
             ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
-            : { customerId: selectedEntity.id, salesOrderId: selectedOrder.id }
+            : {
+                // ReturnOrder.customerId is a Customer FK — a Dealer party
+                // has no matching column yet, so only attach it for customers.
+                ...(selectedEntity._kind !== 'DEALER' ? { customerId: selectedEntity.id } : {}),
+                ...(selectedOrder._source === 'POS'
+                  ? { posOrderId: selectedOrder.id }
+                  : { salesOrderId: selectedOrder.id }),
+              }
           )
         });
       } catch (err) {
@@ -507,15 +566,23 @@ export default function SalesReturnsPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Original Invoice Reference *</label>
                 <select
-                  disabled={!selectedEntity}
+                  disabled={!selectedEntity || loadingOrders}
                   value={selectedOrder?.id || ""}
                   onChange={e => handleOrderChange(e.target.value)}
                   className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] disabled:opacity-50"
                 >
-                  <option value="">{selectedEntity ? "Choose original order..." : "Select entity first"}</option>
+                  <option value="">
+                    {!selectedEntity
+                      ? "Select entity first"
+                      : loadingOrders
+                      ? "Loading invoices..."
+                      : ordersList.length === 0
+                      ? "No eligible invoices for this party"
+                      : "Choose original invoice..."}
+                  </option>
                   {ordersList.map(o => (
                     <option key={o.id} value={o.id}>
-                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
+                      {o._source === 'POS' ? '[POS] ' : ''}#{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
                     </option>
                   ))}
                 </select>

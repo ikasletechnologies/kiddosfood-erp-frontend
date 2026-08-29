@@ -14,7 +14,10 @@ export const posApi = {
 export const posSettlementApi = {
   getToday: (params: any = {}) => api.get('/api/pos/settlement/today', { params }),
   getLatest: (params: any = {}) => api.get('/api/pos/settlement/latest', { params }),
-  closeDay: (data: any) => api.post('/api/pos/settlement/close', data),
+  // Live, server-computed totals (Order + Payment tables) for the open
+  // business day — the same numbers closeDay validates against.
+  getSummary: (params: any = {}) => api.get('/api/pos/settlement/summary', { params }),
+  closeDay: (data: any = {}) => api.post('/api/pos/settlement/close', data),
 };
 
 // --- Sales Module (Quotations, Orders, Returns) ---

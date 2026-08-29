@@ -33,36 +33,40 @@ interface LedgerRow {
   partyType?: string | null;
   partyName?: string | null;
   method?: string | null;
+  // Expense-traceability reference fields (undefined for non-expense rows).
+  expenseId?: string | null;
+  expenseNumber?: string | null;
+  category?: string | null;
 }
 
 function toRows(account: any): LedgerRow[] {
   const rows: LedgerRow[] = [];
 
+  // A paid Expense's only real money-movement record is the Payment below
+  // (sourceModule: 'EXPENSE') — the backend deliberately no longer sends a
+  // separate `account.expenses` list here, so there is nothing left to loop
+  // over and no risk of rendering the same outflow twice.
   for (const p of account.payments || []) {
     const isOutflow = p.entityType === 'VENDOR' || p.sourceModule === 'EXPENSE' || p.type === 'INTERNAL_TRANSFER';
     const isPos = p.sourceModule === 'POS';
+    const isExpense = p.sourceModule === 'EXPENSE';
     rows.push({
       id: `payment-${p.id}`,
       date: p.createdAt,
       particulars: isPos
         ? 'POS Payment Received'
-        : (p.transactionRef || (isOutflow ? (p.sourceModule === 'EXPENSE' ? 'Expense Paid' : 'Payment Made') : 'Payment Received')),
+        : isExpense
+          ? `Expense Paid${p.payee ? ` - ${p.payee}` : ''}`
+          : (p.transactionRef || (isOutflow ? 'Payment Made' : 'Payment Received')),
       type: isOutflow ? 'OUTFLOW' : 'INFLOW',
       amount: p.paidAmount,
       billNumber: isPos ? p.billNumber : null,
       partyType: isPos ? p.partyType : null,
       partyName: isPos ? p.partyName : null,
       method: isPos ? p.paymentMode : null,
-    });
-  }
-
-  for (const e of account.expenses || []) {
-    rows.push({
-      id: `expense-${e.id}`,
-      date: e.date || e.createdAt,
-      particulars: e.description || e.category || 'Business Expense',
-      type: 'OUTFLOW',
-      amount: e.paidAmount || e.amount,
+      expenseId: isExpense ? p.expenseId : null,
+      expenseNumber: isExpense ? p.expenseNumber : null,
+      category: isExpense ? p.category : null,
     });
   }
 
@@ -192,11 +196,13 @@ export default function AccountDetailPage() {
                     <td className="px-5 py-3 text-xs text-gray-500 dark:text-slate-400 whitespace-nowrap align-top">{new Date(r.date).toLocaleString("en-IN")}</td>
                     <td className="px-5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300 align-top">
                       <div>{r.particulars}</div>
-                      {(r.billNumber || r.partyName || r.method) && (
+                      {(r.billNumber || r.partyName || r.method || r.expenseNumber || r.category) && (
                         <div className="mt-1 space-y-0.5 text-[11px] font-normal text-gray-500 dark:text-slate-400">
                           {r.billNumber && <div>Bill: #{r.billNumber}</div>}
                           {r.partyName && <div>{PARTY_TYPE_LABEL[r.partyType || ''] || 'Party'}: {r.partyName}</div>}
                           {r.method && <div>Method: {r.method}</div>}
+                          {r.expenseNumber && <div>Ref: {r.expenseNumber}</div>}
+                          {r.category && <div>Category: {r.category}</div>}
                         </div>
                       )}
                     </td>

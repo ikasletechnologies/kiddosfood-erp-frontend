@@ -38,7 +38,7 @@ const FALLBACK_COMPANY = {
 
 interface POItem {
   id: string;
-  inventoryItem: { id: string; name: string; unit: string };
+  inventoryItem: { id: string; name: string; unit: string; taxRate?: number; gstRate?: number };
   quantity: number;
   price: number;
   gstRate?: number;
@@ -52,6 +52,12 @@ interface PO {
   vendor: { id?: string; name: string };
   status: string;
   totalAmount: number;
+  subtotal?: number;
+  discountAmount?: number;
+  freightCost?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
   createdAt: string;
   poItems: POItem[];
   warehouseId?: string;
@@ -63,13 +69,64 @@ interface GRNItem {
   receivedQty: number;
   acceptedQty: number;
   rejectedQty: number;
-  price: number;
+  price: number;           // actual received unit price (editable)
+  poPrice: number;         // PO unit price — reference only, never edited
+  gstRate?: number;
+  priceOverrideReason?: string;
   vendorBatchNo?: string;
   mfgDate?: string;
   expDate?: string;
   lotNumber?: string;
   warehouseId?: string;
-  inventoryItem?: { name: string; unit: string };
+  inventoryItem?: { name: string; unit: string; taxRate?: number; gstRate?: number };
+}
+
+function computeCommercialsFromPO(
+  po: PO | null,
+  items: GRNItem[]
+) {
+  let acceptedSubtotal = 0;
+  let totalTax = 0;
+  const taxRateMap: Record<number, number> = {};
+
+  items.forEach(gi => {
+    const acceptedQty = Number(gi.acceptedQty) || 0;
+    const price = Number(gi.price) || 0;
+    const lineSubtotal = acceptedQty * price;
+    const rate = Number(gi.gstRate ?? 0);
+    const lineTax = (lineSubtotal * rate) / 100;
+
+    acceptedSubtotal += lineSubtotal;
+    totalTax += lineTax;
+
+    if (rate > 0 && acceptedQty > 0) {
+      taxRateMap[rate] = (taxRateMap[rate] || 0) + lineTax;
+    }
+  });
+
+  const poSubtotal = Number(po?.subtotal) > 0
+    ? Number(po?.subtotal)
+    : (po?.poItems || []).reduce((acc, item) => acc + (Number(item.quantity) || 0) * (Number(item.price) || 0), 0) || 1;
+
+  const ratio = poSubtotal > 0 ? acceptedSubtotal / poSubtotal : 0;
+  const poDiscount = Number(po?.discountAmount) || 0;
+  const poFreight = Number(po?.freightCost) || 0;
+
+  const proRataDiscount = Number((poDiscount * ratio).toFixed(2));
+  const proRataFreight = Number((poFreight * ratio).toFixed(2));
+
+  const goodsValue = Number(acceptedSubtotal.toFixed(2));
+  const taxAmount = Number(totalTax.toFixed(2));
+  const finalPayable = Number((goodsValue + taxAmount - proRataDiscount + proRataFreight).toFixed(2));
+
+  return {
+    goodsValue,
+    taxAmount,
+    taxRateMap,
+    discountAmount: proRataDiscount,
+    freightCost: proRataFreight,
+    finalPayable,
+  };
 }
 
 export default function GRNPage() {
@@ -200,20 +257,26 @@ export default function GRNPage() {
   const selectPO = (po: PO) => {
     setSelectedPO(po);
     setGrnItems(
-      (po.poItems || []).map(item => ({
-        materialId: item.inventoryItem.id,
-        quantity: item.quantity,
-        receivedQty: item.quantity,
-        acceptedQty: item.quantity,
-        rejectedQty: 0,
-        price: item.price,
-        vendorBatchNo: "",
-        mfgDate: "",
-        expDate: "",
-        lotNumber: "",
-        warehouseId: po.warehouseId || defaultWarehouseId || "",
-        inventoryItem: item.inventoryItem,
-      }))
+      (po.poItems || []).map(item => {
+        const gstRate = item.gstRate ?? (item.inventoryItem as any)?.taxRate ?? (item.inventoryItem as any)?.gstRate ?? 0;
+        return {
+          materialId: item.inventoryItem.id,
+          quantity: item.quantity,
+          receivedQty: item.quantity,
+          acceptedQty: item.quantity,
+          rejectedQty: 0,
+          price: item.price,
+          poPrice: item.price,
+          gstRate: Number(gstRate) || 0,
+          priceOverrideReason: "",
+          vendorBatchNo: "",
+          mfgDate: "",
+          expDate: "",
+          lotNumber: "",
+          warehouseId: po.warehouseId || defaultWarehouseId || "",
+          inventoryItem: item.inventoryItem,
+        };
+      })
     );
     setStep(2);
   };
@@ -231,6 +294,22 @@ export default function GRNPage() {
       }
 
       currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
+      next[idx] = currentItem;
+      return next;
+    });
+  };
+
+  // Actual received unit price — kept separate from PO price, which is
+  // never mutated. Clearing the override reason when price is reset back
+  // to the PO price avoids a stale reason lingering on a non-overridden line.
+  const updateItemPrice = (idx: number, val: number) => {
+    setGrnItems(prev => {
+      const next = [...prev];
+      const price = Math.max(0, val);
+      const currentItem = { ...next[idx], price };
+      if (Math.abs(price - currentItem.poPrice) < 0.001) {
+        currentItem.priceOverrideReason = "";
+      }
       next[idx] = currentItem;
       return next;
     });
@@ -283,6 +362,17 @@ export default function GRNPage() {
         return;
       }
       toast.error("Please select a destination warehouse for all items.");
+      return;
+    }
+
+    // Any line where the actual received price differs from the PO price
+    // requires a reason — the PO price itself is never touched, but the
+    // vendor liability that gets posted at approval uses this actual price.
+    const missingReason = itemsToSubmit.some(
+      item => Math.abs(item.price - item.poPrice) > 0.001 && !item.priceOverrideReason?.trim()
+    );
+    if (missingReason) {
+      toast.error("Please provide a reason for every line where the actual price differs from the PO price.");
       return;
     }
 
@@ -607,6 +697,7 @@ export default function GRNPage() {
                       <th className="px-4 py-3 text-left">Material</th>
                       <th className="px-4 py-3 text-left">Traceability</th>
                       <th className="px-4 py-3 text-left">Warehouse</th>
+                      <th className="px-4 py-3 text-left">Pricing</th>
                       <th className="px-4 py-3 text-center">Ordered</th>
                       <th className="px-4 py-3 text-center">Received</th>
                       <th className="px-4 py-3 text-center">Rejected</th>
@@ -617,6 +708,9 @@ export default function GRNPage() {
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {grnItems.map((item, idx) => {
                       const originalItem = selectedPO?.poItems[idx];
+                      const variance = item.price - item.poPrice;
+                      const isOverridden = Math.abs(variance) > 0.001;
+                      const actualLineAmount = item.acceptedQty * item.price;
                       return (
                         <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                           <td className="px-4 py-3">
@@ -706,6 +800,79 @@ export default function GRNPage() {
                               </button>
                             </div>
                           </td>
+                          <td className="px-4 py-3">
+                            {(() => {
+                              const lineGoodsValue = item.acceptedQty * item.price;
+                              const lineGstRate = Number(item.gstRate ?? 0);
+                              const lineGstAmount = (lineGoodsValue * lineGstRate) / 100;
+                              const lineTotal = lineGoodsValue + lineGstAmount;
+
+                              return (
+                                <div className="space-y-1.5 min-w-[190px]">
+                                  <div className="flex items-center justify-between text-[10px] text-gray-500 dark:text-slate-400">
+                                    <span className="uppercase tracking-tight font-semibold">PO Price</span>
+                                    <span className="font-semibold text-gray-600 dark:text-slate-300">₹{item.poPrice.toFixed(2)}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-gray-400 dark:text-slate-500 shrink-0">Actual</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="0.01"
+                                      value={item.price}
+                                      onChange={e => updateItemPrice(idx, Number(e.target.value))}
+                                      title="Actual Unit Price — the PO price is never changed"
+                                      className={clsx(
+                                        "w-full px-2 py-1 border rounded-lg text-xs font-semibold outline-none focus:border-[#f58220]",
+                                        isOverridden
+                                          ? "border-amber-300 dark:border-amber-500/40 bg-amber-50/40 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                          : "border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                                      )}
+                                    />
+                                  </div>
+                                  {isOverridden && (
+                                    <>
+                                      <div className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                        <AlertTriangleIcon size={10} />
+                                        {variance > 0 ? "+" : ""}₹{variance.toFixed(2)}/unit ({item.poPrice > 0 ? (variance > 0 ? "+" : "") + ((variance / item.poPrice) * 100).toFixed(2) + "%" : "—"})
+                                      </div>
+                                      <input
+                                        type="text"
+                                        placeholder="Override reason *"
+                                        value={item.priceOverrideReason || ""}
+                                        onChange={e => updateItemStr(idx, "priceOverrideReason", e.target.value)}
+                                        className={clsx(
+                                          "w-full px-2 py-1 border rounded-lg text-[11px] outline-none focus:border-[#f58220] text-gray-800 dark:text-white bg-white dark:bg-[#13151f]",
+                                          !item.priceOverrideReason?.trim()
+                                            ? "border-red-300 dark:border-red-500/40 bg-red-50/30 dark:bg-red-500/10"
+                                            : "border-gray-200 dark:border-white/10"
+                                        )}
+                                      />
+                                    </>
+                                  )}
+
+                                  <div className="pt-1.5 mt-1 border-t border-gray-100 dark:border-white/5 text-[10px] space-y-0.5">
+                                    <div className="flex justify-between text-gray-500 dark:text-slate-400">
+                                      <span>Goods Value:</span>
+                                      <span className="font-semibold text-gray-700 dark:text-slate-300">₹{lineGoodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between text-gray-500 dark:text-slate-400">
+                                      <span>GST Rate:</span>
+                                      <span className="font-semibold text-gray-700 dark:text-slate-300">{lineGstRate}%</span>
+                                    </div>
+                                    <div className="flex justify-between text-gray-500 dark:text-slate-400">
+                                      <span>GST:</span>
+                                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{lineGstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                    <div className="flex justify-between font-bold text-gray-800 dark:text-white pt-0.5">
+                                      <span>Line Total:</span>
+                                      <span className="text-gray-900 dark:text-white">₹{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td className="px-4 py-3 text-center">
                             <span className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 rounded text-xs font-semibold text-gray-700 dark:text-slate-300">{item.quantity}</span>
                           </td>
@@ -755,6 +922,93 @@ export default function GRNPage() {
                 </table>
               </div>
             </div>
+
+            {/* ── Receiving Summary & Commercial Calculation Preview ── */}
+            {(() => {
+              const poValue = grnItems.reduce((s, i) => s + i.quantity * i.poPrice, 0);
+              const actualGoodsValue = grnItems.reduce((s, i) => s + i.acceptedQty * i.price, 0);
+              const variance = actualGoodsValue - poValue;
+              const variancePct = poValue > 0 ? (variance / poValue) * 100 : 0;
+              const hasOverride = grnItems.some(i => Math.abs(i.price - i.poPrice) > 0.001);
+
+              const commercials = computeCommercialsFromPO(selectedPO, grnItems);
+              const rates = Object.keys(commercials.taxRateMap).map(Number);
+              let gstLabel = "GST";
+              if (rates.length === 1) {
+                gstLabel = `GST (${rates[0]}%)`;
+              } else if (rates.length > 1) {
+                gstLabel = `GST (${rates.sort((a, b) => a - b).map(r => r + "%").join(", ")})`;
+              } else {
+                gstLabel = "GST (0%)";
+              }
+
+              return (
+                <div className="space-y-4">
+                  {/* RECEIVING SUMMARY */}
+                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
+                    <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-tight mb-3">Receiving Summary</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">PO Value</p>
+                        <p className="text-base font-bold text-gray-800 dark:text-white mt-0.5">₹{poValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">Actual Goods Value</p>
+                        <p className="text-base font-bold text-gray-800 dark:text-white mt-0.5">₹{actualGoodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">Price Variance</p>
+                        <p className={clsx("text-base font-bold mt-0.5", variance === 0 ? "text-gray-800 dark:text-white" : variance > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
+                          {variance > 0 ? "+" : ""}₹{variance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {variance !== 0 && <span className="text-xs font-semibold ml-1">({variancePct > 0 ? "+" : ""}{variancePct.toFixed(2)}%)</span>}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* COMMERCIAL CALCULATION */}
+                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-tight">Commercial Calculation</h3>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                        Purchase Bill Payable Preview
+                      </span>
+                    </div>
+
+                    <div className="max-w-md space-y-2 text-xs">
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-gray-600 dark:text-slate-400">Goods Value</span>
+                        <span className="font-mono font-semibold text-gray-800 dark:text-white">₹{commercials.goodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-gray-600 dark:text-slate-400">{gstLabel}</span>
+                        <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{commercials.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-gray-600 dark:text-slate-400">Discount</span>
+                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">-₹{commercials.discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-gray-600 dark:text-slate-400">Freight</span>
+                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">+₹{commercials.freightCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-200 dark:border-white/10 flex justify-between items-center font-bold">
+                        <span className="text-xs uppercase text-gray-900 dark:text-white tracking-wider">Final Vendor Payable</span>
+                        <span className="text-base font-mono text-[#f58220]">₹{commercials.finalPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-3">
+                      Calculated using PO tax rates, pro-rata discount, and freight. Previews the exact commercial calculation that the Purchase Bill will post to the Vendor Ledger upon approval.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Bottom Actions Footer Bar ── */}
             {(() => {
@@ -1022,6 +1276,7 @@ export default function GRNPage() {
                         <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Received</th>
                         <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Accepted</th>
                         <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Rejected</th>
+                        <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest text-right">Price</th>
                         <th className="px-4 py-3 font-semibold text-slate-500 uppercase tracking-widest">Warehouse</th>
                       </tr>
                     </thead>
@@ -1036,6 +1291,14 @@ export default function GRNPage() {
                           <td className="px-4 py-3 text-right font-semibold text-slate-700 dark:text-slate-300">{item.receivedQty}</td>
                           <td className="px-4 py-3 text-right font-semibold text-emerald-600">{item.acceptedQty}</td>
                           <td className="px-4 py-3 text-right font-semibold text-rose-600">{item.rejectedQty}</td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="font-semibold text-slate-700 dark:text-slate-300">₹{Number(item.price).toFixed(2)}</div>
+                            {item.priceOverridden && (
+                              <div className="text-[9px] text-amber-600 dark:text-amber-400 font-bold mt-0.5" title={`Overridden by ${item.priceOverrideBy || "—"} · ${item.priceOverrideAt ? formatDate(item.priceOverrideAt) : ""}\nReason: ${item.priceOverrideReason || "—"}`}>
+                                was ₹{Number(item.poPrice).toFixed(2)} ⚠
+                              </div>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-slate-500">{item.warehouse?.name || (
                             <span className="text-rose-500 italic font-medium">Update Warehouse</span>
                           )}</td>
@@ -1044,7 +1307,107 @@ export default function GRNPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Historical Commercial Breakdown */}
+                {(() => {
+                  const po = viewingGRNDetails.procurementOrder;
+                  const items = (viewingGRNDetails.items || []).map((item: any) => {
+                    const poItem = po?.poItems?.find((pi: any) => pi.inventoryItemId === item.materialId || pi.id === item.materialId);
+                    const gstRate = item.gstRate ?? poItem?.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0;
+                    return {
+                      materialId: item.materialId,
+                      acceptedQty: item.acceptedQty ?? item.quantity,
+                      price: item.price,
+                      quantity: item.quantity,
+                      poPrice: item.poPrice || item.price,
+                      gstRate: Number(gstRate) || 0,
+                    };
+                  });
+                  const comm = computeCommercialsFromPO(po, items);
+                  const rates = Object.keys(comm.taxRateMap).map(Number);
+                  let gstLabel = "GST";
+                  if (rates.length === 1) gstLabel = `GST (${rates[0]}%)`;
+                  else if (rates.length > 1) gstLabel = `GST (${rates.sort((a, b) => a - b).map(r => r + "%").join(", ")})`;
+                  else gstLabel = "GST (0%)";
+
+                  return (
+                    <div className="bg-slate-50 dark:bg-[#0b0c14] border border-slate-100 dark:border-white/5 p-4 rounded-2xl space-y-2 mt-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Commercial Breakdown Preview</h4>
+                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-500/20">Final Payable</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs pt-1">
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Goods Value</span>
+                          <span className="font-bold text-slate-800 dark:text-white">₹{comm.goodsValue.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">{gstLabel}</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">₹{comm.taxAmount.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Discount</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">-₹{comm.discountAmount.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Freight</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">+₹{comm.freightCost.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] font-bold text-slate-400 block uppercase">Total Payable</span>
+                          <span className="font-extrabold text-[#f58220]">₹{comm.finalPayable.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
+
+              {/* Price Override Audit — always visible, not tooltip-only, so
+                  "why was this vendor charged X instead of PO Y" is
+                  answerable months later without digging through app logs. */}
+              {viewingGRNDetails.items?.some((item: any) => item.priceOverridden) && (
+                <div className="space-y-3">
+                  <h3 className="text-[11px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest px-1 flex items-center gap-1.5">
+                    <AlertTriangleIcon size={12} /> Price Override Audit
+                  </h3>
+                  <div className="space-y-2">
+                    {viewingGRNDetails.items
+                      .filter((item: any) => item.priceOverridden)
+                      .map((item: any, idx: number) => (
+                        <div key={idx} className="bg-amber-50/60 dark:bg-amber-500/[0.06] border border-amber-200 dark:border-amber-500/20 rounded-2xl p-4">
+                          <p className="text-xs font-black text-slate-800 dark:text-white mb-3">{item.inventoryItem?.name}</p>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">PO Price</p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">₹{Number(item.poPrice).toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Received Price</p>
+                              <p className="text-xs font-bold text-amber-700 dark:text-amber-400">₹{Number(item.price).toFixed(2)}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Override</p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Yes</p>
+                            </div>
+                            <div className="col-span-2 md:col-span-1">
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Changed By</p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{item.priceOverrideBy || "—"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Changed At</p>
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{item.priceOverrideAt ? formatDate(item.priceOverrideAt) : "—"}</p>
+                            </div>
+                            <div className="col-span-2 md:col-span-3">
+                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Reason</p>
+                              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">{item.priceOverrideReason || "—"}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Footer / Actions */}

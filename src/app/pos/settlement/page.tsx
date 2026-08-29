@@ -15,18 +15,40 @@ import {
   Sparkles,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { posApi, posSettlementApi } from "@/lib/api";
+import { posSettlementApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
 
-interface SettlementStats {
-  cash: number;
-  upi: number;
-  card: number;
-  total: number;
+// Mirrors POSService.getDailySummary — server-computed from Order/Payment
+// tables, never guessed from client-side aggregation.
+interface DailySummary {
+  businessDate: string;
   orderCount: number;
+  grandTotal: number;
+  cashTotal: number;
+  upiTotal: number;
+  cardTotal: number;
+  otherTotal: number;
+  collectionTotal: number;
+  refundTotal: number;
+  netTotal: number;
+  reconciled: boolean;
 }
+
+const EMPTY_SUMMARY: DailySummary = {
+  businessDate: new Date().toISOString(),
+  orderCount: 0,
+  grandTotal: 0,
+  cashTotal: 0,
+  upiTotal: 0,
+  cardTotal: 0,
+  otherTotal: 0,
+  collectionTotal: 0,
+  refundTotal: 0,
+  netTotal: 0,
+  reconciled: true,
+};
 
 interface SettlementRecord {
   id: string;
@@ -34,7 +56,10 @@ interface SettlementRecord {
   cashTotal: number;
   upiTotal: number;
   cardTotal: number;
+  otherTotal?: number;
   grandTotal: number;
+  refundTotal?: number;
+  netTotal?: number;
   orderCount: number;
   closedBy?: string;
   createdAt: string;
@@ -42,48 +67,25 @@ interface SettlementRecord {
 
 export default function SettlementPage() {
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<SettlementStats>({
-    cash: 0,
-    upi: 0,
-    card: 0,
-    total: 0,
-    orderCount: 0,
-  });
+  const [summary, setSummary] = useState<DailySummary>(EMPTY_SUMMARY);
   const [settling, setSettling] = useState(false);
+  const [settleError, setSettleError] = useState<string | null>(null);
   const [todaySettlement, setTodaySettlement] = useState<SettlementRecord | null>(null);
   const [latestSettlement, setLatestSettlement] = useState<SettlementRecord | null>(null);
   const settled = !!todaySettlement;
 
   useEffect(() => {
-    fetchTodayStats();
+    fetchSummary();
     fetchSettlementStatus();
   }, []);
 
-  const fetchTodayStats = async () => {
+  const fetchSummary = async () => {
     setLoading(true);
     try {
-      const res = await posApi.getOrders({
-        date: new Date().toISOString().split("T")[0],
-        status: "COMPLETED",
-      });
-      const orders = res.data?.data || res.data || [];
-
-      const newStats = orders.reduce(
-        (acc: SettlementStats, order: any) => {
-          const amt = order.totalAmount || 0;
-          if (order.paymentMode === "CASH") acc.cash += amt;
-          else if (order.paymentMode === "UPI") acc.upi += amt;
-          else if (order.paymentMode === "CARD") acc.card += amt;
-          acc.total += amt;
-          acc.orderCount += 1;
-          return acc;
-        },
-        { cash: 0, upi: 0, card: 0, total: 0, orderCount: 0 }
-      );
-
-      setStats(newStats);
+      const res = await posSettlementApi.getSummary();
+      setSummary(res.data);
     } catch (e) {
-      console.error("Failed to fetch settlement stats", e);
+      console.error("Failed to fetch settlement summary", e);
       toast.error("Could not load today's sales data");
     } finally {
       setLoading(false);
@@ -105,19 +107,23 @@ export default function SettlementPage() {
 
   const handleSettle = async () => {
     setSettling(true);
+    setSettleError(null);
     try {
-      const settlement = await posSettlementApi.closeDay({
-        cashTotal: stats.cash,
-        upiTotal: stats.upi,
-        cardTotal: stats.card,
-        grandTotal: stats.total,
-        orderCount: stats.orderCount,
-      });
+      // No totals are sent — the backend recomputes and validates them
+      // itself from Order/Payment records, then persists that snapshot.
+      const settlement = await posSettlementApi.closeDay();
       setTodaySettlement(settlement.data);
       setLatestSettlement(settlement.data);
       toast.success("Day settled successfully!");
     } catch (e: any) {
-      toast.error(e.response?.data?.error || "Failed to settle the day");
+      const msg = e.response?.data?.error || "Failed to settle the day";
+      setSettleError(msg);
+      toast.error(msg);
+      // The attempted settle may have been blocked because our cached
+      // summary was stale (e.g. another terminal already closed the day) —
+      // re-sync so the UI reflects the real, current state.
+      fetchSummary();
+      fetchSettlementStatus();
     } finally {
       setSettling(false);
     }
@@ -161,7 +167,7 @@ export default function SettlementPage() {
           {[
             {
               label: "Cash Collection",
-              value: stats.cash,
+              value: summary.cashTotal,
               icon: BanknoteIcon,
               color: "text-emerald-600",
               bg: "bg-emerald-50 dark:bg-emerald-950/20",
@@ -169,7 +175,7 @@ export default function SettlementPage() {
             },
             {
               label: "UPI Collection",
-              value: stats.upi,
+              value: summary.upiTotal,
               icon: QrCodeIcon,
               color: "text-blue-600",
               bg: "bg-blue-50 dark:bg-blue-950/20",
@@ -177,7 +183,7 @@ export default function SettlementPage() {
             },
             {
               label: "Card Payments",
-              value: stats.card,
+              value: summary.cardTotal,
               icon: CreditCardIcon,
               color: "text-violet-600",
               bg: "bg-violet-50 dark:bg-violet-950/20",
@@ -185,7 +191,7 @@ export default function SettlementPage() {
             },
             {
               label: "Total Orders",
-              value: stats.orderCount,
+              value: summary.orderCount,
               icon: HistoryIcon,
               color: "text-indigo-600",
               bg: "bg-indigo-50 dark:bg-indigo-950/20",
@@ -218,7 +224,7 @@ export default function SettlementPage() {
       </div>
 
       {/* Main Content: Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 print:hidden">
         {/* Today's Sales Summary */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
@@ -237,7 +243,7 @@ export default function SettlementPage() {
                     <div className="w-2 h-2 rounded-full bg-emerald-500" /> Cash
                   </span>
                   <span className="text-slate-900 dark:text-white font-bold tabular-nums">
-                    ₹{stats.cash.toLocaleString()}
+                    ₹{summary.cashTotal.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -245,7 +251,7 @@ export default function SettlementPage() {
                     <div className="w-2 h-2 rounded-full bg-blue-500" /> UPI
                   </span>
                   <span className="text-slate-900 dark:text-white font-bold tabular-nums">
-                    ₹{stats.upi.toLocaleString()}
+                    ₹{summary.upiTotal.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -253,17 +259,50 @@ export default function SettlementPage() {
                     <div className="w-2 h-2 rounded-full bg-violet-500" /> Card
                   </span>
                   <span className="text-slate-900 dark:text-white font-bold tabular-nums">
-                    ₹{stats.card.toLocaleString()}
+                    ₹{summary.cardTotal.toLocaleString()}
                   </span>
                 </div>
+                {summary.otherTotal > 0 && (
+                  <div className="flex justify-between items-center text-sm font-semibold text-slate-600 dark:text-slate-300">
+                    <span className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-slate-400" /> Other
+                    </span>
+                    <span className="text-slate-900 dark:text-white font-bold tabular-nums">
+                      ₹{summary.otherTotal.toLocaleString()}
+                    </span>
+                  </div>
+                )}
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
                   <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Gross Total
                   </span>
                   <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                    ₹{stats.total.toLocaleString()}
+                    ₹{summary.grandTotal.toLocaleString()}
                   </span>
                 </div>
+                {summary.refundTotal > 0 && (
+                  <>
+                    <div className="flex justify-between items-center text-sm font-semibold text-rose-600 dark:text-rose-400">
+                      <span>Refunds</span>
+                      <span className="font-bold tabular-nums">− ₹{summary.refundTotal.toLocaleString()}</span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                      <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                        Net Collection
+                      </span>
+                      <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                        ₹{summary.netTotal.toLocaleString()}
+                      </span>
+                    </div>
+                  </>
+                )}
+                {!summary.reconciled && (
+                  <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-400">
+                    <span>
+                      Settlement mismatch detected. Payment mode total ₹{summary.collectionTotal.toLocaleString()} does not match expected collection ₹{summary.grandTotal.toLocaleString()}.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col items-center justify-center p-6 bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/30 rounded-xl text-center space-y-3">
@@ -272,14 +311,14 @@ export default function SettlementPage() {
                 </div>
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wider text-orange-600/70 dark:text-orange-400/70">
-                    Estimated Collection
+                    {summary.refundTotal > 0 ? "Net Collection" : "Estimated Collection"}
                   </p>
                   <h4 className="text-3xl font-black tracking-tight text-orange-600 dark:text-orange-400 mt-1 tabular-nums">
-                    ₹{stats.total.toLocaleString()}
+                    ₹{summary.netTotal.toLocaleString()}
                   </h4>
                 </div>
                 <p className="text-[11px] font-medium text-orange-600/60 dark:text-orange-400/60 max-w-[200px]">
-                  Ensure physical cash matches before settling.
+                  Cash + UPI + Card{summary.refundTotal > 0 ? " − Refunds" : ""}. Ensure physical cash matches before settling.
                 </p>
               </div>
             </div>
@@ -329,27 +368,38 @@ export default function SettlementPage() {
                       Terminal Closed
                     </p>
                   </div>
-                  <button className="w-full py-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                  <button
+                    onClick={() => window.print()}
+                    className="w-full py-2.5 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-xs flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+                  >
                     <PrinterIcon size={14} /> Print Report
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={handleSettle}
-                  disabled={settling || stats.total === 0}
-                  className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
-                >
-                  {settling ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Settling...
-                    </>
-                  ) : (
-                    <>
-                      Perform Day Settle <ArrowLeftIcon className="rotate-180" size={16} />
-                    </>
+                <>
+                  {settleError && (
+                    <div className="p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-400">
+                      {settleError}
+                    </div>
                   )}
-                </button>
+                  <button
+                    onClick={handleSettle}
+                    disabled={settling || loading || summary.grandTotal === 0 || !summary.reconciled}
+                    title={!summary.reconciled ? "Payment-mode totals must reconcile with Gross Total before settling" : undefined}
+                    className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
+                  >
+                    {settling ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Settling...
+                      </>
+                    ) : (
+                      <>
+                        Perform Day Settle <ArrowLeftIcon className="rotate-180" size={16} />
+                      </>
+                    )}
+                  </button>
+                </>
               )}
 
               <div className="pt-5 border-t border-slate-200 dark:border-slate-700 space-y-3">
@@ -381,6 +431,37 @@ export default function SettlementPage() {
           </div>
         </div>
       </div>
+
+      {/* Print-only EOD Report — screen UI above is hidden via print:hidden */}
+      {todaySettlement && (
+        <div className="hidden print:block p-8 text-black">
+          <h1 className="text-xl font-black mb-1">End of Day Settlement Report</h1>
+          <p className="text-sm mb-6">Business Date: {formatDate(todaySettlement.businessDate)}</p>
+          <table className="w-full text-sm border-collapse">
+            <tbody>
+              <tr><td className="py-1 font-semibold">Settlement ID</td><td className="py-1 text-right">{todaySettlement.id}</td></tr>
+              <tr><td className="py-1 font-semibold">Closed At</td><td className="py-1 text-right">{new Date(todaySettlement.createdAt).toLocaleString("en-IN")}</td></tr>
+              <tr><td className="py-1 font-semibold">Closed By</td><td className="py-1 text-right">{todaySettlement.closedBy || "—"}</td></tr>
+              <tr><td className="py-1 font-semibold">Total Orders</td><td className="py-1 text-right">{todaySettlement.orderCount}</td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1 font-bold border-t border-black">Payment Mode Breakdown</td></tr>
+              <tr><td className="py-1">Cash Collection</td><td className="py-1 text-right">₹{todaySettlement.cashTotal.toLocaleString()}</td></tr>
+              <tr><td className="py-1">UPI Collection</td><td className="py-1 text-right">₹{todaySettlement.upiTotal.toLocaleString()}</td></tr>
+              <tr><td className="py-1">Card Collection</td><td className="py-1 text-right">₹{todaySettlement.cardTotal.toLocaleString()}</td></tr>
+              {!!todaySettlement.otherTotal && (
+                <tr><td className="py-1">Other</td><td className="py-1 text-right">₹{todaySettlement.otherTotal.toLocaleString()}</td></tr>
+              )}
+              <tr><td colSpan={2} className="pt-3 pb-1 font-bold border-t border-black">Totals</td></tr>
+              <tr><td className="py-1">Gross Sales</td><td className="py-1 text-right">₹{todaySettlement.grandTotal.toLocaleString()}</td></tr>
+              {!!todaySettlement.refundTotal && (
+                <tr><td className="py-1">Returns / Refunds</td><td className="py-1 text-right">− ₹{todaySettlement.refundTotal.toLocaleString()}</td></tr>
+              )}
+              <tr><td className="py-1 font-bold">Net Collection</td><td className="py-1 text-right font-bold">₹{(todaySettlement.netTotal ?? todaySettlement.grandTotal).toLocaleString()}</td></tr>
+              <tr><td colSpan={2} className="pt-3 pb-1 font-bold border-t border-black">Cash Drawer</td></tr>
+              <tr><td className="py-1">System Cash</td><td className="py-1 text-right">₹{todaySettlement.cashTotal.toLocaleString()}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

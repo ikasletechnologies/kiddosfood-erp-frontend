@@ -95,7 +95,7 @@ export default function ExpensesPage() {
   const [showCatDrop, setShowCatDrop] = useState(false);
   const [expenseDate, setExpenseDate] = useState(todayStr());
   const [showDateCal, setShowDateCal] = useState(false);
-  const [items, setItems] = useState<LineItem[]>([makeItem(), makeItem()]);
+  const [items, setItems] = useState<LineItem[]>([makeItem()]);
   const [paymentType, setPaymentType] = useState("Cash");
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [roundOffEnabled, setRoundOffEnabled] = useState(true);
@@ -162,7 +162,7 @@ export default function ExpensesPage() {
   const removeRow = (id: string) => { if (items.length > 1) setItems(prev => prev.filter(it => it.id !== id)); };
 
   const resetForm = () => {
-    setCategory("OTHER"); setExpenseDate(todayStr()); setItems([makeItem(), makeItem()]);
+    setCategory("OTHER"); setExpenseDate(todayStr()); setItems([makeItem()]);
     setPaymentType("Cash"); setSelectedAccountId(""); setRoundOffEnabled(true); setIsGstEnabled(false);
     setNoteText(""); setShowNote(false);
   };

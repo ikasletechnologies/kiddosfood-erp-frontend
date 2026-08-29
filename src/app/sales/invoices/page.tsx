@@ -269,7 +269,15 @@ export default function SalesInvoicesPage() {
   }, []);
 
   // create form
-  const [paymentType, setPaymentType] = useState<"CASH" | "CREDIT">("CASH");
+  // Defaults to CREDIT (no payment collected yet / receivedAmount = 0) —
+  // NOT "CASH". Backend derives receivedAmount from this: CASH sends the
+  // full total as received and marks the invoice PAID; CREDIT sends 0 and
+  // leaves it UNPAID. Defaulting to CASH here used to make "fully paid"
+  // the outcome of the ordinary Save click unless the user actively
+  // remembered to flip it — every invoice silently became a cash sale with
+  // no real receivable. Marking an invoice as paid must be an explicit
+  // choice, not the default.
+  const [paymentType, setPaymentType] = useState<"CASH" | "CREDIT">("CREDIT");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
@@ -521,7 +529,7 @@ export default function SalesInvoicesPage() {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     setDraftId(null);
-    setPaymentType("CASH");
+    setPaymentType("CREDIT");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -541,7 +549,7 @@ export default function SalesInvoicesPage() {
   const loadDraft = (draft: any) => {
     setDraftId(draft.id);
     const raw = draft._rawState || {};
-    setPaymentType(raw.paymentType || "CASH");
+    setPaymentType(raw.paymentType || "CREDIT");
     setSelectedCustomer(raw.selectedCustomer || null);
     setCustomerSearch(raw.customerSearch || "");
     setCustomerPhone(raw.customerPhone || "");
