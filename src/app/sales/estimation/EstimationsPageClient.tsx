@@ -935,10 +935,11 @@ export default function EstimationsPageClient({
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const margin = 12;
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
       const contentWidth = pageWidth - margin * 2;
 
       // Table Columns definition
-      const cols = [
+      const cols: { header: string; width: number; align: "left" | "right" | "center" }[] = [
         { header: "Date", width: 22, align: "left" },
         { header: L.noColumn, width: 28, align: "left" },
         { header: "Party Name", width: 42, align: "left" },
@@ -948,6 +949,32 @@ export default function EstimationsPageClient({
         { header: "SO Ref", width: 28, align: "left" },
       ];
 
+      // Title + active filter summary, so the exported PDF is self-describing
+      // about which slice of data it represents (matches the filters the
+      // list screen currently has applied).
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${L.docWord} Report`, margin, margin + 4);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      const filterParts = [
+        (dateFrom || dateTo) ? `Date: ${dateFrom || "…"} to ${dateTo || "…"}` : null,
+        statusFilter !== "ALL" ? `Status: ${STATUS_STYLES[statusFilter]?.label || statusFilter}` : null,
+        search.trim() ? `Search: "${search.trim()}"` : null,
+      ].filter(Boolean);
+      doc.text(filterParts.length > 0 ? filterParts.join("   |   ") : "All records", margin, margin + 10);
+      doc.text(`Generated: ${formatDate(new Date())}`, pageWidth - margin, margin + 10, { align: "right" });
+
+      let currentY = margin + 16;
+
+      const drawTableHeader = (y: number) => {
+        doc.setFillColor(245, 130, 32);
+        doc.rect(margin, y, contentWidth, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
 
         let x = margin;
@@ -1090,6 +1117,9 @@ export default function EstimationsPageClient({
       const blobUrl = URL.createObjectURL(pdfBlob);
       const link = document.createElement("a");
       link.href = blobUrl;
+      const prefix = documentType === "PROFORMA" ? "Proforma-Invoices" : "Estimates";
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
       link.download = `${prefix}-${todayStr}.pdf`;
       document.body.appendChild(link);
       link.click();
