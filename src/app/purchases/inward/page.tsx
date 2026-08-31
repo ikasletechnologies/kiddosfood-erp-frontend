@@ -87,7 +87,7 @@ export default function IncomingStockPage() {
       toast.success("Stock Received! Inventory updated.");
       fetchData();
     } catch (error: any) {
-      toast.error(error.response?.data?.error || "Failed to receive stock");
+      toast.error(error.response?.data?.message || "Failed to receive stock");
     } finally {
       setReceivingOrderId(null);
     }
