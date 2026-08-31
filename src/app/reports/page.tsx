@@ -1739,6 +1739,10 @@ function transformFranchisePerformance(data: any): ReportData {
   };
 }
 
+// Explicit mapping from the real Production model (see
+// ProductionService.getProductionHistory / GET /api/production/history) —
+// productionBatchCode/quantity/actualYield/currentStage/producedAt are the
+// actual field names; nothing here is invented or generically defaulted.
 function transformBatchHistory(data: any): ReportData {
   const rows = toArr(data);
   const completed = rows.filter((r: any) => r.status === "COMPLETED").length;
@@ -1746,29 +1750,33 @@ function transformBatchHistory(data: any): ReportData {
     kpiValue: `${rows.length} Batches / Runs`,
     kpiSubText: `Completed: ${completed} • Active: ${rows.length - completed}`,
     rows: rows.map((r: any) => ({
-      batchNumber: r.productionCode || r.batchNumber || r.id?.slice(-6) || "—",
-      productName: r.recipe?.name || r.product?.name || r.productName || "—",
-      targetYield: `${r.plannedQuantity || r.targetYield || 0} units`,
-      actualYield: r.actualQuantity ? `${r.actualQuantity} units` : "Pending",
-      status: r.status || "SCHEDULED",
-      stage: r.stage || r.currentStage || "PLANNED",
-      date: fmtDate(r.producedAt || r.createdAt),
+      batchNumber: r.productionBatchCode || r.id?.slice(-6) || "—",
+      productName: r.recipe?.product?.name || r.recipe?.name || "—",
+      targetYield: `${r.quantity ?? 0} units`,
+      actualYield: r.actualYield !== null && r.actualYield !== undefined ? `${r.actualYield} units` : "Pending",
+      status: r.status || "—",
+      stage: r.currentStage || "—",
+      date: fmtDate(r.producedAt),
     })),
   };
 }
 
+// Same Production model/endpoint as transformBatchHistory (filtered to
+// status=PLANNED server-side) — same real field names apply. Production has
+// no `priority` column at all, so that column stays "—" rather than a
+// fabricated default.
 function transformProductionPlanning(data: any): ReportData {
   const rows = toArr(data);
   return {
     kpiValue: `${rows.length} Scheduled Plans`,
     kpiSubText: "Planned manufacturing output targets",
     rows: rows.map((r: any) => ({
-      planNo: r.productionCode || r.planNo || r.id?.slice(-6) || "—",
-      productName: r.recipe?.name || r.productName || "—",
-      targetQuantity: `${r.plannedQuantity || r.targetQuantity || 0} units`,
-      scheduledStart: fmtDate(r.startDate || r.createdAt),
-      status: r.status || "PLANNED",
-      priority: r.priority || "NORMAL",
+      planNo: r.productionBatchCode || r.id?.slice(-6) || "—",
+      productName: r.recipe?.product?.name || r.recipe?.name || "—",
+      targetQuantity: `${r.quantity ?? 0} units`,
+      scheduledStart: fmtDate(r.startTime || r.producedAt),
+      status: r.status || "—",
+      priority: "—",
     })),
   };
 }
@@ -2059,6 +2067,8 @@ async function fetchReport(
       message = "Your session has expired. Please sign in again.";
     } else if (status === 403) {
       message = "You do not have permission to view this report.";
+    } else if (status === 404) {
+      message = "Report endpoint is unavailable.";
     } else if (status === 500) {
       message = "Unable to load this report. Please try again.";
     } else if (err?.response?.data?.error) {
@@ -2599,9 +2609,14 @@ function ReportsContent() {
                     <tr>
                       <td
                         colSpan={currentMeta.columns.length + 1}
-                        className="px-5 py-16 text-center text-gray-400 dark:text-slate-500 text-xs"
+                        className={clsx(
+                          "px-5 py-16 text-center text-xs",
+                          reportData?.error ? "text-rose-500 dark:text-rose-400 font-medium" : "text-gray-400 dark:text-slate-500"
+                        )}
                       >
-                        {tableSearchTerm
+                        {reportData?.error
+                          ? reportData.errorMessage || "Unable to load this report. Please try again."
+                          : tableSearchTerm
                           ? `No entries match "${tableSearchTerm}".`
                           : "No data records found for the selected period."}
                       </td>
