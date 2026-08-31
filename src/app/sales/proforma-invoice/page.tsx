@@ -12,13 +12,17 @@ import GSTInvoice from "@/components/documents/GSTInvoice";
 import EstimationsPageClient from "@/app/sales/estimation/EstimationsPageClient";
 import { Plus } from "lucide-react";
 
+// No hardcoded state here — the seller's GST registration state must come
+// from the real HQ franchise (see SettingsService.getCompanyProfile),
+// never a guessed default, or CGST+SGST vs IGST silently disagrees with
+// what Sales Order/Tax Invoice compute for the same document.
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
   gstin: "",
   address: "",
   phone: "",
   email: "",
-  state: "Tamil Nadu"
+  state: ""
 };
 
 // A genuinely distinct document from Estimate now (backed by
@@ -333,7 +337,11 @@ export default function ProformaInvoicePage() {
             })),
           }}
           vendor={previewProforma.customer || { name: previewProforma.customerName || "Customer" }}
-          companyDetails={companyProfile || FALLBACK_COMPANY}
+          // companyProfile resolves to {} (truthy, not falsy) when the
+          // fetch succeeds but returns no state — `|| FALLBACK_COMPANY`
+          // alone never catches that case, so check the field that
+          // actually matters for tax classification.
+          companyDetails={companyProfile?.state ? companyProfile : FALLBACK_COMPANY}
           documentType="PROFORMA_INVOICE"
           dueDateDays={(() => {
             if (!previewProforma.validUntil || !previewProforma.createdAt) return 15;

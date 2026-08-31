@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi, franchiseApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -229,6 +229,12 @@ function deriveTaxPercent(it: any): string {
   return "—";
 }
 
+// Used only if the real company profile can't be fetched at all (network/
+// auth failure) — no hardcoded `state`, since a guessed seller state here
+// would silently disagree with what Sales Order/Proforma compute for the
+// same document chain (see [[gst-classification-bug]]).
+const FALLBACK_COMPANY = { name: "", gstin: "", address: "", phone: "", email: "", state: "" };
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SalesInvoicesPage() {
@@ -244,6 +250,14 @@ export default function SalesInvoicesPage() {
   // sale is for.
   const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(user?.franchiseId || "");
+
+  // Real seller identity/GST state for the printed Tax Invoice — same
+  // source Sales Order and Proforma already use, so all three agree on
+  // CGST+SGST vs IGST for the same document chain instead of each guessing.
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
+  useEffect(() => {
+    settingsApi.getCompanyProfile().then(res => setCompanyProfile(res.data)).catch(() => {});
+  }, []);
 
   // shared
   const [view, setView] = useState<"list" | "create">("list");
@@ -1876,6 +1890,10 @@ export default function SalesInvoicesPage() {
               id: printingInvoice.id,
               poNumber: printingInvoice.order?.invoiceNum ? (printingInvoice.order.invoiceNum.startsWith('INV') ? printingInvoice.order.invoiceNum : `INV-${printingInvoice.order.invoiceNum}`) : undefined,
               createdAt: printingInvoice.createdAt,
+              // GST place of supply lives on the Order, not the Invoice
+              // record spread above — without it CGST+SGST vs IGST falls
+              // back to comparing the customer's address instead.
+              stateOfSupply: printingInvoice.order?.stateOfSupply,
               items: (printingInvoice.order?.orderItems || []).map((it: any) => ({
                 itemName: it.product?.name || "Unknown Item",
                 quantity: it.quantity,
@@ -1885,14 +1903,10 @@ export default function SalesInvoicesPage() {
               }))
             }}
             vendor={printingInvoice.order?.customer || { name: 'Walk-In Customer' }}
-            companyDetails={{
-              name: 'Kiddos Food',
-              address: '123 Business Park, Block A\nBengaluru, Karnataka - 560001',
-              gstin: '29ABCDE1234F1Z5',
-              state: 'Karnataka',
-              email: 'hello@kiddosfood.com',
-              phone: '+91 98765 43210'
-            }}
+            // companyProfile resolves to {} (truthy, not falsy) when the
+            // fetch succeeds but returns no state — check the field that
+            // actually matters for tax classification, not just presence.
+            companyDetails={companyProfile?.state ? companyProfile : FALLBACK_COMPANY}
             documentType="TAX_INVOICE"
             onClose={() => setPrintingInvoice(null)}
           />

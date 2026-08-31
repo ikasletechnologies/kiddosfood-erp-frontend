@@ -15,13 +15,17 @@ import api from "@/lib/api/base";
 import { formatDate } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 
+// No hardcoded state here — the seller's GST registration state must come
+// from the real HQ franchise (see SettingsService.getCompanyProfile),
+// never a guessed default, or CGST+SGST vs IGST silently disagrees with
+// what Proforma/Tax Invoice compute for the same document.
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
   gstin: "",
   address: "",
   phone: "",
   email: "",
-  state: "Tamil Nadu"
+  state: ""
 };
 
 // ── Constants (Unified with Invoice Page) ────────────────────────────────────
@@ -226,7 +230,10 @@ export default function SalesOrdersPage() {
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
   const [previewingOrder, setPreviewingOrder] = useState<any>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const currentCompany = companyProfile || FALLBACK_COMPANY;
+  // companyProfile resolves to {} (truthy, not falsy) when the fetch
+  // succeeds but returns no state — `|| FALLBACK_COMPANY` alone never
+  // catches that case, so check the field that actually matters.
+  const currentCompany = companyProfile?.state ? companyProfile : FALLBACK_COMPANY;
 
   // Read-only "view" mode — reuses the edit form's layout (via a disabled
   // fieldset) instead of a separate component, since it needs to show

@@ -1843,7 +1843,12 @@ async function fetchReport(
       case "Material Consumption Report":
         return transformMaterialConsumption((await inventoryApi.getRawMaterialConsumption(params)).data);
       case "Wastage & Scrap Report": {
-        const res = await wasteApi.getAll(params);
+        // Map generic params to waste API's expected fields
+        const wasteParams = {
+          dateFrom: params.startDate,
+          dateTo: params.endDate,
+        } as any;
+        const res = await wasteApi.getAll(wasteParams);
         const wasteRows = toArr(res.data);
         const totalQty = wasteRows.reduce((s: number, w: any) => s + (Number(w.quantity) || 0), 0);
         return {
@@ -1858,6 +1863,8 @@ async function fetchReport(
           })),
         };
       }
+
+      
       case "Formulation & Recipe Costing": {
         const res = await recipesApi.getAll();
         const recipes = toArr(res.data);
