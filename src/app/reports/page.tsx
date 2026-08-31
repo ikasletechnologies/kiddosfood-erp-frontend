@@ -2160,7 +2160,7 @@ function ReportsContent() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={() => router.push("/sales/invoices/new")}
+            onClick={() => router.push("/sales/invoices")}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
           >
             <Plus className="h-4 w-4 shrink-0" />
