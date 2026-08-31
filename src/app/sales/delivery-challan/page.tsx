@@ -190,8 +190,26 @@ export default function DeliveryChallanPage() {
   
   // Dialog drop/floating states
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
+  const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const [openUnitDrop, setOpenUnitDrop] = useState<string | null>(null);
   const [openTaxDrop, setOpenTaxDrop] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openItemDrop) return;
+    const updatePosition = () => {
+      const activeEl = document.activeElement as HTMLElement;
+      if (activeEl && activeEl.tagName === "INPUT" && (activeEl as HTMLInputElement).placeholder === "Search product...") {
+        const rect = activeEl.getBoundingClientRect();
+        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+      }
+    };
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [openItemDrop]);
   
   // Custom Notes / Terms Fields
   const [termsText, setTermsText] = useState("");
@@ -1208,10 +1226,25 @@ export default function DeliveryChallanPage() {
                     const comp = computeRow(it, withTax);
                     const isItemDropOpen = openItemDrop === it.id;
                     return (
-                      <tr key={it.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
+                      <tr key={it.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                         <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                        <td className="px-4 py-2 relative">
-                          <input value={it.itemSearch} onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }} onFocus={() => setOpenItemDrop(it.id)} placeholder="Search product..." className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500" />
+                        <td className="px-4 py-2" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
+                          <input
+                            value={it.itemSearch}
+                            onChange={e => {
+                              updateItem(idx, "itemSearch", e.target.value);
+                              setOpenItemDrop(it.id);
+                              const rect = e.target.getBoundingClientRect();
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                            }}
+                            onFocus={e => {
+                              setOpenItemDrop(it.id);
+                              const rect = e.target.getBoundingClientRect();
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                            }}
+                            placeholder="Search product..."
+                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                          />
             {it.itemSearch && (
               <X 
                 size={14} 
@@ -1220,7 +1253,27 @@ export default function DeliveryChallanPage() {
               />
             )}
                           {isItemDropOpen && (
-                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                            <div
+                              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar item-dropdown-container"
+                              style={
+                                itemDropRect
+                                  ? {
+                                      position: "fixed",
+                                      top: itemDropRect.top + 4,
+                                      left: itemDropRect.left,
+                                      width: itemDropRect.width,
+                                      zIndex: 9999,
+                                    }
+                                  : {
+                                      position: "absolute",
+                                      left: 0,
+                                      top: "100%",
+                                      marginTop: "4px",
+                                      width: "320px",
+                                      zIndex: 9999,
+                                    }
+                              }
+                            >
                               {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).length === 0 ? (
                                 <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">
                                   {products.some(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()))

@@ -511,7 +511,24 @@ export default function EstimationsPageClient({
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  }, [openItemDrop]);
+
+  useEffect(() => {
+    if (!openItemDrop) return;
+    const updatePosition = () => {
+      const activeEl = document.activeElement as HTMLElement;
+      if (activeEl && activeEl.tagName === "INPUT" && (activeEl as HTMLInputElement).placeholder === "Search item...") {
+        const rect = activeEl.getBoundingClientRect();
+        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+      }
+    };
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [openItemDrop]);
 
   // ── Computed totals ────────────────────────────────────────────────────────
   const withTax = priceMode === "with_tax";
@@ -1182,14 +1199,15 @@ export default function EstimationsPageClient({
                     p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
                     p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
                   ).slice(0, 10);
+                  const isItemDropOpen = openItemDrop === item.id;
                   return (
-                    <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
+                    <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                       <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
                         <div className="py-1.5">
                           {idx + 1}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 relative align-top">
+                      <td className="px-4 py-2.5 align-top" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                         <input
                           className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                           placeholder="Search item..."
@@ -1198,9 +1216,13 @@ export default function EstimationsPageClient({
                             updateItem(idx, "itemSearch", e.target.value);
                             updateItem(idx, "productId", "");
                             setOpenItemDrop(item.id);
+                            const rect = e.target.getBoundingClientRect();
+                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
                           }}
-                          onFocus={() => {
+                          onFocus={e => {
                             setOpenItemDrop(item.id);
+                            const rect = e.target.getBoundingClientRect();
+                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
                           }}
                         />
             {item.itemSearch && (
@@ -1210,9 +1232,27 @@ export default function EstimationsPageClient({
                 onClick={() => updateItem(idx, "itemSearch", "")} 
               />
             )}
-                        {openItemDrop === item.id && (
+                        {isItemDropOpen && (
                           <div
-                            className="absolute left-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden flex flex-col z-50 item-dropdown-container"
+                            className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col item-dropdown-container"
+                            style={
+                              itemDropRect
+                                ? {
+                                    position: "fixed",
+                                    top: itemDropRect.top + 4,
+                                    left: itemDropRect.left,
+                                    width: itemDropRect.width,
+                                    zIndex: 9999,
+                                  }
+                                : {
+                                    position: "absolute",
+                                    left: 0,
+                                    top: "100%",
+                                    marginTop: "4px",
+                                    width: "320px",
+                                    zIndex: 9999,
+                                  }
+                            }
                           >
                             <button
                               type="button"

@@ -239,7 +239,25 @@ export default function SalesOrdersPage() {
 
   // Dropdown floating close triggers
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
+  const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
   const customerDropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!openItemDrop) return;
+    const updatePosition = () => {
+      const activeEl = document.activeElement as HTMLElement;
+      if (activeEl && activeEl.tagName === "INPUT" && (activeEl as HTMLInputElement).placeholder === "Search item...") {
+        const rect = activeEl.getBoundingClientRect();
+        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+      }
+    };
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [openItemDrop]);
 
   // ── Data Syncing ─────────────────────────────────────────────────────────────
 
@@ -882,13 +900,22 @@ export default function SalesOrdersPage() {
                   const comp = computeRow(it, withTax);
                   const isItemDropOpen = openItemDrop === it.id;
                   return (
-                    <tr key={it.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                    <tr key={it.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                       <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                      <td className="px-4 py-2.5 relative">
+                      <td className="px-4 py-2.5" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                         <input
                           value={it.itemSearch}
-                          onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
-                          onFocus={() => setOpenItemDrop(it.id)}
+                          onChange={e => {
+                            updateItem(idx, "itemSearch", e.target.value);
+                            setOpenItemDrop(it.id);
+                            const rect = e.target.getBoundingClientRect();
+                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                          }}
+                          onFocus={e => {
+                            setOpenItemDrop(it.id);
+                            const rect = e.target.getBoundingClientRect();
+                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                          }}
                           placeholder="Search item..."
                           className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                         />
@@ -900,7 +927,27 @@ export default function SalesOrdersPage() {
               />
             )}
                         {isItemDropOpen && (
-                          <div className="absolute left-4 right-4 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden max-h-44 overflow-y-auto custom-scrollbar">
+                          <div
+                            className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl overflow-hidden max-h-44 overflow-y-auto custom-scrollbar item-dropdown-container"
+                            style={
+                              itemDropRect
+                                ? {
+                                    position: "fixed",
+                                    top: itemDropRect.top + 4,
+                                    left: itemDropRect.left,
+                                    width: itemDropRect.width,
+                                    zIndex: 9999,
+                                  }
+                                : {
+                                    position: "absolute",
+                                    left: 0,
+                                    top: "100%",
+                                    marginTop: "4px",
+                                    width: "320px",
+                                    zIndex: 9999,
+                                  }
+                            }
+                          >
                             {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
                               <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">No items found</div>
                             ) : (
