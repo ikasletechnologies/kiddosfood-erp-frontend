@@ -90,6 +90,11 @@ export const reportsApi = {
 
   // Sale Orders
   getSaleOrders: (params?: any) => api.get('/api/sales/orders', { params }),
+  // Franchise-isolated report endpoints — use these for the Reports page.
+  // getSaleOrders above hits the raw CRUD listing (SalesOrder model, no
+  // franchiseId filter) and must not be used for reporting.
+  getSaleOrdersReport: (params?: any) => api.get('/api/reports/sale-orders', { params }),
+  getSaleOrderItemsReport: (params?: any) => api.get('/api/reports/sale-order-items', { params }),
 
   // Loan
   getLoans: (params?: any) => api.get('/api/reports/loans', { params }),

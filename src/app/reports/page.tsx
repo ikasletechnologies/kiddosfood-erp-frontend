@@ -979,7 +979,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "date", label: "Date" },
       { key: "orderNo", label: "Order No" },
       { key: "customer", label: "Customer" },
-      { key: "deliveryDate", label: "Delivery Date" },
       { key: "amount", label: "Amount" },
       { key: "status", label: "Status" },
     ],
@@ -1626,17 +1625,34 @@ function transformExpenses(data: any): ReportData {
 function transformSaleOrders(data: any): ReportData {
   const rows = toArr(data);
   const pending = rows.filter((r: any) => r.status === "PENDING").length;
-  const total = rows.reduce((s: number, r: any) => s + (Number(r.total) || Number(r.totalAmount) || 0), 0);
+  const total = rows.reduce((s: number, r: any) => s + (Number(r.totalAmount) || Number(r.total) || 0), 0);
   return {
     kpiValue: fmtCurrency(total),
     kpiSubText: `Orders: ${rows.length} • Pending: ${pending}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.createdAt || r.date),
-      orderNo: r.orderNumber || r._id?.slice(-6) || "—",
-      customer: r.customer?.name || r.customerName || "—",
-      deliveryDate: fmtDate(r.expectedDelivery || r.deliveryDate),
-      amount: fmtCurrency(r.total || r.totalAmount),
+      orderNo: r.orderNumber || r.id?.slice(-6) || "—",
+      customer: r.customerName || r.customer?.name || "—",
+      amount: fmtCurrency(r.totalAmount || r.total),
       status: r.status || "—",
+    })),
+  };
+}
+
+function transformSaleOrderItems(data: any): ReportData {
+  const rows = toArr(data);
+  const totalQty = rows.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+  const totalAmount = rows.reduce((s: number, r: any) => s + (Number(r.totalAmount) || 0), 0);
+  return {
+    kpiValue: `${totalQty} Units`,
+    kpiSubText: `${rows.length} line items • ${fmtCurrency(totalAmount)}`,
+    rows: rows.map((r: any) => ({
+      date: fmtDate(r.orderDate || r.date),
+      orderNo: r.orderNumber || r.orderId?.slice(-6) || "—",
+      customer: r.customerName || r.customer?.name || "—",
+      item: r.productName || r.item || "—",
+      quantity: r.quantity ?? 0,
+      amount: fmtCurrency(r.totalAmount),
     })),
   };
 }
@@ -1911,9 +1927,9 @@ async function fetchReport(
       case "Expense Item Report":
         return transformGeneric((await reportsApi.getExpenseItem(params)).data, meta);
       case "Sale Orders":
-        return transformSaleOrders((await reportsApi.getSaleOrders(params)).data);
+        return transformSaleOrders((await reportsApi.getSaleOrdersReport(params)).data);
       case "Sale Order Item":
-        return transformGeneric((await reportsApi.getSaleOrders(params)).data, meta);
+        return transformSaleOrderItems((await reportsApi.getSaleOrderItemsReport(params)).data);
       case "Bank Statement":
         return transformGeneric((await reportsApi.getBankStatement(params)).data, meta);
       case "Discount Report":
