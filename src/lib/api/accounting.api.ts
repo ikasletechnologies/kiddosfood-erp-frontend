@@ -50,6 +50,7 @@ export const reportsApi = {
   getPartyByItem: (params?: any) => api.get('/api/reports/party-by-item', { params }),
   getSalePurchaseByParty: (params?: any) => api.get('/api/reports/sale-purchase-by-party', { params }),
   getSalePurchaseByPartyGroup: (params?: any) => api.get('/api/reports/sale-purchase-by-party-group', { params }),
+  getFranchiseReport: (params?: any) => api.get('/api/reports/franchise', { params }),
 
   // GST Reports
   getGstr: (type: string, params?: any) => api.get(`/api/reports/gstr/${type}`, { params }),

@@ -11,6 +11,7 @@ import {
 import { clsx } from "clsx";
 import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import { exportToCsv } from "@/lib/export/exportHelpers";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
@@ -915,53 +916,16 @@ export default function EstimationsPageClient({
 
   const handleExportExcel = () => {
     setExportDropdownOpen(false);
-    const headers = [
-      "Date",
-      L.noColumn,
-      "Party Name",
-      "Party Type",
-      "Amount",
-      "Status",
-      "Sales Order Ref"
-    ];
-    const prefix = documentType === "PROFORMA" ? "proforma-invoices" : "estimates";
-    const todayStr = new Date().toISOString().split("T")[0];
-    const dateRangeStr = `Date Range: ${dateFrom || "All"} to ${dateTo || "All"}`;
-    const filterStr = `Status Filter: ${statusFilter}${search ? ` | Search: "${search}"` : ""}`;
-
-    const rows = [
-      [`${L.listHeading.toUpperCase()} REPORT`],
-      [`Generated: ${new Date().toLocaleString("en-IN")}`],
-      [`${dateRangeStr} | ${filterStr}`],
-      [],
-      headers,
-      ...filtered.map((est: any) => [
-        formatDate(est.createdAt),
-        est.quotationNumber || est.proformaNumber || "—",
-        est.customer?.name || est.customerName || "—",
-        est.partyType || (est.customerId ? "CUSTOMER" : "—"),
-        `₹${Number(est.totalAmount || 0).toFixed(2)}`,
-        STATUS_STYLES[est.status]?.label || est.status || "DRAFT",
-        est.convertedOrderNumber || "—",
-      ]),
-    ];
-
-    const escapeCell = (val: any) => {
-      const str = String(val ?? "").replace(/"/g, '""');
-      return `"${str}"`;
-    };
-
-    const csvContent = rows.map((r) => r.map(escapeCell).join(",")).join("\r\n");
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${prefix}-${todayStr}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showToast("Excel (.csv) report downloaded!", "success");
+    // Use helper to generate CSV
+    exportToCsv({
+      documentType,
+      filtered,
+      L,
+      dateFrom,
+      dateTo,
+      statusFilter,
+      search,
+    });
   };
 
   const handleExportPDF = async () => {
@@ -969,36 +933,11 @@ export default function EstimationsPageClient({
     try {
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 12;
+      const pageWidth = doc.internal.pageSize.getWidth();
       const contentWidth = pageWidth - margin * 2;
 
-      const prefix = documentType === "PROFORMA" ? "proforma-invoices" : "estimates";
-      const todayStr = new Date().toISOString().split("T")[0];
-      const title = `${L.listHeading.toUpperCase()} REPORT`;
-
-      const dateRangeStr = `Date Range: ${dateFrom || "All"} to ${dateTo || "All"}`;
-      const filterStr = `Status: ${statusFilter}${search ? ` | Search: "${search}"` : ""}`;
-      const generatedStr = `Generated On: ${new Date().toLocaleString("en-IN")}`;
-
-      let currentY = margin;
-
-      // Report Header
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(15, 23, 42);
-      doc.text(title, margin, currentY + 5);
-
-      // Subheader Metadata
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text(`${generatedStr}  |  ${dateRangeStr}  |  ${filterStr}`, margin, currentY + 11);
-
-      currentY += 16;
-
-      // Table Columns definition: sum = 186mm
+      // Table Columns definition
       const cols = [
         { header: "Date", width: 22, align: "left" },
         { header: L.noColumn, width: 28, align: "left" },
@@ -1009,11 +948,6 @@ export default function EstimationsPageClient({
         { header: "SO Ref", width: 28, align: "left" },
       ];
 
-      const drawTableHeader = (y: number) => {
-        doc.setFillColor(30, 41, 59);
-        doc.rect(margin, y, contentWidth, 7, "F");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(8);
         doc.setTextColor(255, 255, 255);
 
         let x = margin;

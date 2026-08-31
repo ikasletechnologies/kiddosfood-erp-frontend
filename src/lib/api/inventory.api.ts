@@ -47,7 +47,10 @@ export const rawMaterialsApi = {
 export const inventoryApi = {
   getInventory: (franchiseId?: string, category?: string, asOfDate?: string) => api.get('/api/inventory', { params: { franchiseId, category, asOfDate } }),
   getRawMaterialStockSummary: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/summary', { params: { warehouseId, franchiseId, category } }),
-  getRawMaterialConsumption: (warehouseId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/consumption', { params: { warehouseId, franchiseId, category } }),
+  getRawMaterialConsumption: (params?: any) => {
+    const p = typeof params === 'object' && params !== null ? params : { warehouseId: params };
+    return api.get('/api/inventory/raw-materials/consumption', { params: p });
+  },
   // category omitted = ledger spans every item category (Raw Material,
   // Packaging, Semi-Finished, Finished Good), not just Raw Material.
   getInventoryLedger: (itemId?: string, franchiseId?: string, category?: string) => api.get('/api/inventory/raw-materials/ledger', { params: { itemId, franchiseId, category } }),
@@ -81,12 +84,18 @@ export const inventoryApi = {
 
 // --- Production Workflow ---
 export const productionApi = {
-  getHistory: (franchiseId?: string) => api.get('/api/production/history', { params: { franchiseId } }),
+  getHistory: (params?: any) => {
+    const p = typeof params === 'string' ? { franchiseId: params } : params;
+    return api.get('/api/production/history', { params: p });
+  },
   startBatch: (data: any) => api.post('/api/production/batch', data),
   stopBatch: (id: string) => api.post(`/api/production/${id}/stop`),
   approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
-  getPendingQC: (franchiseId?: string) => api.get('/api/production/batches-pending-qc', { params: { franchiseId } }),
+  getPendingQC: (params?: any) => {
+    const p = typeof params === 'string' ? { franchiseId: params } : params;
+    return api.get('/api/production/batches-pending-qc', { params: p });
+  },
   inspectBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/qc`, data),
   // Phase 1 of two-phase packaging: creates an AWAITING_CONFIRMATION ticket
   // only — bulk stock and Finished Goods are untouched until confirmPackaging.
@@ -98,12 +107,18 @@ export const productionApi = {
   confirmPackaging: (packagingId: string, data: { goodQty: number; damagedQty: number; spoiledQty: number; productId?: string }) =>
     api.post(`/api/production/packagings/${packagingId}/confirm`, data),
   getPackagings: (franchiseId?: string) => api.get('/api/production/packagings', { params: { franchiseId } }),
-  getAllBatches: (franchiseId?: string) => api.get('/api/production/batches-all', { params: { franchiseId } }),
+  getAllBatches: (params?: any) => {
+    const p = typeof params === 'string' ? { franchiseId: params } : params;
+    return api.get('/api/production/batches-all', { params: p });
+  },
   advanceStage: (id: string, stage: string) => api.patch(`/api/production/${id}/stage`, { stage }),
 };
 
 export const cartonApi = {
-  getAll: (franchiseId?: string) => api.get('/api/production/cartons', { params: { franchiseId } }),
+  getAll: (params?: any) => {
+    const p = typeof params === 'string' ? { franchiseId: params } : params;
+    return api.get('/api/production/cartons', { params: p });
+  },
   create: (data: {
     batchId: string;
     cartonSize: string;

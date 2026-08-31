@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Plus,
   Receipt,
+  AlertTriangle,
 } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
@@ -92,6 +93,9 @@ interface ReportMeta {
 }
 
 interface ReportData {
+  error?: boolean;
+  errorMessage?: string;
+  statusCode?: number;
   kpiValue: string;
   kpiSubText: string;
   kpiTrend?: string;
@@ -409,26 +413,30 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Franchise Dues & Balances": {
     title: "Franchise Dues & Balances",
-    kpiLabel: "Total Outstanding",
-    tableTitle: "Outstanding Accounts",
+    kpiLabel: "Total Outstanding Dues",
+    tableTitle: "Franchise Dues & Balances",
     columns: [
-      { key: "name", label: "Franchise / Party" },
-      { key: "phone", label: "Phone" },
-      { key: "gst", label: "GST No" },
-      { key: "state", label: "Location" },
-      { key: "balance", label: "Outstanding Dues" },
+      { key: "name", label: "Franchise Name" },
+      { key: "owner", label: "Owner / Contact" },
+      { key: "contact", label: "Phone" },
       { key: "creditLimit", label: "Credit Limit" },
+      { key: "walletBalance", label: "Wallet Balance" },
+      { key: "dueBalance", label: "Outstanding Dues" },
+      { key: "status", label: "Status" },
     ],
   },
   "Franchise Performance Summary": {
     title: "Franchise Performance Summary",
-    kpiLabel: "Branch Sales",
-    tableTitle: "Branch Performance Ledger",
+    kpiLabel: "Total Franchise Sales",
+    tableTitle: "Franchise Performance Summary",
     columns: [
-      { key: "partyName", label: "Franchise Name" },
-      { key: "totalSale", label: "Total Sales" },
-      { key: "totalPurchase", label: "Total Purchases" },
-      { key: "net", label: "Net Volume" },
+      { key: "name", label: "Franchise Name" },
+      { key: "location", label: "Location" },
+      { key: "totalSales", label: "Total Sales" },
+      { key: "totalExpenses", label: "Total Expenses" },
+      { key: "netPerformance", label: "Net Performance" },
+      { key: "ordersCount", label: "Orders" },
+      { key: "status", label: "Status" },
     ],
   },
   Sale: {
@@ -1694,6 +1702,128 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
   };
 }
 
+function transformFranchiseDues(data: any): ReportData {
+  const rows = toArr(data);
+  const totalDues = rows.reduce((s: number, r: any) => s + (Number(r.outstandingAmount) || 0), 0);
+  return {
+    kpiValue: fmtCurrency(totalDues),
+    kpiSubText: `${rows.length} Franchise Account(s)`,
+    rows: rows.map((r: any) => ({
+      name: r.name || "—",
+      owner: r.ownerName || "—",
+      contact: r.contactNum || "—",
+      creditLimit: fmtCurrency(r.creditLimit || 0),
+      walletBalance: fmtCurrency(r.walletBalance || 0),
+      dueBalance: fmtCurrency(r.outstandingAmount || 0),
+      status: r.status || "ACTIVE",
+    })),
+  };
+}
+
+function transformFranchisePerformance(data: any): ReportData {
+  const rows = toArr(data);
+  const totalSales = rows.reduce((s: number, r: any) => s + (Number(r.totalSales) || 0), 0);
+  const totalExpenses = rows.reduce((s: number, r: any) => s + (Number(r.totalExpenses) || 0), 0);
+  return {
+    kpiValue: fmtCurrency(totalSales),
+    kpiSubText: `Sales: ${fmtCurrency(totalSales)} • Expenses: ${fmtCurrency(totalExpenses)}`,
+    rows: rows.map((r: any) => ({
+      name: r.name || "—",
+      location: r.location || "—",
+      totalSales: fmtCurrency(r.totalSales || 0),
+      totalExpenses: fmtCurrency(r.totalExpenses || 0),
+      netPerformance: fmtCurrency((Number(r.totalSales) || 0) - (Number(r.totalExpenses) || 0)),
+      ordersCount: String(r.ordersCount || 0),
+      status: r.status || "ACTIVE",
+    })),
+  };
+}
+
+function transformBatchHistory(data: any): ReportData {
+  const rows = toArr(data);
+  const completed = rows.filter((r: any) => r.status === "COMPLETED").length;
+  return {
+    kpiValue: `${rows.length} Batches / Runs`,
+    kpiSubText: `Completed: ${completed} • Active: ${rows.length - completed}`,
+    rows: rows.map((r: any) => ({
+      batchNumber: r.productionCode || r.batchNumber || r.id?.slice(-6) || "—",
+      productName: r.recipe?.name || r.product?.name || r.productName || "—",
+      targetYield: `${r.plannedQuantity || r.targetYield || 0} units`,
+      actualYield: r.actualQuantity ? `${r.actualQuantity} units` : "Pending",
+      status: r.status || "SCHEDULED",
+      stage: r.stage || r.currentStage || "PLANNED",
+      date: fmtDate(r.producedAt || r.createdAt),
+    })),
+  };
+}
+
+function transformProductionPlanning(data: any): ReportData {
+  const rows = toArr(data);
+  return {
+    kpiValue: `${rows.length} Scheduled Plans`,
+    kpiSubText: "Planned manufacturing output targets",
+    rows: rows.map((r: any) => ({
+      planNo: r.productionCode || r.planNo || r.id?.slice(-6) || "—",
+      productName: r.recipe?.name || r.productName || "—",
+      targetQuantity: `${r.plannedQuantity || r.targetQuantity || 0} units`,
+      scheduledStart: fmtDate(r.startDate || r.createdAt),
+      status: r.status || "PLANNED",
+      priority: r.priority || "NORMAL",
+    })),
+  };
+}
+
+function transformQCReport(data: any): ReportData {
+  const rows = toArr(data);
+  const pending = rows.filter((r: any) => (r.qcStatus || r.status) === "PENDING").length;
+  return {
+    kpiValue: `${rows.length} Inspection Audit(s)`,
+    kpiSubText: `Pending: ${pending} • Audited: ${rows.length - pending}`,
+    rows: rows.map((q: any) => ({
+      batchNo: q.batchNumber || q.productionCode || q.id?.slice(-6) || "—",
+      product: q.product?.name || q.production?.recipe?.name || q.recipe?.name || "—",
+      inspector: q.inspector?.name || q.inspectorName || "QA Staff",
+      result: q.qcStatus || q.status || "PENDING",
+      score: q.qcScore ? `${q.qcScore}%` : "—",
+      notes: q.qcRemarks || q.notes || "—",
+      date: fmtDate(q.createdAt),
+    })),
+  };
+}
+
+function transformMaterialConsumption(data: any): ReportData {
+  const rows = toArr(data);
+  const totalValue = rows.reduce((s: number, r: any) => s + (Number(r.value) || 0), 0);
+  return {
+    kpiValue: fmtCurrency(totalValue),
+    kpiSubText: `${rows.length} Material Consumption Logs`,
+    rows: rows.map((r: any) => ({
+      date: fmtDate(r.date || r.createdAt),
+      rawMaterial: r.itemName || r.item?.name || "—",
+      sku: r.sku || r.item?.sku || "—",
+      quantityConsumed: String(r.quantity || r.qty || 0),
+      unit: r.unit || r.item?.unit || "—",
+      type: r.consumptionType || r.movementType || "Consumption",
+      value: fmtCurrency(r.value || 0),
+    })),
+  };
+}
+
+function transformPackaging(data: any): ReportData {
+  const rows = toArr(data);
+  return {
+    kpiValue: `${rows.length} Cartons`,
+    kpiSubText: "Packaged box records",
+    rows: rows.map((c: any) => ({
+      cartonNo: c.cartonCode || c.cartonNumber || c.id?.slice(-6) || "—",
+      batchNo: c.batch?.batchNumber || c.batchId || "—",
+      size: c.cartonSize || "Standard",
+      units: String(c.unitsPerCarton || 0),
+      date: fmtDate(c.createdAt),
+    })),
+  };
+}
+
 // ─── Fetch Dispatcher ─────────────────────────────────────────────────────────
 
 async function fetchReport(
@@ -1704,49 +1834,16 @@ async function fetchReport(
   try {
     switch (label) {
       // Production
-      case "Batch Manufacturing History": {
-        const res = await productionApi.getAllBatches();
-        const batches = toArr(res.data);
-        return {
-          kpiValue: `${batches.length} Batches`,
-          kpiSubText: `Completed: ${batches.filter((b: any) => b.status === "COMPLETED").length} • Active: ${batches.filter((b: any) => b.status === "IN_PROGRESS").length}`,
-          rows: batches.map((b: any) => ({
-            batchNumber: b.batchNumber || b._id?.slice(-6) || "—",
-            productName: b.recipe?.name || b.product?.name || b.productName || "—",
-            targetYield: `${b.targetYield || b.batchSize || 0} units`,
-            actualYield: b.actualYield ? `${b.actualYield} units` : "Pending",
-            status: b.status || "SCHEDULED",
-            stage: b.stage || "PLANNED",
-            date: fmtDate(b.startDate || b.createdAt),
-          })),
-        };
-      }
-      case "Production Planning": {
-        const res = await productionApi.getHistory();
-        return transformGeneric(res.data, meta);
-      }
-      case "QC & Inspection Report": {
-        const res = await productionApi.getPendingQC();
-        const items = toArr(res.data);
-        return {
-          kpiValue: `${items.length} Pending QC`,
-          kpiSubText: "Quality inspection audits",
-          rows: items.map((q: any) => ({
-            batchNo: q.batchNumber || q._id?.slice(-6) || "—",
-            product: q.product?.name || q.recipe?.name || "—",
-            inspector: q.inspector?.name || "QA Staff",
-            result: q.qcStatus || "PENDING",
-            score: q.qcScore ? `${q.qcScore}%` : "—",
-            date: fmtDate(q.createdAt),
-          })),
-        };
-      }
-      case "Material Consumption Report": {
-        const res = await inventoryApi.getRawMaterialConsumption();
-        return transformGeneric(res.data, meta);
-      }
+      case "Batch Manufacturing History":
+        return transformBatchHistory((await productionApi.getHistory(params)).data);
+      case "Production Planning":
+        return transformProductionPlanning((await productionApi.getHistory({ ...params, status: "PLANNED" })).data);
+      case "QC & Inspection Report":
+        return transformQCReport((await productionApi.getPendingQC(params)).data);
+      case "Material Consumption Report":
+        return transformMaterialConsumption((await inventoryApi.getRawMaterialConsumption(params)).data);
       case "Wastage & Scrap Report": {
-        const res = await wasteApi.getAll();
+        const res = await wasteApi.getAll(params);
         const wasteRows = toArr(res.data);
         const totalQty = wasteRows.reduce((s: number, w: any) => s + (Number(w.quantity) || 0), 0);
         return {
@@ -1754,7 +1851,7 @@ async function fetchReport(
           kpiSubText: `${wasteRows.length} scrap entries recorded`,
           rows: wasteRows.map((w: any) => ({
             date: fmtDate(w.createdAt || w.date),
-            item: w.item?.name || w.itemName || "—",
+            item: w.inventoryItem?.name || w.item?.name || w.itemName || "—",
             quantity: String(w.quantity || 0),
             reason: w.reason || "Damaged / Spoiled",
             note: w.note || "—",
@@ -1776,21 +1873,9 @@ async function fetchReport(
           })),
         };
       }
-      case "Packaging & Cartons": {
-        const res = await cartonApi.getAll();
-        const cartons = toArr(res.data);
-        return {
-          kpiValue: `${cartons.length} Cartons`,
-          kpiSubText: `Packaged box records`,
-          rows: cartons.map((c: any) => ({
-            cartonNo: c.cartonNumber || c._id?.slice(-6) || "—",
-            batchNo: c.batch?.batchNumber || c.batchId || "—",
-            size: c.cartonSize || "Standard",
-            units: String(c.unitsPerCarton || 0),
-            date: fmtDate(c.createdAt),
-          })),
-        };
-      }
+      case "Packaging":
+      case "Packaging & Cartons":
+        return transformPackaging((await cartonApi.getAll(params)).data);
 
       // Inventory Ledger
       case "Raw Material Ledger": {
@@ -1923,7 +2008,7 @@ async function fetchReport(
 
       // Financial - Expenses & Orders & Banking
       case "Expense":
-        return transformExpenses((await accountingApi.getExpenses(params)).data);
+        return transformExpenses((await reportsApi.getExpenses(params)).data);
       case "Expense Category Report":
         return transformGeneric((await reportsApi.getExpenseCategory(params)).data, meta);
       case "Expense Item Report":
@@ -1953,15 +2038,36 @@ async function fetchReport(
       case "Sale Purchase By Party Group":
         return transformGeneric((await reportsApi.getSalePurchaseByPartyGroup(params)).data, meta);
       case "Franchise Dues & Balances":
-        return transformAllParties((await reportsApi.getAllParties()).data);
+        return transformFranchiseDues((await reportsApi.getFranchiseReport(params)).data);
       case "Franchise Performance Summary":
-        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
+        return transformFranchisePerformance((await reportsApi.getFranchiseReport(params)).data);
 
       default:
         return { kpiValue: "—", kpiSubText: "Report ready", rows: [] };
     }
-  } catch {
-    return { kpiValue: "—", kpiSubText: "No records found for selected period", rows: [] };
+  } catch (err: any) {
+    const status = err?.response?.status || err?.status;
+    let message = "Unable to load report data.";
+    if (status === 401) {
+      message = "Your session has expired. Please sign in again.";
+    } else if (status === 403) {
+      message = "You do not have permission to view this report.";
+    } else if (status === 500) {
+      message = "Unable to load this report. Please try again.";
+    } else if (err?.response?.data?.error) {
+      message = String(err.response.data.error);
+    } else if (err?.message) {
+      message = String(err.message);
+    }
+
+    return {
+      error: true,
+      errorMessage: message,
+      statusCode: status,
+      kpiValue: "—",
+      kpiSubText: message,
+      rows: [],
+    };
   }
 }
 
@@ -2195,7 +2301,7 @@ function ReportsContent() {
         startDate: from,
         endDate: to,
         search: tableSearchTerm.trim() || undefined,
-        limit: 1000,
+        limit: 10000,
       });
       const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
         Object.values(row).some((val) =>
