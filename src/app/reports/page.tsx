@@ -96,6 +96,12 @@ interface ReportData {
   kpiSubText: string;
   kpiTrend?: string;
   rows: Record<string, any>[];
+  pagination?: {
+    page: number;
+    limit: number;
+    totalCount: number;
+    totalPages: number;
+  };
   revenue?: number;
   cogs?: number;
   purchase?: number;
@@ -183,7 +189,7 @@ const PARENT_REPORTS: ParentReportDef[] = [
       { id: "Day book", label: "Day Book", category: "Statements & P&L", description: "Daily financial transaction entries." },
       { id: "Sale", label: "Sale Invoices", category: "Statements & P&L", description: "Sales invoice records and dues." },
       { id: "Purchase", label: "Purchase Orders", category: "Statements & P&L", description: "Vendor purchase orders and billed values." },
-      { id: "All Transactions", label: "All Transactions", category: "Statements & P&L", description: "Master transaction log." },
+      { id: "All Transactions", label: "Payment Register", category: "Statements & P&L", description: "Cash, Bank & UPI payment vouchers and receipts." },
 
       // GST Reports
       { id: "GSTR 1", label: "GSTR 1", category: "GST Reports", description: "Outward supply return statement." },
@@ -467,9 +473,9 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
     ],
   },
   "All Transactions": {
-    title: "All Account Transactions",
+    title: "Payment Register",
     kpiLabel: "Total Volume",
-    tableTitle: "Account Transactions",
+    tableTitle: "Payment Vouchers & Ledger Entries",
     columns: [
       { key: "date", label: "Date" },
       { key: "refNo", label: "Ref No" },
@@ -1147,6 +1153,7 @@ function transformSales(data: any): ReportData {
       amount: fmtCurrency(r.total || r.amount || r.grandTotal),
       balance: fmtCurrency(r.balance || r.due || r.pendingAmount || Math.max(0, (r.total || 0) - (r.paidAmount || 0))),
     })),
+    pagination: data?.pagination,
   };
 }
 
@@ -1166,14 +1173,12 @@ function transformPurchases(data: any): ReportData {
       amount: fmtCurrency(r.totalAmount || r.total),
       balance: fmtCurrency(Math.max(0, (Number(r.totalAmount || r.total) || 0) - (Number(r.advancePaid || r.paidAmount) || 0))),
     })),
+    pagination: data?.pagination,
   };
 }
 
 function transformDayBook(data: any): ReportData {
   const entries = toArr(data);
-  // Prefer the backend's full-range aggregates over summing just the
-  // (possibly paginated) `entries` page, so Net Cash Flow stays correct
-  // once a period has more rows than one page.
   const hasBackendTotals = data && (data.openingBalance !== undefined || data.closingBalance !== undefined);
   const cashIn = hasBackendTotals
     ? Number(data.totalDebit) || 0
@@ -1201,13 +1206,12 @@ function transformDayBook(data: any): ReportData {
     totalCredit: cashOut,
     openingBalance,
     closingBalance,
+    pagination: data?.pagination,
   };
 }
 
 function transformTransactions(data: any): ReportData {
   const rows = toArr(data);
-  // Prefer the backend's full-range aggregates over summing just the
-  // (possibly paginated) `rows` page.
   const hasBackendTotals = data && (data.totalDebit !== undefined || data.totalCredit !== undefined);
   const totalDebit = hasBackendTotals
     ? Number(data.totalDebit) || 0
@@ -1216,7 +1220,7 @@ function transformTransactions(data: any): ReportData {
     ? Number(data.totalCredit) || 0
     : rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
   return {
-    kpiValue: `${rows.length} Transactions`,
+    kpiValue: `${data?.pagination?.totalCount ?? rows.length} Payments`,
     kpiSubText: `Debit: ${fmtCurrency(totalDebit)} • Credit: ${fmtCurrency(totalCredit)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date || r.createdAt),
@@ -1228,6 +1232,7 @@ function transformTransactions(data: any): ReportData {
     })),
     totalDebit,
     totalCredit,
+    pagination: data?.pagination,
   };
 }
 
@@ -1240,10 +1245,21 @@ function transformProfitLoss(data: any): ReportData {
   const purchase = Number(data?.purchase || 0);
   const taxPayable = Number(data?.taxPayable ?? data?.tax ?? 0);
   const taxReceivable = Number(data?.taxReceivable || 0);
+
+  const rows = [
+    { category: "Revenue", accountName: "Sales Revenue (Tax Exclusive)", mtd: fmtCurrency(revenue), ytd: "—" },
+    { category: "COGS", accountName: "Cost of Goods Sold (COGS)", mtd: fmtCurrency(cogs), ytd: "—" },
+    { category: "Gross Profit", accountName: "Gross Profit Margin", mtd: fmtCurrency(grossProfit), ytd: "—" },
+    { category: "Expenses", accountName: "Operating Expenses", mtd: fmtCurrency(expenses), ytd: "—" },
+    { category: "Net Profit", accountName: "Net Profit / Loss", mtd: fmtCurrency(netProfit), ytd: "—" },
+    { category: "Taxes", accountName: "GST Output Tax Payable", mtd: fmtCurrency(taxPayable), ytd: "—" },
+    { category: "Taxes", accountName: "GST Input Tax Credit / Receivable", mtd: fmtCurrency(taxReceivable), ytd: "—" },
+  ];
+
   return {
     kpiValue: fmtCurrency(netProfit),
     kpiSubText: `Revenue: ${fmtCurrency(revenue)} • Expenses: ${fmtCurrency(expenses)}`,
-    rows: [],
+    rows,
     revenue,
     cogs,
     purchase,
@@ -1278,7 +1294,33 @@ function transformBillWiseProfit(data: any): ReportData {
 }
 
 function transformCashFlow(data: any): ReportData {
-  const entries = toArr(data?.entries || data?.transactions || data);
+  const accounts = Array.isArray(data?.accounts) ? data.accounts : (Array.isArray(data) ? data : []);
+  const entries = Array.isArray(data?.entries) || Array.isArray(data?.transactions)
+    ? (data.entries || data.transactions)
+    : [];
+
+  if (accounts.length > 0) {
+    const totalLiquidity = Number(data?.totalLiquidity ?? accounts.reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0));
+    const cashBal = Number(data?.breakdown?.cash ?? accounts.filter((a: any) => a.type === "CASH").reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0));
+    const bankBal = Number(data?.breakdown?.bank ?? accounts.filter((a: any) => a.type === "BANK").reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0));
+    const upiBal = Number(data?.breakdown?.upi ?? accounts.filter((a: any) => a.type === "UPI").reduce((s: number, a: any) => s + (Number(a.balance) || 0), 0));
+
+    return {
+      kpiValue: fmtCurrency(totalLiquidity),
+      kpiSubText: `Cash: ${fmtCurrency(cashBal)} • Bank: ${fmtCurrency(bankBal)} • UPI: ${fmtCurrency(upiBal)}`,
+      rows: accounts.map((a: any) => ({
+        date: a.updatedAt ? fmtDate(a.updatedAt) : "Live Balance",
+        description: a.name || "Account",
+        category: a.type || "LIQUIDITY",
+        inflow: Number(a.balance) >= 0 ? fmtCurrency(a.balance) : "—",
+        outflow: Number(a.balance) < 0 ? fmtCurrency(Math.abs(a.balance)) : "—",
+        balance: fmtCurrency(a.balance || 0),
+      })),
+      cashIn: totalLiquidity,
+      cashOut: 0,
+    };
+  }
+
   const cashIn = Number(data?.totalInflow || data?.cashIn || entries.filter((e: any) => e.type === "IN" || e.direction === "IN").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0));
   const cashOut = Number(data?.totalOutflow || data?.cashOut || entries.filter((e: any) => e.type === "OUT" || e.direction === "OUT").reduce((s: number, e: any) => s + (Number(e.amount) || 0), 0));
   return {
@@ -1286,13 +1328,11 @@ function transformCashFlow(data: any): ReportData {
     kpiSubText: `Inflow: ${fmtCurrency(cashIn)} • Outflow: ${fmtCurrency(cashOut)}`,
     rows: entries.map((e: any) => ({
       date: fmtDate(e.date || e.createdAt),
-      refNo: e.refNo || e.invoiceNumber || e.billNo || e._id?.slice(-6) || "—",
-      partyName: e.customer?.name || e.partyName || e.name || "—",
-      category: e.category || "—",
-      type: e.type || e.direction || "—",
-      cashIn: e.type === "IN" || e.direction === "IN" ? Number(e.amount || 0) : 0,
-      cashOut: e.type === "OUT" || e.direction === "OUT" ? Number(e.amount || 0) : 0,
-      runningCash: Number(e.runningBalance || e.balance || 0),
+      description: e.refNo || e.invoiceNumber || e.billNo || e._id?.slice(-6) || e.particulars || "—",
+      category: e.category || e.voucherType || "—",
+      inflow: e.type === "IN" || e.direction === "IN" || e.type === "DEBIT" ? fmtCurrency(e.amount || 0) : "—",
+      outflow: e.type === "OUT" || e.direction === "OUT" || e.type === "CREDIT" ? fmtCurrency(e.amount || 0) : "—",
+      balance: fmtCurrency(e.runningBalance || e.balance || 0),
     })),
     cashIn,
     cashOut,
@@ -1640,7 +1680,7 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
 
 async function fetchReport(
   label: string,
-  params: { startDate: string; endDate: string; search?: string }
+  params: { startDate: string; endDate: string; search?: string; page?: number; limit?: number }
 ): Promise<ReportData> {
   const meta = REPORT_METADATA[label];
   try {
@@ -2016,6 +2056,13 @@ function ReportsContent() {
     });
   }, [activeParent, selectedFinancialCategory]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reset page on tab or filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedChildId, dateFilter, customStartDate, customEndDate, tableSearchTerm]);
+
   // Fetch report data when active child or date changes
   useEffect(() => {
     if (!mounted || !activeChild) {
@@ -2031,6 +2078,8 @@ function ReportsContent() {
         startDate: from,
         endDate: to,
         search: tableSearchTerm.trim() || undefined,
+        page: currentPage,
+        limit: 50,
       })
         .then((d) => {
           if (!cancelled) setReportData(d);
@@ -2047,7 +2096,7 @@ function ReportsContent() {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm]);
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage]);
 
   const currentMeta = activeChild ? REPORT_METADATA[activeChild.id] ?? DEFAULT_META : DEFAULT_META;
   const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -2119,20 +2168,33 @@ function ReportsContent() {
     toast.error("Sharing is not supported in this browser");
   };
 
-  const handleExportCSV = () => {
-    if (!filteredRows || filteredRows.length === 0) {
-      toast.error("No data to export");
-      return;
-    }
-    const toastId = toast.loading("Generating CSV...");
+  const handleExportCSV = async () => {
+    if (!activeChild) return;
+    const toastId = toast.loading("Generating complete CSV export...");
     try {
+      const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+      const fullData = await fetchReport(activeChild.id, {
+        startDate: from,
+        endDate: to,
+        search: tableSearchTerm.trim() || undefined,
+        limit: 1000,
+      });
+      const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
+        Object.values(row).some((val) =>
+          String(val).toLowerCase().includes(tableSearchTerm.toLowerCase())
+        )
+      );
+      if (rowsToExport.length === 0) {
+        toast.error("No data to export", { id: toastId });
+        return;
+      }
       const cols = currentMeta.columns;
       downloadCsv(
         `${(activeChild?.label || "report").replace(/\s+/g, "_").toLowerCase()}_${from}_${to}.csv`,
         cols.map((c) => c.label),
-        filteredRows.map((row) => cols.map((c) => row[c.key] ?? ""))
+        rowsToExport.map((row) => cols.map((c) => row[c.key] ?? ""))
       );
-      toast.success("CSV Exported", { id: toastId });
+      toast.success(`CSV Exported (${rowsToExport.length} records)`, { id: toastId });
     } catch {
       toast.error("Export failed", { id: toastId });
     }
@@ -2416,6 +2478,32 @@ function ReportsContent() {
                   )}
                 </tbody>
               </table>
+            )}
+            {reportData?.pagination && reportData.pagination.totalPages > 1 && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01]">
+                <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">
+                  Showing {((currentPage - 1) * (reportData.pagination.limit || 50)) + 1} to {Math.min(currentPage * (reportData.pagination.limit || 50), reportData.pagination.totalCount)} of {reportData.pagination.totalCount} entries
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs font-semibold text-gray-700 dark:text-slate-300 px-2">
+                    Page {currentPage} of {reportData.pagination.totalPages}
+                  </span>
+                  <button
+                    disabled={currentPage >= (reportData.pagination?.totalPages || 1)}
+                    onClick={() => setCurrentPage((p) => Math.min(reportData.pagination?.totalPages || 1, p + 1))}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </div>
