@@ -445,12 +445,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/admin/users",
         roles: SUPER_ONLY,
       },
-      {
-        icon: UserCheck,
-        label: "Approval Workflows",
-        href: "/admin/approvals",
-        roles: SUPER_ONLY,
-      },
+      // {
+      //   icon: UserCheck,
+      //   label: "Approval Workflows",
+      //   href: "/admin/approvals",
+      //   roles: SUPER_ONLY,
+      // },
       {
         icon: FileClock,
         label: "Audit Logs",

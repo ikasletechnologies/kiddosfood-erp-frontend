@@ -993,6 +993,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "customer", label: "Customer" },
       { key: "item", label: "Item Name" },
       { key: "quantity", label: "Ordered Qty" },
+      { key: "rate", label: "Rate" },
       { key: "amount", label: "Total Amount" },
     ],
   },
@@ -1652,6 +1653,7 @@ function transformSaleOrderItems(data: any): ReportData {
       customer: r.customerName || r.customer?.name || "—",
       item: r.productName || r.item || "—",
       quantity: r.quantity ?? 0,
+      rate: fmtCurrency(r.unitPrice),
       amount: fmtCurrency(r.totalAmount),
     })),
   };
