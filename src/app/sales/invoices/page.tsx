@@ -213,6 +213,22 @@ function MiniCalendar({ value, onChange, onClose }: {
   );
 }
 
+// OrderItem has no taxPercent/gstRate column (only taxAmount) — the rate
+// was already applied once, upstream, to produce that amount, and never
+// discounted per-line anywhere in this chain, so backing it out is an exact
+// reconstruction, not an approximation. Same formula GSTInvoice.tsx already
+// uses for this document's own PDF; kept here for the on-screen table too.
+function deriveTaxPercent(it: any): string {
+  const stored = it.taxPercent ?? it.gstRate;
+  if (stored !== undefined && stored !== null && stored !== "") return String(stored);
+  const base = Number(it.quantity || 0) * Number(it.price || 0);
+  const taxAmount = Number(it.taxAmount || 0);
+  if (taxAmount > 0 && base > 0) {
+    return ((taxAmount / base) * 100).toFixed(0);
+  }
+  return "—";
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function SalesInvoicesPage() {
@@ -949,7 +965,7 @@ export default function SalesInvoicesPage() {
                     <td className="px-4 py-2.5 text-center dark:text-slate-200">{it.quantity}</td>
                     <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || "—"}</td>
                     <td className="px-4 py-2.5 text-right font-mono dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
-                    <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{deriveTaxPercent(it)}%</td>
                     <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
                     <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-800 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
                   </tr>

@@ -106,10 +106,20 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
 
   const companyState = (companyDetails?.state || "").toLowerCase().trim();
   const vendorState = (vendor?.state || "").toLowerCase().trim();
+  // GST place-of-supply (order.stateOfSupply) is the field the law actually
+  // keys CGST+SGST vs IGST on — it can legitimately differ from the
+  // counterparty's master-record address that `vendor` carries (a Customer's
+  // registered state, a Vendor's, or nothing at all). When the caller
+  // supplies it, it wins over the vendor-address heuristic below, which
+  // stays as-is for callers that don't pass it (e.g. purchase-side
+  // documents, where "vendor" genuinely is the state of supply).
+  const stateOfSupply = (order?.stateOfSupply || "").toLowerCase().trim();
   const isSameState =
-    !companyState || !vendorState
-      ? true
-      : vendorState.includes(companyState) || companyState.includes(vendorState);
+    stateOfSupply && companyState
+      ? companyState === stateOfSupply
+      : !companyState || !vendorState
+        ? true
+        : vendorState.includes(companyState) || companyState.includes(vendorState);
 
   const taxableSubtotal = items.reduce((s: number, it: any) => s + safe(it.quantity) * safe(it.price), 0);
   const discount = safe(order.discount ?? order.discountAmount ?? 0);
@@ -122,8 +132,14 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
       const amt = safe(it.quantity) * safe(it.price);
       const tax = amt * (safe(it.gstRate) / 100);
       if (isSameState) {
-        acc.cgst += round(tax / 2);
-        acc.sgst += round(tax / 2);
+        // Round CGST, then take SGST as the remainder so the two halves
+        // always sum back to the true tax. Rounding both halves the same
+        // way (round(tax/2) twice) can double-round a half-paisa split —
+        // e.g. ₹1.75 -> ₹0.88 + ₹0.88 = ₹1.76 — and overstate the total by
+        // a paisa. Mirrors FinanceService's splitTaxBySupplyState.
+        const cgstShare = round(tax / 2);
+        acc.cgst += cgstShare;
+        acc.sgst += round(tax - cgstShare);
       } else {
         acc.igst += round(tax);
       }

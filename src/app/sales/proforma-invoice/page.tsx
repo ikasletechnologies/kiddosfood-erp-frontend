@@ -322,6 +322,7 @@ export default function ProformaInvoicePage() {
             poNumber: previewProforma.proformaNumber,
             sourceSalesOrderNumber: previewProforma.sourceSalesOrderNumber,
             createdAt: previewProforma.createdAt,
+            stateOfSupply: previewProforma.stateOfSupply,
             discount: previewProforma.discountAmount || previewProforma.discount || 0,
             items: (previewProforma.items || []).map((it: any, idx: number) => ({
               itemName: it.productName || it.description || it.itemName || it.name || `Item #${idx + 1}`,

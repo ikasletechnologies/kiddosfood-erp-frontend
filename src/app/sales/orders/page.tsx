@@ -528,7 +528,7 @@ export default function SalesOrdersPage() {
         // update it rather than creating yet another duplicate.
         if (res?.data?.id) setDraftId(res.data.id);
       }
-      showToast("Sales Order saved successfully", "success");
+      showToast(draftId ? "Sales Order updated successfully" : "Sales Order saved successfully", "success");
       fetchAllData();
       setView("list");
       resetForm();
@@ -1231,22 +1231,14 @@ export default function SalesOrdersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => handleSave("DRAFT")}
+                onClick={() => handleSave("OPEN")}
                 disabled={saving}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
               >
-                Save as Draft
+                <Check className="h-4 w-4" /> {saving ? "Updating..." : "Update Order"}
               </button>
-              <button
-                type="button"
-                onClick={() => showToast("Share links generated! Ready for PDF dispatch.", "success")}
-                className="px-4 py-2 text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-[#f58220] transition-colors"
-              >
-                Share
-                  <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Order"}
-                </button>
-              </>
-            )}
+            </>
+          )}
           </div>
         </div>
       );

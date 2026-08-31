@@ -453,8 +453,14 @@ export default function EstimationsPageClient({
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const params: Record<string, string | undefined> = {};
+      if (dateFrom) params.fromDate = dateFrom;
+      if (dateTo) params.toDate = dateTo;
+      if (statusFilter && statusFilter !== "ALL") params.status = statusFilter;
+      if (search.trim()) params.search = search.trim();
+
       const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
-        api.get(apiUrl).catch(() => ({ data: [] })),
+        api.get(apiUrl, { params }).catch(() => ({ data: [] })),
         customersApi.getAll(),
         // Estimates sell finished goods, not raw materials/semi-finished/packaging —
         // exclude those categories to get the sellable Finished Goods catalog
@@ -477,7 +483,7 @@ export default function EstimationsPageClient({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiUrl, dateFrom, dateTo, statusFilter, search]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -705,6 +711,18 @@ export default function EstimationsPageClient({
   };
 
   const handleSave = async (isDraft = false) => {
+    // Re-entrancy guard: the explicit Save/Save Draft buttons already set
+    // disabled={saving}, but handleBack() (wired to the plain Back arrow)
+    // calls handleSave(true) with no such guard — a fast double-click there
+    // fires two concurrent PUT requests with the identical items payload.
+    // Each PUT replaces items via deleteMany-then-create in its own
+    // transaction, so two overlapping requests can both pass the deleteMany
+    // before either commits its create, leaving every line item doubled in
+    // the DB even though nothing was actually duplicated in the form. This
+    // check makes handleSave itself idempotent against re-entrant calls,
+    // regardless of which caller forgot to gate on `saving`.
+    if (saving) return;
+
     // A draft's whole point is to hold whatever's been typed so far, even
     // an item with no price yet — the strict qty/rate>0 filter below is
     // only for the real SENT path. Applying it to drafts too used to
@@ -746,6 +764,13 @@ export default function EstimationsPageClient({
           taxPercent: i.taxPct,
         })),
         discountAmount: totalDisc,
+        // The nearest-rupee adjustment shown on screen (e.g. +0.25 to turn
+        // ₹99.75 into the ₹100.00 the user sees as the payable total) — the
+        // backend has no way to know this was applied unless it's sent
+        // explicitly, so without it the persisted total silently reverted
+        // to the pre-round figure everywhere downstream (list, Sales
+        // Order, Proforma, Tax Invoice all carry totalAmount forward as-is).
+        roundOffAmount: roundOff,
         termsConditions: showTerms ? (termsText || undefined) : undefined,
         notes: showDesc ? (description || undefined) : undefined,
       };
@@ -862,9 +887,10 @@ export default function EstimationsPageClient({
   };
   const filtered = estimations.filter(est => {
     const partyName = est.customer?.name || est.customerName;
-    const matchSearch = !search ||
-      est.quotationNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      partyName?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search.trim() ||
+      est.quotationNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      est.proformaNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      partyName?.toLowerCase().includes(search.trim().toLowerCase());
     const matchStatus = statusFilter === "ALL" || est.status === statusFilter;
     let matchDate = true;
     if (est.createdAt && (dateFrom || dateTo)) {
@@ -889,90 +915,257 @@ export default function EstimationsPageClient({
 
   const handleExportExcel = () => {
     setExportDropdownOpen(false);
-    const headers = ["Date", L.noColumn, "Party Name", "Amount", "Status"];
+    const headers = [
+      "Date",
+      L.noColumn,
+      "Party Name",
+      "Party Type",
+      "Amount",
+      "Status",
+      "Sales Order Ref"
+    ];
+    const prefix = documentType === "PROFORMA" ? "proforma-invoices" : "estimates";
+    const todayStr = new Date().toISOString().split("T")[0];
+    const dateRangeStr = `Date Range: ${dateFrom || "All"} to ${dateTo || "All"}`;
+    const filterStr = `Status Filter: ${statusFilter}${search ? ` | Search: "${search}"` : ""}`;
+
     const rows = [
       [`${L.listHeading.toUpperCase()} REPORT`],
-      [`Generated: ${new Date().toLocaleString()}`],
+      [`Generated: ${new Date().toLocaleString("en-IN")}`],
+      [`${dateRangeStr} | ${filterStr}`],
       [],
       headers,
       ...filtered.map((est: any) => [
         formatDate(est.createdAt),
         est.quotationNumber || est.proformaNumber || "—",
         est.customer?.name || est.customerName || "—",
+        est.partyType || (est.customerId ? "CUSTOMER" : "—"),
         `₹${Number(est.totalAmount || 0).toFixed(2)}`,
-        STATUS_STYLES[est.status]?.label || est.status,
+        STATUS_STYLES[est.status]?.label || est.status || "DRAFT",
+        est.convertedOrderNumber || "—",
       ]),
     ];
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      rows.map((e) => e.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(",")).join("\n");
+
+    const escapeCell = (val: any) => {
+      const str = String(val ?? "").replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvContent = rows.map((r) => r.map(escapeCell).join(",")).join("\r\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `${L.listHeading.replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${prefix}-${todayStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     showToast("Excel (.csv) report downloaded!", "success");
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     setExportDropdownOpen(false);
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      showToast("Please allow pop-ups to export as PDF", "error");
-      return;
-    }
-    const tableRows = filtered.map((est: any) => `
-      <tr>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${formatDate(est.createdAt)}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-family: monospace; color: #f58220;">${est.quotationNumber || est.proformaNumber || "—"}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${est.customer?.name || est.customerName || "—"}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: bold;">₹${Number(est.totalAmount || 0).toFixed(2)}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${STATUS_STYLES[est.status]?.label || est.status}</td>
-      </tr>
-    `).join("");
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+      const contentWidth = pageWidth - margin * 2;
 
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${L.listHeading} Summary — ${new Date().toLocaleDateString()}</title>
-          <style>
-            @media print {
-              body { margin: 0; padding: 20px; font-size: 11px; }
-            }
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1e293b; padding: 24px; }
-            h1 { font-size: 20px; font-weight: 900; margin: 0; text-transform: uppercase; }
-            p { font-size: 11px; color: #64748b; margin: 4px 0 16px 0; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; margin-top: 12px; }
-            th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: bold; text-transform: uppercase; font-size: 10px; color: #475569; }
-          </style>
-        </head>
-        <body>
-          <h1>${L.listHeading.toUpperCase()} REGISTRY</h1>
-          <p>Generated on ${new Date().toLocaleString()} | Sales & Quotations</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>${L.noColumn}</th>
-                <th>Party Name</th>
-                <th style="text-align: right;">Amount</th>
-                <th style="text-align: center;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
-          <script>
-            window.onload = function() { window.print(); }
-          </script>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
+      const prefix = documentType === "PROFORMA" ? "proforma-invoices" : "estimates";
+      const todayStr = new Date().toISOString().split("T")[0];
+      const title = `${L.listHeading.toUpperCase()} REPORT`;
+
+      const dateRangeStr = `Date Range: ${dateFrom || "All"} to ${dateTo || "All"}`;
+      const filterStr = `Status: ${statusFilter}${search ? ` | Search: "${search}"` : ""}`;
+      const generatedStr = `Generated On: ${new Date().toLocaleString("en-IN")}`;
+
+      let currentY = margin;
+
+      // Report Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(15, 23, 42);
+      doc.text(title, margin, currentY + 5);
+
+      // Subheader Metadata
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`${generatedStr}  |  ${dateRangeStr}  |  ${filterStr}`, margin, currentY + 11);
+
+      currentY += 16;
+
+      // Table Columns definition: sum = 186mm
+      const cols = [
+        { header: "Date", width: 22, align: "left" },
+        { header: L.noColumn, width: 28, align: "left" },
+        { header: "Party Name", width: 42, align: "left" },
+        { header: "Party Type", width: 20, align: "left" },
+        { header: "Amount (₹)", width: 24, align: "right" },
+        { header: "Status", width: 22, align: "center" },
+        { header: "SO Ref", width: 28, align: "left" },
+      ];
+
+      const drawTableHeader = (y: number) => {
+        doc.setFillColor(30, 41, 59);
+        doc.rect(margin, y, contentWidth, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(255, 255, 255);
+
+        let x = margin;
+        cols.forEach((col) => {
+          if (col.align === "right") {
+            doc.text(col.header, x + col.width - 2, y + 4.8, { align: "right" });
+          } else if (col.align === "center") {
+            doc.text(col.header, x + col.width / 2, y + 4.8, { align: "center" });
+          } else {
+            doc.text(col.header, x + 2, y + 4.8, { align: "left" });
+          }
+          x += col.width;
+        });
+      };
+
+      drawTableHeader(currentY);
+      currentY += 7;
+
+      if (filtered.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text("No records found matching the selected criteria.", pageWidth / 2, currentY + 10, { align: "center" });
+        currentY += 18;
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+
+        filtered.forEach((est: any, idx: number) => {
+          const rowHeight = 7;
+
+          // Check for page height overflow
+          if (currentY + rowHeight > pageHeight - 22) {
+            doc.addPage();
+            currentY = margin;
+            drawTableHeader(currentY);
+            currentY += 7;
+          }
+
+          // Alternate row background
+          if (idx % 2 === 1) {
+            doc.setFillColor(248, 250, 252);
+            doc.rect(margin, currentY, contentWidth, rowHeight, "F");
+          }
+
+          // Bottom border line
+          doc.setDrawColor(226, 232, 240);
+          doc.setLineWidth(0.1);
+          doc.line(margin, currentY + rowHeight, margin + contentWidth, currentY + rowHeight);
+
+          doc.setTextColor(30, 41, 59);
+
+          const dateVal = formatDate(est.createdAt);
+          const noVal = est.quotationNumber || est.proformaNumber || "—";
+          const partyVal = est.customer?.name || est.customerName || "—";
+          const partyTypeVal = est.partyType || (est.customerId ? "CUSTOMER" : "—");
+          const amtVal = `${Number(est.totalAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          const statusVal = STATUS_STYLES[est.status]?.label || est.status || "DRAFT";
+          const soRefVal = est.convertedOrderNumber || "—";
+
+          let x = margin;
+          // Col 0: Date
+          doc.text(dateVal, x + 2, currentY + 4.8);
+          x += cols[0].width;
+
+          // Col 1: No
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(245, 130, 32);
+          doc.text(noVal, x + 2, currentY + 4.8);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(30, 41, 59);
+          x += cols[1].width;
+
+          // Col 2: Party Name (truncated if long)
+          const truncatedParty = partyVal.length > 25 ? partyVal.slice(0, 23) + "..." : partyVal;
+          doc.text(truncatedParty, x + 2, currentY + 4.8);
+          x += cols[2].width;
+
+          // Col 3: Party Type
+          doc.text(partyTypeVal, x + 2, currentY + 4.8);
+          x += cols[3].width;
+
+          // Col 4: Amount
+          doc.setFont("helvetica", "bold");
+          doc.text(amtVal, x + cols[4].width - 2, currentY + 4.8, { align: "right" });
+          doc.setFont("helvetica", "normal");
+          x += cols[4].width;
+
+          // Col 5: Status
+          doc.text(statusVal, x + cols[5].width / 2, currentY + 4.8, { align: "center" });
+          x += cols[5].width;
+
+          // Col 6: SO Ref
+          if (soRefVal !== "—") {
+            doc.setTextColor(22, 163, 74);
+          }
+          doc.text(soRefVal, x + 2, currentY + 4.8);
+          x += cols[6].width;
+
+          currentY += rowHeight;
+        });
+      }
+
+      // Totals Summary Box
+      if (currentY + 22 > pageHeight - 15) {
+        doc.addPage();
+        currentY = margin;
+      }
+
+      currentY += 4;
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, currentY, contentWidth, 14, "F");
+      doc.setDrawColor(203, 213, 225);
+      doc.rect(margin, currentY, contentWidth, 14, "S");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`Total Records: ${filtered.length}`, margin + 4, currentY + 5.5);
+      doc.text(`Total Amount: ₹ ${totalQuotations.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 5.5);
+      doc.text(`Converted: ₹ ${totalConverted.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 125, currentY + 5.5);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Open / Sent: ₹ ${totalOpen.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 10.5);
+
+      // Page Footers
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 7, { align: "center" });
+      }
+
+      // Save PDF Blob & trigger download
+      const pdfBlob = doc.output("blob");
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = `${prefix}-${todayStr}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+      showToast("PDF document downloaded!", "success");
+    } catch (err) {
+      console.error("PDF export error:", err);
+      showToast("Failed to generate PDF document", "error");
+    }
   };
 
   const handleShareWhatsApp = () => {
