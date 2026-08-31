@@ -1415,7 +1415,7 @@ function transformGstr2(data: any): ReportData {
     kpiSubText: `Taxable: ${fmtCurrency(totalTaxable)} • Tax: ${fmtCurrency(totalTax)}`,
     rows: rows.map((r: any) => ({
       date: fmtDate(r.date),
-      invoiceNo: r.poNumber || "—",
+      invoiceNo: r.invoiceNumber || r.poNumber || "—",
       partyName: r.vendorName || "—",
       gstin: r.vendorGstin || "—",
       taxableAmount: fmtCurrency(r.taxableValue || 0),
