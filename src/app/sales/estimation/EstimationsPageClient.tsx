@@ -16,7 +16,7 @@ import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
-import { formatDate } from "@/lib/utils";
+import { formatDate, roundMoney, calculateSalesDocumentTotals } from "@/lib/utils";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -278,18 +278,22 @@ function makeItem(): LineItem {
 function computeRow(item: LineItem, withTax: boolean) {
   const qty = item.qty || 0;
   const rate = item.rate || 0;
-  const gross = qty * rate;
+  const gross = roundMoney(qty * rate);
   const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
     ? item.discountAmount
-    : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
-  const afterDisc = Math.max(0, gross - discAmt);
+    : roundMoney(gross * (item.discountPct || 0) / 100);
+  const taxable = Math.max(0, roundMoney(gross - discAmt));
   const taxPct = item.taxPct || 0;
-  if (withTax) {
-    const taxAmt = parseFloat((afterDisc * taxPct / (100 + taxPct)).toFixed(2));
-    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
+
+  if (withTax && taxPct > 0) {
+    const taxAmt = roundMoney(taxable * taxPct / (100 + taxPct));
+    const baseTaxable = roundMoney(taxable - taxAmt);
+    return { gross, discAmt, taxable: baseTaxable, taxAmt, amount: taxable };
   }
-  const taxAmt = parseFloat((afterDisc * taxPct / 100).toFixed(2));
-  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
+
+  const taxAmt = roundMoney(taxable * taxPct / 100);
+  const lineTotal = roundMoney(taxable + taxAmt);
+  return { gross, discAmt, taxable, taxAmt, amount: lineTotal };
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -593,18 +597,17 @@ export default function EstimationsPageClient({
   }, [openItemDrop]);
 
   // ── Computed totals ────────────────────────────────────────────────────────
-  const withTax = priceMode === "with_tax";
-  const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
-  // Blank rows default qty to 1 for a nicer typing experience, but a row
-  // with no item selected yet shouldn't count toward the displayed total.
-  const totalQty = items
-    .filter(i => i.productId || i.itemSearch.trim())
-    .reduce((s, i) => s + i.qty, 0);
-  const totalDisc = parseFloat(rowData.reduce((s, r) => s + r.discAmt, 0).toFixed(2));
-  const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
-  const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
-  const finalTotal = parseFloat((totalAmount + roundOff).toFixed(2));
+  const validItems = items.filter(i => i.productId || i.itemSearch.trim());
+  const calcResult = calculateSalesDocumentTotals(validItems, priceMode, roundOffEnabled);
+  const rowData = items.map(item => ({ item, ...computeRow(item, priceMode === "with_tax") }));
+  const totalQty = validItems.reduce((s, i) => s + (i.qty || 0), 0);
+
+  const subTotal = calcResult.subTotal;
+  const totalDisc = calcResult.totalDiscount;
+  const totalTax = calcResult.totalTax;
+  const totalBeforeRound = calcResult.totalBeforeRound;
+  const roundOff = calcResult.roundOff;
+  const finalTotal = calcResult.finalTotal;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
@@ -683,18 +686,46 @@ export default function EstimationsPageClient({
       setStateOfSupply(draft.stateOfSupply || party?.state || "");
       setRefNo(draft.quotationNumber || draft.proformaNumber || "");
       
-      const mappedItems = draft.items && draft.items.length > 0
-        ? draft.items.map((i: any) => ({
-            id: i.id || `item_${Math.random()}`,
-            productId: i.productId,
-            itemSearch: i.productName,
-            qty: i.quantity,
-            unit: normalizeUnit(i.unit),
-            rate: i.rate,
-            discountPct: 0,
-            taxPct: i.taxPercent || 0,
-            taxLabel: TAX_OPTIONS.find(o => o.value === i.taxPercent)?.label || "NONE",
-          }))
+      const parentDiscount = Number(draft.discountAmount ?? draft.discount ?? 0);
+      const rawItems = draft.items && draft.items.length > 0 ? draft.items : [];
+      const totalGross = rawItems.reduce((s: number, i: any) => {
+        const q = Number(i.quantity ?? i.qty ?? 1);
+        const r = Number(i.rate ?? 0);
+        return s + (q * r);
+      }, 0);
+      const hasExplicitItemDiscounts = rawItems.some((i: any) => Number(i.discountAmount ?? i.discount ?? i.discountPct ?? i.discountPercent ?? 0) > 0);
+
+      const mappedItems = rawItems.length > 0
+        ? rawItems.map((i: any) => {
+            const qty = Number(i.quantity ?? i.qty ?? 1);
+            const rate = Number(i.rate ?? 0);
+            const gross = qty * rate;
+
+            let discAmt = Number(i.discountAmount ?? i.discount ?? i.discAmt ?? 0);
+            let discPct = Number(i.discountPercent ?? i.discountPct ?? 0);
+
+            if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
+              discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
+              discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+            } else if (!discPct && gross > 0 && discAmt > 0) {
+              discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
+            }
+
+            const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
+
+            return {
+              id: i.id || `item_${Math.random()}`,
+              productId: i.productId || "",
+              itemSearch: i.productName || i.itemSearch || "",
+              qty,
+              unit: normalizeUnit(i.unit),
+              rate,
+              discountPct: discPct,
+              discountAmount: calculatedDiscAmt,
+              taxPct: Number(i.taxPercent ?? i.taxPct ?? 0),
+              taxLabel: TAX_OPTIONS.find(o => o.value === Number(i.taxPercent ?? i.taxPct ?? 0))?.label || "NONE",
+            };
+          })
         : [makeItem(), makeItem()];
       setItems(mappedItems);
       setPriceMode("without_tax");
@@ -833,29 +864,60 @@ export default function EstimationsPageClient({
         validUntil: invoiceDate,
         stateOfSupply: stateOfSupply || undefined,
         status: isDraft ? "DRAFT" : "SENT",
-        items: itemsToSave.map(i => ({
-          productId: i.productId || undefined,
-          productName: i.itemSearch,
-          quantity: i.qty || 0,
-          unit: i.unit,
-          rate: i.rate || 0,
-          taxPercent: i.taxPct,
-        })),
+        items: itemsToSave.map(i => {
+          const gross = (i.qty || 0) * (i.rate || 0);
+          const discAmt = i.discountAmount !== undefined && i.discountAmount > 0
+            ? i.discountAmount
+            : parseFloat((gross * (i.discountPct || 0) / 100).toFixed(2));
+          const discPct = i.discountPct !== undefined && i.discountPct > 0
+            ? i.discountPct
+            : gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+          return {
+            productId: i.productId || undefined,
+            productName: i.itemSearch,
+            quantity: i.qty || 0,
+            unit: i.unit,
+            rate: i.rate || 0,
+            discountPercent: discPct,
+            discountPct: discPct,
+            discountAmount: discAmt,
+            discount: discAmt,
+            taxPercent: i.taxPct,
+          };
+        }),
         discountAmount: totalDisc,
-        // The nearest-rupee adjustment shown on screen (e.g. +0.25 to turn
-        // ₹99.75 into the ₹100.00 the user sees as the payable total) — the
-        // backend has no way to know this was applied unless it's sent
-        // explicitly, so without it the persisted total silently reverted
-        // to the pre-round figure everywhere downstream (list, Sales
-        // Order, Proforma, Tax Invoice all carry totalAmount forward as-is).
+        totalAmount: finalTotal,
         roundOffAmount: roundOff,
         termsConditions: showTerms ? (termsText || undefined) : undefined,
         notes: showDesc ? (description || undefined) : undefined,
+        _rawState: {
+          partyType,
+          selectedCustomer,
+          customerSearch,
+          customerPhone,
+          invoiceDate,
+          stateOfSupply,
+          refNo,
+          items,
+          priceMode,
+          termsText,
+          description,
+          roundOffEnabled
+        }
       };
 
       let savedRecord: any = null;
       if (draftId) {
-        const res = await api.put(`${apiUrl}/${draftId}`, payload);
+        let res: any = null;
+        try {
+          res = await api.put(`${apiUrl}/${draftId}`, payload);
+        } catch (err: any) {
+          if (err?.response?.status === 404 || err?.response?.status === 405) {
+            res = await api.patch(`${apiUrl}/${draftId}`, payload);
+          } else {
+            throw err;
+          }
+        }
         savedRecord = res?.data;
       } else {
         const res = await api.post(apiUrl, payload);
@@ -1456,12 +1518,12 @@ export default function EstimationsPageClient({
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {items.map((item, idx) => {
-                  const { taxAmt, amount } = computeRow(item, withTax);
+                  const { taxAmt, amount } = computeRow(item, priceMode === "with_tax");
                   const filtProd = products.filter(p =>
                     !item.itemSearch ||
                     p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
                     p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
-                  ).slice(0, 10);
+                  ).slice(0, 200);
                   const isItemDropOpen = openItemDrop === item.id;
                   return (
                     <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
@@ -1715,7 +1777,7 @@ export default function EstimationsPageClient({
             <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between text-xs sm:text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
-                <span className="font-semibold text-gray-700 dark:text-white font-mono">₹{totalAmount.toFixed(2)}</span>
+                <span className="font-semibold text-gray-700 dark:text-white font-mono">₹{subTotal.toFixed(2)}</span>
               </div>
               {totalTax > 0 && (
                 <div className="flex items-center justify-between text-xs sm:text-sm">
@@ -2060,7 +2122,11 @@ export default function EstimationsPageClient({
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-xs sm:text-sm whitespace-nowrap font-mono">
-                        ₹ {(est.totalAmount || 0).toLocaleString("en-IN")}
+                        ₹ {(
+                          est.items && est.items.length > 0
+                            ? calculateSalesDocumentTotals(est.items, est._rawState?.priceMode, est._rawState?.roundOffEnabled ?? true, est.discountAmount || 0).finalTotal
+                            : (est.totalAmount || 0)
+                        ).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
@@ -2152,14 +2218,19 @@ export default function EstimationsPageClient({
             poNumber: previewEstimate.quotationNumber,
             createdAt: previewEstimate.createdAt,
             discount: previewEstimate.discountAmount || 0,
+            discountAmount: previewEstimate.discountAmount || 0,
+            stateOfSupply: previewEstimate.stateOfSupply,
+            roundOffEnabled: previewEstimate._rawState?.roundOffEnabled ?? true,
             items: (previewEstimate.items || []).map((it: any, idx: number) => ({
               itemName: it.productName || `Item #${idx + 1}`,
               quantity: it.quantity || 0,
               unit: it.unit,
               price: it.rate || 0,
               discountAmount: it.discountAmount || 0,
-              discountPct: it.discountPct || 0,
+              discountPercent: it.discountPercent || it.discountPct || 0,
+              discountPct: it.discountPercent || it.discountPct || 0,
               gstRate: it.taxPercent || 0,
+              taxPercent: it.taxPercent || 0,
             })),
           }}
           vendor={{

@@ -7,12 +7,12 @@ import { FileText, Search, RefreshCw, Calendar,
   Clock, CheckCircle2, XCircle, Printer, Plus,
   ChevronDown, Trash2, ArrowLeft, FileSpreadsheet,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
-  AlertTriangle, X } from "lucide-react";
+  AlertTriangle, X, Pencil } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, productsFullApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
-import { formatDate } from "@/lib/utils";
+import { formatDate, calculateSalesDocumentTotals, roundMoney } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 
 // No hardcoded state here — the seller's GST registration state must come
@@ -98,6 +98,8 @@ interface LineItem {
   qty: number;
   unit: string;
   rate: number;
+  discountPct: number;
+  discountAmount?: number;
   taxPct: number;
   taxLabel: string;
   remarks: string;
@@ -113,6 +115,8 @@ function makeItem(): LineItem {
     qty: 1,
     unit: "NONE",
     rate: 0,
+    discountPct: 0,
+    discountAmount: 0,
     taxPct: 0,
     taxLabel: "NONE",
     remarks: "",
@@ -120,14 +124,22 @@ function makeItem(): LineItem {
 }
 
 function computeRow(item: LineItem, withTax: boolean) {
-  const gross = item.qty * item.rate;
+  const gross = (item.qty || 0) * (item.rate || 0);
+  const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
+    ? item.discountAmount
+    : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
+  const taxable = Math.max(0, gross - discAmt);
+  const taxPct = item.taxPct || 0;
+
   if (withTax) {
-    const taxAmt = parseFloat((gross * item.taxPct / (100 + item.taxPct)).toFixed(2));
-    const netAmt = gross - taxAmt;
-    return { taxAmt, amount: parseFloat(gross.toFixed(2)) };
+    const taxAmt = parseFloat((taxable * taxPct / (100 + taxPct)).toFixed(2));
+    const baseTaxable = parseFloat((taxable - taxAmt).toFixed(2));
+    return { gross, discAmt, taxable: baseTaxable, taxAmt, amount: parseFloat(taxable.toFixed(2)) };
   }
-  const taxAmt = parseFloat((gross * item.taxPct / 100).toFixed(2));
-  return { taxAmt, amount: parseFloat((gross + taxAmt).toFixed(2)) };
+
+  const taxAmt = parseFloat((taxable * taxPct / 100).toFixed(2));
+  const lineTotal = parseFloat((taxable + taxAmt).toFixed(2));
+  return { gross, discAmt, taxable, taxAmt, amount: lineTotal };
 }
 
 // Item Master (InventoryItem) configured UOMs: base unit + any configured conversion units.
@@ -377,13 +389,16 @@ export default function SalesOrdersPage() {
   const withTax = priceMode === "with_tax";
   // Same-state supply -> GST, inter-state -> IGST. Unknown state defaults to GST (same-state).
   const isSameState = !companyState || !stateOfSupply || companyState.trim().toLowerCase() === stateOfSupply.trim().toLowerCase();
+  const calcResult = calculateSalesDocumentTotals(items, priceMode, roundOffEnabled);
   const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
 
   const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
-  const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
-  const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
-  const finalTotal = parseFloat((totalAmount + roundOff).toFixed(2));
+  const subTotal = calcResult.subTotal;
+  const totalDisc = calcResult.totalDiscount;
+  const totalTax = calcResult.totalTax;
+  const totalBeforeRound = calcResult.totalBeforeRound;
+  const roundOff = calcResult.roundOff;
+  const finalTotal = calcResult.finalTotal;
 
   // Auto-increment Order ID
   useEffect(() => {
@@ -429,6 +444,7 @@ export default function SalesOrdersPage() {
         ...it,
         productId: p.id,
         itemSearch: p.name,
+        qty: it.qty || 1,
         rate: p.basePrice || p.price || 0,
         unit: defaultUnit,
         taxPct,
@@ -441,7 +457,26 @@ export default function SalesOrdersPage() {
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const updated = { ...it, [field]: value };
+      const qty = field === "qty" ? Number(value) : updated.qty;
+      const rate = field === "rate" ? Number(value) : updated.rate;
+      const gross = qty * rate;
+
+      if (field === "discountPct") {
+        const pct = Number(value);
+        updated.discountAmount = gross > 0 ? parseFloat((gross * pct / 100).toFixed(2)) : 0;
+      } else if (field === "discountAmount") {
+        const amt = Number(value);
+        updated.discountPct = gross > 0 ? parseFloat(((amt / gross) * 100).toFixed(2)) : 0;
+      } else if (field === "qty" || field === "rate") {
+        if (updated.discountPct > 0) {
+          updated.discountAmount = parseFloat((gross * updated.discountPct / 100).toFixed(2));
+        }
+      }
+      return updated;
+    }));
   };
 
   const addRow = () => setItems(prev => [...prev, makeItem()]);
@@ -514,28 +549,59 @@ export default function SalesOrdersPage() {
       stateOfSupply: stateOfSupply || undefined,
       deliveryDate: dueDate || undefined,
       notes: description || undefined,
-      discountAmount: undefined,
-      items: validItems.map(it => ({
-        productId: it.productId || undefined,
-        productName: it.itemSearch,
-        quantity: it.qty,
-        unit: it.unit,
-        rate: it.rate,
-        taxPercent: it.taxPct,
-      })),
+      discountAmount: totalDisc,
+      totalAmount: finalTotal,
+      items: validItems.map(it => {
+        const gross = (it.qty || 0) * (it.rate || 0);
+        const discAmt = it.discountAmount !== undefined && it.discountAmount > 0
+          ? it.discountAmount
+          : parseFloat((gross * (it.discountPct || 0) / 100).toFixed(2));
+        const discPct = it.discountPct !== undefined && it.discountPct > 0
+          ? it.discountPct
+          : gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+        return {
+          productId: it.productId || undefined,
+          productName: it.itemSearch,
+          quantity: it.qty,
+          unit: it.unit,
+          rate: it.rate,
+          discountPercent: discPct,
+          discountPct: discPct,
+          discountAmount: discAmt,
+          discount: discAmt,
+          taxPercent: it.taxPct,
+        };
+      }),
+      _rawState: {
+        selectedCustomer,
+        customerSearch,
+        customerPhone,
+        orderDate,
+        dueDate,
+        stateOfSupply,
+        items,
+        priceMode,
+        paymentType,
+        termsText,
+        description,
+        roundOffEnabled
+      }
     };
 
     try {
+      let savedRes: any = null;
       if (draftId) {
         // Editing an existing order — update it, never create another one.
-        await api.patch(`/api/sales/orders/${draftId}`, apiPayload);
+        savedRes = await api.patch(`/api/sales/orders/${draftId}`, apiPayload);
       } else {
         const res = await api.post("/api/sales/orders", { ...apiPayload, idempotencyKey });
+        savedRes = res;
         // Track the new record's ID so subsequent saves in the same session
         // update it rather than creating yet another duplicate.
         if (res?.data?.id) setDraftId(res.data.id);
       }
       showToast(draftId ? "Sales Order updated successfully" : "Sales Order saved successfully", "success");
+      setPreviewingOrder(savedRes?.data || { ...apiPayload, id: draftId || "new" });
       fetchAllData();
       setView("list");
       resetForm();
@@ -549,9 +615,6 @@ export default function SalesOrdersPage() {
   const handleEdit = (order: any) => {
     setReadOnly(false);
     setViewOrderRef(null);
-    // Real, persisted order.quotationId — not the locally-cached _rawState —
-    // is what gates the Customer/Order Date/State of Supply lock below, so
-    // it must survive a page reload the same way the order itself does.
     setSourceQuotationId(order.quotationId || null);
     setDraftId(order.id);
     setOrderNo(order.orderNo);
@@ -559,10 +622,6 @@ export default function SalesOrdersPage() {
     setSelectedCustomer(raw.selectedCustomer || null);
     setCustomerSearch(raw.customerSearch || order.customerName);
     setCustomerPhone(raw.customerPhone || order.customerPhone || "");
-    // order.orderDate/dueDate are real DB DateTime values (full ISO) once
-    // persisted — the <input type="date"> needs just the date portion.
-    // raw._rawState (a same-session local cache) already stores plain
-    // "YYYY-MM-DD" strings, so only the DB-sourced values need slicing.
     setOrderDate(raw.orderDate || (order.orderDate ? new Date(order.orderDate).toISOString().split("T")[0] : order.invoiceDate));
     setDueDate(raw.dueDate || (order.dueDate ? new Date(order.dueDate).toISOString().split("T")[0] : ""));
     setStateOfSupply(raw.stateOfSupply || order.stateOfSupply || "");
@@ -577,21 +636,45 @@ export default function SalesOrdersPage() {
     if (raw.items && raw.items.length > 0) {
       setItems(raw.items);
     } else if (order.items && order.items.length > 0) {
-      // API SalesOrderItem shape is productName/quantity/taxPercent, not the
-      // description/qty/taxPct fields this used to read (those only ever
-      // existed on locally-cached draft items) — real orders rendered every
-      // item row blank until this matched the actual field names.
-      setItems(order.items.map((it: any) => ({
-        id: it.id || Math.random().toString(36).slice(2),
-        productId: it.productId || "",
-        itemSearch: it.productName ?? it.description ?? "",
-        qty: it.quantity ?? it.qty ?? 0,
-        unit: it.unit || "NONE",
-        rate: it.rate || 0,
-        taxPct: it.taxPercent ?? it.taxPct ?? 0,
-        taxLabel: TAX_OPTIONS.find(o => o.value === (it.taxPercent ?? it.taxPct ?? 0))?.label || "NONE",
-        remarks: it.remarks || "",
-      })));
+      const parentDiscount = Number(order.discountAmount ?? order.discount ?? 0);
+      const totalGross = order.items.reduce((s: number, i: any) => {
+        const q = Number(i.quantity ?? i.qty ?? 1);
+        const r = Number(i.rate ?? 0);
+        return s + (q * r);
+      }, 0);
+      const hasExplicitItemDiscounts = order.items.some((i: any) => Number(i.discountAmount ?? i.discount ?? i.discountPct ?? i.discountPercent ?? 0) > 0);
+
+      setItems(order.items.map((it: any) => {
+        const qty = Number(it.quantity ?? it.qty ?? 0);
+        const rate = Number(it.rate ?? 0);
+        const gross = qty * rate;
+
+        let discAmt = Number(it.discountAmount ?? it.discount ?? 0);
+        let discPct = Number(it.discountPercent ?? it.discountPct ?? 0);
+
+        if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
+          discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
+          discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+        } else if (!discPct && gross > 0 && discAmt > 0) {
+          discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
+        }
+
+        const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
+
+        return {
+          id: it.id || Math.random().toString(36).slice(2),
+          productId: it.productId || "",
+          itemSearch: it.productName ?? it.description ?? "",
+          qty,
+          unit: it.unit || "NONE",
+          rate,
+          discountPct: discPct,
+          discountAmount: calculatedDiscAmt,
+          taxPct: Number(it.taxPercent ?? it.taxPct ?? 0),
+          taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPercent ?? it.taxPct ?? 0))?.label || "NONE",
+          remarks: it.remarks || "",
+        };
+      }));
     } else {
       setItems([makeItem()]);
     }
@@ -901,6 +984,13 @@ export default function SalesOrdersPage() {
                   <th className="text-center px-4 py-2.5 w-20 font-medium">Qty</th>
                   <th className="text-left px-4 py-2.5 w-28 font-medium">Unit</th>
                   <th className="text-right px-4 py-2.5 w-28 font-medium">Price/Unit</th>
+                  <th className="text-center px-2 py-2.5 w-32 font-medium">
+                    <div>Discount</div>
+                    <div className="flex justify-around text-[10px] text-gray-400 font-normal mt-0.5">
+                      <span>%</span>
+                      <span>Amount</span>
+                    </div>
+                  </th>
                   <th className="text-left px-4 py-2.5 w-36 font-medium">Tax</th>
                   <th className="text-right px-4 py-2.5 w-32 font-medium">Amount</th>
                   <th className="w-10"></th>
@@ -1014,6 +1104,24 @@ export default function SalesOrdersPage() {
                             onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
                             className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                             placeholder="0.00"
+                          />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number" min={0} max={100}
+                            value={it.discountPct || ""}
+                            placeholder="0"
+                            onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
+                            className="w-1/2 px-1.5 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                          />
+                          <input
+                            type="number" min={0}
+                            value={it.discountAmount || ""}
+                            placeholder="0.00"
+                            onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
+                            className="w-1/2 px-1.5 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                           />
                         </div>
                       </td>
@@ -1158,7 +1266,7 @@ export default function SalesOrdersPage() {
             <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
-                <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{totalAmount.toFixed(2)}</span>
+                <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{subTotal.toFixed(2)}</span>
               </div>
               {totalTax > 0 && (
                 <div className="flex items-center justify-between text-sm">
@@ -1455,6 +1563,13 @@ export default function SalesOrdersPage() {
                               <Check className="h-3 w-3" /> Done
                             </span>
                           )}
+                          <button
+                            onClick={() => handleEdit(o)}
+                            className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                            title="Edit Order"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                           <div className="relative">
                             <button
                               onClick={() => setShowRowMenu(showRowMenu === o.id ? null : o.id)}
@@ -1505,7 +1620,10 @@ export default function SalesOrdersPage() {
             items: (previewingOrder.items || []).map((it: any) => ({
               itemName: it.description || it.productName || "Item",
               quantity: it.qty ?? it.quantity ?? 0,
+              unit: it.unit,
               price: it.rate ?? it.unitPrice ?? 0,
+              discountAmount: it.discountAmount || 0,
+              discountPct: it.discountPct || 0,
               gstRate: it.taxPct ?? it.taxPercent ?? 0,
             })),
           }}

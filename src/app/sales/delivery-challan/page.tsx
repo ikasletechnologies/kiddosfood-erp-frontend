@@ -7,12 +7,12 @@ import {
   User, Check, Package, Calendar,
   MapPin, Hash, ArrowRight,
   ChevronDown, Trash2, MoreVertical,
-  ArrowLeft, Download, FileSpreadsheet, Printer
+  ArrowLeft, Download, FileSpreadsheet, Printer, Pencil
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber, formatDate } from "@/lib/utils";
+import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 
 const FALLBACK_COMPANY = {
@@ -183,13 +183,18 @@ function computeRow(item: LineItem, withTax: boolean) {
   const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
     ? item.discountAmount
     : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
-  const afterDisc = Math.max(0, gross - discAmt);
+  const taxable = Math.max(0, gross - discAmt);
+  const taxPct = item.taxPct || 0;
+
   if (withTax) {
-    const taxAmt = parseFloat((afterDisc * item.taxPct / (100 + item.taxPct)).toFixed(2));
-    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
+    const taxAmt = parseFloat((taxable * taxPct / (100 + taxPct)).toFixed(2));
+    const baseTaxable = parseFloat((taxable - taxAmt).toFixed(2));
+    return { gross, discAmt, taxable: baseTaxable, taxAmt, amount: parseFloat(taxable.toFixed(2)) };
   }
-  const taxAmt = parseFloat((afterDisc * item.taxPct / 100).toFixed(2));
-  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
+
+  const taxAmt = parseFloat((taxable * taxPct / 100).toFixed(2));
+  const lineTotal = parseFloat((taxable + taxAmt).toFixed(2));
+  return { gross, discAmt, taxable, taxAmt, amount: lineTotal };
 }
 
 // A batch is dispatchable when it has passed QC, isn't under an active recall,
@@ -660,11 +665,14 @@ export default function DeliveryChallanPage() {
   
   // Rows with no item selected yet don't count toward the total — otherwise blank
   // rows (which default to qty 1) inflate Total Qty before a product is even picked.
+  const calcResult = calculateSalesDocumentTotals(items, priceMode, roundOffEnabled);
   const totalQty = items.reduce((s, i) => s + (i.itemSearch.trim() !== "" ? (Number(i.qty) || 0) : 0), 0);
-  const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
-  const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
-  const finalTotal = parseFloat((totalAmount + roundOff).toFixed(2));
+  const subTotal = calcResult.subTotal;
+  const totalDisc = calcResult.totalDiscount;
+  const totalTax = calcResult.totalTax;
+  const totalBeforeRound = calcResult.totalBeforeRound;
+  const roundOff = calcResult.roundOff;
+  const finalTotal = calcResult.finalTotal;
 
   // Auto-increment Challan Number
   useEffect(() => {
@@ -858,15 +866,28 @@ export default function DeliveryChallanPage() {
       stateOfSupply: stateOfSupply || undefined,
       termsConditions: termsText || undefined,
       notes: description || undefined,
-      items: validItems.map(it => ({
-        productId: it.productId || undefined,
-        productName: it.itemSearch,
-        batchNumber: it.batchNumber || undefined,
-        quantity: it.qty,
-        unit: it.unit,
-        rate: it.rate,
-        taxPercent: it.taxPct,
-      })),
+      items: validItems.map(it => {
+        const gross = (it.qty || 0) * (it.rate || 0);
+        const discAmt = it.discountAmount !== undefined && it.discountAmount > 0
+          ? it.discountAmount
+          : parseFloat((gross * (it.discountPct || 0) / 100).toFixed(2));
+        const discPct = it.discountPct !== undefined && it.discountPct > 0
+          ? it.discountPct
+          : gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+        return {
+          productId: it.productId || undefined,
+          productName: it.itemSearch,
+          batchNumber: it.batchNumber || undefined,
+          quantity: it.qty,
+          unit: it.unit,
+          rate: it.rate,
+          discountPercent: discPct,
+          discountPct: discPct,
+          discountAmount: discAmt,
+          discount: discAmt,
+          taxPercent: it.taxPct,
+        };
+      }),
     };
 
     try {
@@ -937,15 +958,40 @@ export default function DeliveryChallanPage() {
     if (raw.items && raw.items.length > 0) {
       setItems(raw.items);
     } else if (dc.items && dc.items.length > 0) {
+      const parentDiscount = Number(dc.discountAmount ?? dc.discount ?? 0);
+      const totalGross = dc.items.reduce((s: number, i: any) => {
+        const q = Number(i.quantity ?? i.qty ?? 1);
+        const r = Number(i.rate ?? i.unitPrice ?? 0);
+        return s + (q * r);
+      }, 0);
+      const hasExplicitItemDiscounts = dc.items.some((i: any) => Number(i.discountAmount ?? i.discount ?? i.discountPct ?? i.discountPercent ?? 0) > 0);
+
       setItems(dc.items.map((it: any) => {
         const taxPct = Number(it.taxPercent ?? it.taxPct ?? 0);
+        const qty = Number(it.quantity ?? it.qty ?? 1);
+        const rate = Number(it.rate ?? it.unitPrice ?? 0);
+        const gross = qty * rate;
+
+        let discAmt = Number(it.discountAmount ?? it.discount ?? 0);
+        let discPct = Number(it.discountPercent ?? it.discountPct ?? 0);
+
+        if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
+          discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
+          discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+        } else if (!discPct && gross > 0 && discAmt > 0) {
+          discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
+        }
+
+        const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
         return {
           id: it.id || Math.random().toString(36).slice(2),
           productId: it.productId || "",
           itemSearch: it.productName || it.description || "",
-          qty: Number(it.quantity ?? it.qty ?? 1),
+          qty,
           unit: it.unit || "NONE",
-          rate: Number(it.rate ?? it.unitPrice ?? 0),
+          rate,
+          discountPct: discPct,
+          discountAmount: calculatedDiscAmt,
           taxPct,
           taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
           batchNumber: it.batchNumber || "",
@@ -1470,7 +1516,7 @@ export default function DeliveryChallanPage() {
               {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
             </div>
             <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {totalAmount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {subTotal.toFixed(2)}</span></div>
               {totalTax > 0 && <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
               <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
                 <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" id="roundoff" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" /><span className="text-xs">Round Off</span></label>
@@ -1798,6 +1844,13 @@ export default function DeliveryChallanPage() {
                               Return Goods
                             </button>
                           )}
+                          <button
+                            onClick={() => handleEdit(dc)}
+                            className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                            title="Edit Delivery Challan"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                           <div className="relative">
                             <button
                               onClick={() => setShowRowMenu(showRowMenu === dc.id ? null : dc.id)}

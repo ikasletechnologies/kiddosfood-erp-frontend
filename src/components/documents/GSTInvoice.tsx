@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, QrCode, Download, Share2, Loader2 } from 'lucide-react';
-import { formatDate } from '@/lib/utils';
+import { formatDate, calculateSalesDocumentTotals } from '@/lib/utils';
 
 // The one shared visual template for every billing/order document in the
 // app — a document TYPE only changes its heading, "#" field label, and
@@ -121,47 +121,40 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
         ? true
         : vendorState.includes(companyState) || companyState.includes(vendorState);
 
-  const taxableSubtotal = items.reduce((s: number, it: any) => s + safe(it.quantity) * safe(it.price), 0);
-  const discount = safe(order.discount ?? order.discountAmount ?? 0);
-  const freightCost = safe(order.freightCost ?? order.shippingAmount ?? order.shipping ?? order.freight ?? 0);
-  const taxableAfterDiscount = Math.max(0, taxableSubtotal - discount);
+  const calcResult = calculateSalesDocumentTotals(
+    items,
+    order.priceMode || "without_tax",
+    order.roundOffEnabled ?? true,
+    safe(order.discount ?? order.discountAmount ?? 0)
+  );
 
-  const taxBreakdown = items.reduce(
+  const grossSubtotal = round(calcResult.computedItems.reduce((s: number, it: any) => s + it.grossAmount, 0));
+  const discount = round(calcResult.totalDiscount) || safe(order.discount ?? order.discountAmount ?? 0);
+  const taxableSubtotal = round(calcResult.subTotal);
+  const freightCost = safe(order.freightCost ?? order.shippingAmount ?? order.shipping ?? order.freight ?? 0);
+
+  const taxBreakdown = calcResult.computedItems.reduce(
     (acc: any, it: any) => {
-      // Assuming discount is proportional, but for simple invoice we calculate tax on base price
-      const amt = safe(it.quantity) * safe(it.price);
-      const tax = amt * (safe(it.gstRate) / 100);
+      const tax = it.taxAmount;
       if (isSameState) {
-        // Round CGST, then take SGST as the remainder so the two halves
-        // always sum back to the true tax. Rounding both halves the same
-        // way (round(tax/2) twice) can double-round a half-paisa split —
-        // e.g. ₹1.75 -> ₹0.88 + ₹0.88 = ₹1.76 — and overstate the total by
-        // a paisa. Mirrors FinanceService's splitTaxBySupplyState.
         const cgstShare = round(tax / 2);
         acc.cgst += cgstShare;
         acc.sgst += round(tax - cgstShare);
       } else {
-        acc.igst += round(tax);
+        acc.igst += tax;
       }
       return acc;
     },
     { cgst: 0, sgst: 0, igst: 0 }
   );
 
-  // Re-adjust tax if there was an order-level discount
-  let finalCgst = taxBreakdown.cgst;
-  let finalSgst = taxBreakdown.sgst;
-  let finalIgst = taxBreakdown.igst;
-  
-  if (discount > 0 && taxableSubtotal > 0) {
-    const ratio = taxableAfterDiscount / taxableSubtotal;
-    finalCgst = round(finalCgst * ratio);
-    finalSgst = round(finalSgst * ratio);
-    finalIgst = round(finalIgst * ratio);
-  }
+  const finalCgst = round(taxBreakdown.cgst);
+  const finalSgst = round(taxBreakdown.sgst);
+  const finalIgst = round(taxBreakdown.igst);
 
   const totalTax = round(finalCgst + finalSgst + finalIgst);
-  const grandTotal = round(taxableAfterDiscount + totalTax + freightCost);
+  const roundOff = calcResult.roundOff;
+  const grandTotal = round(calcResult.finalTotal + freightCost);
 
   const invoiceNo =
     order.poNumber ||
@@ -405,15 +398,15 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           </thead>
           <tbody>
             {items.map((item: any, idx: number) => {
+              const comp = calcResult.computedItems[idx] || {};
               const itemName = item.itemName || item.productName || item.name || item.inventoryItem?.name || `Item #${idx + 1}`;
               const qty = safe(item.quantity ?? item.qty);
               const price = safe(item.price ?? item.rate);
-              const gross = qty * price;
-              const discAmt = safe(item.discountAmount) || (item.discountPct ? round(gross * safe(item.discountPct) / 100) : safe(item.discount));
-              const taxable = Math.max(0, gross - discAmt);
+              const discAmt = comp.discountAmount ?? 0;
+              const taxable = comp.taxableAmount ?? 0;
               const gstRate = safe(item.gstRate ?? item.taxPct ?? item.taxPercent);
-              const tax = round(taxable * (gstRate / 100));
-              const rowTotal = round(taxable + tax);
+              const tax = comp.taxAmount ?? 0;
+              const rowTotal = comp.lineTotal ?? 0;
 
               return (
                 <tr key={idx} className="bg-gray-50/50 border-b-4 border-white">
@@ -486,18 +479,20 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           <div className="w-[300px] shrink-0 pt-1">
             <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
               <span className="text-gray-600">Sub Total</span>
-              <span className="font-semibold text-gray-900">₹{fmt(taxableSubtotal)}</span>
+              <span className="font-semibold text-gray-900">₹{fmt(discount > 0 ? grossSubtotal : taxableSubtotal)}</span>
             </div>
             {discount > 0 && (
-              <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                <span className="text-emerald-500">Discount</span>
-                <span className="font-semibold text-emerald-500">- ₹{fmt(discount)}</span>
-              </div>
+              <>
+                <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-emerald-500">Discount</span>
+                  <span className="font-semibold text-emerald-500">- ₹{fmt(discount)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-600">Taxable Amount</span>
+                  <span className="font-semibold text-gray-900">₹{fmt(taxableSubtotal)}</span>
+                </div>
+              </>
             )}
-            <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-              <span className="text-gray-600">Taxable Amount</span>
-              <span className="font-semibold text-gray-900">₹{fmt(taxableAfterDiscount)}</span>
-            </div>
             {freightCost > 0 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">Freight / Shipment</span>
@@ -521,10 +516,10 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                 <span className="font-semibold text-gray-900">₹{fmt(finalIgst)}</span>
               </div>
             )}
-            {freightCost > 0 && (
+            {roundOff !== 0 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
-                <span className="text-gray-600">Freight / Shipping</span>
-                <span className="font-semibold text-gray-900">+ ₹{fmt(freightCost)}</span>
+                <span className="text-gray-600">Round Off</span>
+                <span className="font-semibold text-gray-900">{roundOff >= 0 ? "+" : "-"} ₹{fmt(Math.abs(roundOff))}</span>
               </div>
             )}
             

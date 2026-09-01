@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Wallet, Plus, RefreshCw, ChevronDown, X, Search,
   Share2, Trash2, ArrowLeft, ArrowRight,
-  Calendar, Check, Printer
+  Calendar, Check, Printer, Pencil
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useSearchParams } from "next/navigation";
@@ -211,6 +211,8 @@ export default function PaymentInPage() {
   const periodDropRef = useRef<HTMLDivElement>(null);
   const customerDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
+
+
 
   const fetchPayments = useCallback(async () => {
     setLoading(true);
@@ -482,18 +484,24 @@ export default function PaymentInPage() {
     }
   };
 
-  const loadDraft = (draft: any) => {
-    setDraftId(draft.id);
-    const raw = draft._rawState || {};
-    setPartyType(raw.partyType || "CUSTOMER");
-    setSelectedCustomer(raw.selectedCustomer || null);
-    setCustomerSearch(raw.customerSearch || "");
-    setSelectedInvoiceId(raw.selectedInvoiceId || "");
-    setAmount(raw.amount || "");
-    setPaymentMode(raw.paymentMode || "Cash");
-    setDescription(raw.description || "");
-    setChequeNo(raw.chequeNo || "");
-    setReceiptDate(raw.receiptDate || new Date().toISOString().split("T")[0]);
+  const loadDraft = (p: any) => {
+    setDraftId(p.id);
+    const raw = p._rawState || {};
+    const pt: "CUSTOMER" | "DEALER" | "FRANCHISE" = raw.partyType || p.partyType || "CUSTOMER";
+    setPartyType(pt);
+
+    const list = pt === "DEALER" ? dealers : pt === "FRANCHISE" ? franchises : customers;
+    const rawParty = raw.selectedCustomer || p.entity || list.find((x: any) => x.id === (p.partyId || p.customerId)) || null;
+    const party = rawParty ? normalizeParty(pt, rawParty) : null;
+
+    setSelectedCustomer(party);
+    setCustomerSearch(raw.customerSearch || (party ? party.name : "") || p.customerName || "");
+    setReceiptDate(raw.receiptDate || (p.createdAt ? new Date(p.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]));
+    setSelectedInvoiceId(raw.selectedInvoiceId || p.invoiceId || "");
+    setAmount(raw.amount || (p.paidAmount ? String(p.paidAmount) : ""));
+    setPaymentMode(raw.paymentMode || p.paymentMode || "Cash");
+    setDescription(raw.description || p.remarks || p.notes || "");
+    setChequeNo(raw.chequeNo || p.referenceNo || p.chequeNo || "");
     setIdempotencyKey(crypto.randomUUID());
     setView("create");
   };
@@ -1007,6 +1015,13 @@ export default function PaymentInPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); loadDraft(p); }}
+                            className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                            title="Edit Payment"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                           {isDraft ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteDraft(p.id); }}

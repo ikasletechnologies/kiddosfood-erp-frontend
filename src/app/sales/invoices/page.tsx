@@ -4,14 +4,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft, Truck
+  AlignLeft, FileText, ArrowLeft, Truck, Pencil
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber, formatDate } from "@/lib/utils";
+import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
@@ -186,13 +186,18 @@ function computeRow(item: LineItem, withTax: boolean) {
   const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
     ? item.discountAmount
     : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
-  const afterDisc = Math.max(0, gross - discAmt);
+  const taxable = Math.max(0, gross - discAmt);
+  const taxPct = item.taxPct || 0;
+
   if (withTax) {
-    const taxAmt = parseFloat((afterDisc * item.taxPct / (100 + item.taxPct)).toFixed(2));
-    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
+    const taxAmt = parseFloat((taxable * taxPct / (100 + taxPct)).toFixed(2));
+    const baseTaxable = parseFloat((taxable - taxAmt).toFixed(2));
+    return { gross, discAmt, taxable: baseTaxable, taxAmt, amount: parseFloat(taxable.toFixed(2)) };
   }
-  const taxAmt = parseFloat((afterDisc * item.taxPct / 100).toFixed(2));
-  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
+
+  const taxAmt = parseFloat((taxable * taxPct / 100).toFixed(2));
+  const lineTotal = parseFloat((taxable + taxAmt).toFixed(2));
+  return { gross, discAmt, taxable, taxAmt, amount: lineTotal };
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -615,14 +620,16 @@ export default function SalesInvoicesPage() {
   }, []);
 
   // ── Computed totals ────────────────────────────────────────────────────────
-  const withTax = priceMode === "with_tax";
-  const rowData = items.map(item => ({ item, ...computeRow(item, withTax) }));
+  const calcResult = calculateSalesDocumentTotals(items, priceMode, roundOffEnabled);
+  const rowData = items.map(item => ({ item, ...computeRow(item, priceMode === "with_tax") }));
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
-  const totalDisc = parseFloat(rowData.reduce((s, r) => s + r.discAmt, 0).toFixed(2));
-  const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const totalAmount = parseFloat(rowData.reduce((s, r) => s + r.amount, 0).toFixed(2));
-  const roundOff = roundOffEnabled ? parseFloat((Math.round(totalAmount) - totalAmount).toFixed(2)) : 0;
-  const finalTotal = parseFloat((totalAmount + roundOff).toFixed(2));
+
+  const subTotal = calcResult.subTotal;
+  const totalDisc = calcResult.totalDiscount;
+  const totalTax = calcResult.totalTax;
+  const totalBeforeRound = calcResult.totalBeforeRound;
+  const roundOff = calcResult.roundOff;
+  const finalTotal = calcResult.finalTotal;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
@@ -644,23 +651,74 @@ export default function SalesInvoicesPage() {
     setView("create");
   };
 
-  const loadDraft = (draft: any) => {
-    setDraftId(draft.id);
-    const raw = draft._rawState || {};
-    setPaymentType(raw.paymentType || "CREDIT");
-    setSelectedCustomer(raw.selectedCustomer || null);
-    setCustomerSearch(raw.customerSearch || "");
-    setCustomerPhone(raw.customerPhone || "");
-    setInvoiceDate(raw.invoiceDate || new Date().toISOString().split("T")[0]);
-    setInvoiceNumber(raw.invoiceNumber || "");
-    setStateOfSupply(raw.stateOfSupply || "");
-    setItems(raw.items && raw.items.length > 0 ? raw.items : [makeItem(), makeItem()]);
+  const loadDraft = (inv: any) => {
+    setDraftId(inv.id);
+    const raw = inv._rawState || {};
+    const rawParty = raw.selectedCustomer || inv.order?.customer || customers.find((p: any) => p.id === (inv.order?.partyId || inv.order?.customerId)) || null;
+    const party = rawParty ? { id: rawParty.id, name: rawParty.name, phone: rawParty.contact || rawParty.phone || "", state: rawParty.state } : null;
+
+    setPaymentType(raw.paymentType || inv.order?.paymentType || "CREDIT");
+    setSelectedCustomer(party);
+    setCustomerSearch(raw.customerSearch || (party ? party.name : "") || inv.order?.customerName || "");
+    setCustomerPhone(raw.customerPhone || inv.order?.customerPhone || party?.phone || "");
+    setInvoiceDate(raw.invoiceDate || (inv.createdAt ? new Date(inv.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]));
+    setInvoiceNumber(raw.invoiceNumber || inv.order?.invoiceNum || "");
+    setStateOfSupply(raw.stateOfSupply || inv.order?.stateOfSupply || party?.state || "");
     setPriceMode(raw.priceMode || "without_tax");
-    setTermsText(raw.termsText || "");
-    setShowTerms(raw.showTerms || !!raw.termsText);
-    setDescription(raw.description || "");
-    setShowDesc(raw.showDesc || !!raw.description);
+    setTermsText(raw.termsText || inv.order?.termsConditions || "");
+    setShowTerms(raw.showTerms || !!raw.termsText || !!inv.order?.termsConditions);
+    setDescription(raw.description || inv.order?.notes || "");
+    setShowDesc(raw.showDesc || !!raw.description || !!inv.order?.notes);
     setRoundOffEnabled(raw.roundOffEnabled ?? true);
+
+    const parentDiscount = Number(inv.discountAmount ?? inv.discount ?? inv.order?.discountAmount ?? 0);
+    const rawItems = raw.items && raw.items.length > 0
+      ? raw.items
+      : (inv.order?.orderItems || inv.items || []);
+
+    const totalGross = rawItems.reduce((s: number, i: any) => {
+      const q = Number(i.quantity ?? i.qty ?? 1);
+      const r = Number(i.price ?? i.rate ?? 0);
+      return s + (q * r);
+    }, 0);
+    const hasExplicitItemDiscounts = rawItems.some((i: any) => Number(i.discountAmount ?? i.discount ?? i.discountPct ?? i.discountPercent ?? i.gst ?? 0) > 0);
+
+    const mappedItems = rawItems.length > 0
+      ? rawItems.map((i: any) => {
+          const qty = Number(i.quantity ?? i.qty ?? 1);
+          const rate = Number(i.price ?? i.rate ?? 0);
+          const gross = qty * rate;
+
+          let discAmt = Number(i.discountAmount ?? i.discount ?? i.discAmt ?? 0);
+          let discPct = Number(i.discountPercent ?? i.discountPct ?? 0);
+
+          if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
+            discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
+            discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+          } else if (!discPct && gross > 0 && discAmt > 0) {
+            discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
+          }
+
+          const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
+
+          return {
+            id: i.id || `item_${Math.random()}`,
+            productId: i.productId || i.product?.id || "",
+            itemSearch: i.productName || i.product?.name || i.itemSearch || "",
+            qty,
+            unit: normalizeUnit(i.unit || "NONE"),
+            rate,
+            basePrice: i.basePrice || rate,
+            discountPct: discPct,
+            discountAmount: calculatedDiscAmt,
+            taxPct: Number(i.taxPercent ?? i.taxPct ?? i.gst ?? 0),
+            taxLabel: TAX_OPTIONS.find(o => o.value === Number(i.taxPercent ?? i.taxPct ?? i.gst ?? 0))?.label || "NONE",
+            batchNumber: i.batchNumber || "",
+            batches: i.batches || [],
+          };
+        })
+      : [makeItem(), makeItem()];
+    setItems(mappedItems);
     setView("create");
   };
 
@@ -880,7 +938,7 @@ export default function SalesInvoicesPage() {
       };
       if (finalCustomerId) payload.customerId = finalCustomerId;
 
-      await api.post("/api/finance/invoices", payload);
+      const res = await api.post("/api/finance/invoices", payload);
       
       // If we saved an invoice that was previously a draft, remove the draft
       if (draftId) {
@@ -890,6 +948,21 @@ export default function SalesInvoicesPage() {
       }
 
       showToast("Invoice saved successfully", "success");
+      setPrintingInvoice(res?.data || {
+        id: "new",
+        order: {
+          invoiceNum: invoiceNumber || "INV-0001",
+          customer: selectedCustomer,
+          orderItems: items.map(i => ({
+            product: { name: i.itemSearch },
+            quantity: i.qty,
+            unit: i.unit,
+            price: i.rate,
+            discountAmount: i.discountAmount,
+            taxAmount: (i.qty * i.rate * (i.taxPct / 100))
+          }))
+        }
+      });
       fetchData();
       setView("list");
     } catch (e: any) {
@@ -1326,10 +1399,10 @@ export default function SalesInvoicesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((item, idx) => {
-                    const { discAmt, taxAmt, amount } = computeRow(item, withTax);
+                    const { discAmt, taxAmt, amount } = computeRow(item, priceMode === "with_tax");
                     const filtProd = products.filter(p =>
                       !item.itemSearch || p.name?.toLowerCase().includes(item.itemSearch.toLowerCase())
-                    ).slice(0, 10);
+                    ).slice(0, 200);
 
                     return (
                       <tr key={item.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/30 dark:hover:bg-white/[0.02] group">
@@ -1900,11 +1973,8 @@ export default function SalesInvoicesPage() {
                       key={inv.id} 
                       className={clsx(
                         "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
-                      onClick={() => {
-                        if (isDraft) loadDraft(inv);
-                      }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(inv.createdAt)}
@@ -1942,6 +2012,13 @@ export default function SalesInvoicesPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); loadDraft(inv); }}
+                            className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                            title="Edit Invoice"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
                           {isDraft ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}

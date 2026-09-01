@@ -90,3 +90,127 @@ export function formatERPNumber(
   return `${prefix}-${year}-${suffix}`;
 }
 
+// ── Canonical Monetary Precision & Calculations ────────────────────────────────
+
+export function roundMoney(value: number): number {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+export interface CalculationLineItem {
+  quantity?: number;
+  qty?: number;
+  rate?: number;
+  price?: number;
+  discountPercent?: number;
+  discountPct?: number;
+  discountAmount?: number;
+  discount?: number;
+  taxPercent?: number;
+  taxPct?: number;
+  gstRate?: number;
+}
+
+export interface DocumentCalculationResult {
+  computedItems: Array<{
+    grossAmount: number;
+    discountAmount: number;
+    taxableAmount: number;
+    taxAmount: number;
+    lineTotal: number;
+  }>;
+  subTotal: number;         // Post-discount taxable total sum
+  totalDiscount: number;    // Total discount sum
+  totalTax: number;         // Total tax sum
+  totalBeforeRound: number; // subTotal + totalTax
+  roundOff: number;         // Signed round-off adjustment
+  finalTotal: number;       // Grand total payable
+}
+
+export function calculateSalesDocumentTotals(
+  items: CalculationLineItem[],
+  priceMode: "with_tax" | "without_tax" = "without_tax",
+  roundOffEnabled: boolean = true,
+  documentDiscountAmount: number = 0
+): DocumentCalculationResult {
+  let subTotal = 0;
+  let totalTax = 0;
+  let totalDiscount = 0;
+
+  const validItems = items || [];
+  const totalGross = validItems.reduce((sum, item) => {
+    const q = Number(item.quantity ?? item.qty ?? 0);
+    const r = Number(item.rate ?? item.price ?? 0);
+    return sum + roundMoney(q * r);
+  }, 0);
+
+  const hasExplicitItemDiscounts = validItems.some((item) =>
+    (item.discountAmount !== undefined && Number(item.discountAmount) > 0) ||
+    (item.discount !== undefined && Number(item.discount) > 0) ||
+    (item.discountPercent !== undefined && Number(item.discountPercent) > 0) ||
+    (item.discountPct !== undefined && Number(item.discountPct) > 0)
+  );
+
+  const computedItems = validItems.map((item) => {
+    const qty = Number(item.quantity ?? item.qty ?? 0);
+    const rate = Number(item.rate ?? item.price ?? 0);
+    const grossAmount = roundMoney(qty * rate);
+
+    const discountPct = Number(item.discountPercent ?? item.discountPct ?? 0);
+    let discAmt = item.discountAmount !== undefined && Number(item.discountAmount) > 0
+      ? Number(item.discountAmount)
+      : (item.discount !== undefined && Number(item.discount) > 0 ? Number(item.discount) : 0);
+
+    if (!hasExplicitItemDiscounts && documentDiscountAmount > 0 && totalGross > 0) {
+      discAmt = roundMoney(documentDiscountAmount * (grossAmount / totalGross));
+    } else if (!discAmt && discountPct > 0) {
+      discAmt = roundMoney(grossAmount * (discountPct / 100));
+    }
+
+    const taxableAmount = roundMoney(Math.max(0, grossAmount - discAmt));
+    const taxPct = Number(item.taxPercent ?? item.taxPct ?? item.gstRate ?? 0);
+
+    let taxAmount = 0;
+    let lineTotal = 0;
+
+    if (priceMode === "with_tax" && taxPct > 0) {
+      taxAmount = roundMoney(taxableAmount * taxPct / (100 + taxPct));
+      lineTotal = taxableAmount;
+      const baseTaxable = roundMoney(taxableAmount - taxAmount);
+      subTotal += baseTaxable;
+    } else {
+      taxAmount = roundMoney(taxableAmount * taxPct / 100);
+      lineTotal = roundMoney(taxableAmount + taxAmount);
+      subTotal += taxableAmount;
+    }
+
+    totalTax += taxAmount;
+    totalDiscount += discAmt;
+
+    return {
+      grossAmount,
+      discountAmount: discAmt,
+      taxableAmount,
+      taxAmount,
+      lineTotal
+    };
+  });
+
+  subTotal = roundMoney(subTotal);
+  totalTax = roundMoney(totalTax);
+  totalDiscount = roundMoney(totalDiscount);
+
+  const totalBeforeRound = roundMoney(subTotal + totalTax);
+  const roundOff = roundOffEnabled ? roundMoney(Math.round(totalBeforeRound) - totalBeforeRound) : 0;
+  const finalTotal = roundMoney(totalBeforeRound + roundOff);
+
+  return {
+    computedItems,
+    subTotal,
+    totalDiscount,
+    totalTax,
+    totalBeforeRound,
+    roundOff,
+    finalTotal
+  };
+}
+
