@@ -437,6 +437,25 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
+    title: "GST REPORTS",
+    items: [
+      {
+        icon: Receipt,
+        label: "GST Reports",
+        href: "/reports/gst/gstr-1",
+        roles: SUPER_ONLY,
+        children: [
+          { label: "GSTR-1", href: "/reports/gst/gstr-1" },
+          { label: "GSTR-2", href: "/reports/gst/gstr-2" },
+          { label: "GSTR-3B", href: "/reports/gst/gstr-3b" },
+          { label: "GSTR-9", href: "/reports/gst/gstr-9" },
+          { label: "Sales Summary (HSN)", href: "/reports/gst/hsn-summary" },
+          { label: "SAC Report", href: "/reports/gst/sac-report" },
+        ],
+      },
+    ],
+  },
+  {
     title: "SYSTEM",
     items: [
       {

@@ -9,7 +9,7 @@ import {
   FileSpreadsheet, Copy
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi } from "@/lib/api";
+import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi, salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { exportToCsv } from "@/lib/export/exportHelpers";
 import api from "@/lib/api/base";
@@ -472,18 +472,13 @@ export default function EstimationsPageClient({
   const [previewAutoAction, setPreviewAutoAction] = useState<"download" | "share" | undefined>(undefined);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
 
-  // Convert to Sales Order & Tracking Modals
-  const [showConvertModal, setShowConvertModal] = useState(false);
-  const [selectedEstForConvert, setSelectedEstForConvert] = useState<any>(null);
-  const [deliveryDate, setDeliveryDate] = useState("");
-  const [deliveryAddress, setDeliveryAddress] = useState("");
-  const [trackingNumber, setTrackingNumber] = useState("");
-  const [courierName, setCourierName] = useState("");
-  // Sales-order-specific fulfilment/payment commitment — deliberately NOT
-  // derived from the Estimate's validUntil (a price-offer expiry, a
-  // different business concept). Defaults to 7 days out at modal-open time,
-  // matching the backend's own default when this is left unset.
-  const [convertDueDate, setConvertDueDate] = useState("");
+  // Convert Inline View Flow
+  const [convertView, setConvertView] = useState<"SALE" | "SALES_ORDER" | null>(null);
+  const [convertingEstId, setConvertingEstId] = useState<string | null>(null);
+  const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
+  const [paymentType, setPaymentType] = useState<string>("Cash");
+  const [receivedAmount, setReceivedAmount] = useState<number>(0);
+  const [openConvertMenu, setOpenConvertMenu] = useState<string | null>(null);
 
   // Add Party inline form
   const [showAddParty, setShowAddParty] = useState(false);
@@ -977,42 +972,116 @@ export default function EstimationsPageClient({
     }
   };
 
-  const handleOpenConvertModal = (est: any) => {
-    setSelectedEstForConvert(est);
-    setDeliveryDate(new Date().toISOString().split("T")[0]);
-    setDeliveryAddress("");
-    setTrackingNumber("");
-    setCourierName("");
-    setConvertDueDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
-    setShowConvertModal(true);
+  const handleOpenConversionForm = (est: any, type: "SALE" | "SALES_ORDER") => {
+    setConvertingEstId(est.id);
+    setConvertView(type);
+    setSelectedCustomer(est.customer || (est.customerId ? { id: est.customerId, name: est.customerName, phone: est.customerPhone } : null));
+    setCustomerSearch(est.customerName || est.customer?.name || "");
+    setCustomerPhone(est.customerPhone || est.customer?.phone || "");
+    setStateOfSupply(est.stateOfSupply || "");
+    setInvoiceDate(new Date().toISOString().split("T")[0]);
+    setRefNo(est.quotationNumber || "");
+    setPaymentType("Cash");
+    setReceivedAmount(0);
+    setTermsText(est.termsConditions || "");
+    setShowTerms(!!est.termsConditions);
+    setDescription(est.notes || "");
+    setShowDesc(!!est.notes);
+    setRoundOffEnabled(est._rawState?.roundOffEnabled ?? true);
+
+    if (est.items && est.items.length > 0) {
+      setItems(est.items.map((it: any) => {
+        const qty = Number(it.quantity ?? it.qty ?? 1);
+        const rate = Number(it.rate ?? 0);
+        const gross = qty * rate;
+        const discAmt = Number(it.discountAmount ?? it.discount ?? 0);
+        const discPct = Number(it.discountPercent ?? it.discountPct ?? (gross > 0 ? (discAmt / gross) * 100 : 0));
+        const taxPct = Number(it.taxPercent ?? it.taxPct ?? 0);
+        return {
+          id: Math.random().toString(36).slice(2),
+          productId: it.productId || "",
+          itemSearch: it.productName || "",
+          qty,
+          unit: it.unit || "NONE",
+          rate,
+          discountPct: parseFloat(discPct.toFixed(2)),
+          discountAmount: discAmt,
+          taxPct,
+          taxLabel: taxPct ? `GST@${taxPct}%` : "NONE",
+        };
+      }));
+    } else {
+      setItems([makeItem(), makeItem()]);
+    }
   };
 
-  const submitConvert = async () => {
-    if (!selectedEstForConvert) return;
-    setConverting(selectedEstForConvert.id);
+  const handleConfirmConversion = async () => {
+    if (!convertingEstId) return;
+    setSaving(true);
     try {
-      // Estimate -> Sales Order (never straight to a Tax Invoice — Proforma
-      // and the actual Tax Invoice are separate later steps in the chain).
-      const res = await api.post(`/api/sales/quotations/${selectedEstForConvert.id}/convert`, {
-        deliveryDate: deliveryDate || undefined,
-        deliveryAddress: deliveryAddress || undefined,
-        trackingNumber: trackingNumber || undefined,
-        courierName: courierName || undefined,
-        dueDate: convertDueDate || undefined
-      });
-      showToast("Converted to Sales Order successfully", "success");
-      setShowConvertModal(false);
-      const salesOrderId = res?.data?.id;
-      if (salesOrderId) {
-        router.push(`/sales/orders?id=${salesOrderId}`);
+      if (convertView === "SALE") {
+        await salesApi.convertToSale(convertingEstId, {
+          customerId: selectedCustomer?.id,
+          customerName: selectedCustomer?.name || customerSearch,
+          customerPhone,
+          stateOfSupply,
+          paymentType,
+          receivedAmount,
+          items: items.map(it => ({
+            productId: it.productId,
+            qty: it.qty,
+            unit: it.unit,
+            rate: it.rate,
+            gst: it.taxPct,
+            discount: it.discountPct
+          })),
+          roundOff: roundOff,
+          termsAndConditions: termsText || undefined,
+          description: description || undefined
+        });
+        showToast("Converted Estimate to Sale (Invoice) successfully", "success");
       } else {
-        fetchData();
+        await salesApi.convertToSalesOrder(convertingEstId, {
+          customerId: selectedCustomer?.id,
+          customerName: selectedCustomer?.name || customerSearch,
+          customerPhone,
+          stateOfSupply,
+          dueDate: invoiceDate,
+          deliveryDate: invoiceDate,
+          notes: description || undefined,
+          items: items.map(it => ({
+            productId: it.productId,
+            qty: it.qty,
+            unit: it.unit,
+            rate: it.rate,
+            discountPercent: it.discountPct,
+            discountAmount: it.discountAmount,
+            taxPercent: it.taxPct
+          }))
+        });
+        showToast("Converted Estimate to Sales Order successfully", "success");
       }
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Conversion failed", "error");
+
+      await fetchData();
+      setConvertView(null);
+      setConvertingEstId(null);
+      setView("list");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Conversion failed", "error");
     } finally {
-      setConverting(null);
+      setSaving(false);
     }
+  };
+
+  const handleCloseConversionForm = () => {
+    setShowCloseConfirmModal(true);
+  };
+
+  const confirmCloseConversion = () => {
+    setShowCloseConfirmModal(false);
+    setConvertView(null);
+    setConvertingEstId(null);
+    setView("list");
   };
 
   // Isolates just the clicked estimate into the shared GSTInvoice preview
@@ -2104,8 +2173,13 @@ export default function EstimationsPageClient({
                       <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-200 text-xs whitespace-nowrap">
                         <div>{est.quotationNumber}</div>
                         {est.status === "CONVERTED" && est.convertedOrderNumber && (
-                          <div className="text-[10px] text-green-600 dark:text-green-400 font-bold mt-1 bg-green-50 dark:bg-green-500/10 px-1.5 py-0.5 rounded inline-block">
+                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold mt-1 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
                             Sales Order: {est.convertedOrderNumber}
+                          </div>
+                        )}
+                        {est.status === "CONVERTED" && est.convertedInvoiceNumber && (
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded inline-block">
+                            Sale: {est.convertedInvoiceNumber}
                           </div>
                         )}
                       </td>
@@ -2140,23 +2214,62 @@ export default function EstimationsPageClient({
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
-                          {est.status === "CONVERTED" && est.convertedOrderNumber && (
+                          {est.status === "CONVERTED" && est.convertedOrderId && (
                              <a
                                href={`/sales/orders?id=${est.convertedOrderId}`}
                                onClick={(e) => e.stopPropagation()}
-                               className="px-2 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-2"
+                               className="px-2 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-1"
                              >
                                View Sales Order
                              </a>
                           )}
-                          {est.status === "SENT" && !isDraft && (
-                             <button
-                               onClick={(e) => { e.stopPropagation(); handleOpenConvertModal(est); }}
-                               disabled={!!converting}
-                               className="px-2.5 py-1 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20 rounded text-[10px] font-bold hover:bg-green-100 transition-colors mr-1"
+                          {est.status === "CONVERTED" && est.convertedInvoiceId && (
+                             <a
+                               href={`/sales/invoices?id=${est.convertedInvoiceId}`}
+                               onClick={(e) => e.stopPropagation()}
+                               className="px-2 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors mr-1"
                              >
-                               {converting === est.id ? "..." : "Convert"}
-                             </button>
+                               View Sale
+                             </a>
+                          )}
+                          {est.status !== "CONVERTED" && !isDraft && (
+                             <div className="relative inline-block text-left mr-1">
+                               <button
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setOpenConvertMenu(openConvertMenu === est.id ? null : est.id);
+                                 }}
+                                 className="px-2.5 py-1 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20 rounded text-[10px] font-bold hover:bg-green-100 transition-colors flex items-center gap-1"
+                               >
+                                 <span>Convert</span>
+                                 <ChevronDown size={12} />
+                               </button>
+                               {openConvertMenu === est.id && (
+                                 <div
+                                   className="absolute right-0 mt-1 w-44 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl z-50 py-1"
+                                   onClick={(e) => e.stopPropagation()}
+                                 >
+                                   <button
+                                     onClick={() => {
+                                       setOpenConvertMenu(null);
+                                       handleOpenConvertModal(est, "SALE");
+                                     }}
+                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
+                                   >
+                                     <span>Convert to Sale</span>
+                                   </button>
+                                   <button
+                                     onClick={() => {
+                                       setOpenConvertMenu(null);
+                                       handleOpenConvertModal(est, "SALES_ORDER");
+                                     }}
+                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-white/5"
+                                   >
+                                     <span>Convert to Sale Order</span>
+                                   </button>
+                                 </div>
+                               )}
+                             </div>
                           )}
                           {isDraft ? (
                             <div className="flex items-center justify-end gap-1">
@@ -2250,14 +2363,16 @@ export default function EstimationsPageClient({
         />
       )}
 
-      {/* Convert to Sales Order Modal */}
+      {/* Convert Modal */}
       {showConvertModal && selectedEstForConvert && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 p-4" onClick={() => setShowConvertModal(false)}>
           <div className="bg-white dark:bg-card rounded-2xl shadow-2xl border border-gray-150 dark:border-white/10 w-full max-w-lg mx-auto overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between text-white shrink-0">
               <div className="min-w-0 pr-2">
-                <h3 className="font-bold text-base sm:text-lg truncate">Convert to Sales Order</h3>
+                <h3 className="font-bold text-base sm:text-lg truncate">
+                  {modalConvertType === "SALE" ? "Convert Estimate to Sale" : "Convert Estimate to Sales Order"}
+                </h3>
                 <p className="text-white/80 text-xs mt-0.5 truncate">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customer?.name || selectedEstForConvert.customerName || "No Customer Name"}</p>
               </div>
               <button
@@ -2281,58 +2396,72 @@ export default function EstimationsPageClient({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    <Calendar size={12} /> Delivery Date
-                  </label>
-                  <input
-                    type="date"
-                    value={deliveryDate}
-                    onChange={e => setDeliveryDate(e.target.value)}
-                    className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                  />
+              {modalConvertType === "SALE" ? (
+                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
+                  <div className="font-bold mb-1">Conversion Effect:</div>
+                  This will create a Sales Invoice/Sale transaction using the exact estimate amounts. Physical inventory will be deducted according to Sale rules, and an outstanding receivable will be created.
                 </div>
+              ) : (
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-3.5 text-xs text-blue-800 dark:text-blue-300">
+                    <div className="font-bold mb-1">Conversion Effect:</div>
+                    This will create a Sales Order. Physical inventory will <strong>NOT</strong> be deducted at this stage.
+                  </div>
 
-                <div className="flex flex-col">
-                  <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                    <Truck size={12} /> Courier Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Delhivery, BlueDart"
-                    value={courierName}
-                    onChange={e => setCourierName(e.target.value)}
-                    className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                  />
-                </div>
-              </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                        <Calendar size={12} /> Delivery Date
+                      </label>
+                      <input
+                        type="date"
+                        value={deliveryDate}
+                        onChange={e => setDeliveryDate(e.target.value)}
+                        className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
+                      />
+                    </div>
 
-              <div className="flex flex-col">
-                <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                  <AlignLeft size={12} /> Tracking / Waybill Number
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter Tracking ID / AWB Number"
-                  value={trackingNumber}
-                  onChange={e => setTrackingNumber(e.target.value)}
-                  className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                />
-              </div>
+                    <div className="flex flex-col">
+                      <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                        <Truck size={12} /> Courier Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Delhivery, BlueDart"
+                        value={courierName}
+                        onChange={e => setCourierName(e.target.value)}
+                        className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                      />
+                    </div>
+                  </div>
 
-              <div className="flex flex-col">
-                <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                  <FileText size={12} /> Delivery Address
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Enter the shipping/delivery address..."
-                  value={deliveryAddress}
-                  onChange={e => setDeliveryAddress(e.target.value)}
-                  className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                />
-              </div>
+                  <div className="flex flex-col">
+                    <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                      <AlignLeft size={12} /> Tracking / Waybill Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter Tracking ID / AWB Number"
+                      value={trackingNumber}
+                      onChange={e => setTrackingNumber(e.target.value)}
+                      className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                      <FileText size={12} /> Delivery Address
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Enter the shipping/delivery address..."
+                      value={deliveryAddress}
+                      onChange={e => setDeliveryAddress(e.target.value)}
+                      className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Footer */}
@@ -2348,7 +2477,7 @@ export default function EstimationsPageClient({
                 disabled={!!converting}
                 className="px-4 sm:px-5 py-2 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 disabled:opacity-50"
               >
-                {converting ? "Converting..." : "Convert to SO"}
+                {converting ? "Converting..." : (modalConvertType === "SALE" ? "Convert to Sale" : "Create Sales Order")}
               </button>
             </div>
           </div>

@@ -9,7 +9,7 @@ import { FileText, Search, RefreshCw, Calendar,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
   AlertTriangle, X, Pencil } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi, settingsApi } from "@/lib/api";
+import { customersApi, productsFullApi, settingsApi, salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import { formatDate, calculateSalesDocumentTotals, roundMoney } from "@/lib/utils";
@@ -373,6 +373,52 @@ export default function SalesOrdersPage() {
     loadDeepLinkedOrder();
   }, []);
 
+  // Convert-from-Estimate pre-population flow (?convertFromEstimate=<quotationId>)
+  useEffect(() => {
+    const convertEstId = new URLSearchParams(window.location.search).get("convertFromEstimate");
+    if (!convertEstId || autoOpenedIdRef.current === convertEstId) return;
+
+    const loadEstimateForConversion = async () => {
+      try {
+        const res = await api.get(`/api/sales/quotations/${convertEstId}`);
+        if (res.data) {
+          autoOpenedIdRef.current = convertEstId;
+          const est = res.data;
+          setSourceQuotationId(est.id);
+          setSelectedCustomer(est.customer || (est.customerId ? { id: est.customerId, name: est.customerName, phone: est.customerPhone } : null));
+          setCustomerSearch(est.customerName || est.customer?.name || "");
+          setCustomerPhone(est.customerPhone || est.customer?.phone || "");
+          setStateOfSupply(est.stateOfSupply || "");
+          
+          if (est.items && est.items.length > 0) {
+            setItems(est.items.map((it: any) => ({
+              id: Math.random().toString(36).slice(2),
+              productId: it.productId || "",
+              itemSearch: it.productName || "",
+              qty: it.quantity || 1,
+              unit: it.unit || "NONE",
+              rate: it.rate || 0,
+              discountPct: it.discountPercent || it.discountPct || 0,
+              discountAmount: it.discountAmount || 0,
+              taxPct: it.taxPercent || 0,
+              taxLabel: it.taxPercent ? `GST@${it.taxPercent}%` : "NONE",
+            })));
+          }
+
+          setTermsText(est.termsConditions || "");
+          setShowTerms(!!est.termsConditions);
+          setDescription(est.notes || "");
+          setShowDesc(!!est.notes);
+          setRoundOffEnabled(true);
+          setView("create");
+        }
+      } catch (err) {
+        console.error("Failed to load estimate for conversion", err);
+      }
+    };
+    loadEstimateForConversion();
+  }, []);
+
   // Click outside logic
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -590,17 +636,26 @@ export default function SalesOrdersPage() {
 
     try {
       let savedRes: any = null;
-      if (draftId) {
+      if (sourceQuotationId && !draftId) {
+        const res = await salesApi.convertToSalesOrder(sourceQuotationId, {
+          ...apiPayload,
+          deliveryDate: dueDate || undefined,
+          dueDate: dueDate || undefined
+        });
+        savedRes = res;
+        showToast("Converted Estimate to Sales Order successfully", "success");
+      } else if (draftId) {
         // Editing an existing order — update it, never create another one.
         savedRes = await api.patch(`/api/sales/orders/${draftId}`, apiPayload);
+        showToast("Sales Order updated successfully", "success");
       } else {
         const res = await api.post("/api/sales/orders", { ...apiPayload, idempotencyKey });
         savedRes = res;
         // Track the new record's ID so subsequent saves in the same session
         // update it rather than creating yet another duplicate.
         if (res?.data?.id) setDraftId(res.data.id);
+        showToast("Sales Order saved successfully", "success");
       }
-      showToast(draftId ? "Sales Order updated successfully" : "Sales Order saved successfully", "success");
       setPreviewingOrder(savedRes?.data || { ...apiPayload, id: draftId || "new" });
       fetchAllData();
       setView("list");

@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi, salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -402,6 +402,7 @@ export default function SalesInvoicesPage() {
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [sourceQuotationId, setSourceQuotationId] = useState<string | null>(null);
 
   // Add Party modal state
   const [showAddParty, setShowAddParty] = useState(false);
@@ -603,6 +604,51 @@ export default function SalesInvoicesPage() {
     };
     loadLinked();
   }, [deepLinkedInvoiceId]);
+
+  // Convert-from-Estimate pre-population flow (?convertFromEstimate=<quotationId>)
+  useEffect(() => {
+    const convertEstId = new URLSearchParams(window.location.search).get("convertFromEstimate");
+    if (!convertEstId) return;
+
+    const loadEstimateForConversion = async () => {
+      try {
+        const res = await api.get(`/api/sales/quotations/${convertEstId}`);
+        if (res.data) {
+          const est = res.data;
+          setSourceQuotationId(est.id);
+          setSelectedCustomer(est.customer || (est.customerId ? { id: est.customerId, name: est.customerName, phone: est.customerPhone } : null));
+          setCustomerSearch(est.customerName || est.customer?.name || "");
+          setCustomerPhone(est.customerPhone || est.customer?.phone || "");
+          setStateOfSupply(est.stateOfSupply || "");
+          
+          if (est.items && est.items.length > 0) {
+            setItems(est.items.map((it: any) => ({
+              id: Math.random().toString(36).slice(2),
+              productId: it.productId || "",
+              itemSearch: it.productName || "",
+              qty: it.quantity || 1,
+              unit: it.unit || "NONE",
+              rate: it.rate || 0,
+              discountPct: it.discountPercent || it.discountPct || 0,
+              discountAmount: it.discountAmount || 0,
+              taxPct: it.taxPercent || 0,
+              taxLabel: it.taxPercent ? `GST@${it.taxPercent}%` : "NONE",
+            })));
+          }
+
+          setTermsText(est.termsConditions || "");
+          setShowTerms(!!est.termsConditions);
+          setDescription(est.notes || "");
+          setShowDesc(!!est.notes);
+          setRoundOffEnabled(true);
+          setView("create");
+        }
+      } catch (err) {
+        console.error("Failed to load estimate for conversion", err);
+      }
+    };
+    loadEstimateForConversion();
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -938,16 +984,14 @@ export default function SalesInvoicesPage() {
       };
       if (finalCustomerId) payload.customerId = finalCustomerId;
 
-      const res = await api.post("/api/finance/invoices", payload);
-      
-      // If we saved an invoice that was previously a draft, remove the draft
-      if (draftId) {
-        try {
-          await draftsApi.deleteDraft(draftId);
-        } catch (e) {}
+      let res: any = null;
+      if (sourceQuotationId && !draftId) {
+        res = await salesApi.convertToSale(sourceQuotationId, payload);
+        showToast("Converted Estimate to Sale (Invoice) successfully", "success");
+      } else {
+        res = await api.post("/api/finance/invoices", payload);
+        showToast("Invoice saved successfully", "success");
       }
-
-      showToast("Invoice saved successfully", "success");
       setPrintingInvoice(res?.data || {
         id: "new",
         order: {

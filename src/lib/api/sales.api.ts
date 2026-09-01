@@ -27,6 +27,8 @@ export const salesApi = {
   getQuotationById: (id: string) => api.get(`/api/sales/quotations/${id}`),
   updateQuotation: (id: string, data: any) => api.patch(`/api/sales/quotations/${id}`, data),
   convertQuotation: (id: string) => api.post(`/api/sales/quotations/${id}/convert`),
+  convertToSale: (id: string, payload?: any) => api.post(`/api/sales/quotations/${id}/convert-to-sale`, payload),
+  convertToSalesOrder: (id: string, payload?: any) => api.post(`/api/sales/quotations/${id}/convert-to-sales-order`, payload),
 
   getSalesOrders: (params?: any) => api.get('/api/sales/orders', { params }),
   getSalesOrderById: (id: string) => api.get(`/api/sales/orders/${id}`),

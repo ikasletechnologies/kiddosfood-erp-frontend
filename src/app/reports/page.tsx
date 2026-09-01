@@ -61,12 +61,8 @@ import CentralItemDetailReport from "./components/ItemDetailReport";
 import CentralSalePurchaseByCategoryReport from "./components/SalePurchaseByCategoryReport";
 import CentralStockSummaryByCategoryReport from "./components/StockSummaryByCategoryReport";
 import CentralItemWiseDiscountReport from "./components/ItemWiseDiscountReport";
-import CentralGSTR1Report from "./components/GSTR1Report";
-import CentralGSTR2Report from "./components/GSTR2Report";
-import CentralGSTR3BReport from "./components/GSTR3BReport";
-import CentralGSTR9Report from "./components/GSTR9Report";
-import CentralSaleSummaryByHSNReport from "./components/SaleSummaryByHSNReport";
-import CentralSACReport from "./components/SACReport";
+// GSTR-1/2/3B/9, HSN Summary and SAC now live as dedicated pages under
+// /reports/gst/* — see src/app/reports/gst/*/page.tsx.
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -178,7 +174,6 @@ const PARENT_REPORTS: ParentReportDef[] = [
     description: "Profit & Loss, Balance Sheet, GST returns, taxes and expenses.",
     subcategories: [
       "Statements & P&L",
-      "GST Reports",
       "Taxes & Compliance",
       "Expenses & Orders",
       "Banking & Loans",
@@ -195,13 +190,9 @@ const PARENT_REPORTS: ParentReportDef[] = [
       { id: "Purchase", label: "Purchase Orders", category: "Statements & P&L", description: "Vendor purchase orders and billed values." },
       { id: "All Transactions", label: "Payment Register", category: "Statements & P&L", description: "Cash, Bank & UPI payment vouchers and receipts." },
 
-      // GST Reports
-      { id: "GSTR 1", label: "GSTR 1", category: "GST Reports", description: "Outward supply return statement." },
-      { id: "GSTR 2", label: "GSTR 2", category: "GST Reports", description: "Inward supply and purchase input credits." },
-      { id: "GSTR 3 B", label: "GSTR 3B", category: "GST Reports", description: "Monthly GST self-declaration return." },
-      { id: "GSTR 9", label: "GSTR 9", category: "GST Reports", description: "Annual GST return summary." },
-      { id: "Sale Summary By HSN", label: "Sale Summary By HSN", category: "GST Reports", description: "HSN code sales and tax breakdown." },
-      { id: "SAC Report", label: "SAC Report", category: "GST Reports", description: "Service Accounting Code breakdown." },
+      // GSTR-1/2/3B/9, HSN Summary and SAC now live as dedicated pages
+      // under /reports/gst/* (see the sidebar's "GST Reports" section),
+      // not as entries in this generic report catalog.
 
       // Taxes & Compliance
       { id: "GST Report", label: "GST Report", category: "Taxes & Compliance", description: "GST collected and paid summary." },
@@ -623,90 +614,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "totalSale", label: "Total Sale" },
       { key: "totalPurchase", label: "Total Purchase" },
       { key: "net", label: "Net" },
-    ],
-  },
-  "GSTR 1": {
-    title: "GSTR 1 – Outward Supplies",
-    kpiLabel: "Output GST",
-    tableTitle: "Outward Supply Details",
-    columns: [
-      { key: "date", label: "Date" },
-      { key: "invoiceNo", label: "Invoice No" },
-      { key: "partyName", label: "Party Name" },
-      { key: "gstin", label: "GSTIN" },
-      { key: "taxableAmount", label: "Taxable Amt" },
-      { key: "cgst", label: "CGST" },
-      { key: "sgst", label: "SGST" },
-      { key: "igst", label: "IGST" },
-      { key: "totalTax", label: "Total Tax" },
-    ],
-  },
-  "GSTR 2": {
-    title: "GSTR 2 – Inward Supplies",
-    kpiLabel: "Input GST",
-    tableTitle: "Inward Supply Details",
-    columns: [
-      { key: "date", label: "Date" },
-      { key: "invoiceNo", label: "Invoice No" },
-      { key: "partyName", label: "Supplier" },
-      { key: "gstin", label: "Supplier GSTIN" },
-      { key: "taxableAmount", label: "Taxable Amt" },
-      { key: "cgst", label: "CGST" },
-      { key: "sgst", label: "SGST" },
-      { key: "igst", label: "IGST" },
-      { key: "totalTax", label: "Total Tax" },
-    ],
-  },
-  "GSTR 3 B": {
-    title: "GSTR 3B – Monthly Return",
-    kpiLabel: "Net GST Payable",
-    tableTitle: "GST Summary",
-    columns: [
-      { key: "category", label: "Category" },
-      { key: "taxableAmount", label: "Taxable Amount" },
-      { key: "cgst", label: "CGST" },
-      { key: "sgst", label: "SGST" },
-      { key: "igst", label: "IGST" },
-      { key: "totalTax", label: "Total Tax" },
-    ],
-  },
-  "GSTR 9": {
-    title: "GSTR 9 – Annual Return",
-    kpiLabel: "Annual GST",
-    tableTitle: "Annual GST Summary",
-    columns: [
-      { key: "section", label: "Section" },
-      { key: "taxableAmount", label: "Taxable Amount" },
-      { key: "cgst", label: "CGST" },
-      { key: "sgst", label: "SGST" },
-      { key: "igst", label: "IGST" },
-      { key: "totalTax", label: "Total Tax" },
-    ],
-  },
-  "Sale Summary By HSN": {
-    title: "Sale Summary By HSN",
-    kpiLabel: "Taxable Value",
-    tableTitle: "HSN-wise Sale Summary",
-    columns: [
-      { key: "hsn", label: "HSN Code" },
-      { key: "description", label: "Description" },
-      { key: "unit", label: "Unit" },
-      { key: "quantity", label: "Quantity" },
-      { key: "taxableAmount", label: "Taxable Value" },
-      { key: "gstRate", label: "GST Rate" },
-      { key: "totalTax", label: "Total Tax" },
-    ],
-  },
-  "SAC Report": {
-    title: "SAC Report",
-    kpiLabel: "Service Value",
-    tableTitle: "SAC-wise Summary",
-    columns: [
-      { key: "sac", label: "SAC Code" },
-      { key: "description", label: "Service" },
-      { key: "taxableAmount", label: "Taxable Value" },
-      { key: "gstRate", label: "GST Rate" },
-      { key: "totalTax", label: "Total Tax" },
     ],
   },
   "Stock summary": {
@@ -1423,118 +1330,6 @@ function transformAllParties(data: any): ReportData {
 
 // Financial year an India GST return uses (Apr–Mar), e.g. "2025-2026" for any
 // date between 2025-04-01 and 2026-03-31.
-function toFinancialYear(dateStr?: string): string {
-  const d = dateStr ? new Date(dateStr) : new Date();
-  const y = isNaN(d.getTime()) ? new Date().getFullYear() : d.getFullYear();
-  const m = isNaN(d.getTime()) ? new Date().getMonth() : d.getMonth(); // 0-indexed
-  const startYear = m >= 3 ? y : y - 1; // April (index 3) starts the FY
-  return `${startYear}-${startYear + 1}`;
-}
-
-// GSTR-1 backend shape: { sale: [...], saleReturn: [...], totalTaxableValue, totalOutputGST }
-function transformGstr1(data: any): ReportData {
-  const rows = Array.isArray(data?.sale) ? data.sale : [];
-  const totalTaxable = Number(data?.totalTaxableValue) || 0;
-  const totalTax = Number(data?.totalOutputGST) || 0;
-  return {
-    kpiValue: fmtCurrency(totalTax),
-    kpiSubText: `Taxable: ${fmtCurrency(totalTaxable)} • Tax: ${fmtCurrency(totalTax)}`,
-    rows: rows.map((r: any) => ({
-      date: fmtDate(r.date),
-      invoiceNo: r.invoiceNo || "—",
-      partyName: r.partyName || "—",
-      gstin: r.gstin || "—",
-      taxableAmount: fmtCurrency(r.taxableValue || 0),
-      cgst: fmtCurrency(r.cgst || 0),
-      sgst: fmtCurrency(r.sgst || 0),
-      igst: fmtCurrency(r.igst || 0),
-      totalTax: fmtCurrency(r.totalTax || 0),
-    })),
-  };
-}
-
-// GSTR-2 backend shape: { data: [...], totalTaxableValue, totalInputGST }
-function transformGstr2(data: any): ReportData {
-  const rows = Array.isArray(data?.data) ? data.data : [];
-  const totalTaxable = Number(data?.totalTaxableValue) || 0;
-  const totalTax = Number(data?.totalInputGST) || 0;
-  return {
-    kpiValue: fmtCurrency(totalTax),
-    kpiSubText: `Taxable: ${fmtCurrency(totalTaxable)} • Tax: ${fmtCurrency(totalTax)}`,
-    rows: rows.map((r: any) => ({
-      date: fmtDate(r.date),
-      invoiceNo: r.invoiceNumber || r.poNumber || "—",
-      partyName: r.vendorName || "—",
-      gstin: r.vendorGstin || "—",
-      taxableAmount: fmtCurrency(r.taxableValue || 0),
-      cgst: fmtCurrency(r.cgst || 0),
-      sgst: fmtCurrency(r.sgst || 0),
-      igst: fmtCurrency(r.igst || 0),
-      totalTax: fmtCurrency(r.totalTax || 0),
-    })),
-  };
-}
-
-// GSTR-3B backend shape is a form/summary object, not a transaction list:
-// { outwardSupplies: [...], eligibleITC: { available: [...] }, summary: {...} }
-function transformGstr3B(data: any): ReportData {
-  const outward = data?.outwardSupplies?.[0] || {};
-  const itc = data?.eligibleITC?.available?.[0] || {};
-  const summary = data?.summary || {};
-  return {
-    kpiValue: fmtCurrency(summary.netGstPayable || 0),
-    kpiSubText: `Output Tax: ${fmtCurrency(summary.totalOutputTax || 0)} • ITC: ${fmtCurrency(summary.totalInputTax || 0)}`,
-    rows: [
-      {
-        category: "Outward Taxable Supplies",
-        taxableAmount: fmtCurrency(outward.taxableValue || 0),
-        cgst: fmtCurrency(outward.cgst || 0),
-        sgst: fmtCurrency(outward.sgst || 0),
-        igst: fmtCurrency(outward.igst || 0),
-        totalTax: fmtCurrency(summary.totalOutputTax || 0),
-      },
-      {
-        category: "Eligible ITC",
-        taxableAmount: "—",
-        cgst: fmtCurrency(itc.cgst || 0),
-        sgst: fmtCurrency(itc.sgst || 0),
-        igst: fmtCurrency(itc.igst || 0),
-        totalTax: fmtCurrency(summary.totalInputTax || 0),
-      },
-      {
-        category: "Net GST Payable",
-        taxableAmount: "—",
-        cgst: "—",
-        sgst: "—",
-        igst: "—",
-        totalTax: fmtCurrency(summary.netGstPayable || 0),
-      },
-    ],
-  };
-}
-
-// GSTR-9 backend shape is also a form/summary object, keyed by FY, not by date range:
-// { basicDetails, outwardAndInwardSupplies: [{section, description, ...}], summary }
-function transformGstr9(data: any): ReportData {
-  const supplies = Array.isArray(data?.outwardAndInwardSupplies) ? data.outwardAndInwardSupplies : [];
-  const summary = data?.summary || {};
-  return {
-    kpiValue: fmtCurrency(summary.netTaxPayable || 0),
-    kpiSubText: `Output Tax: ${fmtCurrency(summary.totalOutputTax || 0)} • Input Tax: ${fmtCurrency(summary.totalInputTax || 0)}`,
-    rows: supplies.map((r: any) => {
-      const total = (Number(r.centralTax) || 0) + (Number(r.stateTax) || 0) + (Number(r.integratedTax) || 0);
-      return {
-        section: `${r.section || "—"} — ${r.description || ""}`,
-        taxableAmount: fmtCurrency(r.taxableValue || 0),
-        cgst: fmtCurrency(r.centralTax || 0),
-        sgst: fmtCurrency(r.stateTax || 0),
-        igst: fmtCurrency(r.integratedTax || 0),
-        totalTax: fmtCurrency(total),
-      };
-    }),
-  };
-}
-
 function transformStockSummary(data: any): ReportData {
   const rows = toArr(data);
   const totalValue = rows.reduce(
@@ -1993,21 +1788,10 @@ async function fetchReport(
       case "Balance Sheet":
         return transformBalanceSheet((await reportsApi.getBalanceSheet(params)).data);
 
-      // Financial - GST & Taxes
-      case "GSTR 1":
-        return transformGstr1((await reportsApi.getGSTR1(params)).data);
-      case "GSTR 2":
-        return transformGstr2((await reportsApi.getGSTR2(params)).data);
-      case "GSTR 3 B":
-        return transformGstr3B((await reportsApi.getGSTR3B(params)).data);
-      case "GSTR 9":
-        return transformGstr9(
-          (await reportsApi.getGSTR9({ financialYear: toFinancialYear(params.startDate) })).data
-        );
-      case "Sale Summary By HSN":
-        return transformGeneric((await reportsApi.getHsnSummary(params)).data, meta);
-      case "SAC Report":
-        return transformGeneric((await reportsApi.getSacReport(params)).data, meta);
+      // GSTR-1/2/3B/9, HSN Summary and SAC moved to dedicated pages under
+      // /reports/gst/* — see the "GST Reports" sidebar section.
+
+      // Financial - Taxes
       case "GST Report":
         return transformGeneric((await reportsApi.getGstReport(params)).data, meta);
       case "GST Rate Report":
