@@ -89,7 +89,16 @@ export default function TransitStockPage() {
     const uniqueChallans = new Set(rows.map(r => r.challanId));
     const now = new Date();
     const delayedChallans = new Set(
-      rows.filter(r => (r as any).expectedDeliveryDate && new Date((r as any).expectedDeliveryDate) < now).map(r => r.challanId)
+      rows.filter(r => {
+        const exp = (r as any).expectedDeliveryDate;
+        if (!exp) return false;
+        const expDate = new Date(exp);
+        if (isNaN(expDate.getTime())) return false;
+        if (expDate.getHours() === 0 && expDate.getMinutes() === 0 && expDate.getSeconds() === 0) {
+          expDate.setHours(23, 59, 59, 999);
+        }
+        return expDate < now;
+      }).map(r => r.challanId)
     );
     return {
       activeTransit: uniqueChallans.size,
@@ -197,7 +206,7 @@ export default function TransitStockPage() {
                           disabled={markingId === r.challanId}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 hover:text-emerald-700 rounded-lg text-xs font-semibold transition-colors border border-emerald-200 dark:border-emerald-500/20 shadow-sm disabled:opacity-50"
                         >
-                          <CheckCircle size={14} /> {markingId === r.challanId ? "..." : "Delivered"}
+                          <CheckCircle size={14} /> {markingId === r.challanId ? "..." : "Mark Delivered"}
                         </button>
                       </td>
                     </tr>
