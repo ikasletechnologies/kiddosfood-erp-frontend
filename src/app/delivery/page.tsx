@@ -84,7 +84,15 @@ export default function DispatchTrackingPage() {
     total: rows.length,
     inTransit: rows.filter(r => r.status === "IN_TRANSIT").length,
     delivered: rows.filter(r => r.status === "DELIVERED" || r.status === "CLOSED").length,
-    delayed: rows.filter(r => r.status === "IN_TRANSIT" && r.expectedDeliveryDate && new Date(r.expectedDeliveryDate) < new Date()).length,
+    delayed: rows.filter(r => {
+      if (r.status !== "IN_TRANSIT" || !r.expectedDeliveryDate) return false;
+      const expDate = new Date(r.expectedDeliveryDate);
+      if (isNaN(expDate.getTime())) return false;
+      if (expDate.getHours() === 0 && expDate.getMinutes() === 0 && expDate.getSeconds() === 0) {
+        expDate.setHours(23, 59, 59, 999);
+      }
+      return expDate < new Date();
+    }).length,
   }), [rows]);
 
   const handleMarkDelivered = async (challanId: string) => {
