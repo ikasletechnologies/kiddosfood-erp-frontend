@@ -361,17 +361,16 @@ export default function DebitNotesPage() {
                       placeholder="Search or select vendor..."
                       className="flex-1 text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                     />
-                    {showVendorDrop ? vendorSearch : (selectedVendor?.name || "") && (
+                    {(vendorSearch || selectedVendor) && (
                       <X 
                         size={14} 
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                        onClick={() => setVendorSearch("")} 
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setVendorSearch("");
+                          setSelectedVendor(null);
+                        }} 
                       />
-                    )}
-                    {selectedVendor && (
-                      <button onClick={e => { e.stopPropagation(); setSelectedVendor(null); setVendorSearch(""); }} className="text-gray-300 dark:text-slate-500 hover:text-gray-500 dark:hover:text-white">
-                        <X size={13} />
-                      </button>
                     )}
                     <ChevronDown size={14} className="text-gray-400 shrink-0" />
                   </div>

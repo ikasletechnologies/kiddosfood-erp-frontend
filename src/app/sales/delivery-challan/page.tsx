@@ -50,16 +50,16 @@ const UNITS = [
 
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
-  { label: "IGST@0%", value: 0 },
   { label: "GST@0%", value: 0 },
-  { label: "IGST@5%", value: 5 },
+  { label: "IGST@0%", value: 0 },
   { label: "GST@5%", value: 5 },
-  { label: "IGST@12%", value: 12 },
+  { label: "IGST@5%", value: 5 },
   { label: "GST@12%", value: 12 },
-  { label: "IGST@18%", value: 18 },
+  { label: "IGST@12%", value: 12 },
   { label: "GST@18%", value: 18 },
-  { label: "IGST@28%", value: 28 },
+  { label: "IGST@18%", value: 18 },
   { label: "GST@28%", value: 28 },
+  { label: "IGST@28%", value: 28 },
 ];
 
 const INDIAN_STATES = [
@@ -79,6 +79,69 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   CANCELLED:  { label: "Cancelled",   color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
+// ── Helper Functions for Product Units ───────────────────────────────────────
+
+function normalizeUnit(raw: string | undefined | null): string {
+  if (!raw) return "NONE";
+  const s = raw.trim().toUpperCase();
+  if (!s || s === "NONE") return "NONE";
+
+  if (s === "KG" || s === "KGS" || s === "KILOGRAM" || s === "KILOGRAMS") return "KGS";
+  if (s === "G" || s === "GRM" || s === "GRAM" || s === "GRAMS" || s === "GM") return "GRM";
+  if (s === "L" || s === "LTR" || s === "LITER" || s === "LITERS" || s === "LITRE" || s === "LITRES") return "LTR";
+  if (s === "PC" || s === "PCS" || s === "PIECE" || s === "PIECES") return "PCS";
+  if (s === "NO" || s === "NOS" || s === "NUMBER" || s === "NUMBERS") return "NOS";
+  if (s === "BOX" || s === "BOXES") return "BOX";
+  if (s === "BAG" || s === "BAGS") return "BAG";
+  if (s === "BDL" || s === "BUNDLE" || s === "BUNDLES") return "BDL";
+  if (s === "CT" || s === "CARAT" || s === "CARATS") return "CT";
+  if (s === "CMS" || s === "CENTIMETER" || s === "CENTIMETERS") return "CMS";
+  if (s === "DZN" || s === "DOZEN" || s === "DOZENS") return "DZN";
+  if (s === "MTR" || s === "METER" || s === "METERS" || s === "METRE") return "MTR";
+  if (s === "PKT" || s === "PACK" || s === "PACKS" || s === "PACKET" || s === "PACKETS") return "PKT";
+  if (s === "ROLL" || s === "ROLLS") return "ROLL";
+  if (s === "SQF" || s === "SQFT" || s === "SQUARE FEET") return "SQF";
+  if (s === "TNE" || s === "TON" || s === "TONS") return "TNE";
+  if (s === "UNT" || s === "UNIT" || s === "UNITS") return "UNT";
+
+  const match = UNITS.find(u => u.code === s || u.short.toUpperCase() === s || u.label.toUpperCase().includes(s));
+  return match ? match.code : s;
+}
+
+function getUnitOptions(item: LineItem): { code: string; short: string; label: string }[] {
+  if (!item.productId) return UNITS;
+  const configured: { code: string; short: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const addUnit = (codeOrName: string, labelStr?: string) => {
+    if (!codeOrName) return;
+    const norm = normalizeUnit(codeOrName);
+    const existingUnit = UNITS.find(u => u.code === norm);
+    const code = existingUnit ? existingUnit.code : norm;
+    const short = existingUnit ? existingUnit.short : codeOrName;
+    const label = labelStr || (existingUnit ? existingUnit.label : short);
+
+    if (!seen.has(code)) {
+      seen.add(code);
+      configured.push({ code, short, label });
+    }
+  };
+
+  if (item.unit && item.unit !== "NONE") {
+    addUnit(item.unit);
+  }
+  if (item.baseUnit) {
+    const baseName = typeof item.baseUnit === "string" ? item.baseUnit : item.baseUnit.shortName || item.baseUnit.name;
+    addUnit(baseName);
+  }
+  (item.conversions || []).forEach((c: any) => {
+    const convUnit = c.unit ? (typeof c.unit === "string" ? c.unit : c.unit.shortName || c.unit.name) : c.unitId;
+    if (convUnit) addUnit(convUnit);
+  });
+
+  return configured.length > 0 ? configured : UNITS;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -88,10 +151,14 @@ interface LineItem {
   qty: number;
   unit: string;
   rate: number;
+  discountPct?: number;
+  discountAmount?: number;
   taxPct: number;
   taxLabel: string;
   batchNumber: string;
   remarks: string;
+  baseUnit?: any;
+  conversions?: any[];
 }
 
 function makeItem(): LineItem {
@@ -102,6 +169,8 @@ function makeItem(): LineItem {
     qty: 1,
     unit: "NONE",
     rate: 0,
+    discountPct: 0,
+    discountAmount: 0,
     taxPct: 0,
     taxLabel: "NONE",
     batchNumber: "",
@@ -110,14 +179,17 @@ function makeItem(): LineItem {
 }
 
 function computeRow(item: LineItem, withTax: boolean) {
-  const gross = item.qty * item.rate;
+  const gross = (item.qty || 0) * (item.rate || 0);
+  const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
+    ? item.discountAmount
+    : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
+  const afterDisc = Math.max(0, gross - discAmt);
   if (withTax) {
-    const taxAmt = parseFloat((gross * item.taxPct / (100 + item.taxPct)).toFixed(2));
-    const netAmt = gross - taxAmt;
-    return { taxAmt, amount: parseFloat(gross.toFixed(2)) };
+    const taxAmt = parseFloat((afterDisc * item.taxPct / (100 + item.taxPct)).toFixed(2));
+    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
   }
-  const taxAmt = parseFloat((gross * item.taxPct / 100).toFixed(2));
-  return { taxAmt, amount: parseFloat((gross + taxAmt).toFixed(2)) };
+  const taxAmt = parseFloat((afterDisc * item.taxPct / 100).toFixed(2));
+  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
 }
 
 // A batch is dispatchable when it has passed QC, isn't under an active recall,
@@ -354,6 +426,7 @@ export default function DeliveryChallanPage() {
       if (cpRes.status === "fulfilled" && (cpRes.value as any).data) {
         setCompanyProfile((cpRes.value as any).data);
       }
+      return mappedChallans;
     } finally {
       setLoading(false);
     }
@@ -622,23 +695,46 @@ export default function DeliveryChallanPage() {
   const selectProduct = (idx: number, p: any) => {
     const validBatches = getValidBatches(p.id);
     const autoBatch = validBatches.length === 1 ? (validBatches[0].batchCode || validBatches[0].id) : "";
+    const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
+    const normalizedUnit = normalizeUnit(rawUnit);
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
         rate: p.basePrice || p.price || 0,
-        unit: p.unit || "NONE",
+        unit: normalizedUnit,
         taxPct: p.taxPercent || 0,
         taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
         batchNumber: autoBatch,
+        baseUnit: p.baseUnit || p.unit,
+        conversions: p.unitConversions || p.conversions || [],
       } : it
     ));
     setOpenItemDrop(null);
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const updated = { ...it, [field]: value };
+      const gross = (updated.qty || 0) * (updated.rate || 0);
+
+      if (field === "discountPct") {
+        const pct = Number(value) || 0;
+        updated.discountPct = pct;
+        updated.discountAmount = gross > 0 ? parseFloat((gross * pct / 100).toFixed(2)) : 0;
+      } else if (field === "discountAmount") {
+        const amt = Number(value) || 0;
+        updated.discountAmount = amt;
+        updated.discountPct = gross > 0 ? parseFloat(((amt / gross) * 100).toFixed(2)) : 0;
+      } else if (field === "qty" || field === "rate") {
+        if (updated.discountPct) {
+          updated.discountAmount = parseFloat((gross * updated.discountPct / 100).toFixed(2));
+        }
+      }
+      return updated;
+    }));
   };
 
   const addRow = () => setItems(prev => [...prev, makeItem()]);
@@ -774,14 +870,20 @@ export default function DeliveryChallanPage() {
     };
 
     try {
+      let res: any = null;
       if (draftId) {
-        await salesApi.updateDeliveryChallan(draftId, apiPayload);
+        res = await salesApi.updateDeliveryChallan(draftId, apiPayload);
         showToast("Delivery Challan updated successfully", "success");
       } else {
-        await salesApi.createDeliveryChallan({ ...apiPayload, idempotencyKey });
+        res = await salesApi.createDeliveryChallan({ ...apiPayload, idempotencyKey });
         showToast("Delivery Challan saved successfully", "success");
       }
-      fetchData();
+      const list = await fetchData();
+      if (status === "IN_TRANSIT") {
+        const targetId = res?.data?.id || res?.data?._id || draftId;
+        const matched = Array.isArray(list) ? list.find((x: any) => x.id === targetId || x._id === targetId) : null;
+        setPreviewingChallan(matched || res?.data);
+      }
       setView("list");
       resetForm();
     } catch (e: any) {
@@ -1100,14 +1202,20 @@ export default function DeliveryChallanPage() {
                           onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                           onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                         />
-            {customerSearch && (
-              <X
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                onClick={() => setCustomerSearch("")}
-              />
-            )}
-                        <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
+                          {customerSearch && (
+                            <X
+                              size={14}
+                              className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCustomerSearch("");
+                                setSelectedCustomer(null);
+                                setSelectedDealer(null);
+                                setSelectedFranchise(null);
+                              }}
+                            />
+                          )}
+                          <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       </div>
                       {showCustomerDrop && (
                         <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
@@ -1210,15 +1318,22 @@ export default function DeliveryChallanPage() {
               <table className="w-full text-sm min-w-[700px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="text-left px-4 py-2.5 w-10">#</th>
-                    <th className="text-left px-4 py-2.5">Item</th>
-                    <th className="text-left px-3 py-2.5 w-32">Batch No</th>
-                    <th className="text-center px-3 py-2.5 w-20">Qty</th>
-                    <th className="text-center px-3 py-2.5 w-24">Unit</th>
-                    <th className="text-right px-3 py-2.5 w-28">Price/Unit</th>
-                    <th className="text-center px-3 py-2.5 w-28">Tax</th>
-                    <th className="text-right px-3 py-2.5 w-28">Amount</th>
-                    <th className="w-10"></th>
+                    <th rowSpan={2} className="text-left px-4 py-2.5 w-10 align-middle">#</th>
+                    <th rowSpan={2} className="text-left px-4 py-2.5 align-middle">Item</th>
+                    <th rowSpan={2} className="text-left px-3 py-2.5 w-32 align-middle">Batch No</th>
+                    <th rowSpan={2} className="text-center px-2 py-2.5 w-16 align-middle">Qty</th>
+                    <th rowSpan={2} className="text-center px-2 py-2.5 w-20 align-middle">Unit</th>
+                    <th rowSpan={2} className="text-right px-3 py-2.5 w-24 align-middle">Price/Unit</th>
+                    <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
+                    <th rowSpan={2} className="text-center px-3 py-2.5 w-24 align-middle">Tax</th>
+                    <th rowSpan={2} className="text-right px-3 py-2.5 w-28 align-middle">Amount</th>
+                    <th rowSpan={2} className="w-8 align-middle"></th>
+                  </tr>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-center px-1.5 py-1.5 w-16">
+                      <span className="inline-block text-[10px] text-gray-500 dark:text-slate-400">%</span>
+                    </th>
+                    <th className="text-right px-2 py-1.5 w-20">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -1319,8 +1434,14 @@ export default function DeliveryChallanPage() {
   }
 }} className="w-full text-xs sm:text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
 </td>
-                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
+                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{getUnitOptions(it).map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
                         <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-xs sm:text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
+                        <td className="px-1.5 py-2.5">
+                          <input type="number" min={0} max={100} value={it.discountPct || ""} onChange={e => updateItem(idx, "discountPct", Number(e.target.value))} placeholder="0" className="w-full text-xs text-center outline-none bg-transparent text-gray-700 dark:text-white" />
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <input type="number" min={0} value={it.discountAmount || ""} onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))} placeholder="0.00" className="w-full text-xs text-right outline-none bg-transparent text-gray-700 dark:text-white" />
+                        </td>
                         <td className="px-3 py-2.5">
                           <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">
                             {TAX_OPTIONS.map(t => <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>)}

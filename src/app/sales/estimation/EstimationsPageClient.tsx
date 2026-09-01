@@ -53,20 +53,20 @@ const UNITS = [
 
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
-  { label: "IGST@0%", value: 0 },
   { label: "GST@0%", value: 0 },
-  { label: "IGST@0.25%", value: 0.25 },
+  { label: "IGST@0%", value: 0 },
   { label: "GST@0.25%", value: 0.25 },
-  { label: "IGST@3%", value: 3 },
+  { label: "IGST@0.25%", value: 0.25 },
   { label: "GST@3%", value: 3 },
-  { label: "IGST@5%", value: 5 },
+  { label: "IGST@3%", value: 3 },
   { label: "GST@5%", value: 5 },
-  { label: "IGST@12%", value: 12 },
+  { label: "IGST@5%", value: 5 },
   { label: "GST@12%", value: 12 },
-  { label: "IGST@18%", value: 18 },
+  { label: "IGST@12%", value: 12 },
   { label: "GST@18%", value: 18 },
-  { label: "IGST@28%", value: 28 },
+  { label: "IGST@18%", value: 18 },
   { label: "GST@28%", value: 28 },
+  { label: "IGST@28%", value: 28 },
 ];
 
 const INDIAN_STATES = [
@@ -188,8 +188,11 @@ interface LineItem {
   unit: string;
   rate: number;
   discountPct: number;
+  discountAmount?: number;
   taxPct: number;
   taxLabel?: string;
+  baseUnit?: any;
+  conversions?: any[];
 }
 
 // InventoryItem.unit is free-text from Item Master (e.g. "kg", "Ltr") and
@@ -198,13 +201,63 @@ interface LineItem {
 // resolve it to the matching UNITS code so the dropdown actually shows it.
 function normalizeUnit(raw: string | undefined | null): string {
   if (!raw) return "NONE";
-  const needle = raw.trim().toUpperCase();
-  if (!needle || needle === "NONE") return "NONE";
-  const match = UNITS.find(u => {
-    const short = u.short.toUpperCase();
-    return u.code === needle || short === needle || short.startsWith(needle) || needle.startsWith(short);
+  const s = raw.trim().toUpperCase();
+  if (!s || s === "NONE") return "NONE";
+
+  if (s === "KG" || s === "KGS" || s === "KILOGRAM" || s === "KILOGRAMS") return "KGS";
+  if (s === "G" || s === "GRM" || s === "GRAM" || s === "GRAMS" || s === "GM") return "GRM";
+  if (s === "L" || s === "LTR" || s === "LITER" || s === "LITERS" || s === "LITRE" || s === "LITRES") return "LTR";
+  if (s === "PC" || s === "PCS" || s === "PIECE" || s === "PIECES") return "PCS";
+  if (s === "NO" || s === "NOS" || s === "NUMBER" || s === "NUMBERS") return "NOS";
+  if (s === "BOX" || s === "BOXES") return "BOX";
+  if (s === "BAG" || s === "BAGS") return "BAG";
+  if (s === "BDL" || s === "BUNDLE" || s === "BUNDLES") return "BDL";
+  if (s === "CT" || s === "CARAT" || s === "CARATS") return "CT";
+  if (s === "CMS" || s === "CENTIMETER" || s === "CENTIMETERS") return "CMS";
+  if (s === "DZN" || s === "DOZEN" || s === "DOZENS") return "DZN";
+  if (s === "MTR" || s === "METER" || s === "METERS" || s === "METRE") return "MTR";
+  if (s === "PKT" || s === "PACK" || s === "PACKS" || s === "PACKET" || s === "PACKETS") return "PKT";
+  if (s === "ROLL" || s === "ROLLS") return "ROLL";
+  if (s === "SQF" || s === "SQFT" || s === "SQUARE FEET") return "SQF";
+  if (s === "TNE" || s === "TON" || s === "TONS") return "TNE";
+  if (s === "UNT" || s === "UNIT" || s === "UNITS") return "UNT";
+
+  const match = UNITS.find(u => u.code === s || u.short.toUpperCase() === s || u.label.toUpperCase().includes(s));
+  return match ? match.code : s;
+}
+
+function getUnitOptions(item: LineItem): { code: string; short: string; label: string }[] {
+  if (!item.productId) return UNITS;
+  const configured: { code: string; short: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const addUnit = (codeOrName: string, labelStr?: string) => {
+    if (!codeOrName) return;
+    const norm = normalizeUnit(codeOrName);
+    const existingUnit = UNITS.find(u => u.code === norm);
+    const code = existingUnit ? existingUnit.code : norm;
+    const short = existingUnit ? existingUnit.short : codeOrName;
+    const label = labelStr || (existingUnit ? existingUnit.label : short);
+
+    if (!seen.has(code)) {
+      seen.add(code);
+      configured.push({ code, short, label });
+    }
+  };
+
+  if (item.unit && item.unit !== "NONE") {
+    addUnit(item.unit);
+  }
+  if (item.baseUnit) {
+    const baseName = typeof item.baseUnit === "string" ? item.baseUnit : item.baseUnit.shortName || item.baseUnit.name;
+    addUnit(baseName);
+  }
+  (item.conversions || []).forEach((c: any) => {
+    const convUnit = c.unit ? (typeof c.unit === "string" ? c.unit : c.unit.shortName || c.unit.name) : c.unitId;
+    if (convUnit) addUnit(convUnit);
   });
-  return match ? match.code : "NONE";
+
+  return configured.length > 0 ? configured : UNITS;
 }
 
 function makeItem(): LineItem {
@@ -216,6 +269,7 @@ function makeItem(): LineItem {
     unit: "NONE",
     rate: 0,
     discountPct: 0,
+    discountAmount: 0,
     taxPct: 0,
     taxLabel: "NONE",
   };
@@ -224,18 +278,18 @@ function makeItem(): LineItem {
 function computeRow(item: LineItem, withTax: boolean) {
   const qty = item.qty || 0;
   const rate = item.rate || 0;
-  const discountPct = item.discountPct || 0;
-  const taxPct = item.taxPct || 0;
   const gross = qty * rate;
-  const discAmt = parseFloat((gross * discountPct / 100).toFixed(2));
+  const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
+    ? item.discountAmount
+    : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
+  const afterDisc = Math.max(0, gross - discAmt);
+  const taxPct = item.taxPct || 0;
   if (withTax) {
-    const netAmt = gross - discAmt;
-    const taxAmt = parseFloat((netAmt * taxPct / (100 + taxPct)).toFixed(2));
-    return { discAmt, taxAmt, amount: parseFloat(netAmt.toFixed(2)) };
+    const taxAmt = parseFloat((afterDisc * taxPct / (100 + taxPct)).toFixed(2));
+    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
   }
-  const taxable = gross - discAmt;
-  const taxAmt = parseFloat((taxable * taxPct / 100).toFixed(2));
-  return { discAmt, taxAmt, amount: parseFloat((taxable + taxAmt).toFixed(2)) };
+  const taxAmt = parseFloat((afterDisc * taxPct / 100).toFixed(2));
+  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -481,6 +535,7 @@ export default function EstimationsPageClient({
       if (pRes.status === "fulfilled") setProducts((pRes.value as any).data || []);
       if (dRes.status === "fulfilled") setDealers((dRes.value as any).data || []);
       if (fRes.status === "fulfilled") setFranchises((fRes.value as any).data || []);
+      return apiEstimations;
     } finally {
       setLoading(false);
     }
@@ -681,22 +736,44 @@ export default function EstimationsPageClient({
 
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
+    const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
         rate: p.customerPrice || p.basePrice || p.price || 0,
-        unit: normalizeUnit(p.unit),
+        unit: normalizeUnit(rawUnit),
         taxPct,
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
+        baseUnit: p.baseUnit || p.unit,
+        conversions: p.unitConversions || p.conversions || [],
       } : it
     ));
     setOpenItemDrop(null);
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const updated = { ...it, [field]: value };
+      const gross = (updated.qty || 0) * (updated.rate || 0);
+
+      if (field === "discountPct") {
+        const pct = Number(value) || 0;
+        updated.discountPct = pct;
+        updated.discountAmount = gross > 0 ? parseFloat((gross * pct / 100).toFixed(2)) : 0;
+      } else if (field === "discountAmount") {
+        const amt = Number(value) || 0;
+        updated.discountAmount = amt;
+        updated.discountPct = gross > 0 ? parseFloat(((amt / gross) * 100).toFixed(2)) : 0;
+      } else if (field === "qty" || field === "rate") {
+        if (updated.discountPct) {
+          updated.discountAmount = parseFloat((gross * updated.discountPct / 100).toFixed(2));
+        }
+      }
+      return updated;
+    }));
   };
 
   useEffect(() => {
@@ -776,19 +853,45 @@ export default function EstimationsPageClient({
         notes: showDesc ? (description || undefined) : undefined,
       };
 
+      let savedRecord: any = null;
       if (draftId) {
-        await api.put(`${apiUrl}/${draftId}`, payload);
+        const res = await api.put(`${apiUrl}/${draftId}`, payload);
+        savedRecord = res?.data;
       } else {
         const res = await api.post(apiUrl, payload);
-        // Keep saving into the SAME record on repeat "Save Draft" clicks —
-        // without this, every click created a brand-new Quotation.
+        savedRecord = res?.data;
         if (isDraft && res?.data?.id) setDraftId(res.data.id);
       }
 
       showToast(isDraft ? "Draft saved successfully" : L.savedToast, "success");
-      fetchData();
-      if (onCancel) onCancel();
-      else setView("list");
+      const listData = await fetchData();
+
+      if (!isDraft) {
+        const targetId = savedRecord?.id || savedRecord?._id || draftId;
+        const matched = Array.isArray(listData) ? listData.find((x: any) => x.id === targetId || x._id === targetId) : null;
+        const previewDoc = matched || savedRecord || {
+          ...payload,
+          createdAt: new Date().toISOString(),
+          customer: selectedCustomer,
+          customerName: selectedCustomer?.name || customerSearch,
+          customerPhone: customerPhone || selectedCustomer?.phone || selectedCustomer?.contact,
+          quotationNumber: refNo || savedRecord?.quotationNumber || "Auto",
+          items: itemsToSave.map(i => ({
+            productName: i.itemSearch,
+            quantity: i.qty,
+            unit: i.unit,
+            rate: i.rate,
+            taxPercent: i.taxPct
+          }))
+        };
+        setPreviewEstimate(previewDoc);
+        if (onCancel) onCancel();
+        else setView("list");
+      } else if (onCancel) {
+        onCancel();
+      } else {
+        setView("list");
+      }
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Failed to save estimation", "error");
     } finally {
@@ -1211,13 +1314,18 @@ export default function EstimationsPageClient({
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                       onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                     />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
+                    {customerSearch && (
+                      <X 
+                        size={14} 
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCustomerSearch("");
+                          setSelectedCustomer(null);
+                          setCustomerPhone("");
+                        }} 
+                      />
+                    )}
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
 
@@ -1326,26 +1434,24 @@ export default function EstimationsPageClient({
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
-              <button
-                type="button"
-                onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
-                className="px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
-              >
-                Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
-              </button>
             </div>
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
               <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-2.5 w-10">#</th>
-                  <th className="text-left px-4 py-2.5">Item</th>
-                  <th className="text-center px-4 py-2.5 w-20">Qty</th>
-                  <th className="text-left px-4 py-2.5 w-28">Unit</th>
-                  <th className="text-right px-4 py-2.5 w-28">Price/Unit</th>
-                  <th className="text-left px-4 py-2.5 w-36">Tax</th>
-                  <th className="text-right px-4 py-2.5 w-32">Amount</th>
-                  <th className="w-10"></th>
+                  <th rowSpan={2} className="text-left px-4 py-2.5 w-10 align-middle">#</th>
+                  <th rowSpan={2} className="text-left px-4 py-2.5 align-middle">Item</th>
+                  <th rowSpan={2} className="text-center px-4 py-2.5 w-20 align-middle">Qty</th>
+                  <th rowSpan={2} className="text-left px-4 py-2.5 w-28 align-middle">Unit</th>
+                  <th rowSpan={2} className="text-right px-4 py-2.5 w-28 align-middle">Price/Unit</th>
+                  <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
+                  <th rowSpan={2} className="text-left px-4 py-2.5 w-36 align-middle">Tax</th>
+                  <th rowSpan={2} className="text-right px-4 py-2.5 w-32 align-middle">Amount</th>
+                  <th rowSpan={2} className="w-10 align-middle"></th>
+                </tr>
+                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
+                  <th className="text-center px-1.5 py-1.5 w-16">%</th>
+                  <th className="text-right px-2 py-1.5 w-20">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -1460,7 +1566,7 @@ export default function EstimationsPageClient({
                           onChange={e => updateItem(idx, "unit", e.target.value)}
                           className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
                         >
-                          {UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
+                          {getUnitOptions(item).map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
                         </select>
                       </td>
                       <td className="px-4 py-2.5 align-top">
@@ -1474,6 +1580,24 @@ export default function EstimationsPageClient({
                             className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                           />
                         </div>
+                      </td>
+                      <td className="px-2 py-2.5 align-top">
+                        <input
+                          type="number" min={0} max={100}
+                          value={item.discountPct || ""}
+                          placeholder="0"
+                          onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                        />
+                      </td>
+                      <td className="px-2 py-2.5 align-top">
+                        <input
+                          type="number" min={0}
+                          value={item.discountAmount || ""}
+                          placeholder="0.00"
+                          onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                        />
                       </td>
                       <td className="px-4 py-2.5 align-top">
                         <select
@@ -1909,11 +2033,8 @@ export default function EstimationsPageClient({
                       key={est.id} 
                       className={clsx(
                         "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
+                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                       )}
-                      onClick={() => {
-                        if (isDraft) loadDraft(est);
-                      }}
                     >
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                         {formatDate(est.createdAt)}
@@ -1991,6 +2112,13 @@ export default function EstimationsPageClient({
                           ) : (
                             <>
                               <button
+                                onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
+                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                title="Edit Estimate"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                              <button
                                 onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Print"
@@ -2029,6 +2157,8 @@ export default function EstimationsPageClient({
               quantity: it.quantity || 0,
               unit: it.unit,
               price: it.rate || 0,
+              discountAmount: it.discountAmount || 0,
+              discountPct: it.discountPct || 0,
               gstRate: it.taxPercent || 0,
             })),
           }}

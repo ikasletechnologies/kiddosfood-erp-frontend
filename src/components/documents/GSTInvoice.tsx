@@ -174,6 +174,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
   const fmtDate = (d: Date) => formatDate(d);
 
   const hasUnitData = items.some((it: any) => it.unit);
+  const hasDiscountColumn = items.some((it: any) => safe(it.discountAmount) > 0 || safe(it.discountPct) > 0 || safe(it.discount) > 0);
   const defaultTerms = [
     "Please pay within 15 days from the date of invoice. Overdue interest @ 14% will be charged on delayed payments.",
     "Please quote invoice number when remitting funds.",
@@ -381,52 +382,78 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           </div>
         </div>
 
-        {/* Place of Supply */}
-        <div className="flex justify-between px-6 text-xs mb-8 text-gray-500">
-          <div>
-            Place of Supply <span className="font-bold text-gray-900 ml-2">{vendorState || companyDetails.state || "Karnataka"}</span>
-          </div>
-          <div>
-            Country of Supply <span className="font-bold text-gray-900 ml-2">India</span>
-          </div>
-        </div>
+
 
         {/* Items Table */}
         <table className="w-full text-xs mb-10 border-collapse">
           <thead>
             <tr className="bg-[#F97316] text-white">
-              <th className="py-3 px-4 text-left font-medium rounded-tl-lg w-1/3">Item #/Item description</th>
+              <th className="py-3 px-2 text-center font-medium rounded-tl-lg w-8">#</th>
+              <th className="py-3 px-3 text-left font-medium">Item Description</th>
               <th className="py-3 px-2 text-center font-medium">HSN</th>
               <th className="py-3 px-2 text-right font-medium">Qty.</th>
               {hasUnitData && <th className="py-3 px-2 text-center font-medium">UOM</th>}
+              <th className="py-3 px-2 text-right font-medium">Price/Unit</th>
+              {hasDiscountColumn && <th className="py-3 px-2 text-right font-medium">Discount</th>}
               <th className="py-3 px-2 text-right font-medium">GST</th>
-              <th className="py-3 px-4 text-right font-medium">Taxable Amount</th>
-              <th className="py-3 px-4 text-right font-medium">
+              <th className="py-3 px-3 text-right font-medium">Taxable Amount</th>
+              <th className="py-3 px-3 text-right font-medium">
                 {isSameState ? 'CGST+SGST' : 'IGST'}
               </th>
-              <th className="py-3 px-4 text-right font-medium rounded-tr-lg">Amount</th>
+              <th className="py-3 px-3 text-right font-medium rounded-tr-lg">Amount</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item: any, idx: number) => {
-              const itemName = item.itemName || item.inventoryItem?.name || `Product / Material #${idx + 1}`;
-              const qty = safe(item.quantity);
-              const price = safe(item.price);
-              const taxable = qty * price;
-              const tax = taxable * (safe(item.gstRate) / 100);
-              
+              const itemName = item.itemName || item.productName || item.name || item.inventoryItem?.name || `Item #${idx + 1}`;
+              const qty = safe(item.quantity ?? item.qty);
+              const price = safe(item.price ?? item.rate);
+              const gross = qty * price;
+              const discAmt = safe(item.discountAmount) || (item.discountPct ? round(gross * safe(item.discountPct) / 100) : safe(item.discount));
+              const taxable = Math.max(0, gross - discAmt);
+              const gstRate = safe(item.gstRate ?? item.taxPct ?? item.taxPercent);
+              const tax = round(taxable * (gstRate / 100));
+              const rowTotal = round(taxable + tax);
+
               return (
                 <tr key={idx} className="bg-gray-50/50 border-b-4 border-white">
-                  <td className="py-3 px-4 text-gray-900 font-medium">
-                    {idx + 1}. {itemName}
+                  <td className="py-3 px-2 text-center text-gray-500 font-medium whitespace-nowrap">
+                    {idx + 1}
                   </td>
-                  <td className="py-3 px-2 text-center text-gray-600 font-mono text-[11px] truncate max-w-[70px]" title={item.hsnCode || '—'}>{item.hsnCode || '—'}</td>
-                  <td className="py-3 px-2 text-right text-gray-600">{qty}</td>
-                  {hasUnitData && <td className="py-3 px-2 text-center text-gray-600">{item.unit || '—'}</td>}
-                  <td className="py-3 px-2 text-right text-gray-600">{safe(item.gstRate)}%</td>
-                  <td className="py-3 px-4 text-right text-gray-600">₹ {fmt(taxable)}</td>
-                  <td className="py-3 px-4 text-right text-gray-600">₹ {fmt(tax)}</td>
-                  <td className="py-3 px-4 text-right text-gray-900 font-medium">₹ {fmt(taxable + tax)}</td>
+                  <td className="py-3 px-3 text-gray-900 font-medium">
+                    {itemName}
+                  </td>
+                  <td className="py-3 px-2 text-center text-gray-600 font-mono text-[11px] truncate max-w-[65px]" title={item.hsnCode || '—'}>
+                    {item.hsnCode || '—'}
+                  </td>
+                  <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
+                    {qty}
+                  </td>
+                  {hasUnitData && (
+                    <td className="py-3 px-2 text-center text-gray-600 whitespace-nowrap">
+                      {item.unit || '—'}
+                    </td>
+                  )}
+                  <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
+                    ₹ {fmt(price)}
+                  </td>
+                  {hasDiscountColumn && (
+                    <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
+                      {discAmt > 0 ? `₹ ${fmt(discAmt)}` : '—'}
+                    </td>
+                  )}
+                  <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
+                    {gstRate}%
+                  </td>
+                  <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
+                    ₹ {fmt(taxable)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
+                    ₹ {fmt(tax)}
+                  </td>
+                  <td className="py-3 px-3 text-right text-gray-900 font-medium whitespace-nowrap">
+                    ₹ {fmt(rowTotal)}
+                  </td>
                 </tr>
               );
             })}
@@ -438,27 +465,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           
           {/* Left: Bank & Terms */}
           <div className="flex-1">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h3 className="text-[#F97316] font-semibold text-base mb-3">Bank & Payment Details</h3>
-                <table className="text-xs border-separate border-spacing-y-1.5">
-                  <tbody>
-                    <tr><td className="text-gray-500 w-32">Account Holder Name</td><td className="text-gray-900 font-medium">{companyDetails.name}</td></tr>
-                    <tr><td className="text-gray-500">Account Number</td><td className="text-gray-900 font-medium font-mono">45366287987</td></tr>
-                    <tr><td className="text-gray-500">IFSC</td><td className="text-gray-900 font-medium font-mono">HDFC0018159</td></tr>
-                    <tr><td className="text-gray-500">Account Type</td><td className="text-gray-900 font-medium">Savings</td></tr>
-                    <tr><td className="text-gray-500">Bank</td><td className="text-gray-900 font-medium">HDFC Bank</td></tr>
-                    <tr><td className="text-gray-500">UPI</td><td className="text-gray-900 font-medium">payment@hdfc</td></tr>
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-[10px] text-gray-400">UPI - Scan to Pay</span>
-                <div className="w-24 h-24 bg-gray-100 flex items-center justify-center rounded">
-                  <QrCode size={80} className="text-gray-900" />
-                </div>
-              </div>
-            </div>
+
 
             <div>
               <h3 className="text-[#F97316] font-semibold text-base mb-2">Terms and Conditions</h3>

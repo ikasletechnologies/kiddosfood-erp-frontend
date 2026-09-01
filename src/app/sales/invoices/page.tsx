@@ -43,20 +43,20 @@ const UNITS = [
 
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
-  { label: "IGST@0%", value: 0 },
   { label: "GST@0%", value: 0 },
-  { label: "IGST@0.25%", value: 0.25 },
+  { label: "IGST@0%", value: 0 },
   { label: "GST@0.25%", value: 0.25 },
-  { label: "IGST@3%", value: 3 },
+  { label: "IGST@0.25%", value: 0.25 },
   { label: "GST@3%", value: 3 },
-  { label: "IGST@5%", value: 5 },
+  { label: "IGST@3%", value: 3 },
   { label: "GST@5%", value: 5 },
-  { label: "IGST@12%", value: 12 },
+  { label: "IGST@5%", value: 5 },
   { label: "GST@12%", value: 12 },
-  { label: "IGST@18%", value: 18 },
+  { label: "IGST@12%", value: 12 },
   { label: "GST@18%", value: 18 },
-  { label: "IGST@28%", value: 28 },
+  { label: "IGST@18%", value: 18 },
   { label: "GST@28%", value: 28 },
+  { label: "IGST@28%", value: 28 },
 ];
 
 const INDIAN_STATES = [
@@ -79,6 +79,69 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   CANCELLED:{ label: "Cancelled",color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
+// ── Helper Functions for Product Units ───────────────────────────────────────
+
+function normalizeUnit(raw: string | undefined | null): string {
+  if (!raw) return "NONE";
+  const s = raw.trim().toUpperCase();
+  if (!s || s === "NONE") return "NONE";
+
+  if (s === "KG" || s === "KGS" || s === "KILOGRAM" || s === "KILOGRAMS") return "KGS";
+  if (s === "G" || s === "GRM" || s === "GRAM" || s === "GRAMS" || s === "GM") return "GRM";
+  if (s === "L" || s === "LTR" || s === "LITER" || s === "LITERS" || s === "LITRE" || s === "LITRES") return "LTR";
+  if (s === "PC" || s === "PCS" || s === "PIECE" || s === "PIECES") return "PCS";
+  if (s === "NO" || s === "NOS" || s === "NUMBER" || s === "NUMBERS") return "NOS";
+  if (s === "BOX" || s === "BOXES") return "BOX";
+  if (s === "BAG" || s === "BAGS") return "BAG";
+  if (s === "BDL" || s === "BUNDLE" || s === "BUNDLES") return "BDL";
+  if (s === "CT" || s === "CARAT" || s === "CARATS") return "CT";
+  if (s === "CMS" || s === "CENTIMETER" || s === "CENTIMETERS") return "CMS";
+  if (s === "DZN" || s === "DOZEN" || s === "DOZENS") return "DZN";
+  if (s === "MTR" || s === "METER" || s === "METERS" || s === "METRE") return "MTR";
+  if (s === "PKT" || s === "PACK" || s === "PACKS" || s === "PACKET" || s === "PACKETS") return "PKT";
+  if (s === "ROLL" || s === "ROLLS") return "ROLL";
+  if (s === "SQF" || s === "SQFT" || s === "SQUARE FEET") return "SQF";
+  if (s === "TNE" || s === "TON" || s === "TONS") return "TNE";
+  if (s === "UNT" || s === "UNIT" || s === "UNITS") return "UNT";
+
+  const match = UNITS.find(u => u.code === s || u.short.toUpperCase() === s || u.label.toUpperCase().includes(s));
+  return match ? match.code : s;
+}
+
+function getUnitOptions(item: LineItem): { code: string; short: string; label: string }[] {
+  if (!item.productId) return UNITS;
+  const configured: { code: string; short: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const addUnit = (codeOrName: string, labelStr?: string) => {
+    if (!codeOrName) return;
+    const norm = normalizeUnit(codeOrName);
+    const existingUnit = UNITS.find(u => u.code === norm);
+    const code = existingUnit ? existingUnit.code : norm;
+    const short = existingUnit ? existingUnit.short : codeOrName;
+    const label = labelStr || (existingUnit ? existingUnit.label : short);
+
+    if (!seen.has(code)) {
+      seen.add(code);
+      configured.push({ code, short, label });
+    }
+  };
+
+  if (item.unit && item.unit !== "NONE") {
+    addUnit(item.unit);
+  }
+  if (item.baseUnit) {
+    const baseName = typeof item.baseUnit === "string" ? item.baseUnit : item.baseUnit.shortName || item.baseUnit.name;
+    addUnit(baseName);
+  }
+  (item.conversions || []).forEach((c: any) => {
+    const convUnit = c.unit ? (typeof c.unit === "string" ? c.unit : c.unit.shortName || c.unit.name) : c.unitId;
+    if (convUnit) addUnit(convUnit);
+  });
+
+  return configured.length > 0 ? configured : UNITS;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -89,6 +152,7 @@ interface LineItem {
   unit: string;
   rate: number;
   discountPct: number;
+  discountAmount?: number;
   taxPct: number;
   taxLabel?: string;
   baseUnit?: any;
@@ -109,6 +173,7 @@ function makeItem(): LineItem {
     rate: 0,
     basePrice: 0,
     discountPct: 0,
+    discountAmount: 0,
     taxPct: 0,
     taxLabel: "NONE",
     batchNumber: "",
@@ -117,16 +182,17 @@ function makeItem(): LineItem {
 }
 
 function computeRow(item: LineItem, withTax: boolean) {
-  const gross = item.qty * item.rate;
-  const discAmt = parseFloat((gross * item.discountPct / 100).toFixed(2));
+  const gross = (item.qty || 0) * (item.rate || 0);
+  const discAmt = item.discountAmount !== undefined && item.discountAmount > 0
+    ? item.discountAmount
+    : parseFloat((gross * (item.discountPct || 0) / 100).toFixed(2));
+  const afterDisc = Math.max(0, gross - discAmt);
   if (withTax) {
-    const netAmt = gross - discAmt;
-    const taxAmt = parseFloat((netAmt * item.taxPct / (100 + item.taxPct)).toFixed(2));
-    return { discAmt, taxAmt, amount: parseFloat(netAmt.toFixed(2)) };
+    const taxAmt = parseFloat((afterDisc * item.taxPct / (100 + item.taxPct)).toFixed(2));
+    return { gross, discAmt, taxAmt, amount: parseFloat(afterDisc.toFixed(2)) };
   }
-  const taxable = gross - discAmt;
-  const taxAmt = parseFloat((taxable * item.taxPct / 100).toFixed(2));
-  return { discAmt, taxAmt, amount: parseFloat((taxable + taxAmt).toFixed(2)) };
+  const taxAmt = parseFloat((afterDisc * item.taxPct / 100).toFixed(2));
+  return { gross, discAmt, taxAmt, amount: parseFloat((afterDisc + taxAmt).toFixed(2)) };
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
@@ -614,6 +680,9 @@ export default function SalesInvoicesPage() {
       console.error("Failed to fetch product batches", err);
     }
 
+    const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
+    const normalizedUnit = normalizeUnit(rawUnit);
+
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
@@ -621,11 +690,11 @@ export default function SalesInvoicesPage() {
         itemSearch: p.name,
         basePrice: p.basePrice || p.price || 0,
         rate: p.basePrice || p.price || 0,
-        unit: p.unit || "NONE",
+        unit: normalizedUnit,
         taxPct: p.taxPercent || 0,
         taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
-        baseUnit: p.baseUnit,
-        conversions: p.conversions || [],
+        baseUnit: p.baseUnit || p.unit,
+        conversions: p.unitConversions || p.conversions || [],
         availableStock: p.currentStock || 0,
         batches: productBatches,
         batchNumber: productBatches.length > 0 ? productBatches[0].batchCode : "",
@@ -638,7 +707,22 @@ export default function SalesInvoicesPage() {
     setItems(prev => prev.map((it, i) => {
       if (i !== idx) return it;
       const updated = { ...it, [field]: value };
-      
+      const gross = (updated.qty || 0) * (updated.rate || 0);
+
+      if (field === "discountPct") {
+        const pct = Number(value) || 0;
+        updated.discountPct = pct;
+        updated.discountAmount = gross > 0 ? parseFloat((gross * pct / 100).toFixed(2)) : 0;
+      } else if (field === "discountAmount") {
+        const amt = Number(value) || 0;
+        updated.discountAmount = amt;
+        updated.discountPct = gross > 0 ? parseFloat(((amt / gross) * 100).toFixed(2)) : 0;
+      } else if (field === "qty" || field === "rate") {
+        if (updated.discountPct) {
+          updated.discountAmount = parseFloat((gross * updated.discountPct / 100).toFixed(2));
+        }
+      }
+
       if (field === "unit") {
         const u = String(value).toUpperCase();
         const conv = it.conversions?.find((c: any) => 
@@ -651,6 +735,10 @@ export default function SalesInvoicesPage() {
           updated.rate = Number((updated.basePrice * conv.multiplier).toFixed(2));
         } else {
           updated.rate = updated.basePrice;
+        }
+        if (updated.discountPct) {
+          const newGross = (updated.qty || 0) * (updated.rate || 0);
+          updated.discountAmount = parseFloat((newGross * updated.discountPct / 100).toFixed(2));
         }
       }
       return updated;
@@ -1082,13 +1170,18 @@ export default function SalesInvoicesPage() {
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                       />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
+                      {customerSearch && (
+                        <X 
+                          size={14} 
+                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCustomerSearch("");
+                            setSelectedCustomer(null);
+                            setCustomerPhone("");
+                          }} 
+                        />
+                      )}
                       <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
                     </div>
                     {showCustomerDrop && (
@@ -1215,16 +1308,20 @@ export default function SalesInvoicesPage() {
               <table className="w-full text-sm border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase">
-                    <th className="w-8 px-3 py-2.5 text-center">#</th>
-                    <th className="px-3 py-2.5 text-left">Item</th>
-                    <th className="w-28 px-2 py-2.5 text-center">Batch No.</th>
-                    <th className="w-16 px-2 py-2.5 text-center">Qty</th>
-                    <th className="w-20 px-2 py-2.5 text-center">Unit</th>
-                    <th className="w-24 px-3 py-2.5 text-right">Price/Unit</th>
-                    <th className="w-16 px-2 py-2.5 text-center">Disc%</th>
-                    <th className="w-36 px-2 py-2.5 text-center">Tax</th>
-                    <th className="w-24 px-3 py-2.5 text-right">Amount</th>
-                    <th className="w-8" />
+                    <th rowSpan={2} className="w-8 px-3 py-2.5 text-center align-middle">#</th>
+                    <th rowSpan={2} className="px-3 py-2.5 text-left align-middle">Item</th>
+                    <th rowSpan={2} className="w-28 px-2 py-2.5 text-center align-middle">Batch No.</th>
+                    <th rowSpan={2} className="w-16 px-2 py-2.5 text-center align-middle">Qty</th>
+                    <th rowSpan={2} className="w-20 px-2 py-2.5 text-center align-middle">Unit</th>
+                    <th rowSpan={2} className="w-24 px-3 py-2.5 text-right align-middle">Price/Unit</th>
+                    <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
+                    <th rowSpan={2} className="w-36 px-2 py-2.5 text-center align-middle">Tax</th>
+                    <th rowSpan={2} className="w-24 px-3 py-2.5 text-right align-middle">Amount</th>
+                    <th rowSpan={2} className="w-8 align-middle" />
+                  </tr>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-center px-1.5 py-1.5 w-14">%</th>
+                    <th className="text-right px-2 py-1.5 w-20">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -1382,7 +1479,7 @@ export default function SalesInvoicesPage() {
                               className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-y-auto"
                               style={{ position: "fixed", top: unitDropRect.top + 2, left: unitDropRect.left, width: 180, maxHeight: 220, zIndex: 9999 }}
                             >
-                              {UNITS.map(u => (
+                              {getUnitOptions(item).map(u => (
                                 <button
                                   key={u.code}
                                   className={clsx(
@@ -1410,14 +1507,23 @@ export default function SalesInvoicesPage() {
                           />
                         </td>
 
-                        {/* DISC% */}
-                        <td className="px-2 py-2.5">
+                        {/* DISCOUNT */}
+                        <td className="px-1.5 py-2.5">
                           <input
                             type="number" min={0} max={100}
                             value={item.discountPct || ""}
                             placeholder="0"
                             onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent"
+                            className="w-full text-xs text-gray-700 dark:text-white text-center outline-none bg-transparent"
+                          />
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <input
+                            type="number" min={0}
+                            value={item.discountAmount || ""}
+                            placeholder="0.00"
+                            onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
+                            className="w-full text-xs text-gray-700 dark:text-white text-right outline-none bg-transparent"
                           />
                         </td>
 

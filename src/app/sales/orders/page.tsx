@@ -54,16 +54,16 @@ const UNITS = [
 
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
-  { label: "IGST@0%", value: 0 },
   { label: "GST@0%", value: 0 },
-  { label: "IGST@5%", value: 5 },
+  { label: "IGST@0%", value: 0 },
   { label: "GST@5%", value: 5 },
-  { label: "IGST@12%", value: 12 },
+  { label: "IGST@5%", value: 5 },
   { label: "GST@12%", value: 12 },
-  { label: "IGST@18%", value: 18 },
+  { label: "IGST@12%", value: 12 },
   { label: "GST@18%", value: 18 },
-  { label: "IGST@28%", value: 28 },
+  { label: "IGST@18%", value: 18 },
   { label: "GST@28%", value: 28 },
+  { label: "IGST@28%", value: 28 },
 ];
 
 const INDIAN_STATES = [
@@ -793,7 +793,11 @@ export default function SalesOrdersPage() {
                       <X 
                         size={14} 
                         className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                        onClick={(e) => { e.stopPropagation(); setCustomerSearch(""); }} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCustomerSearch("");
+                          setSelectedCustomer(null);
+                        }} 
                       />
                     )}
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
