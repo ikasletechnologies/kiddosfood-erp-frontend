@@ -166,8 +166,9 @@ export default function LineItemsTable() {
 
   return (
     <div className="w-full min-w-0">
+      {/* Desktop Table View (>= 768px) */}
       <div className={clsx(
-        "w-full max-w-full transition-all overflow-x-auto custom-scrollbar",
+        "hidden md:block w-full max-w-full transition-all overflow-x-auto custom-scrollbar",
         activeSearchId ? "min-h-[460px] pb-80" : ""
       )}>
         <table className="w-full text-left border-collapse table-auto min-w-[760px]">
@@ -175,11 +176,11 @@ export default function LineItemsTable() {
               <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-200 dark:border-slate-800">
                 <th className="px-3 py-3 w-12 text-center">#</th>
                 <th className="px-3 py-3 min-w-[240px]">Material / Item Detail</th>
-                <th className="px-3 py-3 w-32 text-center hidden md:table-cell">SKU</th>
+                <th className="px-3 py-3 w-32 text-center">SKU</th>
                 <th className="px-3 py-3 w-24 text-center">Qty</th>
-                <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">Unit</th>
+                <th className="px-2 py-3 w-20 text-center">Unit</th>
                 <th className="px-3 py-3 w-36 min-w-[130px] text-center">Unit Price</th>
-                <th className="px-2 py-3 w-20 text-center hidden sm:table-cell">GST %</th>
+                <th className="px-2 py-3 w-20 text-center">GST %</th>
                 <th className="px-3 py-3 w-36 text-right">Line Total</th>
                 <th className="px-2 py-3 w-10 text-center"></th>
               </tr>
@@ -283,7 +284,7 @@ export default function LineItemsTable() {
                         <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
 
                         {activeSearchId === item.id && (
-                          <div className="absolute top-[calc(100%+8px)] left-0 w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
+                          <div className="absolute top-[calc(100%+8px)] left-0 w-full max-w-[calc(100vw-2.5rem)] sm:w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
                             {/* Dropdown Header */}
                             <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
@@ -416,7 +417,7 @@ export default function LineItemsTable() {
                     )}
                     </div>
                   </td>
-                  <td className="px-3 py-3.5 align-middle text-center hidden md:table-cell">
+                  <td className="px-3 py-3.5 align-middle text-center">
                      <span className="text-[10px] font-bold font-mono text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md whitespace-nowrap">
                         {material?.sku || "---"}
                      </span>
@@ -436,7 +437,7 @@ export default function LineItemsTable() {
                       onKeyDown={(e) => handleKeyDown(e, item.id)}
                     />
                   </td>
-                  <td className="px-2 py-3.5 align-middle text-center hidden sm:table-cell">
+                  <td className="px-2 py-3.5 align-middle text-center">
                     {(() => {
                       const baseUnit = item.unit || "KG";
                       const options = getUnitOptions(baseUnit);
@@ -449,7 +450,6 @@ export default function LineItemsTable() {
                           title={options.length < 2 ? "This item has no alternate unit to convert to" : "Change the unit this quantity is entered in"}
                           onChange={(e) => {
                             const newUnit = e.target.value;
-                            // Optionally auto-convert quantity when unit is switched so value is retained
                             const newQty = convertQty(item.quantity, item.unit, newUnit);
                             updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty) });
                           }}
@@ -530,12 +530,301 @@ export default function LineItemsTable() {
         </table>
       </div>
 
+      {/* Mobile Item Cards View (< 768px) */}
+      <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-3 space-y-3">
+        {items.map((item, index) => {
+          const amount = item.quantity * item.price;
+          const totalWithGst = amount + (amount * (item.gstRate / 100));
+          const material = materials.find(m => m.id === item.materialId);
+          const resolvedName = item.name && item.name !== "Material" && item.name !== "Unknown Material"
+            ? item.name
+            : (material?.name || item.name || "");
+          const baseUnit = item.unit || "KG";
+          const options = getUnitOptions(baseUnit);
+
+          return (
+            <div key={item.id} className="bg-slate-50/50 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 space-y-3">
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-2.5 py-0.5 rounded-full">
+                    Item #{String(index + 1).padStart(2, '0')}
+                  </span>
+                  {material?.sku && (
+                    <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                      {material.sku}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  <span>Remove</span>
+                </button>
+              </div>
+
+              {/* Material Search Field */}
+              <div className="space-y-1 relative">
+                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                  Material / Raw Material <span className="text-rose-500">*</span>
+                </label>
+                <div
+                  className={clsx(
+                    "material-selector-container flex items-center gap-2 px-3 py-2 rounded-xl border transition-all cursor-text relative min-w-0",
+                    activeSearchId === item.id ? "z-[100]" : "z-10",
+                    !item.materialId 
+                      ? "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 focus-within:border-orange-400" 
+                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-orange-300 shadow-2xs"
+                  )}
+                  onClick={() => setActiveSearchId(item.id)}
+                >
+                  <Package size={15} className={clsx("shrink-0", item.materialId ? "text-[#f58220]" : "text-slate-400 dark:text-slate-500")} />
+                  <div className="flex flex-col flex-1 min-w-0 relative">
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        placeholder="Search Material..."
+                        className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
+                        value={activeSearchId === item.id ? searchQuery : resolvedName}
+                        readOnly={false}
+                        onChange={(e) => {
+                           setSearchQuery(e.target.value);
+                           if (item.materialId) {
+                              updateItem(item.id, { materialId: "", name: "" });
+                              setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                           }
+                           if (activeSearchId !== item.id) setActiveSearchId(item.id);
+                        }}
+                        onFocus={() => {
+                           setActiveSearchId(item.id);
+                           setSearchQuery("");
+                        }}
+                      />
+                      {(activeSearchId === item.id ? searchQuery : resolvedName) && (
+                        <button
+                          type="button"
+                          className="absolute right-0 text-slate-400 hover:text-slate-600 transition-colors p-0.5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSearchQuery("");
+                            updateItem(item.id, { materialId: "", name: "" });
+                            setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronDown size={14} className="text-slate-400 dark:text-slate-500 shrink-0" />
+
+                  {/* Dropdown in Mobile Card */}
+                  {activeSearchId === item.id && (
+                    <div className="absolute top-[calc(100%+6px)] left-0 w-full max-w-[calc(100vw-3rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
+                      <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddMaterialManually(item.id, searchQuery || "");
+                          }}
+                          className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-1 uppercase tracking-wider cursor-pointer"
+                        >
+                          <Plus size={12} /> Add New
+                        </button>
+                      </div>
+
+                      {searchQuery.trim().length > 0 && (
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAddMaterialManually(item.id, searchQuery.trim());
+                          }}
+                          className="p-3 bg-orange-50/70 dark:bg-orange-950/20 border-b border-orange-100 dark:border-orange-900/30 hover:bg-orange-100/70 cursor-pointer flex items-center justify-between transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <Plus size={13} className="text-[#f58220] shrink-0" />
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              Add &quot;{searchQuery.trim()}&quot;
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-[#f58220] uppercase bg-white dark:bg-slate-900 px-2 py-0.5 rounded border border-orange-200 shrink-0">
+                            Add
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                        {filteredMaterials.length > 0 ? (
+                          filteredMaterials.map(m => {
+                            const vendorPrice = getVendorPrice(m.id);
+                            const displayPrice = vendorPrice !== null ? vendorPrice : (m.price || 0);
+                            const isLow = m.currentStock <= (m.minimumStock || 10);
+
+                            return (
+                              <div
+                                key={m.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateItem(item.id, {
+                                    materialId: m.id,
+                                    name: m.name,
+                                    unit: m.unit || "KG",
+                                    price: displayPrice,
+                                    gstRate: m.gstRate || 5
+                                  });
+                                  setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
+                                  if (vendorPrice !== null) {
+                                    setAutoFilledIds(prev => new Set(prev).add(item.id));
+                                  } else {
+                                    setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                                  }
+                                  setActiveSearchId(null);
+                                }}
+                                className="p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
+                              >
+                                 <div className="flex flex-col gap-0.5 min-w-0 pr-2">
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">{m.name}</span>
+                                    <div className="flex items-center gap-1.5">
+                                       <span className="text-[10px] font-mono text-slate-400">{m.sku}</span>
+                                       {isLow && <span className="text-[8px] font-bold text-rose-600 bg-rose-50 px-1 py-0.2 rounded">LOW STOCK</span>}
+                                    </div>
+                                 </div>
+                                 <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                    <span className="text-xs font-bold text-orange-500 font-mono">₹{displayPrice}</span>
+                                    <span className="text-[10px] text-slate-400">Stock: {m.currentStock} {m.unit}</span>
+                                 </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="p-4 text-center text-xs text-slate-500">No materials matched</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {material && (
+                  <div className="flex items-center flex-wrap gap-1.5 pt-1">
+                     <div className={clsx(
+                       "flex items-center gap-1 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border whitespace-nowrap",
+                       material.currentStock <= (material.minimumStock || 10) 
+                         ? "bg-rose-50 text-rose-600 border-rose-200" 
+                         : "bg-emerald-50 text-emerald-600 border-emerald-200"
+                     )}>
+                       {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
+                       Stock: {material.currentStock} {item.unit || "KG"}
+                     </div>
+                    <span className="text-[9px] font-medium text-slate-400">HSN: {material.hsnCode || "N/A"}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity & Unit Row */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0"
+                    className="w-full py-2 px-2.5 bg-white dark:bg-slate-900 rounded-xl outline-none text-xs font-bold text-center border border-slate-200 dark:border-slate-800 focus:border-orange-400"
+                    value={item.quantity === 0 ? "" : item.quantity}
+                    onChange={(e) => {
+                      const entered = parseFloat(e.target.value) || 0;
+                      updateItem(item.id, { quantity: entered });
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">Unit</label>
+                  <select
+                    className="w-full py-2 px-2 bg-white dark:bg-slate-900 rounded-xl outline-none text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center border border-slate-200 dark:border-slate-800 focus:border-orange-400"
+                    value={item.unit}
+                    disabled={options.length < 2}
+                    onChange={(e) => {
+                      const newUnit = e.target.value;
+                      const newQty = convertQty(item.quantity, item.unit, newUnit);
+                      updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty) });
+                    }}
+                  >
+                    {options.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Price & GST Row */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Unit Price</label>
+                    {autoFilledIds.has(item.id) && (
+                      <span className="text-[8px] font-bold text-orange-600 bg-orange-50 px-1 py-0.2 rounded border border-orange-200 uppercase">
+                        Auto
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative flex items-center bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 focus-within:border-orange-400">
+                    <span className="pl-2.5 text-xs font-bold text-slate-400 select-none">₹</span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="0.00"
+                      className="w-full py-2 pl-1 pr-2 bg-transparent outline-none text-xs font-bold font-mono text-slate-800 dark:text-white"
+                      value={item.price === 0 ? "" : item.price}
+                      onChange={(e) => {
+                        updateItem(item.id, { price: parseFloat(e.target.value) || 0 });
+                        setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 block">GST %</label>
+                  <select
+                    className="w-full py-2 px-2 bg-purple-50/80 dark:bg-purple-900/20 rounded-xl outline-none text-xs font-bold text-purple-700 dark:text-purple-300 text-center border border-purple-200 dark:border-purple-800/40 focus:border-purple-400"
+                    value={item.gstRate}
+                    onChange={(e) => updateItem(item.id, { gstRate: parseFloat(e.target.value) || 0 })}
+                  >
+                    <option value="0">0%</option>
+                    <option value="5">5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Card Footer: Total Amount */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="text-xs text-slate-500 font-medium">Line Total (incl. Tax):</span>
+                <div className="text-right">
+                  <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
+                    ₹{totalWithGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <div className="text-[9px] text-slate-400 font-medium">
+                    Tax: ₹{(totalWithGst - amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <button
         onClick={addItem}
-        className="w-full py-4 mt-4 bg-slate-50/50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-white hover:border-orange-400 hover:text-orange-500 transition-all group"
+        className="w-full py-3.5 sm:py-4 mt-3 sm:mt-4 bg-slate-50/50 dark:bg-slate-900/50 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-500 dark:text-slate-400 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-white hover:border-orange-400 hover:text-orange-500 transition-all group cursor-pointer active:scale-95"
       >
-        <div className="w-8 h-8 rounded-full bg-white shadow-sm border border-slate-100 group-hover:border-orange-400 group-hover:bg-[#f58220] group-hover:text-white flex items-center justify-center transition-all">
-          <Plus size={16} />
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white shadow-sm border border-slate-100 group-hover:border-orange-400 group-hover:bg-[#f58220] group-hover:text-white flex items-center justify-center transition-all">
+          <Plus size={15} />
         </div>
         Add New Line Item
       </button>

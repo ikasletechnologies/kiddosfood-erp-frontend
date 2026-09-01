@@ -1,9 +1,9 @@
 "use client";
 
 import { Suspense } from "react";
-import SalesInvoicesClient from "./SalesInvoicesClient";
+import SalesInvoicesClient from "../SalesInvoicesClient";
 
-export default function SalesInvoicesPage() {
+export default function NewSalesInvoicePage() {
   return (
     <Suspense
       fallback={
@@ -12,7 +12,7 @@ export default function SalesInvoicesPage() {
         </div>
       }
     >
-      <SalesInvoicesClient initialView="list" />
+      <SalesInvoicesClient initialView="create" />
     </Suspense>
   );
 }

@@ -856,14 +856,14 @@ export default function SalesOrdersPage() {
   };
 
   // ════════════════════════════════════════════════════════════════════════════
-  // 1. CREATE/EDIT FORM VIEW (Viewport Height Locked to calc(100vh - 56px))
+  // 1. CREATE/EDIT FORM VIEW
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
         {/* Top Header */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-3 sm:px-6 py-3 flex items-center justify-between shrink-0 sticky top-0 z-30 shadow-2xs">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => {
                 if (readOnly) {
@@ -880,17 +880,18 @@ export default function SalesOrdersPage() {
                   resetForm();
                 }
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              title="Back to Orders"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <div className="flex flex-col">
-              <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <ClipboardList className="h-5 w-5 text-[#f58220]" />
-                {readOnly ? `Sales Order ${orderNo}` : view === "create" ? "Sale Order" : `Edit Order #${orderNo}`}
+            <div className="flex flex-col min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2 truncate">
+                <ClipboardList className="h-5 w-5 text-[#f58220] shrink-0" />
+                <span className="truncate">{readOnly ? `Sales Order ${orderNo}` : view === "create" ? "New Sale Order" : `Edit Order #${orderNo}`}</span>
               </h2>
               {viewOrderRef?.quotation?.quotationNumber && (
-                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 mt-0.5 pl-7">
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 mt-0.5 pl-7 truncate">
                   Source Estimate: {viewOrderRef.quotation.quotationNumber}
                 </span>
               )}
@@ -903,15 +904,14 @@ export default function SalesOrdersPage() {
           disabled={readOnly}
           style={{ border: 0, margin: 0, padding: 0, display: "contents" }}
         >
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 p-3 sm:p-4 md:p-6 max-w-6xl mx-auto space-y-4 sm:space-y-5 w-full min-w-0">
           {/* Customer + Order Details */}
-          {/* Customer + Order Details */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full min-w-0">
               {/* Left: Party + Phone */}
               <div className="space-y-3 sm:space-y-4 min-w-0">
                 <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party / Customer <span className="text-rose-500">*</span></label>
                   <div
                     className={clsx(
                       "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
@@ -920,7 +920,7 @@ export default function SalesOrdersPage() {
                     onClick={() => { if (!lockFromQuotation) setShowCustomerDrop(v => !v); }}
                   >
                     <input
-                      className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                      className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 min-w-0"
                       placeholder="Select or search party"
                       value={customerSearch}
                       disabled={lockFromQuotation}
@@ -941,7 +941,7 @@ export default function SalesOrdersPage() {
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
                   {showCustomerDrop && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
+                    <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2.5rem)] sm:w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
                       <div className="max-h-52 overflow-y-auto custom-scrollbar">
                         {filteredCustomers.length === 0 ? (
                           <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No customers found</div>
@@ -950,11 +950,11 @@ export default function SalesOrdersPage() {
                             <button
                               key={c.id}
                               type="button"
-                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left"
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left cursor-pointer"
                               onClick={() => selectCustomer(c)}
                             >
-                              <div>
-                                <div className="text-sm font-semibold text-gray-800 dark:text-white">{c.name}</div>
+                              <div className="min-w-0 pr-2">
+                                <div className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.name}</div>
                                 <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
                               </div>
                             </button>
@@ -965,7 +965,7 @@ export default function SalesOrdersPage() {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone Number</label>
                   <input
                     className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
                     placeholder="10-digit phone number"
@@ -982,7 +982,7 @@ export default function SalesOrdersPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order No</label>
-                  <div className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-white/[0.02] font-mono">{orderNo || "Auto"}</div>
+                  <div className="border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-white/[0.02] font-mono truncate">{orderNo || "Auto"}</div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Order Date</label>
@@ -1018,19 +1018,21 @@ export default function SalesOrdersPage() {
             </div>
           </div>
 
-          {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+          {/* Items Section */}
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Ordered Items</span>
               <button
                 type="button"
                 onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
-                className="px-2.5 py-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 dark:text-slate-300 transition-colors"
+                className="px-2.5 py-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-md text-gray-600 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar w-full max-w-full">
               <table className="w-full text-sm min-w-[700px]">
               <thead>
                 <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5">
@@ -1075,13 +1077,13 @@ export default function SalesOrdersPage() {
                           placeholder="Search item..."
                           className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                         />
-            {it.itemSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setOpenItemDrop("")} 
-              />
-            )}
+                        {it.itemSearch && (
+                          <X 
+                            size={14} 
+                            className="absolute right-6 top-4 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                            onClick={() => { updateItem(idx, "itemSearch", ""); setOpenItemDrop(""); }} 
+                          />
+                        )}
                         {isItemDropOpen && (
                           <div
                             className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-2xl overflow-hidden max-h-44 overflow-y-auto custom-scrollbar item-dropdown-container"
@@ -1111,7 +1113,7 @@ export default function SalesOrdersPage() {
                                 <button
                                   key={p.id}
                                   type="button"
-                                  className="w-full flex items-center justify-between px-4 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs"
+                                  className="w-full flex items-center justify-between px-4 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs cursor-pointer"
                                   onClick={() => selectProduct(idx, p)}
                                 >
                                   <div>
@@ -1144,7 +1146,7 @@ export default function SalesOrdersPage() {
                         <select
                           value={it.unit}
                           onChange={e => updateItem(idx, "unit", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
                         >
                           {getUnitOptions(it).map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
                         </select>
@@ -1189,20 +1191,21 @@ export default function SalesOrdersPage() {
                             updateItem(idx, "taxPct", val);
                             updateItem(idx, "taxLabel", opt?.label || "NONE");
                           }}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
+                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-md text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
                         >
                           {taxOptionsFor(isSameState).map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
                         </select>
                         <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5 font-mono">₹{comp.taxAmt.toFixed(2)}</div>
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-gray-700 dark:text-slate-200">
+                      <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-gray-700 dark:text-slate-200 whitespace-nowrap">
                         ₹{comp.amount.toFixed(2)}
                       </td>
                       <td className="px-4 py-2.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeRow(idx)}
-                          className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 rounded transition-colors"
+                          className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 rounded transition-colors cursor-pointer"
+                          title="Remove item"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -1213,15 +1216,163 @@ export default function SalesOrdersPage() {
               </tbody>
             </table>
             </div>
-            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
+
+            {/* Mobile Item Cards View (< 768px) */}
+            <div className="block md:hidden divide-y divide-gray-100 dark:divide-white/5 p-3 space-y-3">
+              {items.map((it, idx) => {
+                const comp = computeRow(it, withTax);
+                const isItemDropOpen = openItemDrop === it.id;
+                return (
+                  <div key={it.id} className="bg-slate-50/50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-2xl p-3.5 space-y-3">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-white/5">
+                      <span className="text-xs font-black text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-2.5 py-0.5 rounded-full">
+                        Item #{String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+
+                    {/* Item Search & Remarks */}
+                    <div className="space-y-1 relative">
+                      <label className="text-[11px] font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
+                        Product / Item <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          value={it.itemSearch}
+                          onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
+                          onFocus={() => setOpenItemDrop(it.id)}
+                          placeholder="Search product..."
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 pr-7"
+                        />
+                        {it.itemSearch && (
+                          <X 
+                            size={14} 
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                            onClick={() => { updateItem(idx, "itemSearch", ""); setOpenItemDrop(""); }} 
+                          />
+                        )}
+                      </div>
+                      {isItemDropOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-50 w-full max-w-[calc(100vw-3rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                          {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
+                            <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">No items found</div>
+                          ) : (
+                            products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).map(p => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs cursor-pointer"
+                                onClick={() => selectProduct(idx, p)}
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <strong className="text-gray-800 dark:text-white truncate block">{p.name}</strong>
+                                  <div className="text-gray-400 dark:text-slate-500 text-[10px]">SKU: {p.sku || "—"}</div>
+                                </div>
+                                <span className="text-[#f58220] font-mono font-bold shrink-0">₹{p.basePrice || p.price || 0}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                      <input
+                        value={it.remarks}
+                        onChange={e => updateItem(idx, "remarks", e.target.value)}
+                        placeholder="Remarks / delivery instructions"
+                        className="w-full px-3 py-1.5 text-xs text-gray-500 dark:text-slate-400 outline-none bg-white dark:bg-[#13151f] border border-gray-100 dark:border-white/5 rounded-lg mt-1"
+                      />
+                    </div>
+
+                    {/* Quantity & Unit Row */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Quantity</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={it.qty}
+                          onChange={e => updateItem(idx, "qty", Number(e.target.value) || 0)}
+                          className="w-full py-2 px-2.5 bg-white dark:bg-[#13151f] rounded-xl outline-none text-xs font-bold text-center border border-gray-200 dark:border-white/10 focus:border-orange-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Unit</label>
+                        <select
+                          value={it.unit}
+                          onChange={e => updateItem(idx, "unit", e.target.value)}
+                          className="w-full py-2 px-2 bg-white dark:bg-[#13151f] rounded-xl outline-none text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider text-center border border-gray-200 dark:border-white/10 focus:border-orange-400 cursor-pointer"
+                        >
+                          {getUnitOptions(it).map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Price & Tax Row */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Price/Unit</label>
+                        <div className="relative flex items-center bg-white dark:bg-[#13151f] rounded-xl border border-gray-200 dark:border-white/10 focus-within:border-orange-400">
+                          <span className="pl-2.5 text-xs font-bold text-gray-400 select-none">₹</span>
+                          <input
+                            type="number"
+                            min={0}
+                            value={it.rate || ""}
+                            onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
+                            placeholder="0.00"
+                            className="w-full py-2 pl-1 pr-2 bg-transparent outline-none text-xs font-bold font-mono text-gray-800 dark:text-white"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1 block">Tax %</label>
+                        <select
+                          value={it.taxPct}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            const opt = taxOptionsFor(isSameState).find(x => x.value === val);
+                            updateItem(idx, "taxPct", val);
+                            updateItem(idx, "taxLabel", opt?.label || "NONE");
+                          }}
+                          className="w-full py-2 px-2 bg-white dark:bg-[#13151f] rounded-xl outline-none text-xs font-bold text-gray-700 dark:text-slate-300 text-center border border-gray-200 dark:border-white/10 focus:border-orange-400 cursor-pointer"
+                        >
+                          {taxOptionsFor(isSameState).map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Card Footer: Total Amount */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-white/5">
+                      <span className="text-xs text-gray-500 font-medium">Line Total:</span>
+                      <div className="text-right">
+                        <span className="text-sm font-black text-gray-900 dark:text-white font-mono">
+                          ₹{comp.amount.toFixed(2)}
+                        </span>
+                        <div className="text-[9px] text-gray-400 font-medium font-mono">
+                          Tax: ₹{comp.taxAmt.toFixed(2)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex flex-wrap items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={addRow}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 transition-all cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" /> Add Row
               </button>
-              <div className="flex items-center gap-5 text-xs text-gray-400 dark:text-slate-500">
+              <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-slate-500">
                 <span>Qty: <strong className="text-gray-700 dark:text-slate-200">{totalQty}</strong></span>
                 <span>Tax: <strong className="text-gray-700 dark:text-slate-200 font-mono">₹{totalTax.toFixed(2)}</strong></span>
               </div>
@@ -1231,13 +1382,13 @@ export default function SalesOrdersPage() {
           {/* Notes + Summary */}
           <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
             {/* Left: Add-ons */}
-            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3 min-w-0">
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3 min-w-0 shadow-2xs">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setShowTerms(v => !v)}
                   className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
+                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all cursor-pointer",
                     showTerms ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
@@ -1247,7 +1398,7 @@ export default function SalesOrdersPage() {
                   type="button"
                   onClick={() => setShowDesc(v => !v)}
                   className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
+                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all cursor-pointer",
                     showDesc ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
@@ -1256,14 +1407,14 @@ export default function SalesOrdersPage() {
                 <button
                   type="button"
                   onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer"
                 >
                   <ImageIcon className="h-3.5 w-3.5" /> Image
                 </button>
                 <button
                   type="button"
                   onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer"
                 >
                   <LinkIcon className="h-3.5 w-3.5" /> Document
                 </button>
@@ -1279,7 +1430,7 @@ export default function SalesOrdersPage() {
                       type="button"
                       onClick={() => setPaymentType(type)}
                       className={clsx(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                        "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer",
                         paymentType === type
                           ? "bg-orange-500 text-white border-orange-500"
                           : "bg-white dark:bg-card text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-orange-300"
@@ -1318,7 +1469,7 @@ export default function SalesOrdersPage() {
             </div>
 
             {/* Right: Summary */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
                 <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{subTotal.toFixed(2)}</span>
@@ -1336,7 +1487,7 @@ export default function SalesOrdersPage() {
                     id="so_roundoff"
                     checked={roundOffEnabled}
                     onChange={e => setRoundOffEnabled(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20"
+                    className="h-3.5 w-3.5 rounded border-gray-300 dark:border-white/20 accent-orange-500"
                   />
                   Round Off
                 </label>
@@ -1352,7 +1503,7 @@ export default function SalesOrdersPage() {
         </fieldset>
 
         {/* Action Bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-3 sm:px-6 py-3 flex flex-wrap items-center justify-end gap-2.5 sm:gap-3 shrink-0 sticky bottom-0 z-30 shadow-lg">
           {readOnly ? (
             <>
               <button
@@ -1362,7 +1513,7 @@ export default function SalesOrdersPage() {
                   resetForm();
                   window.history.replaceState({}, "", window.location.pathname);
                 }}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
+                className="px-4 py-2 text-xs sm:text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 Back to List
               </button>
@@ -1370,7 +1521,7 @@ export default function SalesOrdersPage() {
                 <button
                   type="button"
                   onClick={(e) => handleConfirm(viewOrderRef, e)}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
                 >
                   <Check className="h-4 w-4" /> Confirm Order
                 </button>
@@ -1380,7 +1531,7 @@ export default function SalesOrdersPage() {
                   type="button"
                   onClick={(e) => handleCreateProforma(viewOrderRef, e)}
                   disabled={convertingId === viewOrderRef?.id}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm cursor-pointer"
                 >
                   {convertingId === viewOrderRef?.id ? "Creating..." : "Create Proforma Invoice"}
                 </button>
@@ -1388,7 +1539,7 @@ export default function SalesOrdersPage() {
               {viewOrderRef?.proformaInvoiceId && (
                 <a
                   href={`/sales/proforma-invoice?id=${viewOrderRef.proformaInvoiceId}`}
-                  className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
                 >
                   View Proforma Invoice
                 </a>
@@ -1398,31 +1549,24 @@ export default function SalesOrdersPage() {
             <>
               <button
                 type="button"
-                onClick={() => { setView("list"); resetForm(); }}
-                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
                 onClick={() => handleSave("OPEN")}
                 disabled={saving}
-                className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+                className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors shadow-sm disabled:opacity-50 cursor-pointer active:scale-95"
               >
-                <Check className="h-4 w-4" /> {saving ? "Updating..." : "Update Order"}
+                <Check className="h-4 w-4" /> {saving ? "Saving..." : (viewOrderRef ? "Update Order" : "Save Order")}
               </button>
             </>
           )}
-          </div>
         </div>
-      );
-    }
-  
-    // ════════════════════════════════════════════════════════════════════════════
-    // 2. LIST VIEW
-    // ════════════════════════════════════════════════════════════════════════════
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 2. LIST VIEW
+  // ════════════════════════════════════════════════════════════════════════════
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
 
         {/* ── Page Header Toolbar ── */}
         <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end w-full min-w-0">

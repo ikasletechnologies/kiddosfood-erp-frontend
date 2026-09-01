@@ -265,39 +265,40 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/70 p-4 md:p-8 overflow-y-auto print:p-0 print:bg-white">
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center bg-black/70 p-2 sm:p-4 md:p-8 overflow-y-auto print:p-0 print:bg-white">
       {/* Action Bar */}
-      <div className="fixed top-4 right-6 flex gap-2 print:hidden z-[110]">
+      <div className="fixed top-2 sm:top-4 right-2 sm:right-6 left-2 sm:left-auto flex flex-wrap sm:flex-nowrap justify-end items-center gap-1.5 sm:gap-2 print:hidden z-[110]">
         <button
           onClick={() => window.print()}
-          className="flex items-center gap-2 bg-[#F97316] text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-orange-600 transition-colors"
+          className="flex items-center gap-1.5 sm:gap-2 bg-[#F97316] text-white px-3 sm:px-5 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-orange-600 transition-colors"
         >
-          <Printer size={16} /> Print {docTitle}
+          <Printer size={15} /> <span>Print {docTitle}</span>
         </button>
         <button
           onClick={handleDownload}
           disabled={generating !== null}
-          className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
+          className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
         >
-          {generating === 'download' ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />} Download
+          {generating === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} <span>Download</span>
         </button>
         <button
           onClick={handleShare}
           disabled={generating !== null}
-          className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
+          className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
         >
-          {generating === 'share' ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />} Share
+          {generating === 'share' ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />} <span>Share</span>
         </button>
         <button
           onClick={onClose}
-          className="flex items-center gap-2 bg-white text-gray-700 px-4 py-2.5 rounded-xl text-sm font-bold shadow hover:bg-gray-50 transition-colors"
+          className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors"
         >
-          <X size={16} /> Close
+          <X size={15} /> <span>Close</span>
         </button>
       </div>
 
       {/* Invoice Document (A4 format) */}
-      <div ref={docRef} className="w-full max-w-[210mm] min-h-[297mm] bg-white text-gray-800 shadow-2xl my-10 print:my-0 print:shadow-none p-10 md:p-14 relative">
+      <div className="w-full max-w-[210mm] my-12 sm:my-10 print:my-0 overflow-x-auto custom-scrollbar">
+        <div ref={docRef} className="w-full min-w-[640px] md:min-w-0 min-h-[297mm] bg-white text-gray-800 shadow-2xl print:shadow-none p-6 sm:p-10 md:p-14 relative">
         
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
@@ -544,6 +545,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           </p>
         </div>
 
+      </div>
       </div>
     </div>,
     document.body

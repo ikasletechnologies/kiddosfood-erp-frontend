@@ -190,26 +190,26 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       />
 
       {/* Top bar */}
-      <div className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0D14]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between shadow-2xs">
-        <div className="flex items-center gap-3">
+      <div className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0D14]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <button
             type="button"
             onClick={() => router.push("/purchases/orders")}
-            className="p-2 -ml-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+            className="p-2 -ml-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors shrink-0"
             title="Back to Purchase Orders"
           >
             <ArrowLeft size={18} />
           </button>
-          <div className="p-2.5 bg-orange-50 dark:bg-orange-950/30 text-[#f58220] rounded-xl border border-orange-100 dark:border-orange-900/30">
+          <div className="p-2 sm:p-2.5 bg-orange-50 dark:bg-orange-950/30 text-[#f58220] rounded-xl border border-orange-100 dark:border-orange-900/30 shrink-0">
             <Package size={18} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
                 {editId ? "Edit Purchase Order" : "New Purchase Order"}
               </h1>
               <span className={clsx(
-                "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border",
+                "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shrink-0",
                 poStatus === "DRAFT" 
                   ? "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" 
                   : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/40"
@@ -220,33 +220,33 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             <p className="text-xs text-slate-400 font-mono">#{poNumber}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowPreview(true)}
-            className="px-3.5 py-2 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs uppercase tracking-wider"
+            className="px-3 sm:px-3.5 py-2 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs uppercase tracking-wider"
           >
-            <FileText size={14} /> Preview
+            <FileText size={14} /> <span className="hidden xs:inline">Preview</span>
           </button>
           <button
             type="button"
             onClick={handleCreatePO}
             disabled={!isValid || isSubmitting}
-            className="flex items-center gap-2 px-5 py-2 text-xs font-bold uppercase tracking-wider bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2 text-xs font-bold uppercase tracking-wider bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
           >
-            <CheckCircle2 size={15} /> {isSubmitting ? (editId ? "Updating..." : "Creating...") : (editId ? "Update Purchase Order" : "Create Purchase Order")}
+            <CheckCircle2 size={15} /> {isSubmitting ? (editId ? "Updating..." : "Creating...") : (editId ? "Update PO" : "Create PO")}
           </button>
         </div>
       </div>
 
-      <div className="p-6 max-w-[1600px] mx-auto space-y-5">
+      <div className="p-3 sm:p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 sm:space-y-5 w-full min-w-0">
         {contextMessage && (
-          <div className="bg-orange-50/80 border border-orange-200 p-4 rounded-xl flex items-center justify-between shadow-2xs">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-[#f58220] text-white rounded-lg shadow-2xs">
+          <div className="bg-orange-50/80 border border-orange-200 p-3.5 sm:p-4 rounded-xl flex items-center justify-between shadow-2xs gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 bg-[#f58220] text-white rounded-lg shadow-2xs shrink-0">
                 <Package size={16} />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-xs font-bold text-orange-950 uppercase tracking-tight">{contextMessage}</h3>
                 <p className="text-xs text-orange-700 mt-0.5">The quantities have been pre-filled with the calculated shortage amount. Please select a vendor and confirm the price.</p>
               </div>
