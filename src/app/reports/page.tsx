@@ -121,53 +121,9 @@ interface ReportData {
   closingBalance?: number;
 }
 
-// ─── 5 Parent Definitions ─────────────────────────────────────────────────────
+// ─── Parent Definitions ───────────────────────────────────────────────────────
 
 const PARENT_REPORTS: ParentReportDef[] = [
-  {
-    id: "production",
-    label: "Production",
-    description: "Batches, recipes, QC inspections and scrap logs.",
-    children: [
-      { id: "Batch Manufacturing History", label: "Batch Manufacturing History", description: "Batch runs, actual yield, status and duration." },
-      { id: "Production Planning", label: "Production Planning", description: "Scheduled manufacturing plans and output targets." },
-      { id: "QC & Inspection Report", label: "QC & Inspection Report", description: "Quality control inspection outcomes and notes." },
-      { id: "Material Consumption Report", label: "Material Consumption", description: "Raw materials consumed across batches." },
-      { id: "Wastage & Scrap Report", label: "Wastage & Scrap", description: "Scrap quantities and damage reasons." },
-      { id: "Formulation & Recipe Costing", label: "Recipe Costing", description: "Recipe ingredients and estimated unit cost." },
-      { id: "Packaging", label: "Packaging", description: "Packaged goods log and batch records." },
-    ],
-  },
-  {
-    id: "inventory",
-    label: "Inventory",
-    description: "Stock valuation, item P&L, stock movements and low stock alerts.",
-    children: [
-      { id: "Stock summary", label: "Stock Summary", description: "Current stock quantities, unit rates and warehouse valuation." },
-      { id: "Item Report By Party", label: "Item Report By Party", description: "Item-wise transactions by party." },
-      { id: "Item Wise Profit And Loss", label: "Item Wise Profit & Loss", description: "Gross margin and profit per catalog item." },
-      { id: "Item Category Wise Profit And Loss", label: "Item Category Wise Profit", description: "Profitability by product category." },
-      { id: "Low Stock Summary", label: "Low Stock Summary", description: "Items below minimum reorder point." },
-      { id: "Stock Detail", label: "Stock Detail", description: "Chronological inward and outward stock movements." },
-      { id: "Item Detail", label: "Item Detail", description: "Product catalog with SKUs, HSN codes and rates." },
-      { id: "Sale/ Purchase Report By Item Category", label: "Sale / Purchase Report By Item", description: "Category-wise sales and purchase volume." },
-      { id: "Stock Summary Report By Item Category", label: "Stock Summary Report By Item", description: "Category-level stock quantity and valuation." },
-      { id: "Item Wise Discount", label: "Item Wise Discount", description: "Discounts applied across catalog products." },
-    ],
-  },
-  {
-    id: "inventory-ledger",
-    label: "Inventory Ledger",
-    description: "Raw material logs, stock movement audits and adjustments.",
-    children: [
-      { id: "Raw Material Ledger", label: "Raw Material Ledger", description: "Item-wise ledger with Inward, Outward and Balance." },
-      { id: "Stock Movement History", label: "Stock Movement History", description: "Movement audit records across all items." },
-      { id: "Inward & GRN Movements", label: "Inward & GRN Movements", description: "Stock received from suppliers and purchase orders." },
-      { id: "Outward & Dispatch Movements", label: "Outward & Dispatch Movements", description: "Stock issued and dispatched." },
-      { id: "Stock Adjustments & Reconciliation", label: "Stock Adjustments", description: "Physical count adjustments and audit variances." },
-      { id: "Finished Goods Stock", label: "Finished Goods Stock", description: "Stock balance for finished catalog goods." },
-    ],
-  },
   {
     id: "financial",
     label: "Financial",
@@ -189,10 +145,6 @@ const PARENT_REPORTS: ParentReportDef[] = [
       { id: "Sale", label: "Sale Invoices", category: "Statements & P&L", description: "Sales invoice records and dues." },
       { id: "Purchase", label: "Purchase Orders", category: "Statements & P&L", description: "Vendor purchase orders and billed values." },
       { id: "All Transactions", label: "Payment Register", category: "Statements & P&L", description: "Cash, Bank & UPI payment vouchers and receipts." },
-
-      // GSTR-1/2/3B/9, HSN Summary and SAC now live as dedicated pages
-      // under /reports/gst/* (see the sidebar's "GST Reports" section),
-      // not as entries in this generic report catalog.
 
       // Taxes & Compliance
       { id: "GST Report", label: "GST Report", category: "Taxes & Compliance", description: "GST collected and paid summary." },
@@ -218,16 +170,16 @@ const PARENT_REPORTS: ParentReportDef[] = [
   {
     id: "franchise",
     label: "Franchise",
-    description: "Party statements, branch performance and party-wise P&L.",
+    description: "Branch performance, dues & balances, party statements and party-wise P&L.",
     children: [
+      { id: "Franchise Performance Summary", label: "Franchise Performance", description: "Branch revenue and operating metrics." },
+      { id: "Franchise Dues & Balances", label: "Franchise Outstanding", description: "Branch dues and outstanding limits." },
       { id: "Party Statement", label: "Party Statement", description: "Party ledger statement." },
       { id: "Party wise Profit & Loss", label: "Party wise Profit & Loss", description: "Profitability per party relationship." },
       { id: "All parties", label: "All Parties", description: "Party directory with live balances." },
       { id: "Party Report By Item", label: "Party Report By Item", description: "Item-wise sales per party." },
       { id: "Sale Purchase By Party", label: "Sale Purchase By Party", description: "Sales vs. purchases comparison." },
       { id: "Sale Purchase By Party Group", label: "Sale Purchase By Party Group", description: "Transactions grouped by customer tier." },
-      { id: "Franchise Dues & Balances", label: "Franchise Dues & Balances", description: "Branch dues and outstanding limits." },
-      { id: "Franchise Performance Summary", label: "Franchise Performance", description: "Branch revenue and operating metrics." },
     ],
   },
 ];
@@ -416,7 +368,35 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "status", label: "Status" },
     ],
   },
+  "Franchise Outstanding": {
+    title: "Franchise Dues & Balances",
+    kpiLabel: "Total Outstanding Dues",
+    tableTitle: "Franchise Dues & Balances",
+    columns: [
+      { key: "name", label: "Franchise Name" },
+      { key: "owner", label: "Owner / Contact" },
+      { key: "contact", label: "Phone" },
+      { key: "creditLimit", label: "Credit Limit" },
+      { key: "walletBalance", label: "Wallet Balance" },
+      { key: "dueBalance", label: "Outstanding Dues" },
+      { key: "status", label: "Status" },
+    ],
+  },
   "Franchise Performance Summary": {
+    title: "Franchise Performance Summary",
+    kpiLabel: "Total Franchise Sales",
+    tableTitle: "Franchise Performance Summary",
+    columns: [
+      { key: "name", label: "Franchise Name" },
+      { key: "location", label: "Location" },
+      { key: "totalSales", label: "Total Sales" },
+      { key: "totalExpenses", label: "Total Expenses" },
+      { key: "netPerformance", label: "Net Performance" },
+      { key: "ordersCount", label: "Orders" },
+      { key: "status", label: "Status" },
+    ],
+  },
+  "Franchise Performance": {
     title: "Franchise Performance Summary",
     kpiLabel: "Total Franchise Sales",
     tableTitle: "Franchise Performance Summary",

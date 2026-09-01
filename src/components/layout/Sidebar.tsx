@@ -203,27 +203,39 @@ export default function Sidebar() {
                 >
                   {finalItems.map((item) => {
                     const itemIcon = item.icon;
-                    const isExpanded =
-                      expandedMenus.includes(item.label) || !!searchTerm;
                     const hasChildren = !!item.children?.length;
+                    const hasActiveChild =
+                      hasChildren &&
+                      item.children!.some(
+                        (c) => pathname === c.href || fullPath === c.href
+                      );
+                    // A child route being open (fresh load, deep link, or
+                    // browser back/forward) should expand its parent
+                    // submenu automatically, not just leave the parent row
+                    // highlighted with the list collapsed.
+                    const isExpanded =
+                      expandedMenus.includes(item.label) || !!searchTerm || hasActiveChild;
 
                     const currentReportParent =
                       pathname === "/reports"
                         ? searchParams?.get("parent") || "production"
                         : null;
-                    const isReportItem = item.href.startsWith("/reports?parent=");
+                    // Only a flat, childless item (Production/Inventory/
+                    // Inventory Ledger/Franchise) uses the bare-category
+                    // "/reports?parent=X" pattern that this special-case
+                    // exists for. A subgroup parent (Transaction Reports,
+                    // Party Reports, etc.) also happens to have a first
+                    // child whose href starts the same way — it must fall
+                    // through to the general active/expand logic below
+                    // instead, or its own highlight would never match.
+                    const isReportItem = !hasChildren && item.href.startsWith("/reports?parent=");
                     const itemReportParent = isReportItem
                       ? item.href.replace("/reports?parent=", "")
                       : null;
 
                     const isActive = isReportItem
                       ? pathname === "/reports" && currentReportParent === itemReportParent
-                      : pathname === item.href ||
-                        fullPath === item.href ||
-                        (hasChildren &&
-                          item.children?.some(
-                            (c) => pathname === c.href || fullPath === c.href
-                          ));
+                      : pathname === item.href || fullPath === item.href || hasActiveChild;
 
                     const isHovered = hoveredItem === item.label;
                     const isComingSoon = item.isComingSoon;

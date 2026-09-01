@@ -58,6 +58,128 @@ const SUPER_ONLY = ["SUPER_ADMIN"];
 const FRANCHISE_ONLY = ["FRANCHISE_ADMIN"];
 const ALL_ROLES = ["SUPER_ADMIN", "FRANCHISE_ADMIN"];
 
+// Deep-links into the existing generic report catalog (src/app/reports/page.tsx),
+// which already supports selecting a specific child report via ?report=<id>.
+// Built with URLSearchParams (not encodeURIComponent) so the query-string
+// encoding matches what Sidebar.tsx's active-route check compares against at
+// runtime (searchParams.toString() also uses URLSearchParams serialization,
+// e.g. space -> "+") — any other encoding would silently break active
+// highlighting for report ids containing spaces.
+const reportLink = (parent: string, report: string) =>
+  `/reports?${new URLSearchParams({ parent, report }).toString()}`;
+
+// Single source of truth for every "REPORTS" subgroup. Each entry becomes one
+// collapsible MenuItem (icon + label + children) inside the REPORTS section
+// below — add a new report to an existing group, or a whole new group, here
+// rather than hand-editing the section's items array.
+const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: string }[] }[] = [
+  {
+    icon: Landmark,
+    label: "Transaction Reports",
+    items: [
+      { label: "Sale", href: reportLink("financial", "Sale") },
+      { label: "Purchase", href: reportLink("financial", "Purchase") },
+      { label: "Day Book", href: "/accounting/day-book" },
+      { label: "All Transactions", href: reportLink("financial", "All Transactions") },
+      { label: "Profit & Loss", href: "/accounting/profit-loss" },
+      { label: "Bill Wise Profit", href: reportLink("financial", "Bill Wise Profit") },
+      { label: "Cash Flow", href: "/accounting/cash-flow" },
+      { label: "Trial Balance", href: "/accounting/trial-balance" },
+      { label: "Balance Sheet", href: "/accounting/balance-sheet" },
+    ],
+  },
+  {
+    icon: Users,
+    label: "Party Reports",
+    items: [
+      { label: "Party Statement", href: reportLink("franchise", "Party Statement") },
+      { label: "Party Wise Profit & Loss", href: reportLink("franchise", "Party wise Profit & Loss") },
+      { label: "All Parties", href: reportLink("franchise", "All parties") },
+      { label: "Party Report By Item", href: reportLink("franchise", "Party Report By Item") },
+      { label: "Sale Purchase By Party", href: reportLink("franchise", "Sale Purchase By Party") },
+      { label: "Sale Purchase By Party Group", href: reportLink("franchise", "Sale Purchase By Party Group") },
+    ],
+  },
+  {
+    icon: Package,
+    label: "Item / Stock Reports",
+    items: [
+      { label: "Stock Summary", href: reportLink("inventory", "Stock summary") },
+      { label: "Item Report By Party", href: reportLink("inventory", "Item Report By Party") },
+      { label: "Item Wise Profit & Loss", href: reportLink("inventory", "Item Wise Profit And Loss") },
+      { label: "Item Category Wise Profit", href: reportLink("inventory", "Item Category Wise Profit And Loss") },
+      { label: "Low Stock Summary", href: reportLink("inventory", "Low Stock Summary") },
+      { label: "Stock Detail", href: reportLink("inventory", "Stock Detail") },
+      { label: "Item Detail", href: reportLink("inventory", "Item Detail") },
+      { label: "Sale / Purchase By Item Category", href: reportLink("inventory", "Sale/ Purchase Report By Item Category") },
+      { label: "Stock Summary By Item Category", href: reportLink("inventory", "Stock Summary Report By Item Category") },
+      { label: "Item Wise Discount", href: reportLink("inventory", "Item Wise Discount") },
+    ],
+  },
+  {
+    icon: TrendingUp,
+    label: "Business Status",
+    items: [
+      { label: "Bank Statement", href: reportLink("financial", "Bank Statement") },
+      { label: "Discount Report", href: reportLink("financial", "Discount Report") },
+    ],
+  },
+  {
+    icon: Receipt,
+    label: "Tax / GST Reports",
+    items: [
+      { label: "GST Report", href: reportLink("financial", "GST Report") },
+      { label: "GST Rate Report", href: reportLink("financial", "GST Rate Report") },
+      { label: "TDS Payable", href: reportLink("financial", "TDS Payable") },
+      { label: "TDS Receivable", href: reportLink("financial", "TDS Receivable") },
+    ],
+  },
+  {
+    icon: Wallet,
+    label: "Expense Reports",
+    items: [
+      { label: "Expense Report", href: reportLink("financial", "Expense") },
+      { label: "Expense Category Report", href: reportLink("financial", "Expense Category Report") },
+      { label: "Expense Item Report", href: reportLink("financial", "Expense Item Report") },
+    ],
+  },
+  {
+    icon: ClipboardList,
+    label: "Sales Order Reports",
+    items: [
+      { label: "Sale Orders", href: reportLink("financial", "Sale Orders") },
+      { label: "Sale Order Item", href: reportLink("financial", "Sale Order Item") },
+    ],
+  },
+  {
+    icon: Store,
+    label: "Franchise Reports",
+    items: [
+      { label: "Franchise Performance", href: reportLink("franchise", "Franchise Performance Summary") },
+      { label: "Franchise Outstanding", href: reportLink("franchise", "Franchise Dues & Balances") },
+    ],
+  },
+  {
+    icon: CreditCard,
+    label: "Loan Account Reports",
+    items: [
+      { label: "Loan Statement", href: reportLink("financial", "Loan Statement") },
+    ],
+  },
+  {
+    icon: Receipt,
+    label: "GST Reports",
+    items: [
+      { label: "GSTR-1", href: "/reports/gst/gstr-1" },
+      { label: "GSTR-2", href: "/reports/gst/gstr-2" },
+      { label: "GSTR-3B", href: "/reports/gst/gstr-3b" },
+      { label: "GSTR-9", href: "/reports/gst/gstr-9" },
+      { label: "Sales Summary (HSN)", href: "/reports/gst/hsn-summary" },
+      { label: "SAC Report", href: "/reports/gst/sac-report" },
+    ],
+  },
+];
+
 // ─── SUPER_ADMIN (HQ CONTROL CENTER) ──────────────────────────────────────────
 export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
   {
@@ -403,57 +525,13 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
   },
   {
     title: "REPORTS",
-    items: [
-      {
-        icon: Factory,
-        label: "Production",
-        href: "/reports?parent=production",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Package,
-        label: "Inventory",
-        href: "/reports?parent=inventory",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: FileText,
-        label: "Inventory Ledger",
-        href: "/reports?parent=inventory-ledger",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Landmark,
-        label: "Financial",
-        href: "/reports?parent=financial",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: BarChart3,
-        label: "Franchise",
-        href: "/reports?parent=franchise",
-        roles: SUPER_ONLY,
-      },
-    ],
-  },
-  {
-    title: "GST REPORTS",
-    items: [
-      {
-        icon: Receipt,
-        label: "GST Reports",
-        href: "/reports/gst/gstr-1",
-        roles: SUPER_ONLY,
-        children: [
-          { label: "GSTR-1", href: "/reports/gst/gstr-1" },
-          { label: "GSTR-2", href: "/reports/gst/gstr-2" },
-          { label: "GSTR-3B", href: "/reports/gst/gstr-3b" },
-          { label: "GSTR-9", href: "/reports/gst/gstr-9" },
-          { label: "Sales Summary (HSN)", href: "/reports/gst/hsn-summary" },
-          { label: "SAC Report", href: "/reports/gst/sac-report" },
-        ],
-      },
-    ],
+    items: REPORT_GROUPS.map((g) => ({
+      icon: g.icon,
+      label: g.label,
+      href: g.items[0].href,
+      roles: SUPER_ONLY,
+      children: g.items,
+    })),
   },
   {
     title: "SYSTEM",

@@ -19,6 +19,7 @@ interface GSTR1Row {
   cgst: number;
   sgst: number;
   igst: number;
+  cessAmount: number;
   totalTax: number;
   totalAmount: number;
 }
@@ -71,26 +72,26 @@ export default function GSTR1Page() {
 
   const rates = useMemo(() => Array.from(new Set(data.sale.map((r) => r.taxRate))).sort((a, b) => a - b), [data.sale]);
 
-  const filteredSale = useMemo(
-    () => data.sale.filter((r) => !search || r.partyName.toLowerCase().includes(search.toLowerCase()) || r.invoiceNo.toLowerCase().includes(search.toLowerCase())),
-    [data.sale, search]
-  );
-  const filteredReturns = useMemo(
-    () => data.saleReturn.filter((r) => !search || r.partyName.toLowerCase().includes(search.toLowerCase())),
-    [data.saleReturn, search]
-  );
-  const filteredCreditNotes = useMemo(
-    () => data.creditNotes.filter((r) => !search || r.partyName.toLowerCase().includes(search.toLowerCase())),
-    [data.creditNotes, search]
-  );
+  const matchesSearch = (r: { partyName: string; invoiceNo: string; gstin?: string }) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      r.partyName.toLowerCase().includes(q) ||
+      r.invoiceNo.toLowerCase().includes(q) ||
+      (r.gstin || "").toLowerCase().includes(q)
+    );
+  };
+  const filteredSale = useMemo(() => data.sale.filter(matchesSearch), [data.sale, search]);
+  const filteredReturns = useMemo(() => data.saleReturn.filter(matchesSearch), [data.saleReturn, search]);
+  const filteredCreditNotes = useMemo(() => data.creditNotes.filter(matchesSearch), [data.creditNotes, search]);
 
   const current = tab === "sale" ? filteredSale : tab === "saleReturn" ? filteredReturns : filteredCreditNotes;
 
   const fmt = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const headers = ["Invoice No", "Date", "Party", "GSTIN", "Place of Supply", "Tax Rate", "Taxable Value", "CGST", "SGST", "IGST", "Total Tax", "Total Amount"];
+  const headers = ["Invoice No", "Date", "Party", "GSTIN", "Place of Supply", "Tax Rate", "Taxable Value", "CGST", "SGST", "IGST", "Cess", "Total Tax", "Invoice Value"];
   const toRows = (rows: (GSTR1Row | CreditNoteRow)[]) =>
-    rows.map((r: any) => [r.invoiceNo, r.date, r.partyName, r.gstin, r.placeOfSupply || "—", r.taxRate ?? "—", r.taxableValue, r.cgst, r.sgst, r.igst, r.totalTax, r.totalAmount ?? ""]);
+    rows.map((r: any) => [r.invoiceNo, r.date, r.partyName, r.gstin, r.placeOfSupply || "—", r.taxRate ?? "—", r.taxableValue, r.cgst, r.sgst, r.igst, r.cessAmount ?? 0, r.totalTax, r.totalAmount ?? ""]);
 
   const filenameBase = `GSTR1_${tab}_${startDate}_${endDate}`;
 
@@ -147,7 +148,7 @@ export default function GSTR1Page() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
-              placeholder="Search party / invoice…"
+              placeholder="Search party / invoice / GSTIN…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="text-sm border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-medium bg-white dark:bg-[#13151f] w-48"
@@ -204,6 +205,7 @@ export default function GSTR1Page() {
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.cgst)}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.sgst)}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.igst)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{fmt(r.cessAmount || 0)}</td>
                     <td className="px-4 py-3 text-right font-mono font-semibold">{fmt(r.totalTax)}</td>
                     <td className="px-4 py-3 text-right font-mono">{r.totalAmount != null ? fmt(r.totalAmount) : "—"}</td>
                   </tr>
