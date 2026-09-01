@@ -1024,84 +1024,130 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0" style={{ minHeight: "calc(100vh - 80px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background min-h-screen text-gray-800 dark:text-slate-100 w-full min-w-0">
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => {
                 setView("list");
                 resetForm();
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              className="p-2 sm:p-2.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              title="Back to Challans"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-bold text-gray-800 dark:text-white truncate">
-              {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
-            </h2>
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white truncate">
+                {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
+              </h2>
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 hidden xs:block">
+                Dispatch goods and manage delivery items
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] sm:text-xs text-gray-400 dark:text-slate-500">Challan No:</span>
+            <span className="text-xs sm:text-sm text-orange-500 font-mono font-bold bg-orange-50 dark:bg-orange-500/10 px-2.5 py-1 rounded-lg border border-orange-200 dark:border-orange-500/20">
+              #{challanNo}
+            </span>
+          </div>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 custom-scrollbar w-full min-w-0">
+        <div className="flex-1 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full min-w-0 max-w-7xl mx-auto">
 
           {/* Customer + Details card */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
-              <div className="space-y-3 min-w-0">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-6 w-full min-w-0 shadow-2xs">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+              <div className="space-y-3.5 sm:space-y-4 min-w-0">
                 <div>
-                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mb-1.5">
-                    <label className="text-xs font-semibold text-gray-500 dark:text-slate-400">Destination *</label>
-                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-gray-700 dark:text-slate-300">
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Customer
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "DEALER"} onChange={() => { setDestType("DEALER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Dealer
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "FRANCHISE"} onChange={() => { setDestType("FRANCHISE"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Franchise
-                      </label>
+                  <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2 mb-2">
+                    <label className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider">
+                      Destination Party <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="flex items-center bg-gray-100 dark:bg-white/5 p-0.5 rounded-lg border border-gray-200 dark:border-white/5 text-xs font-semibold">
+                      {(["CUSTOMER", "DEALER", "FRANCHISE"] as const).map(dt => (
+                        <button
+                          key={dt}
+                          type="button"
+                          onClick={() => {
+                            setDestType(dt);
+                            setCustomerSearch("");
+                            setSelectedCustomer(null);
+                            setSelectedDealer(null);
+                            setSelectedFranchise(null);
+                          }}
+                          className={clsx(
+                            "px-2.5 py-1 rounded-md transition-all text-xs",
+                            destType === dt
+                              ? "bg-white dark:bg-card text-orange-600 dark:text-orange-400 shadow-2xs font-bold"
+                              : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                          )}
+                        >
+                          {dt === "CUSTOMER" ? "Customer" : dt === "DEALER" ? "Dealer" : "Franchise"}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="relative flex-1" ref={customerDropRef}>
                       <div
                         className={clsx(
-                          "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-colors",
-                          showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
+                          "flex items-center gap-2 border rounded-xl px-3.5 py-2.5 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
+                          showCustomerDrop ? "border-orange-500 ring-2 ring-orange-100 dark:ring-orange-500/20" : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
                         )}
                         onClick={() => setShowCustomerDrop(v => !v)}
                       >
+                        <Search size={15} className="text-gray-400 dark:text-slate-500 shrink-0" />
                         <input
-                          className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                          placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
+                          className="flex-1 text-xs sm:text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                          placeholder={`Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}...`}
                           value={customerSearch}
                           onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                           onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                         />
-            {customerSearch && (
-              <X
-                size={14}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                onClick={() => setCustomerSearch("")}
-              />
-            )}
-                        <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
+                        {customerSearch && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCustomerSearch("");
+                              setSelectedCustomer(null);
+                              setSelectedDealer(null);
+                              setSelectedFranchise(null);
+                            }}
+                            className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                        <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       </div>
                       {showCustomerDrop && (
-                        <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                          <div className="max-h-56 overflow-y-auto custom-scrollbar">
+                        <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] sm:w-[420px] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                          <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
                             {destinationOptions.length === 0 ? (
-                              <div className="px-4 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No results found</div>
+                              <div className="px-4 py-5 text-xs text-gray-400 dark:text-slate-500 text-center">
+                                No {destType.toLowerCase()} found matching &ldquo;{customerSearch}&rdquo;
+                              </div>
                             ) : destinationOptions.map(c => (
-                              <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
-                                <div className="text-left">
-                                  <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.email || "—"}</div>
+                              <button
+                                key={c.id}
+                                type="button"
+                                className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 rounded-xl text-left transition-colors"
+                                onClick={() => selectCustomer(c)}
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <div className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white truncate">{c.name}</div>
+                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.email || "No contact info"}</div>
                                 </div>
+                                {(c.state || c.city) && (
+                                  <span className="text-[10px] font-medium text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded shrink-0">
+                                    {c.city ? `${c.city}, ` : ""}{c.state || ""}
+                                  </span>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -1112,17 +1158,18 @@ export default function DeliveryChallanPage() {
                       type="button"
                       onClick={() => openQuickAdd(destType)}
                       title={`Create new ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
-                      className="shrink-0 p-2 border border-gray-300 dark:border-white/10 hover:border-orange-400 rounded-lg text-gray-500 dark:text-slate-400 hover:text-orange-500 transition-colors"
+                      className="shrink-0 p-2.5 border border-gray-200 dark:border-white/10 hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-xl text-gray-500 dark:text-slate-400 hover:text-orange-500 transition-colors"
                     >
-                      <Plus size={16} />
+                      <Plus size={18} />
                     </button>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone Number</label>
                     <input
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
                       placeholder="10-digit phone number"
                       type="tel"
                       inputMode="numeric"
@@ -1131,12 +1178,16 @@ export default function DeliveryChallanPage() {
                       onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                     />
                     {customerPhone && !isValidPhone(customerPhone) && (
-                      <p className="text-[11px] text-red-500 mt-1">Enter a valid 10-digit mobile number.</p>
+                      <p className="text-[11px] text-red-500 mt-1 font-medium">Enter a valid 10-digit mobile number.</p>
                     )}
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Source Warehouse</label>
-                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
+                    <select
+                      value={sourceFranchiseId}
+                      onChange={e => setSourceFranchiseId(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] transition-colors"
+                    >
                       {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
                       {franchises.map((f: any) => {
                         const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
@@ -1150,172 +1201,547 @@ export default function DeliveryChallanPage() {
                   </div>
                 </div>
               </div>
-              <div className="space-y-3 min-w-0">
+
+              <div className="space-y-3.5 sm:space-y-4 min-w-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Vehicle Number</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+                    <input
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
+                      placeholder="e.g. MH 12 AB 1234"
+                      value={vehicleNo}
+                      onChange={e => setVehicleNo(e.target.value)}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Driver Name</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
+                    <input
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
+                      placeholder="e.g. Ramesh Kumar"
+                      value={driverName}
+                      onChange={e => setDriverName(e.target.value)}
+                    />
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-2 mt-1">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Challan Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Due Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">State of Supply</span>
-                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44">
-                    <option value="">Select state</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Challan Date</label>
+                    <input
+                      type="date"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] transition-colors"
+                      value={invoiceDate}
+                      onChange={e => setInvoiceDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Due Date</label>
+                    <input
+                      type="date"
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] transition-colors"
+                      value={dueDate}
+                      onChange={e => setDueDate(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">State of Supply</label>
+                    <select
+                      value={stateOfSupply}
+                      onChange={e => setStateOfSupply(e.target.value)}
+                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-[#13151f] text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-500 transition-colors"
+                    >
+                      <option value="">Select state</option>
+                      {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
-              <button type="button" onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")} className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-[#13151f] hover:border-gray-400 transition-colors">
-                Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
+          {/* Items Section */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-gray-200 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-orange-500" />
+                <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-white uppercase tracking-wider">
+                  Challan Items ({items.length})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
+                className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded-xl px-3 py-1.5 bg-white dark:bg-[#13151f] hover:border-orange-400 transition-colors"
+              >
+                Pricing: <span className="font-bold text-orange-600 dark:text-orange-400">{priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}</span>
               </button>
             </div>
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[700px]">
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-sm min-w-[750px]">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="text-left px-4 py-2.5 w-10">#</th>
-                    <th className="text-left px-4 py-2.5">Item</th>
-                    <th className="text-left px-3 py-2.5 w-32">Batch No</th>
-                    <th className="text-center px-3 py-2.5 w-20">Qty</th>
-                    <th className="text-center px-3 py-2.5 w-24">Unit</th>
-                    <th className="text-right px-3 py-2.5 w-28">Price/Unit</th>
-                    <th className="text-center px-3 py-2.5 w-28">Tax</th>
-                    <th className="text-right px-3 py-2.5 w-28">Amount</th>
-                    <th className="w-10"></th>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-bold text-xs border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
+                    <th className="text-center px-4 py-3 w-12">#</th>
+                    <th className="text-left px-4 py-3">Product / Item</th>
+                    <th className="text-left px-3 py-3 w-36">Batch No</th>
+                    <th className="text-center px-3 py-3 w-24">Qty</th>
+                    <th className="text-center px-3 py-3 w-28">Unit</th>
+                    <th className="text-right px-3 py-3 w-28">Price / Unit</th>
+                    <th className="text-center px-3 py-3 w-32">Tax</th>
+                    <th className="text-right px-4 py-3 w-32">Amount</th>
+                    <th className="w-12"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((it, idx) => {
                     const comp = computeRow(it, withTax);
                     const isItemDropOpen = openItemDrop === it.id;
+                    const validBatches = getValidBatches(it.productId);
                     return (
                       <tr key={it.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
-                        <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                        <td className="px-4 py-2 relative">
-                          <input value={it.itemSearch} onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }} onFocus={() => setOpenItemDrop(it.id)} placeholder="Search product..." className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500" />
-            {it.itemSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setOpenItemDrop("")} 
-              />
-            )}
+                        <td className="px-4 py-3 text-center text-xs font-mono text-gray-400 dark:text-slate-500">{idx + 1}</td>
+                        <td className="px-4 py-2.5 relative">
+                          <div className="relative">
+                            <input
+                              value={it.itemSearch}
+                              onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
+                              onFocus={() => setOpenItemDrop(it.id)}
+                              placeholder="Search product..."
+                              className="w-full text-sm font-medium text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 pr-6"
+                            />
+                            {it.itemSearch && (
+                              <X 
+                                size={14} 
+                                className="absolute right-0 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                                onClick={() => {
+                                  updateItem(idx, "itemSearch", "");
+                                  updateItem(idx, "productId", "");
+                                  updateItem(idx, "batchNumber", "");
+                                  setOpenItemDrop("");
+                                }} 
+                              />
+                            )}
+                          </div>
                           {isItemDropOpen && (
-                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
+                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-52 overflow-y-auto custom-scrollbar p-1">
                               {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).length === 0 ? (
-                                <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">
+                                <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
                                   {products.some(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()))
-                                    ? "No dispatchable stock for this item at the selected warehouse"
-                                    : "No items matched"}
+                                    ? "No dispatchable stock at selected warehouse"
+                                    : "No products matched"}
                                 </div>
                               ) : products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).map(p => (
-                                <button key={p.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs" onClick={() => selectProduct(idx, p)}>
-                                  <div><strong className="text-gray-800 dark:text-white font-medium">{p.name}</strong><div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div></div>
-                                  <div className="text-orange-500 font-semibold">₹{p.basePrice || p.price || 0}</div>
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-orange-50 dark:hover:bg-white/5 rounded-xl text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs transition-colors"
+                                  onClick={() => selectProduct(idx, p)}
+                                >
+                                  <div className="min-w-0 pr-2">
+                                    <strong className="text-gray-800 dark:text-white font-semibold truncate block">{p.name}</strong>
+                                    <div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
+                                  </div>
+                                  <div className="text-orange-500 font-bold font-mono text-xs shrink-0">₹{p.basePrice || p.price || 0}</div>
                                 </button>
                               ))}
                             </div>
                           )}
-                          <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-600 dark:focus:text-slate-200" />
+                          <input
+                            value={it.remarks}
+                            onChange={e => updateItem(idx, "remarks", e.target.value)}
+                            placeholder="Add item note / remarks..."
+                            className="w-full text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
+                          />
                         </td>
                         <td className="px-3 py-2.5">
-{(() => {
-  const validBatches = getValidBatches(it.productId);
-  return (
-    <>
-      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-xs sm:text-sm outline-none bg-transparent text-gray-700 dark:text-white cursor-pointer">
-        <option value="" className="dark:bg-card">Select...</option>
-        {validBatches.map(b => (
-          <option key={b.id} value={b.batchCode || b.id} className="dark:bg-card">{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
-        ))}
-      </select>
-      {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
-        <div className="text-[10px] text-red-500 mt-1 leading-tight">No available batch found for this product in the selected warehouse.</div>
-      )}
-    </>
-  );
-})()}
-</td>
+                          <select
+                            value={it.batchNumber}
+                            onChange={e => updateItem(idx, "batchNumber", e.target.value)}
+                            className="w-full text-xs outline-none bg-white dark:bg-[#13151f] text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 cursor-pointer"
+                          >
+                            <option value="">Select Batch...</option>
+                            {validBatches.map(b => (
+                              <option key={b.id} value={b.batchCode || b.id}>
+                                {b.batchCode || 'No Code'} (Qty: {b.availableQuantity})
+                              </option>
+                            ))}
+                          </select>
+                          {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
+                            <div className="text-[10px] text-red-500 mt-1 leading-tight font-medium">No available batch in warehouse</div>
+                          )}
+                        </td>
                         <td className="px-3 py-2.5">
-<input type="number" min={0} value={it.qty} onChange={e => {
-  const val = Number(e.target.value) || 0;
-  const batch = getValidBatches(it.productId).find(b => (b.batchCode || b.id) === it.batchNumber);
-  if (batch && val > (batch.availableQuantity || 0)) {
-    updateItem(idx, "qty", batch.availableQuantity || 0);
-  } else {
-    updateItem(idx, "qty", val);
-  }
-}} className="w-full text-xs sm:text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
-</td>
-                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
-                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-xs sm:text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
+                          <input
+                            type="number"
+                            min={0}
+                            value={it.qty}
+                            onChange={e => {
+                              const val = Number(e.target.value) || 0;
+                              const batch = validBatches.find(b => (b.batchCode || b.id) === it.batchNumber);
+                              if (batch && val > (batch.availableQuantity || 0)) {
+                                updateItem(idx, "qty", batch.availableQuantity || 0);
+                              } else {
+                                updateItem(idx, "qty", val);
+                              }
+                            }}
+                            className="w-full text-xs sm:text-sm text-center font-semibold outline-none bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-gray-800 dark:text-white focus:border-orange-500"
+                          />
+                        </td>
                         <td className="px-3 py-2.5">
-                          <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">
-                            {TAX_OPTIONS.map(t => <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>)}
+                          <select
+                            value={it.unit}
+                            onChange={e => updateItem(idx, "unit", e.target.value)}
+                            className="w-full text-xs text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 cursor-pointer"
+                          >
+                            {UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-xs sm:text-sm font-medium text-gray-800 dark:text-white">₹{comp.amount.toFixed(2)}</td>
-                        <td className="pr-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-opacity"><Trash2 className="h-4 w-4" /></button></td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="number"
+                            min={0}
+                            value={it.rate || ""}
+                            onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
+                            className="w-full text-xs sm:text-sm text-right font-mono outline-none bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 text-gray-800 dark:text-white focus:border-orange-500"
+                            placeholder="0.00"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={it.taxPct}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              const opt = TAX_OPTIONS.find(x => x.value === val);
+                              updateItem(idx, "taxPct", val);
+                              updateItem(idx, "taxLabel", opt?.label || "NONE");
+                            }}
+                            className="w-full text-xs text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 cursor-pointer"
+                          >
+                            {TAX_OPTIONS.map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
+                          </select>
+                          {comp.taxAmt > 0 && (
+                            <div className="text-[10px] text-gray-400 dark:text-slate-500 text-center mt-0.5 font-mono">
+                              +₹{comp.taxAmt.toFixed(2)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-xs sm:text-sm font-bold text-gray-900 dark:text-white font-mono">
+                          ₹{comp.amount.toFixed(2)}
+                        </td>
+                        <td className="pr-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeRow(idx)}
+                            className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Remove row"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
-              <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"><Plus className="h-4 w-4" /> Add Row</button>
-              <span className="text-xs text-gray-500 dark:text-slate-400">Total Qty: <span className="font-semibold text-gray-700 dark:text-slate-200">{totalQty}</span></span>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="block md:hidden divide-y divide-gray-100 dark:divide-white/5 p-3 space-y-3">
+              {items.map((it, idx) => {
+                const comp = computeRow(it, withTax);
+                const isItemDropOpen = openItemDrop === it.id;
+                const validBatches = getValidBatches(it.productId);
+                return (
+                  <div key={it.id} className="bg-gray-50/50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 space-y-3">
+                    {/* Card Header */}
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-white/5">
+                      <span className="text-xs font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-2.5 py-0.5 rounded-full">
+                        Item #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 p-1 rounded-md"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Remove</span>
+                      </button>
+                    </div>
+
+                    {/* Product Search */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Product / Item *</label>
+                      <div className="relative">
+                        <input
+                          value={it.itemSearch}
+                          onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
+                          onFocus={() => setOpenItemDrop(it.id)}
+                          placeholder="Search product..."
+                          className="w-full text-xs font-medium text-gray-800 dark:text-white bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 outline-none focus:border-orange-500 pr-7"
+                        />
+                        {it.itemSearch && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateItem(idx, "itemSearch", "");
+                              updateItem(idx, "productId", "");
+                              updateItem(idx, "batchNumber", "");
+                              setOpenItemDrop("");
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      {isItemDropOpen && (
+                        <div className="mt-1 z-50 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar p-1">
+                          {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).length === 0 ? (
+                            <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
+                              {products.some(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()))
+                                ? "No stock at selected warehouse"
+                                : "No products matched"}
+                            </div>
+                          ) : products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 rounded-lg text-left text-xs transition-colors"
+                              onClick={() => selectProduct(idx, p)}
+                            >
+                              <div className="min-w-0 pr-2">
+                                <strong className="text-gray-800 dark:text-white font-medium truncate block">{p.name}</strong>
+                                <div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
+                              </div>
+                              <span className="text-orange-500 font-bold font-mono text-xs shrink-0">₹{p.basePrice || p.price || 0}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      <input
+                        value={it.remarks}
+                        onChange={e => updateItem(idx, "remarks", e.target.value)}
+                        placeholder="Add brief details / note..."
+                        className="w-full text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent focus:text-gray-700 dark:focus:text-slate-200 mt-1"
+                      />
+                    </div>
+
+                    {/* Batch Selection */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Batch Number</label>
+                      <select
+                        value={it.batchNumber}
+                        onChange={e => updateItem(idx, "batchNumber", e.target.value)}
+                        className="w-full text-xs outline-none bg-white dark:bg-[#13151f] text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2"
+                      >
+                        <option value="">Select Batch...</option>
+                        {validBatches.map(b => (
+                          <option key={b.id} value={b.batchCode || b.id}>
+                            {b.batchCode || 'No Code'} (Qty: {b.availableQuantity})
+                          </option>
+                        ))}
+                      </select>
+                      {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
+                        <div className="text-[10px] text-red-500 font-medium">No available batch in selected warehouse</div>
+                      )}
+                    </div>
+
+                    {/* Qty & Unit Grid */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1 block">Quantity</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={it.qty}
+                          onChange={e => {
+                            const val = Number(e.target.value) || 0;
+                            const batch = validBatches.find(b => (b.batchCode || b.id) === it.batchNumber);
+                            if (batch && val > (batch.availableQuantity || 0)) {
+                              updateItem(idx, "qty", batch.availableQuantity || 0);
+                            } else {
+                              updateItem(idx, "qty", val);
+                            }
+                          }}
+                          className="w-full text-xs font-semibold text-center bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-gray-800 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1 block">Unit</label>
+                        <select
+                          value={it.unit}
+                          onChange={e => updateItem(idx, "unit", e.target.value)}
+                          className="w-full text-xs bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-gray-800 dark:text-white"
+                        >
+                          {UNITS.map(u => <option key={u.code} value={u.code}>{u.short}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Price & Tax Grid */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1 block">Price / Unit</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={it.rate || ""}
+                          onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
+                          className="w-full text-xs font-mono text-right bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-gray-800 dark:text-white"
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1 block">Tax</label>
+                        <select
+                          value={it.taxPct}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            const opt = TAX_OPTIONS.find(x => x.value === val);
+                            updateItem(idx, "taxPct", val);
+                            updateItem(idx, "taxLabel", opt?.label || "NONE");
+                          }}
+                          className="w-full text-xs bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-gray-800 dark:text-white"
+                        >
+                          {TAX_OPTIONS.map(t => <option key={t.label} value={t.value}>{t.label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Card Footer: Row Total */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100 dark:border-white/5">
+                      <span className="text-xs text-gray-500 dark:text-slate-400">Row Total:</span>
+                      <span className="text-sm font-bold text-gray-900 dark:text-white font-mono">
+                        ₹{comp.amount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Items Bottom Bar */}
+            <div className="px-4 sm:px-6 py-3 border-t border-gray-200 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 bg-gray-50/40 dark:bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={addRow}
+                className="flex items-center gap-2 text-xs sm:text-sm font-bold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-4 py-2 rounded-xl transition-colors shadow-2xs"
+              >
+                <Plus className="h-4 w-4" /> Add Item
+              </button>
+              <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
+                <span>Total Items: <strong className="text-gray-800 dark:text-white">{items.length}</strong></span>
+                <span>Total Qty: <strong className="text-gray-800 dark:text-white">{totalQty}</strong></span>
+              </div>
             </div>
           </div>
 
           {/* Notes + Summary */}
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start pb-2 w-full min-w-0">
-            <div className="flex-1 space-y-2 min-w-0">
-              <button type="button" onClick={() => setShowTerms(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showTerms ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions</button>
-              <button type="button" onClick={() => setShowDesc(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showDesc ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Add Description</button>
-              {showTerms && <textarea rows={3} value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Enter terms..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
-              {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
-            </div>
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {totalAmount.toFixed(2)}</span></div>
-              {totalTax > 0 && <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
-              <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" id="roundoff" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" /><span className="text-xs">Round Off</span></label>
-                <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
+          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start pb-4 w-full min-w-0">
+            <div className="flex-1 space-y-3 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTerms(v => !v)}
+                  className={clsx(
+                    "flex items-center gap-2 text-xs font-semibold border rounded-xl px-3.5 py-2 transition-colors",
+                    showTerms
+                      ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                      : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDesc(v => !v)}
+                  className={clsx(
+                    "flex items-center gap-2 text-xs font-semibold border rounded-xl px-3.5 py-2 transition-colors",
+                    showDesc
+                      ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                      : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Add Description / Notes
+                </button>
               </div>
-              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/5 pt-2">
-                <span className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white">Total</span>
-                <span className="text-base sm:text-lg font-bold text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
+              {showTerms && (
+                <textarea
+                  rows={3}
+                  value={termsText}
+                  onChange={e => setTermsText(e.target.value)}
+                  placeholder="Enter delivery terms & conditions..."
+                  className="w-full text-xs sm:text-sm text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-xl px-3.5 py-2.5 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-orange-500"
+                />
+              )}
+              {showDesc && (
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Enter dispatch notes / delivery instructions..."
+                  className="w-full text-xs sm:text-sm text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-xl px-3.5 py-2.5 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-orange-500"
+                />
+              )}
+            </div>
+
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full lg:w-80 shrink-0 space-y-2.5 shadow-2xs">
+              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                <span>Subtotal</span>
+                <span className="text-gray-800 dark:text-white font-mono font-semibold">₹ {totalAmount.toFixed(2)}</span>
+              </div>
+              {totalTax > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                  <span>Tax Amount</span>
+                  <span className="text-gray-800 dark:text-white font-mono font-semibold">+ ₹ {totalTax.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="roundoff"
+                    checked={roundOffEnabled}
+                    onChange={e => setRoundOffEnabled(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-orange-500 rounded"
+                  />
+                  <span className="text-xs font-medium">Round Off</span>
+                </label>
+                <span className="text-xs font-mono font-semibold">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/5 pt-2.5">
+                <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Total Amount</span>
+                <span className="text-base sm:text-xl font-black text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
         </div>
 
         {/* Action bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
-          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-2xs w-full min-w-0 sticky bottom-0 z-30">
+          <button
+            type="button"
+            onClick={() => { setView("list"); resetForm(); }}
+            className="px-4 py-2.5 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
           <div className="flex items-center gap-2 sm:gap-3">
-            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-4 sm:px-6 py-2 text-xs sm:text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors shadow-sm">
+            <button
+              type="button"
+              onClick={() => handleSave("DRAFT")}
+              disabled={saving}
+              className="px-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-xl disabled:opacity-60 transition-colors"
+            >
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave("IN_TRANSIT")}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 sm:px-6 py-2.5 text-xs sm:text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl disabled:opacity-50 transition-all shadow-sm active:scale-95"
+            >
               <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Challan"}
             </button>
           </div>
@@ -1329,7 +1755,7 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "transit") {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
         <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shadow-2xs w-full min-w-0">
           <div className="flex items-center gap-2">
             <button onClick={() => setView("list")} className="px-3 py-1.5 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl transition-colors">Challans</button>
@@ -1393,7 +1819,7 @@ export default function DeliveryChallanPage() {
   // 2. LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
 
       {/* ── Page Header Toolbar ── */}
       <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">

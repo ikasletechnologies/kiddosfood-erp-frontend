@@ -94,9 +94,9 @@ export default function BillingSection({
           </span>
         </div>
 
-        <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex items-center justify-between min-h-[96px]">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
+        <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 min-h-[96px]">
+          <div className="flex items-center gap-3 sm:gap-3.5 min-w-0">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
               {user?.fullName?.charAt(0) || "S"}
             </div>
             <div className="min-w-0">
@@ -118,7 +118,7 @@ export default function BillingSection({
 
           <Link 
             href="/profile/agency" 
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] hover:underline shrink-0 ml-3"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#f58220] hover:text-[#e8740e] hover:underline shrink-0"
           >
             <Edit3 size={12} /> Edit Profile
           </Link>
@@ -152,9 +152,9 @@ export default function BillingSection({
         </div>
 
         {selectedVendor ? (
-          <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex items-center justify-between min-h-[96px] relative">
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
+          <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 min-h-[96px] relative">
+            <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
                 {selectedVendor.name.charAt(0)}
               </div>
               <div className="min-w-0 flex-1">
@@ -180,10 +180,10 @@ export default function BillingSection({
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0 ml-3">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800/40 whitespace-nowrap">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" />
-                {selectedVendor.suppliedMaterials?.length || 1} Material Available
+                {selectedVendor.suppliedMaterials?.length || 1} Available
               </span>
               <button 
                 type="button"
@@ -196,7 +196,7 @@ export default function BillingSection({
             </div>
           </div>
         ) : (
-          <div className="p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl shadow-2xs flex flex-col justify-center min-h-[96px] relative group">
+          <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl shadow-2xs flex flex-col justify-center min-h-[96px] relative group">
             <div className="w-full relative z-10" ref={searchContainerRef}>
               <div className="relative">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />

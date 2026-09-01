@@ -983,24 +983,33 @@ export default function EstimationsPageClient({
   // ══════════════════════════════════════════════════════════════════════════
   if (view === "create") {
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0" style={{ minHeight: "calc(100vh - 80px)" }}>
+      <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 flex flex-col w-full min-w-0 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 animate-in fade-in duration-300">
 
         {/* ── Top bar ── */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
           <div className="flex items-center gap-3 min-w-0">
-            <button onClick={handleBack} className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0">
+            <button 
+              onClick={handleBack} 
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0 cursor-pointer"
+              title="Back to List"
+            >
               <ArrowLeft size={18} />
             </button>
-            <h2 className="text-base sm:text-lg font-bold text-gray-800 dark:text-white truncate">{L.formHeading}</h2>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">{L.formHeading}</h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
+                {draftId ? "Editing quotation draft" : "Create new customer quotation"}
+              </p>
+            </div>
           </div>
         </div>
 
         {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto min-h-0 p-3 sm:p-4 md:p-6 space-y-4 custom-scrollbar w-full min-w-0">
+        <div className="flex-1 space-y-4 sm:space-y-6 w-full min-w-0">
 
           {/* Customer + Meta info */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full min-w-0">
               {/* Left: Party + Phone */}
               <div className="space-y-3 sm:space-y-4 min-w-0">
                 <div>
@@ -1012,7 +1021,7 @@ export default function EstimationsPageClient({
                         type="button"
                         onClick={() => handlePartyTypeChange(pt.value)}
                         className={clsx(
-                          "px-3 py-1.5 text-xs font-semibold transition-colors rounded-lg",
+                          "px-3 py-1.5 text-xs font-semibold transition-colors rounded-lg cursor-pointer",
                           partyType === pt.value ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                         )}
                       >
@@ -1026,7 +1035,7 @@ export default function EstimationsPageClient({
                   <div
                     className={clsx(
                       "flex items-center gap-2 border rounded-xl px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
-                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
+                      showCustomerDrop ? "border-[#f58220] ring-1 ring-[#f58220]/20" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
                     )}
                     onClick={() => setShowCustomerDrop(v => !v)}
                   >
@@ -1037,13 +1046,13 @@ export default function EstimationsPageClient({
                       onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                       onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                     />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
+                    {customerSearch && (
+                      <X 
+                        size={14} 
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                        onClick={(e) => { e.stopPropagation(); setCustomerSearch(""); setSelectedCustomer(null); }} 
+                      />
+                    )}
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
 
@@ -1051,7 +1060,8 @@ export default function EstimationsPageClient({
                     <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] sm:w-[400px] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
                       {partyType === "CUSTOMER" && (
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-medium"
+                          type="button"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold cursor-pointer"
                           onClick={() => {
                             const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
                             setNewParty(prev => ({
@@ -1076,10 +1086,11 @@ export default function EstimationsPageClient({
                           filteredCustomers.map((c: any) => (
                             <button
                               key={c.id}
-                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
+                              type="button"
+                              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors cursor-pointer text-left"
                               onClick={() => selectCustomer(c)}
                             >
-                              <div className="text-left">
+                              <div>
                                 <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
                                 <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.contact || c.phone || c.contactNum || "—"}</div>
                               </div>
@@ -1093,7 +1104,7 @@ export default function EstimationsPageClient({
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
                   <input
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="Phone number"
                     value={customerPhone}
                     onChange={e => setCustomerPhone(e.target.value)}
@@ -1110,7 +1121,7 @@ export default function EstimationsPageClient({
                     placeholder="Auto"
                     value={refNo}
                     onChange={e => setRefNo(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
                   />
                 </div>
                 <div>
@@ -1119,7 +1130,7 @@ export default function EstimationsPageClient({
                     <button
                       type="button"
                       onClick={() => setShowCalendar(v => !v)}
-                      className="w-full flex items-center justify-between border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] hover:border-orange-400 transition-colors"
+                      className="w-full flex items-center justify-between border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] hover:border-[#f58220] transition-colors cursor-pointer"
                     >
                       <span className="font-medium text-gray-700 dark:text-white">
                         {invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}
@@ -1127,7 +1138,7 @@ export default function EstimationsPageClient({
                       <Calendar size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                     </button>
                     {showCalendar && (
-                      <div className="absolute right-0 top-full mt-1.5 z-[200] max-w-[calc(100vw-2rem)]">
+                      <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-1.5 z-[200] max-w-[calc(100vw-2rem)]">
                         <MiniCalendar value={invoiceDate} onChange={setInvoiceDate} onClose={() => setShowCalendar(false)} />
                       </div>
                     )}
@@ -1138,7 +1149,7 @@ export default function EstimationsPageClient({
                   <select
                     value={stateOfSupply}
                     onChange={e => setStateOfSupply(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] cursor-pointer"
                   >
                     <option value="" className="dark:bg-card">Select state</option>
                     {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -1148,137 +1159,313 @@ export default function EstimationsPageClient({
             </div>
           </div>
 
-          {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+          {/* Items Section */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
+              <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wide">Estimate Items</span>
               <button
                 type="button"
                 onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
-                className="px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
+                className="px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 hover:border-orange-300 text-xs font-semibold rounded-lg text-gray-600 dark:text-slate-300 transition-colors cursor-pointer"
               >
                 Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
               </button>
             </div>
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+
+            {/* Desktop Table View (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto custom-scrollbar w-full max-w-full">
               <table className="w-full text-sm min-w-[700px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-2.5 w-10">#</th>
-                  <th className="text-left px-4 py-2.5">Item</th>
-                  <th className="text-center px-4 py-2.5 w-20">Qty</th>
-                  <th className="text-left px-4 py-2.5 w-28">Unit</th>
-                  <th className="text-right px-4 py-2.5 w-28">Price/Unit</th>
-                  <th className="text-left px-4 py-2.5 w-36">Tax</th>
-                  <th className="text-right px-4 py-2.5 w-32">Amount</th>
-                  <th className="w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {items.map((item, idx) => {
-                  const { taxAmt, amount } = computeRow(item, withTax);
-                  const filtProd = products.filter(p =>
-                    !item.itemSearch ||
-                    p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
-                    p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
-                  ).slice(0, 10);
-                  return (
-                    <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
-                      <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
-                        <div className="py-1.5">
-                          {idx + 1}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 relative align-top">
-                        <input
-                          className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                          placeholder="Search item..."
-                          value={item.itemSearch}
-                          onChange={e => {
-                            updateItem(idx, "itemSearch", e.target.value);
-                            updateItem(idx, "productId", "");
-                            setOpenItemDrop(item.id);
-                          }}
-                          onFocus={() => {
-                            setOpenItemDrop(item.id);
-                          }}
-                        />
-            {item.itemSearch && (
-              <X 
-                size={14} 
-                className="absolute right-6 top-5 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => updateItem(idx, "itemSearch", "")} 
-              />
-            )}
-                        {openItemDrop === item.id && (
-                          <div
-                            className="absolute left-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden flex flex-col z-50 item-dropdown-container"
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-left px-4 py-2.5 w-10">#</th>
+                    <th className="text-left px-4 py-2.5">Item</th>
+                    <th className="text-center px-4 py-2.5 w-20">Qty</th>
+                    <th className="text-left px-4 py-2.5 w-28">Unit</th>
+                    <th className="text-right px-4 py-2.5 w-28">Price/Unit</th>
+                    <th className="text-left px-4 py-2.5 w-36">Tax</th>
+                    <th className="text-right px-4 py-2.5 w-32">Amount</th>
+                    <th className="w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {items.map((item, idx) => {
+                    const { taxAmt, amount } = computeRow(item, withTax);
+                    const filtProd = products.filter(p =>
+                      !item.itemSearch ||
+                      p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
+                      p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
+                    ).slice(0, 10);
+                    return (
+                      <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group">
+                        <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
+                          <div className="py-1.5">{idx + 1}</div>
+                        </td>
+                        <td className="px-4 py-2.5 relative align-top">
+                          <input
+                            className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                            placeholder="Search item..."
+                            value={item.itemSearch}
+                            onChange={e => {
+                              updateItem(idx, "itemSearch", e.target.value);
+                              updateItem(idx, "productId", "");
+                              setOpenItemDrop(item.id);
+                            }}
+                            onFocus={() => {
+                              setOpenItemDrop(item.id);
+                            }}
+                          />
+                          {item.itemSearch && (
+                            <X 
+                              size={14} 
+                              className="absolute right-6 top-5 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                              onClick={() => updateItem(idx, "itemSearch", "")} 
+                            />
+                          )}
+                          {openItemDrop === item.id && (
+                            <div className="absolute left-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden flex flex-col z-50 item-dropdown-container">
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0 cursor-pointer"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setActiveItemIdx(idx);
+                                  setShowAddProduct(true);
+                                  setOpenItemDrop(null);
+                                }}
+                              >
+                                <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                                Add New Product
+                              </button>
+                              <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                {filtProd.length === 0 ? (
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
+                                ) : (
+                                  filtProd.map(p => (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors cursor-pointer"
+                                      onMouseDown={() => selectProduct(idx, p)}
+                                    >
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
+                                      </div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <input
+                            type="number"
+                            min={0}
+                            value={item.qty === 0 ? "" : item.qty}
+                            onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <select
+                            value={item.unit}
+                            onChange={e => updateItem(idx, "unit", e.target.value)}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer"
                           >
+                            {UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.rate === 0 ? "" : item.rate}
+                              onChange={e => updateItem(idx, "rate", Number(e.target.value))}
+                              className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <select
+                            value={item.taxLabel || "NONE"}
+                            onChange={e => {
+                              const label = e.target.value;
+                              const option = TAX_OPTIONS.find(o => o.label === label);
+                              const val = option ? option.value : 0;
+                              updateItem(idx, "taxLabel", label);
+                              updateItem(idx, "taxPct", val);
+                            }}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer"
+                          >
+                            {TAX_OPTIONS.map((o, index) => (
+                              <option key={index} value={o.label} className="dark:bg-card">{o.label}</option>
+                            ))}
+                          </select>
+                          <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 dark:text-slate-200 align-top">
+                          <div className="py-1.5 font-mono">
+                            {amount > 0 ? `₹${amount.toFixed(2)}` : "—"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-center align-top">
+                          <div className="py-1">
                             <button
                               type="button"
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setActiveItemIdx(idx);
-                                setShowAddProduct(true);
-                                setOpenItemDrop(null);
-                              }}
+                              onClick={() => removeRow(idx)}
+                              className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 text-gray-400 hover:text-rose-500 rounded-lg transition-colors cursor-pointer"
+                              title="Remove item"
                             >
-                              <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
-                              Add New Product
+                              <Trash2 size={15} />
                             </button>
-                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                              {filtProd.length === 0 ? (
-                                <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
-                              ) : (
-                                filtProd.map(p => (
-                                  <button
-                                    key={p.id}
-                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                                    onMouseDown={() => selectProduct(idx, p)}
-                                  >
-                                    <div>
-                                      <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                      <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
-                                    </div>
-                                  </button>
-                                ))
-                              )}
-                            </div>
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden p-3 space-y-3.5">
+              {items.map((item, idx) => {
+                const { taxAmt, amount } = computeRow(item, withTax);
+                const filtProd = products.filter(p =>
+                  !item.itemSearch ||
+                  p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
+                  p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
+                ).slice(0, 10);
+
+                return (
+                  <div key={item.id} className="p-3.5 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-2xl space-y-3 relative">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#f58220]/10 text-[#f58220] font-bold text-xs">
+                        Item #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Remove row"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {/* Product Search */}
+                    <div className="relative">
+                      <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1">
+                        Product / Item *
+                      </label>
+                      <input
+                        className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                        placeholder="Search product..."
+                        value={item.itemSearch}
+                        onChange={e => {
+                          updateItem(idx, "itemSearch", e.target.value);
+                          updateItem(idx, "productId", "");
+                          setOpenItemDrop(item.id);
+                        }}
+                        onFocus={() => {
+                          setOpenItemDrop(item.id);
+                        }}
+                      />
+                      {item.itemSearch && (
+                        <X 
+                          size={14} 
+                          className="absolute right-3 top-8 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                          onClick={() => updateItem(idx, "itemSearch", "")} 
+                        />
+                      )}
+                      {openItemDrop === item.id && (
+                        <div className="absolute left-0 top-full mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden flex flex-col z-50">
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0 cursor-pointer"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setActiveItemIdx(idx);
+                              setShowAddProduct(true);
+                              setOpenItemDrop(null);
+                            }}
+                          >
+                            <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                            Add New Product
+                          </button>
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                            {filtProd.length === 0 ? (
+                              <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
+                            ) : (
+                              filtProd.map(p => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors cursor-pointer"
+                                  onMouseDown={() => selectProduct(idx, p)}
+                                >
+                                  <div>
+                                    <div className="text-xs font-bold text-gray-800 dark:text-white">{p.name}</div>
+                                    <div className="text-[10px] text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
+                                  </div>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Quantity & Unit Row */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1">
+                          Quantity
+                        </label>
                         <input
                           type="number"
                           min={0}
                           value={item.qty === 0 ? "" : item.qty}
                           onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                         />
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1">
+                          Unit
+                        </label>
                         <select
                           value={item.unit}
                           onChange={e => updateItem(idx, "unit", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer"
                         >
                           {UNITS.map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
                         </select>
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
-                          <input
-                            type="number"
-                            min={0}
-                            value={item.rate === 0 ? "" : item.rate}
-                            onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
-                          />
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
+                      </div>
+                    </div>
+
+                    {/* Price & Tax Row */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1">
+                          Price / Unit (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.rate === 0 ? "" : item.rate}
+                          onChange={e => updateItem(idx, "rate", Number(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1">
+                          Tax
+                        </label>
                         <select
                           value={item.taxLabel || "NONE"}
                           onChange={e => {
@@ -1288,54 +1475,55 @@ export default function EstimationsPageClient({
                             updateItem(idx, "taxLabel", label);
                             updateItem(idx, "taxPct", val);
                           }}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
+                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer"
                         >
                           {TAX_OPTIONS.map((o, index) => (
                             <option key={index} value={o.label} className="dark:bg-card">{o.label}</option>
                           ))}
                         </select>
-                        <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 dark:text-slate-200 align-top">
-                        <div className="py-1.5">
-                          {amount > 0 ? `₹${amount.toFixed(2)}` : "—"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-center align-top">
-                        <div className="py-1">
-                          <button
-                            onClick={() => removeRow(idx)}
-                            className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+
+                    {/* Row Total Footer */}
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-200 dark:border-white/5 text-xs">
+                      <span className="text-gray-400 font-semibold">Row Total</span>
+                      <div className="text-right">
+                        <span className="font-mono font-bold text-gray-900 dark:text-white text-sm">
+                          ₹{amount.toFixed(2)}
+                        </span>
+                        {taxAmt > 0 && (
+                          <p className="text-[10px] text-gray-400 font-mono mt-0.5">Tax: ₹{taxAmt.toFixed(2)}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
+
+            {/* Table / Card Footer Toolbar */}
+            <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex flex-wrap items-center justify-between gap-3 bg-gray-50/40 dark:bg-white/[0.02]">
               <button
+                type="button"
                 onClick={addRow}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 transition-all"
+                className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 dark:border-white/10 hover:border-orange-300 hover:bg-orange-50 dark:hover:bg-white/5 rounded-xl text-xs font-bold text-[#f58220] transition-all cursor-pointer"
               >
-                <Plus className="h-3.5 w-3.5" /> Add Row
+                <Plus className="h-4 w-4" /> Add Row
               </button>
-              <div className="flex items-center gap-5 text-xs text-gray-400 dark:text-slate-500">
+              <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-slate-500">
+                <span>Items: <strong className="text-gray-700 dark:text-slate-200">{items.length}</strong></span>
                 <span>Qty: <strong className="text-gray-700 dark:text-slate-200">{totalQty}</strong></span>
-                <span>Tax: <strong className="text-gray-700 dark:text-slate-200 font-sans">₹{totalTax.toFixed(2)}</strong></span>
+                <span>Tax: <strong className="text-gray-700 dark:text-slate-200 font-mono">₹{totalTax.toFixed(2)}</strong></span>
               </div>
             </div>
           </div>
 
           {/* Notes + Summary */}
           <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
-            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-3 min-w-0 shadow-2xs">
+            <div className="flex-1 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 space-y-3 min-w-0 shadow-2xs">
               <div className="flex flex-wrap gap-2">
                 <button
+                  type="button"
                   onClick={() => {
                     setShowTerms(v => {
                       if (v) setTermsText("");
@@ -1343,13 +1531,14 @@ export default function EstimationsPageClient({
                     });
                   }}
                   className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showTerms ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
+                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-semibold transition-all cursor-pointer",
+                    showTerms ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-[#f58220]" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
-                  <AlignLeft className="h-3.5 w-3.5" /> Terms & Conditions
+                  <AlignLeft className="h-3.5 w-3.5" /> Terms &amp; Conditions
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowDesc(v => {
                       if (v) setDescription("");
@@ -1357,23 +1546,22 @@ export default function EstimationsPageClient({
                     });
                   }}
                   className={clsx(
-                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all",
-                    showDesc ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
+                    "flex items-center gap-1.5 px-3 py-1.5 border rounded-xl text-xs font-semibold transition-all cursor-pointer",
+                    showDesc ? "border-orange-400 bg-orange-50 dark:bg-orange-500/10 text-[#f58220]" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
                   <FileText className="h-3.5 w-3.5" /> Description
                 </button>
-
               </div>
               {showTerms && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Terms & Conditions</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Terms &amp; Conditions</label>
                   <textarea
                     rows={3}
                     value={termsText}
                     onChange={e => setTermsText(e.target.value)}
                     placeholder="Add terms..."
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none resize-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
@@ -1385,13 +1573,13 @@ export default function EstimationsPageClient({
                     value={description}
                     onChange={e => setDescription(e.target.value)}
                     placeholder="Add description..."
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none resize-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
                 </div>
               )}
             </div>
 
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-80 shrink-0 space-y-2.5 shadow-2xs">
               <div className="flex items-center justify-between text-xs sm:text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
                 <span className="font-semibold text-gray-700 dark:text-white font-mono">₹{totalAmount.toFixed(2)}</span>
@@ -1403,7 +1591,7 @@ export default function EstimationsPageClient({
                 </div>
               )}
               <div className="flex items-center justify-between text-xs sm:text-sm">
-                <label htmlFor="est_roundoff" className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 cursor-pointer">
+                <label htmlFor="est_roundoff" className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     id="est_roundoff"
@@ -1416,7 +1604,7 @@ export default function EstimationsPageClient({
                 <span className="text-gray-500 dark:text-slate-400 text-xs font-mono">{roundOff >= 0 ? "+" : ""}₹{roundOff.toFixed(2)}</span>
               </div>
               <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex items-center justify-between">
-                <span className="font-bold text-gray-800 dark:text-white text-sm sm:text-base">Total</span>
+                <span className="font-bold text-gray-800 dark:text-white text-sm sm:text-base">Grand Total</span>
                 <span className="text-lg sm:text-xl font-bold text-[#f58220] font-mono">₹{finalTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -1425,25 +1613,28 @@ export default function EstimationsPageClient({
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-2xs w-full min-w-0">
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-2xs w-full min-w-0">
           <button
+            type="button"
             onClick={handleBack}
-            className="px-4 py-2 text-xs sm:text-sm font-medium border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-600 dark:text-slate-400 transition-colors"
+            className="px-4 py-2 text-xs sm:text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-600 dark:text-slate-400 transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             <button
+              type="button"
               onClick={() => handleSave(true)}
               disabled={saving}
-              className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-700 dark:text-slate-300 transition-colors disabled:opacity-50"
+              className="px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-700 dark:text-slate-300 transition-colors disabled:opacity-50 cursor-pointer"
             >
               Save Draft
             </button>
             <div className="relative" ref={shareDropRef}>
               <button
+                type="button"
                 onClick={() => setShowShareDrop(v => !v)}
-                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-xl text-[#f58220] transition-colors"
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold border border-orange-200 dark:border-orange-500/20 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-xl text-[#f58220] transition-colors cursor-pointer"
               >
                 <Share2 size={14} className="shrink-0" /> <span>Share</span> <ChevronDown size={12} className="shrink-0 opacity-70" />
               </button>
@@ -1456,9 +1647,10 @@ export default function EstimationsPageClient({
               )}
             </div>
             <button
+              type="button"
               onClick={() => handleSave(false)}
               disabled={saving}
-              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-xs sm:text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all disabled:opacity-50 shadow-sm active:scale-95 whitespace-nowrap"
+              className="flex items-center gap-2 px-4 sm:px-6 py-2 text-xs sm:text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all disabled:opacity-50 shadow-sm active:scale-95 whitespace-nowrap cursor-pointer"
             >
               <Check className="h-4 w-4" /> <span>{saving ? "Saving..." : "Save"}</span>
             </button>
@@ -1527,10 +1719,10 @@ export default function EstimationsPageClient({
   const fmt = (d: string) => formatDate(d + "T00:00:00");
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full min-w-0 animate-in fade-in duration-300">
 
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
+      <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
             <Calculator className="h-5 w-5" />
@@ -1546,7 +1738,7 @@ export default function EstimationsPageClient({
         </div>
         <button
           onClick={openCreate}
-          className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
+          className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
         >
           <Plus className="h-4 w-4 shrink-0" /> <span>{L.newButton}</span>
         </button>

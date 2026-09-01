@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import Link from "next/link";
 import { RECIPE_UNITS } from "@/lib/recipe-units";
 import { convertUnit } from "@/lib/unitConversion";
 
@@ -77,13 +76,11 @@ export default function ProductionPlanningPage() {
         }
         const franchiseList = fRes.data || [];
         if (franchiseList.length > 0) {
-          // Deterministic default: open at HQ if one is configured, rather
-          // than whichever franchise the DB happened to return first.
           const hq = franchiseList.find((f: any) => f.isHQ);
           const fallback = [...franchiseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
           setFranchiseId((hq || fallback).id);
         }
-      } catch (err) {
+      } catch {
         toast.error("Failed to load recipes or warehouses");
       } finally {
         setLoading(false);
@@ -123,12 +120,6 @@ export default function ProductionPlanningPage() {
   const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
 
-  // Stock is stored and reported in the inventory item's own unit (e.g. KG),
-  // while the recipe's requirement is expressed in the recipe item's unit
-  // (e.g. g) — those are two independent fields with no guarantee they
-  // match. Converting the raw stock figure into the recipe's unit here is
-  // what makes every comparison/display below apples-to-apples; without it,
-  // 8 KG of stock reads as "8" against a 500 g requirement and looks short.
   const getAvailableStock = (itemId: string, itemSku: string, recipeUnit: string) => {
     if (!Array.isArray(warehouseStock)) return 0;
     const found = warehouseStock.find((fi: any) => {
@@ -229,64 +220,87 @@ export default function ProductionPlanningPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col items-center justify-center p-6">
-        <div className="w-12 h-12 border-4 border-[#f58220] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest">Planning Scheduler Loading...</p>
+        <div className="w-10 h-10 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Planning Scheduler Loading...</p>
       </div>
     );
   }
 
-  return (    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-4 sm:p-6 space-y-4 sm:space-y-6 w-full min-w-0">
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full min-w-0 animate-in fade-in duration-300">
 
-      {/* ── Page Actions ── */}
-      {recipe && (
-        <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 flex flex-wrap items-center justify-end gap-3 sm:gap-4 print:hidden w-full min-w-0">
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-300 rounded-xl font-bold text-xs uppercase tracking-wider hover:border-gray-300 dark:hover:border-white/20 transition-all active:scale-[0.98]"
-            >
-              <Printer size={16} />
-              Print Recipe
-            </button>
-            <button
-              onClick={handleStartProductionDirect}
-              disabled={launching || multiplier <= 0}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs uppercase tracking-wider hover:shadow-xl hover:translate-y-[-1px] transition-all active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none disabled:hover:shadow-none disabled:hover:translate-y-0 ${
-                multiplier <= 0 ? "bg-gray-300 text-gray-600" : hasShortage ? "bg-rose-600 text-white" : "bg-[#F97316] text-white"
-              }`}
-            >
-              {launching ? (
-                <>
-                  <RefreshCw size={16} className="animate-spin" />
-                  Starting...
-                </>
-              ) : multiplier <= 0 ? (
-                <>Enter Target Batch Yield</>
-              ) : hasShortage ? (
-                <>
-                  <AlertTriangle size={16} />
-                  Insufficient Stock — Buy Now
-                  <ShoppingCart size={16} />
-                </>
-              ) : (
-                <>
-                  Start Production
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
+      {/* ── Top Header Toolbar ── */}
+      <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-2xs w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
+            <ChefHat size={24} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white tracking-tight truncate">
+              Production Planning &amp; Scaling
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate mt-0.5">
+              Scale formulation recipes, verify raw material availability, and launch batch runs
+            </p>
+          </div>
         </div>
-      )}
 
-      {/* Controls Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 print:hidden w-full min-w-0">
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400">
-            Select Recipe
+        {/* Header Actions */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between lg:justify-end min-w-0">
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 rounded-xl text-xs font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Print Formulation Recipe"
+          >
+            <Printer size={15} />
+            <span className="hidden sm:inline">Print Recipe</span>
+          </button>
+
+          <button
+            onClick={handleStartProductionDirect}
+            disabled={launching || multiplier <= 0}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 ${
+              multiplier <= 0
+                ? "bg-gray-300 dark:bg-white/10 text-gray-600 dark:text-slate-400"
+                : hasShortage
+                ? "bg-rose-600 hover:bg-rose-700 text-white"
+                : "bg-[#f58220] hover:bg-[#e0751a] text-white"
+            }`}
+          >
+            {launching ? (
+              <>
+                <RefreshCw size={14} className="animate-spin" />
+                <span>Launching...</span>
+              </>
+            ) : multiplier <= 0 ? (
+              <span>Enter Batch Yield</span>
+            ) : hasShortage ? (
+              <>
+                <AlertTriangle size={14} />
+                <span>Insufficient Stock — Buy Raw Materials</span>
+                <ShoppingCart size={14} />
+              </>
+            ) : (
+              <>
+                <span>Start Production Run</span>
+                <ArrowRight size={14} />
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Configuration Parameters Grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+        {/* 1. Recipe Selector */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
+          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+            Formulation Recipe <span className="text-[#f58220]">*</span>
           </label>
           <select
             value={selectedRecipeId}
             onChange={(e) => handleRecipeChange(e.target.value)}
-            className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
+            className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#f58220] outline-none cursor-pointer"
           >
             <option value="" disabled className="dark:bg-card">Choose Recipe...</option>
             {recipes.map((r) => (
@@ -297,9 +311,10 @@ export default function ProductionPlanningPage() {
           </select>
         </div>
 
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
-          <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400">
-            Target Batch Yield
+        {/* 2. Target Batch Yield */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
+          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+            Target Batch Yield <span className="text-[#f58220]">*</span>
           </label>
           <div className="flex gap-2">
             <input
@@ -308,13 +323,13 @@ export default function ProductionPlanningPage() {
               step="any"
               value={targetYield || ""}
               onChange={(e) => setTargetYield(parseFloat(e.target.value) || 0)}
-              className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
-              placeholder="e.g. 50"
+              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-mono font-bold focus:border-[#f58220] outline-none"
+              placeholder="e.g. 100"
             />
             <select
               value={targetUnit}
               onChange={(e) => setTargetUnit(e.target.value)}
-              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-2 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
+              className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-2.5 py-2 text-xs font-bold focus:border-[#f58220] outline-none cursor-pointer shrink-0"
             >
               {RECIPE_UNITS.map(u => (
                 <option key={u} value={u} className="dark:bg-card">{u}</option>
@@ -323,15 +338,16 @@ export default function ProductionPlanningPage() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 space-y-1.5 shadow-sm min-w-0">
+        {/* 3. Warehouse Location */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-semibold text-gray-500 dark:text-slate-400 flex items-center gap-1.5">
-              <Warehouse size={12} className="text-[#f58220]" />
-              Warehouse / Stock Location
+            <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
+              <Warehouse size={13} className="text-[#f58220]" />
+              Stock Location / Warehouse
             </label>
             <button
               onClick={() => setShowAddWarehouse(true)}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 text-[#F97316] hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors text-[10px] font-bold uppercase tracking-wide"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-[#f58220] hover:bg-orange-100 transition-colors text-[10px] font-bold uppercase cursor-pointer"
             >
               <Plus size={10} /> Add
             </button>
@@ -339,7 +355,7 @@ export default function ProductionPlanningPage() {
           <select
             value={selectedWarehouseId}
             onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-xs font-medium focus:border-[#f58220] focus:outline-none"
+            className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#f58220] outline-none cursor-pointer"
           >
             {warehouses.map((w) => (
               <option key={w.id} value={w.id} className="dark:bg-card">
@@ -350,70 +366,74 @@ export default function ProductionPlanningPage() {
         </div>
       </div>
 
-      {/* Two-Column Layout */}
+      {/* ── Main Formulation & Ingredients Layout ── */}
       {recipe ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
 
-          {/* Left Column: Recipe Yield details & Instructions */}
+          {/* Left Column: Yield Scaling Details & Instructions */}
           <div className="lg:col-span-1 space-y-4 sm:space-y-6 min-w-0">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm min-w-0">
-              <div className="flex items-center gap-2.5 mb-3">
-                <ChefHat className="text-[#F97316]" size={18} />
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 min-w-0">
+              <div className="flex items-center gap-2.5">
+                <ChefHat className="text-[#f58220]" size={18} />
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">{recipe.name}</h3>
               </div>
-              <div className="space-y-2.5 text-xs font-semibold text-gray-600 dark:text-slate-300">
-                <div className="flex justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
-                  <span className="uppercase text-gray-400 dark:text-slate-500">Recipe Yield:</span>
-                  <span className="text-gray-800 dark:text-white">{recipe.yieldQty} {recipe.yieldUnit || ""}</span>
+              <div className="space-y-2 text-xs font-semibold text-gray-600 dark:text-slate-300 divide-y divide-gray-100 dark:divide-white/5">
+                <div className="flex justify-between pt-1">
+                  <span className="text-gray-400 dark:text-slate-500">Base Yield:</span>
+                  <span className="text-gray-800 dark:text-white font-mono">{recipe.yieldQty} {recipe.yieldUnit || ""}</span>
                 </div>
-                <div className="flex justify-between pb-0.5">
-                  <span className="uppercase text-gray-400 dark:text-slate-500">Scaled Yield:</span>
-                  <span className="text-[#F97316] font-black">{targetYield} {targetUnit || recipe.yieldUnit || ""}</span>
+                <div className="flex justify-between pt-2">
+                  <span className="text-gray-400 dark:text-slate-500">Scaled Output:</span>
+                  <span className="text-[#f58220] font-mono font-bold">{targetYield} {targetUnit || recipe.yieldUnit || ""}</span>
+                </div>
+                <div className="flex justify-between pt-2">
+                  <span className="text-gray-400 dark:text-slate-500">Batch Multiplier:</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">{multiplier.toFixed(2)}×</span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-4 shadow-sm space-y-2 min-w-0">
-              <h4 className="text-xs font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2 min-w-0">
+              <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
                 Production Instructions
               </h4>
               <p className="text-xs leading-relaxed text-gray-600 dark:text-slate-300 whitespace-pre-line font-medium">
-                {recipe.instructions || "No specific instructions loaded for this recipe."}
+                {recipe.instructions || "Standard formulation instructions. Ensure QC parameters are recorded during production stages."}
               </p>
             </div>
           </div>
 
           {/* Right Column: Ingredients Needed Table */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl shadow-sm overflow-hidden min-w-0">
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl shadow-2xs overflow-hidden min-w-0">
               
-              {/* Header */}
-              <div className="p-4 border-b border-gray-200 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-white/[0.02]">
+              {/* Table Header */}
+              <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/[0.01]">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                    <Database size={16} className="text-[#F97316]" />
-                    Ingredients Needed
+                  <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <Database size={15} className="text-[#f58220]" />
+                    Raw Material Requirements ({recipe.recipeItems.length})
                   </h3>
-                  <p className="text-[11px] text-gray-450 dark:text-slate-400 font-semibold mt-1">
-                    Comparing quantities needed for {targetYield || 0} {targetUnit || recipe.yieldUnit || ""}
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 font-semibold mt-0.5">
+                    Quantities needed for {targetYield || 0} {targetUnit || recipe.yieldUnit || ""}
                   </p>
                 </div>
                 {stockLoading && (
                   <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 flex items-center gap-1.5 uppercase animate-pulse shrink-0">
-                    <RefreshCw size={12} className="animate-spin" /> Checking Stock...
+                    <RefreshCw size={12} className="animate-spin text-[#f58220]" /> Checking Stock...
                   </span>
                 )}
               </div>
 
-              {/* Body */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+              {/* Desktop Table View */}
+              <div className="hidden sm:block overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-left border-collapse min-w-[500px]">
                   <thead>
-                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
-                      <th className="py-3 px-6">Ingredient</th>
-                      <th className="py-3 px-4 text-right">Recipe Qty</th>
+                    <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
+                      <th className="py-3 px-5">Ingredient</th>
+                      <th className="py-3 px-4 text-right">Required</th>
                       <th className="py-3 px-4 text-right">Stock Available</th>
-                      <th className="py-3 px-6 text-center">Status</th>
+                      <th className="py-3 px-5 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-semibold text-gray-700 dark:text-slate-300">
@@ -424,31 +444,31 @@ export default function ProductionPlanningPage() {
                       const deficit = Math.max(scaledQty - available, 0);
 
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3.5 px-6 font-bold">
-                            <div className="text-gray-800 dark:text-white">{item.inventoryItem?.name}</div>
-                            <div className="text-[9px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "N/A"}</div>
+                        <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3.5 px-5 font-bold">
+                            <div className="text-gray-900 dark:text-white">{item.inventoryItem?.name}</div>
+                            <div className="text-[10px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "SKU-N/A"}</div>
                           </td>
-                          <td className="py-3.5 px-4 text-right font-bold text-gray-900 dark:text-white">
-                            {scaledQty.toFixed(3)} <span className="text-[10px] font-bold uppercase text-[#F97316]">{item.unit}</span>
+                          <td className="py-3.5 px-4 text-right font-mono font-bold text-gray-900 dark:text-white">
+                            {scaledQty.toFixed(3)} <span className="text-[10px] uppercase text-[#f58220]">{item.unit}</span>
                           </td>
-                          <td className="py-3.5 px-4 text-right text-gray-500 dark:text-slate-400">
-                            {available.toFixed(3)} <span className="text-[10px] font-bold uppercase">{item.unit}</span>
+                          <td className="py-3.5 px-4 text-right font-mono text-gray-600 dark:text-slate-400">
+                            {available.toFixed(3)} <span className="text-[10px] uppercase">{item.unit}</span>
                           </td>
-                          <td className="py-3.5 px-6 text-center">
+                          <td className="py-3.5 px-5 text-center">
                             {sufficient ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-500/20">
-                                <CheckCircle2 size={10} />
-                                AVAILABLE
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
+                                <CheckCircle2 size={11} />
+                                Available
                               </span>
                             ) : (
                               <span className="inline-flex flex-col items-center gap-0.5">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-500/20">
-                                  <AlertCircle size={10} />
-                                  SHORT
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20">
+                                  <AlertCircle size={11} />
+                                  Shortage
                                 </span>
-                                <span className="text-[9px] font-mono text-rose-500 dark:text-rose-400 font-bold mt-0.5">
-                                  {deficit.toFixed(3)} {item.unit} SHORT
+                                <span className="text-[10px] font-mono text-rose-500 dark:text-rose-400 font-bold">
+                                  {deficit.toFixed(3)} {item.unit} Short
                                 </span>
                               </span>
                             )}
@@ -460,69 +480,122 @@ export default function ProductionPlanningPage() {
                 </table>
               </div>
 
+              {/* Mobile Cards View (< 640px) */}
+              <div className="sm:hidden divide-y divide-gray-100 dark:divide-white/5">
+                {recipe.recipeItems.map((item) => {
+                  const scaledQty = item.quantityRequired * multiplier;
+                  const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
+                  const sufficient = available + EPSILON >= scaledQty;
+                  const deficit = Math.max(scaledQty - available, 0);
+
+                  return (
+                    <div key={item.id} className="p-3.5 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-bold text-gray-900 dark:text-white text-xs">{item.inventoryItem?.name}</p>
+                          <p className="text-[10px] font-mono text-gray-400">{item.inventoryItem?.sku || "SKU-N/A"}</p>
+                        </div>
+                        {sufficient ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Available
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200">
+                            Shortage
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-white/[0.02] p-2 rounded-xl">
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400">Required</span>
+                          <p className="font-mono font-bold text-gray-800 dark:text-white mt-0.5">
+                            {scaledQty.toFixed(3)} {item.unit}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-gray-400">In Stock</span>
+                          <p className="font-mono text-gray-600 dark:text-slate-400 mt-0.5">
+                            {available.toFixed(3)} {item.unit}
+                          </p>
+                        </div>
+                      </div>
+
+                      {!sufficient && (
+                        <p className="text-[10px] font-mono font-bold text-rose-500 text-right">
+                          Deficit: {deficit.toFixed(3)} {item.unit}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
             </div>
           </div>
 
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 text-center">
-          <div className="w-12 h-12 bg-gray-100 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-400 dark:text-slate-500 mb-3">
-            <ChefHat size={24} />
+        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 text-center p-6">
+          <div className="w-14 h-14 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center text-[#f58220] mb-3">
+            <ChefHat size={28} />
           </div>
-          <p className="text-sm font-semibold text-gray-800 dark:text-white">Select a Formula to Begin Scaling Calculations</p>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Choose a recipe above and enter a target batch yield.</p>
+          <p className="text-sm font-bold text-gray-800 dark:text-white">Select a Formula to Begin Scaling Calculations</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Choose a recipe above and enter a target batch yield to calculate ingredient needs.</p>
         </div>
       )}
 
-      {/* Add Warehouse Modal */}
+      {/* ── Add Warehouse Modal ── */}
       {showAddWarehouse && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-sm mx-auto space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-gray-800 dark:text-white flex items-center gap-2">
-                <Warehouse size={16} className="text-[#F97316]" />
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Warehouse size={16} className="text-[#f58220]" />
                 Add New Warehouse
               </h3>
-              <button onClick={() => setShowAddWarehouse(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-slate-200">
+              <button onClick={() => setShowAddWarehouse(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 cursor-pointer">
                 <X size={16} />
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 text-xs">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase mb-1">Warehouse Name *</label>
+                <label className="block font-bold text-gray-700 dark:text-slate-300 mb-1">Warehouse Name *</label>
                 <input
                   type="text"
                   value={newWhName}
                   onChange={(e) => setNewWhName(e.target.value)}
-                  placeholder="e.g. Main Store, Cold Storage"
-                  className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-medium text-gray-800 dark:text-white bg-white dark:bg-[#13151f] focus:border-[#f58220] focus:outline-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                  placeholder="e.g. Central Plant Store, Cold Storage"
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white bg-gray-50 dark:bg-[#13151f] focus:border-[#f58220] outline-none"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase mb-1">Location / Address</label>
+                <label className="block font-bold text-gray-700 dark:text-slate-300 mb-1">Location / Address</label>
                 <input
                   type="text"
                   value={newWhLocation}
                   onChange={(e) => setNewWhLocation(e.target.value)}
-                  placeholder="Optional"
-                  className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-medium text-gray-800 dark:text-white bg-white dark:bg-[#13151f] focus:border-[#f58220] focus:outline-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                  placeholder="Optional address details"
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white bg-gray-50 dark:bg-[#13151f] focus:border-[#f58220] outline-none"
                 />
               </div>
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-2">
               <button
+                type="button"
                 onClick={() => setShowAddWarehouse(false)}
-                className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleAddWarehouse}
                 disabled={savingWh}
-                className="flex-1 py-2 rounded-xl bg-[#F97316] text-white text-xs font-bold hover:bg-orange-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-2 shadow-sm"
+                className="flex-1 py-2 rounded-xl bg-[#f58220] text-white text-xs font-bold hover:bg-[#e0751a] transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
               >
-                {savingWh ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
-                {savingWh ? "Saving..." : "Add Warehouse"}
+                {savingWh ? <RefreshCw size={13} className="animate-spin" /> : <Plus size={13} />}
+                <span>{savingWh ? "Saving..." : "Add Warehouse"}</span>
               </button>
             </div>
           </div>

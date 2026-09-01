@@ -5,14 +5,14 @@ import { createPortal } from "react-dom";
 import {
   Plus, Minus, Trash2, Search, CreditCard, Banknote, QrCode,
   User, X, Percent, ShoppingBag, ArrowRight, Tag,
-  Building2, Store, Printer, RefreshCw, Scan, Barcode, RotateCcw
+  Building2, Store, Printer, RefreshCw, Barcode, RotateCcw,
+  Receipt, CheckCircle2
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, franchiseApi, accountsApi, posApi } from "@/lib/api";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
-import { Modal } from "@/components/ui/Modal";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ interface ReceiptData {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const fmt = (n: number) => `₹${n.toLocaleString("en-IN")}`;
+const fmt = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const UNIT_LABEL: Record<string, string> = { KG: "kg", G: "g", L: "L", ML: "ml", PCS: "pcs", PC: "pc" };
 const formatPackSize = (p?: { qty: number; unit: string } | null) =>
@@ -89,6 +89,8 @@ export default function POSPage() {
   const [newAccType, setNewAccType]       = useState<"CASH" | "BANK" | "UPI">("CASH");
   const [newAccBalance, setNewAccBalance] = useState("");
   const [creatingAccount, setCreatingAccount] = useState(false);
+
+  const cartRef = useRef<HTMLDivElement>(null);
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,7 +224,7 @@ export default function POSPage() {
         setCart([]); setSelectedParty(null); setPartySearch(""); setDiscount(""); setPaidAmount(""); setSearch("");
         searchRef.current?.focus();
       }
-      if (e.key === " " && document.activeElement?.tagName !== "INPUT") {
+      if (e.key === " " && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
         e.preventDefault(); searchRef.current?.focus();
       }
     };
@@ -355,7 +357,7 @@ export default function POSPage() {
     const w = window.open("", "_blank", "width=420,height=700");
     if (!w) return;
     const rows = receipt.items.map(i =>
-      `<tr><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">₹${i.price}</td><td style="text-align:right">₹${(i.price * i.quantity).toLocaleString()}</td></tr>`
+      `<tr><td>${i.name}</td><td style="text-align:center">${i.quantity}</td><td style="text-align:right">₹${i.price.toFixed(2)}</td><td style="text-align:right">₹${(i.price * i.quantity).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td></tr>`
     ).join("");
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>
       *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;max-width:300px;margin:auto;padding:16px;font-size:12px}
@@ -365,9 +367,9 @@ export default function POSPage() {
       .total{display:flex;justify-content:space-between;margin:3px 0}.bold{font-weight:bold;font-size:14px}
       @media print{body{padding:0}}
     </style></head><body>
-      <h1>HQ POS</h1>
+      <h1>KIDDOS POS</h1>
       <div class="center" style="font-size:10px;margin-bottom:8px">
-        Bill #${receipt.orderId.slice(-8).toUpperCase()} &nbsp;·&nbsp;
+        Bill #${receipt.orderId ? receipt.orderId.slice(-8).toUpperCase() : "COUNTER"} &nbsp;·&nbsp;
         ${formatDate(receipt.timestamp)} ${new Date(receipt.timestamp).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}
       </div>
       <div class="center" style="font-size:11px;margin-bottom:8px">
@@ -377,10 +379,10 @@ export default function POSPage() {
       <table><thead><tr><th style="text-align:left">Item</th><th>Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amt</th></tr></thead>
       <tbody>${rows}</tbody></table>
       <div class="line"></div>
-      <div class="total"><span>Subtotal</span><span>₹${receipt.subtotal.toLocaleString()}</span></div>
-      <div class="total"><span>GST</span><span>₹${receipt.gst.toLocaleString()}</span></div>
-      ${receipt.discount > 0 ? `<div class="total"><span>Discount</span><span>-₹${receipt.discount.toLocaleString()}</span></div>` : ""}
-      <div class="total bold" style="border-top:1px solid #000;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>₹${receipt.total.toLocaleString()}</span></div>
+      <div class="total"><span>Subtotal</span><span>₹${receipt.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
+      <div class="total"><span>GST</span><span>₹${receipt.gst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
+      ${receipt.discount > 0 ? `<div class="total"><span>Discount</span><span>-₹${receipt.discount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>` : ""}
+      <div class="total bold" style="border-top:1px solid #000;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>₹${receipt.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span></div>
       <div class="center" style="margin-top:20px;font-size:11px;font-weight:bold">*** THANK YOU ***</div>
       <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
     </body></html>`);
@@ -401,11 +403,11 @@ export default function POSPage() {
   if (receipt) {
     return (
       <div className="flex min-h-[calc(100vh-3.5rem)] items-center justify-center bg-gray-50 dark:bg-background p-4 w-full min-w-0">
-        <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-auto overflow-hidden">
+        <div className="bg-white dark:bg-card rounded-2xl shadow-xl border border-gray-200 dark:border-white/10 w-full max-w-sm mx-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200">
           {/* Header */}
           <div className="px-6 py-5 text-center text-white" style={{ background: BRAND_ORANGE }}>
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-              <ShoppingBag size={28} />
+              <CheckCircle2 size={28} />
             </div>
             <div className="text-lg font-bold">Payment Successful</div>
             <div className="text-2xl font-black mt-1">{fmt(receipt.total)}</div>
@@ -416,30 +418,30 @@ export default function POSPage() {
           <div className="px-6 py-4 space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">Bill No</span>
-              <span className="font-semibold text-gray-800 dark:text-white">#{receipt.orderId.slice(-8).toUpperCase()}</span>
+              <span className="font-mono font-bold text-gray-800 dark:text-white">#{receipt.orderId ? receipt.orderId.slice(-8).toUpperCase() : "COUNTER"}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">{receipt.partyType}</span>
-              <span className="font-semibold text-gray-800 dark:text-white">{receipt.party?.name || "Walk-in"}</span>
+              <span className="font-semibold text-gray-800 dark:text-white truncate max-w-[180px]">{receipt.party?.name || "Walk-in"}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500 dark:text-slate-400">Items</span>
               <span className="font-semibold text-gray-800 dark:text-white">{receipt.items.length} items · {receipt.items.reduce((s, i) => s + i.quantity, 0)} qty</span>
             </div>
             <div className="border-t border-gray-100 dark:border-white/5 pt-3 space-y-1">
-              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="dark:text-slate-200">{fmt(receipt.subtotal)}</span></div>
-              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>GST</span><span className="dark:text-slate-200">{fmt(receipt.gst)}</span></div>
-              {receipt.discount > 0 && <div className="flex justify-between text-xs text-green-600 dark:text-green-400"><span>Discount</span><span>-{fmt(receipt.discount)}</span></div>}
-              <div className="flex justify-between text-sm font-bold text-gray-800 dark:text-white pt-1 border-t border-gray-100 dark:border-white/5"><span>Total</span><span>{fmt(receipt.total)}</span></div>
+              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="font-mono dark:text-slate-200">{fmt(receipt.subtotal)}</span></div>
+              <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>GST</span><span className="font-mono dark:text-slate-200">{fmt(receipt.gst)}</span></div>
+              {receipt.discount > 0 && <div className="flex justify-between text-xs text-emerald-600 dark:text-emerald-400"><span>Discount</span><span className="font-mono">-{fmt(receipt.discount)}</span></div>}
+              <div className="flex justify-between text-sm font-bold text-gray-800 dark:text-white pt-1 border-t border-gray-100 dark:border-white/5"><span>Total</span><span className="font-mono text-[#f58220]">{fmt(receipt.total)}</span></div>
             </div>
           </div>
 
           {/* Actions */}
           <div className="px-6 pb-6 flex gap-2">
-            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 py-2.5 rounded-xl text-sm font-medium transition-colors">
+            <button onClick={handlePrint} className="flex-1 flex items-center justify-center gap-2 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 py-2.5 rounded-xl text-sm font-semibold transition-colors cursor-pointer">
               <Printer size={15} /> Print
             </button>
-            <button onClick={handleNewOrder} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+            <button onClick={handleNewOrder} className="flex-1 bg-[#f58220] hover:bg-[#e8740e] text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-sm active:scale-95 cursor-pointer">
               New Order
             </button>
           </div>
@@ -455,15 +457,15 @@ export default function POSPage() {
   const activeTab = PARTY_TABS.find(t => t.type === partyType)!;
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-screen lg:h-[calc(100vh-3.5rem)] bg-[#F5F6FA] dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+    <div className="flex flex-col lg:flex-row min-h-screen lg:h-[calc(100vh-3.5rem)] bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
 
-      {/* ── LEFT: Products ─────────────────────────────────────────────────── */}
+      {/* ── LEFT: Products Catalog ─────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {/* Search bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 py-3 shrink-0 w-full min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
+        {/* Search & Action Bar */}
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-3 sm:px-4 py-3 shrink-0 w-full min-w-0 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 w-full min-w-0">
+            <div className="relative flex-1 min-w-0">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
               <input
                 ref={searchRef}
@@ -471,44 +473,52 @@ export default function POSPage() {
                 placeholder="Search products (Space to focus)..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-10 pr-8 py-2.5 text-xs sm:text-sm outline-none focus:border-[#f58220] transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
-            )}
+              {search && (
+                <X 
+                  size={14} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                  onClick={() => setSearch("")} 
+                />
+              )}
             </div>
-            <button
-              onClick={() => { setShowScanner(true); setScannedProduct(null); }}
-              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-[#f58220] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0"
-            >
-              <Barcode size={15} /> Scan Barcode
-            </button>
-            <button
-              onClick={handleReturnProduct}
-              className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-500 dark:text-slate-300 hover:text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0"
-            >
-              <RotateCcw size={15} /> Return Product
-            </button>
-            <button onClick={fetchProducts} className="p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shrink-0">
-              <RefreshCw size={15} className={productsLoading ? "animate-spin" : ""} />
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => { setShowScanner(true); setScannedProduct(null); }}
+                className="p-2 sm:px-3 sm:py-2 border border-gray-200 dark:border-white/10 rounded-xl text-gray-700 dark:text-slate-300 hover:text-[#f58220] hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0 cursor-pointer"
+                title="Scan Barcode"
+              >
+                <Barcode size={15} /> <span className="hidden sm:inline">Scan Barcode</span>
+              </button>
+              <button
+                onClick={handleReturnProduct}
+                className="p-2 sm:px-3 sm:py-2 border border-gray-200 dark:border-white/10 rounded-xl text-gray-700 dark:text-slate-300 hover:text-red-500 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors flex items-center gap-1.5 font-bold text-xs shrink-0 cursor-pointer"
+                title="Return Product"
+              >
+                <RotateCcw size={15} /> <span className="hidden sm:inline">Return</span>
+              </button>
+              <button
+                onClick={fetchProducts}
+                className="p-2 sm:p-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shrink-0 cursor-pointer"
+                title="Refresh Products"
+              >
+                <RefreshCw size={15} className={productsLoading ? "animate-spin" : ""} />
+              </button>
+            </div>
           </div>
 
           {/* Category tabs */}
-          <div className="flex items-center gap-2 mt-3 overflow-x-auto custom-scrollbar pb-1 max-w-full">
+          <div className="flex items-center gap-1.5 sm:gap-2 mt-2.5 overflow-x-auto custom-scrollbar pb-1 max-w-full">
             {categories.map(cat => (
               <button
                 key={cat}
                 onClick={() => setActiveCat(cat)}
                 className={clsx(
-                  "shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap",
+                  "shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer",
                   activeCategory === cat
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-white/10"
+                    ? "bg-[#f58220] text-white shadow-2xs"
+                    : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-white/10"
                 )}
               >
                 {cat}
@@ -518,18 +528,20 @@ export default function POSPage() {
         </div>
 
         {/* Products grid */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 custom-scrollbar">
           {productsLoading ? (
-            <div className="flex items-center justify-center h-40">
-              <RefreshCw size={20} className="animate-spin text-blue-500" />
+            <div className="flex flex-col items-center justify-center h-48 gap-2">
+              <RefreshCw size={24} className="animate-spin text-[#f58220] opacity-70" />
+              <p className="text-xs text-gray-400 dark:text-slate-500">Loading catalog...</p>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-400 dark:text-slate-500">
-              <ShoppingBag size={32} strokeWidth={1} className="mb-2" />
-              <p className="text-sm">No products found</p>
+            <div className="flex flex-col items-center justify-center h-48 text-gray-400 dark:text-slate-500 text-center">
+              <ShoppingBag size={36} strokeWidth={1.5} className="mb-2 text-gray-300 dark:text-slate-600" />
+              <p className="text-sm font-semibold">No products found</p>
+              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Try adjusting your search or category filter</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5 sm:gap-4">
               {filtered.map(p => {
                 const inCart = cart.find(i => i.id === p.id);
 
@@ -537,17 +549,18 @@ export default function POSPage() {
                   <button
                     key={p.id}
                     onClick={() => addToCart(p)}
-                    style={inCart ? { borderColor: BRAND_ORANGE, borderWidth: "1.5px" } : {}}
                     className={clsx(
-                      "group relative bg-white dark:bg-card border rounded-2xl p-3 sm:p-4 text-left transition-all hover:shadow-md active:scale-95",
-                      inCart ? "shadow-md" : "border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10",
+                      "group relative bg-white dark:bg-card border rounded-2xl p-3 sm:p-4 text-left transition-all hover:shadow-md active:scale-95 cursor-pointer flex flex-col justify-between min-h-[110px]",
+                      inCart
+                        ? "border-[#f58220] ring-1 ring-orange-200 dark:ring-orange-500/20 shadow-sm"
+                        : "border-gray-200 dark:border-white/5 hover:border-gray-300 dark:hover:border-white/10",
                       p.noPrice && "opacity-50 cursor-not-allowed"
                     )}
                   >
                     {/* Stock badge */}
                     {p.stock !== null && (
                       <div className={clsx(
-                        "absolute top-2.5 right-2.5 text-[11px] font-bold px-2 py-1 rounded-full",
+                        "absolute top-2.5 right-2.5 text-[10px] font-bold px-1.5 py-0.5 rounded-md",
                         p.stock === 0 ? "bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400" : p.stock <= 5 ? "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400" : "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400"
                       )}>
                         {p.stock === 0 ? "OUT" : `${p.stock}`}
@@ -561,14 +574,19 @@ export default function POSPage() {
                       </div>
                     )}
 
-                    <p className="text-sm font-semibold text-gray-800 dark:text-white leading-tight line-clamp-2 mb-2">
-                      {p.name}
-                      {formatPackSize(p.packSize) && (
-                        <span className="ml-1 font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
-                      )}
-                    </p>
-                    <p className="text-base font-bold mt-1" style={{ color: BRAND_ORANGE }}>₹{getPrice(p, partyType).toLocaleString()}</p>
-                    {p.taxPercent > 0 && <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">GST {p.taxPercent}%</p>}
+                    <div>
+                      <p className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white leading-tight line-clamp-2 pr-6">
+                        {p.name}
+                        {formatPackSize(p.packSize) && (
+                          <span className="ml-1 font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
+                        )}
+                      </p>
+                    </div>
+
+                    <div className="mt-2">
+                      <p className="text-sm sm:text-base font-bold font-mono text-[#f58220]">₹{getPrice(p, partyType).toLocaleString("en-IN")}</p>
+                      {p.taxPercent > 0 && <p className="text-[10px] text-gray-400 dark:text-slate-500">GST {p.taxPercent}%</p>}
+                    </div>
                   </button>
                 );
               })}
@@ -576,17 +594,21 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Bottom hint */}
-        <div className="bg-white dark:bg-card border-t border-gray-100 dark:border-white/5 px-4 py-2 flex items-center gap-4 text-[10px] text-gray-400 dark:text-slate-500 shrink-0">
-          <span><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-400 font-mono">ESC</kbd> Clear</span>
-          <span><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-500 dark:text-slate-400 font-mono">SPACE</kbd> Focus Search</span>
-          <span className="ml-auto">{cart.length} items · {fmt(total)}</span>
+        {/* Bottom hint toolbar */}
+        <div className="bg-white dark:bg-card border-t border-gray-100 dark:border-white/5 px-4 py-2 flex items-center justify-between text-[11px] text-gray-500 dark:text-slate-400 shrink-0">
+          <div className="flex items-center gap-3">
+            <span><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded font-mono text-gray-600 dark:text-slate-300">ESC</kbd> Clear</span>
+            <span className="hidden sm:inline"><kbd className="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded font-mono text-gray-600 dark:text-slate-300">SPACE</kbd> Focus Search</span>
+          </div>
+          <span className="font-bold text-gray-900 dark:text-white">{cart.length} items · {fmt(total)}</span>
         </div>
       </div>
 
       {/* ── RIGHT: Order Panel ─────────────────────────────────────────────── */}
-      <div className="w-full lg:w-80 xl:w-96 bg-white dark:bg-card border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0 min-w-0">
-
+      <div
+        ref={cartRef}
+        className="w-full lg:w-80 xl:w-96 bg-white dark:bg-card border-t lg:border-t-0 lg:border-l border-gray-200 dark:border-white/5 flex flex-col overflow-hidden shrink-0 min-w-0 shadow-2xs"
+      >
         {/* Party type tabs */}
         <div className="border-b border-gray-100 dark:border-white/5 px-3 pt-3 pb-0 shrink-0">
           <div className="flex gap-1 bg-gray-100 dark:bg-white/5 p-1 rounded-xl">
@@ -599,11 +621,11 @@ export default function POSPage() {
                   onClick={() => { setPartyType(tab.type); setSelectedParty(null); setPartySearch(""); setPartyResults([]); setCart([]); }}
                   style={active ? { background: BRAND_ORANGE } : {}}
                   className={clsx(
-                    "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-semibold transition-all",
-                    active ? "text-white shadow-sm" : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white"
+                    "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer",
+                    active ? "text-white shadow-2xs" : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white"
                   )}
                 >
-                  <Icon size={12} />
+                  <Icon size={13} />
                   {tab.label}
                 </button>
               );
@@ -614,15 +636,15 @@ export default function POSPage() {
         {/* Party search */}
         <div className="px-3 py-2.5 border-b border-gray-100 dark:border-white/5 shrink-0" ref={partyDropRef}>
           {selectedParty ? (
-            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 border dark:bg-orange-500/10 dark:border-orange-500/20" style={{ background: "#fff8f2", borderColor: "#f9c89a" }}>
+            <div className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 border dark:bg-orange-500/10 dark:border-orange-500/20 bg-orange-50/60 border-orange-200">
               <div className="w-8 h-8 text-white rounded-lg flex items-center justify-center font-bold text-sm shrink-0" style={{ background: BRAND_ORANGE }}>
                 {selectedParty.name?.[0]?.toUpperCase() || "?"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{selectedParty.name}</p>
-                <p className="text-[10px]" style={{ color: BRAND_ORANGE }}>{selectedParty.phone || selectedParty.contactNum || selectedParty.location || partyType}</p>
+                <p className="text-[10px] text-[#f58220] truncate">{selectedParty.phone || selectedParty.contactNum || selectedParty.location || partyType}</p>
               </div>
-              <button onClick={() => { setSelectedParty(null); setPartySearch(""); }} className="text-gray-400 hover:text-red-500 transition-colors">
+              <button onClick={() => { setSelectedParty(null); setPartySearch(""); }} className="text-gray-400 hover:text-red-500 transition-colors p-1 cursor-pointer">
                 <X size={14} />
               </button>
             </div>
@@ -635,27 +657,27 @@ export default function POSPage() {
                 value={partySearch}
                 onChange={e => { setPartySearch(e.target.value); setShowPartyDrop(true); }}
                 onFocus={() => setShowPartyDrop(true)}
-                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-8 py-2 text-xs outline-none focus:border-[#f58220] transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
-            {partySearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setPartySearch("")} 
-              />
-            )}
+              {partySearch && (
+                <X 
+                  size={14} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                  onClick={() => setPartySearch("")} 
+                />
+              )}
               {showPartyDrop && partyResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
                   {partyResults.map(p => (
                     <button
                       key={p.id}
                       onClick={() => { setSelectedParty(p); setPartySearch(p.name); setShowPartyDrop(false); setPartyResults([]); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left transition-colors cursor-pointer"
                     >
                       <div className="w-7 h-7 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-semibold text-xs text-gray-600 dark:text-slate-300 shrink-0">
                         {p.name?.[0]?.toUpperCase()}
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{p.name}</p>
                         <p className="text-[10px] text-gray-400 dark:text-slate-500">{p.phone || p.contactNum || p.location || ""}</p>
                       </div>
@@ -679,84 +701,84 @@ export default function POSPage() {
             <p className="text-[10px] text-gray-400 dark:text-slate-500">{cart.length} items added</p>
           </div>
           {cart.length > 0 && (
-            <button onClick={() => setCart([])} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors">
+            <button onClick={() => setCart([])} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer" title="Clear Cart">
               <Trash2 size={14} />
             </button>
           )}
         </div>
 
         {/* Cart items */}
-        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
+        <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5 custom-scrollbar min-h-[140px] max-h-[320px] lg:max-h-none">
           {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-slate-600 py-8">
+            <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-slate-600 py-8 text-center">
               <ShoppingBag size={32} strokeWidth={1} className="mb-2" />
               <p className="text-xs font-medium text-gray-400 dark:text-slate-500">Add products to start billing</p>
             </div>
           ) : (
             cart.map(item => (
-              <div key={item.id} className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl px-3 py-2.5 hover:border-blue-200 dark:hover:border-blue-500/30 transition-colors">
+              <div key={item.id} className="flex items-center gap-2 bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/5 rounded-xl px-3 py-2.5 hover:border-orange-200 dark:hover:border-orange-500/30 transition-colors">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{item.name}</p>
-                  <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">₹{item.price} {item.taxPercent > 0 && `· GST ${item.taxPercent}%`}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">₹{item.price.toFixed(2)} {item.taxPercent > 0 && `· GST ${item.taxPercent}%`}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                  <button onClick={() => updateQty(item.id, -1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-orange-400 hover:text-[#f58220] transition-colors cursor-pointer">
                     <Minus size={10} strokeWidth={3} />
                   </button>
                   <span className="w-6 text-center text-xs font-bold text-gray-800 dark:text-white">{item.quantity}</span>
-                  <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                  <button onClick={() => updateQty(item.id, 1)} className="w-6 h-6 rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-card flex items-center justify-center text-gray-600 dark:text-slate-300 hover:border-orange-400 hover:text-[#f58220] transition-colors cursor-pointer">
                     <Plus size={10} strokeWidth={3} />
                   </button>
-                  <button onClick={() => removeItem(item.id)} className="w-6 h-6 ml-1 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors">
+                  <button onClick={() => removeItem(item.id)} className="w-6 h-6 ml-1 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors cursor-pointer">
                     <X size={12} />
                   </button>
                 </div>
-                <div className="text-xs font-bold text-gray-800 dark:text-white w-14 text-right shrink-0">
-                  ₹{(item.price * item.quantity).toLocaleString()}
+                <div className="text-xs font-bold font-mono text-gray-800 dark:text-white w-16 text-right shrink-0">
+                  ₹{(item.price * item.quantity).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </div>
               </div>
             ))
           )}
         </div>
 
-        {/* Billing panel */}
+        {/* Billing & Checkout Panel */}
         <div className="border-t border-gray-100 dark:border-white/5 px-4 py-3 space-y-3 bg-gray-50/60 dark:bg-white/[0.02] shrink-0">
 
           {/* Paid & Change */}
           <div className="flex gap-3">
             <div className="flex-1">
-              <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500 mb-1">PAID AMOUNT</p>
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Paid Amount</p>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 text-sm font-semibold">₹</span>
                 <input
                   type="number"
-                  placeholder="0"
+                  placeholder="0.00"
                   value={paidAmount}
                   onChange={e => setPaidAmount(e.target.value)}
-                  className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg pl-7 pr-2 py-2 text-sm font-bold outline-none focus:border-blue-500 transition-colors text-gray-800 dark:text-white"
+                  className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-7 pr-2 py-2 text-xs sm:text-sm font-bold outline-none focus:border-[#f58220] transition-colors text-gray-800 dark:text-white font-mono"
                 />
               </div>
             </div>
             <div className="text-right shrink-0">
-              <p className="text-[10px] font-medium text-red-400 mb-1">CHANGE DUE</p>
-              <p className={clsx("text-xl font-black mt-1", changeDue >= 0 ? "text-green-600 dark:text-green-400" : "text-red-500")}>
-                ₹{Math.max(0, changeDue).toLocaleString()}
+              <p className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Change Due</p>
+              <p className={clsx("text-lg sm:text-xl font-bold font-mono mt-1", changeDue >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-500")}>
+                ₹{Math.max(0, changeDue).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
               </p>
             </div>
           </div>
 
-          {/* Totals */}
-          <div className="bg-white dark:bg-[#13151f] border border-gray-100 dark:border-white/10 rounded-xl px-3 py-2.5 space-y-1.5">
+          {/* Totals Breakdown */}
+          <div className="bg-white dark:bg-[#13151f] border border-gray-100 dark:border-white/10 rounded-xl px-3 py-2.5 space-y-1.5 shadow-2xs">
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400">
-              <span className="flex items-center gap-1"><Percent size={10} className="text-blue-500" /> Subtotal</span>
-              <span className="font-medium text-gray-700 dark:text-slate-200">{fmt(subtotal)}</span>
+              <span className="flex items-center gap-1"><Percent size={11} className="text-orange-500" /> Subtotal</span>
+              <span className="font-mono font-medium text-gray-700 dark:text-slate-200">{fmt(subtotal)}</span>
             </div>
             <div className="flex justify-between text-xs text-gray-500 dark:text-slate-400">
-              <span className="flex items-center gap-1"><Percent size={10} className="text-blue-500" /> Tax (GST)</span>
-              <span className="font-medium text-gray-700 dark:text-slate-200">{fmt(gst)}</span>
+              <span className="flex items-center gap-1"><Percent size={11} className="text-orange-500" /> Tax (GST)</span>
+              <span className="font-mono font-medium text-gray-700 dark:text-slate-200">{fmt(gst)}</span>
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400"><Tag size={10} className="text-green-500" /> Discount</span>
+              <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400"><Tag size={11} className="text-emerald-500" /> Discount</span>
               <div className="relative w-24">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
                 <input
@@ -765,23 +787,23 @@ export default function POSPage() {
                   placeholder="0"
                   value={discount}
                   onChange={e => setDiscount(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-lg pl-5 pr-2 py-1 text-xs font-semibold text-right outline-none focus:border-blue-400 transition-colors text-gray-800 dark:text-white"
+                  className="w-full bg-gray-50 dark:bg-white/5 border border-gray-100 dark:border-white/10 rounded-lg pl-5 pr-2 py-1 text-xs font-semibold text-right outline-none focus:border-[#f58220] transition-colors text-gray-800 dark:text-white font-mono"
                 />
               </div>
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-white/10">
-              <span className="text-xs font-medium text-gray-500 dark:text-slate-400">PAYABLE TOTAL</span>
-              <span className="text-xl font-black text-gray-900 dark:text-white">{fmt(total)}</span>
+              <span className="text-xs font-bold text-gray-800 dark:text-slate-300">PAYABLE TOTAL</span>
+              <span className="text-lg sm:text-xl font-bold font-mono text-[#f58220]">{fmt(total)}</span>
             </div>
           </div>
 
-          {/* Account */}
+          {/* Account Selection */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[10px] font-medium text-gray-400 dark:text-slate-500">SOURCE ACCOUNT</p>
+              <p className="text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Source Account</p>
               <button
                 onClick={() => fetchAccounts()}
-                className="text-[10px] text-blue-600 dark:text-blue-400 hover:text-blue-700 font-medium cursor-pointer"
+                className="text-[10px] text-[#f58220] hover:text-[#e8740e] font-semibold cursor-pointer"
               >
                 Refresh
               </button>
@@ -796,17 +818,17 @@ export default function POSPage() {
                   else if (acc?.type === "UPI") setPayMode("UPI");
                   else if (acc?.type === "BANK") setPayMode("CARD");
                 }}
-                className="flex-1 min-w-0 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-colors"
+                className="flex-1 min-w-0 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] transition-colors"
               >
                 {accounts.length === 0
-                  ? <option>No accounts — set up in Finance</option>
+                  ? <option value="" className="dark:bg-card">No accounts — set up in Finance</option>
                   : accounts.map(a => <option key={a.id} value={a.id} className="dark:bg-card">{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
                 }
               </select>
               <button
                 type="button"
                 onClick={() => setShowAddAccountModal(true)}
-                className="p-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-2xs shrink-0 flex items-center justify-center cursor-pointer"
+                className="p-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-2xs shrink-0 flex items-center justify-center cursor-pointer active:scale-95"
                 title="Add New Source Account"
               >
                 <Plus size={16} />
@@ -814,7 +836,7 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* Payment modes */}
+          {/* Payment Mode Selector */}
           <div className="grid grid-cols-3 gap-2">
             {(["CASH", "UPI", "CARD"] as const).map(mode => {
               const Icon = mode === "CASH" ? Banknote : mode === "UPI" ? QrCode : CreditCard;
@@ -824,12 +846,12 @@ export default function POSPage() {
                   key={mode}
                   onClick={() => setPayMode(mode)}
                   className={clsx(
-                    "flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-semibold transition-all",
+                    "flex flex-col items-center gap-1 py-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer",
                     active
-                      ? mode === "CASH" ? "bg-green-500 text-white border-green-500"
-                        : mode === "UPI" ? "bg-blue-500 text-white border-blue-500"
-                          : "bg-violet-500 text-white border-violet-500"
-                      : "bg-white dark:bg-white/5 text-gray-500 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
+                      ? mode === "CASH" ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                        : mode === "UPI" ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                          : "bg-violet-600 text-white border-violet-600 shadow-2xs"
+                      : "bg-white dark:bg-white/5 text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
                   )}
                 >
                   <Icon size={16} />
@@ -839,11 +861,11 @@ export default function POSPage() {
             })}
           </div>
 
-          {/* Confirm button */}
+          {/* Confirm Button */}
           <button
             onClick={handleCheckout}
             disabled={cart.length === 0 || loading || !accountId}
-            className="w-full flex items-center justify-center gap-2 disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white py-3 rounded-xl text-sm font-bold transition-all shadow-sm"
+            className="w-full flex items-center justify-center gap-2 disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 dark:disabled:text-slate-500 disabled:cursor-not-allowed text-white py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
             style={cart.length > 0 && accountId ? { background: BRAND_ORANGE } : {}}
           >
             {loading ? (
@@ -855,12 +877,13 @@ export default function POSPage() {
         </div>
       </div>
 
+      {/* Barcode Scanner Modal */}
       {showScanner && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 p-8 text-white space-y-6">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-300 p-6 sm:p-8 text-white space-y-5">
             <button
               onClick={() => setShowScanner(false)}
-              className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="absolute top-5 right-5 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
             >
               <X size={20} />
             </button>
@@ -868,28 +891,28 @@ export default function POSPage() {
             <div className="text-center">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping shrink-0" />
-                <h3 className="text-xl font-black tracking-tight uppercase">POS Barcode Scanner</h3>
+                <h3 className="text-lg sm:text-xl font-bold tracking-tight uppercase">POS Barcode Scanner</h3>
               </div>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Simulated camera laser decoder</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Camera & laser UPC decoder</p>
             </div>
 
             {!scannedProduct ? (
-              <div className="relative h-48 bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden flex flex-col items-center justify-center">
+              <div className="relative h-44 sm:h-48 bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden flex flex-col items-center justify-center">
                 <div className="absolute inset-x-0 h-0.5 bg-red-500 shadow-[0_0_8px_#ef4444] animate-[posScan_2s_ease-in-out_infinite] z-20" />
-                <div className="absolute top-6 left-6.5 w-4 h-4 border-t-2 border-l-2 border-red-500 rounded-tl" />
-                <div className="absolute top-6 right-6 w-4 h-4 border-t-2 border-r-2 border-red-500 rounded-tr" />
-                <div className="absolute bottom-6 left-6.5 w-4 h-4 border-b-2 border-l-2 border-red-500 rounded-bl" />
-                <div className="absolute bottom-6 right-6 w-4 h-4 border-b-2 border-r-2 border-red-500 rounded-br" />
+                <div className="absolute top-4 left-4 w-4 h-4 border-t-2 border-l-2 border-red-500 rounded-tl" />
+                <div className="absolute top-4 right-4 w-4 h-4 border-t-2 border-r-2 border-red-500 rounded-tr" />
+                <div className="absolute bottom-4 left-4 w-4 h-4 border-b-2 border-l-2 border-red-500 rounded-bl" />
+                <div className="absolute bottom-4 right-4 w-4 h-4 border-b-2 border-r-2 border-red-500 rounded-br" />
 
                 {isScanProcessing ? (
-                  <div className="text-center space-y-3 z-10">
+                  <div className="text-center space-y-2 z-10">
                     <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" />
-                    <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">Decoding UPC barcode...</p>
+                    <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest">Decoding UPC barcode...</p>
                   </div>
                 ) : (
                   <div className="text-center space-y-2 z-10">
                     <Barcode size={40} className="text-slate-700 animate-pulse mx-auto" />
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Align product UPC under laser line</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Align product UPC under laser line</p>
                   </div>
                 )}
                 <style dangerouslySetInnerHTML={{
@@ -902,22 +925,22 @@ export default function POSPage() {
                   `}} />
               </div>
             ) : (
-              <div className="bg-slate-950 border border-emerald-500/20 p-6 rounded-3xl text-center space-y-4 animate-in zoom-in-95 duration-200">
-                <div className="w-12 h-12 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-sm">✓</div>
+              <div className="bg-slate-950 border border-emerald-500/20 p-5 rounded-2xl text-center space-y-3 animate-in zoom-in-95 duration-200">
+                <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center text-white font-bold text-xs">✓</div>
                 </div>
                 <div>
-                  <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Product Decoded</p>
-                  <h4 className="text-lg font-black text-white uppercase">{scannedProduct.name}</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Price: ₹{scannedProduct.price} · Stock: {scannedProduct.stock ?? "N/A"}</p>
+                  <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-[0.2em] mb-0.5">Product Decoded</p>
+                  <h4 className="text-base sm:text-lg font-bold text-white uppercase">{scannedProduct.name}</h4>
+                  <p className="text-[11px] text-slate-400 font-mono mt-1">Price: ₹{scannedProduct.price} · Stock: {scannedProduct.stock ?? "N/A"}</p>
                 </div>
               </div>
             )}
 
             {!scannedProduct && (
-              <div className="space-y-3">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Simulate product scans:</label>
-                <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto">
+              <div className="space-y-2">
+                <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Simulate product scans:</label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
                   {products.slice(0, 8).map(p => (
                     <button
                       key={p.id}
@@ -927,9 +950,9 @@ export default function POSPage() {
                           setIsScanProcessing(false);
                           setScannedProduct(p);
                           toast.success(`Scanned: ${p.name}`);
-                        }, 850);
+                        }, 600);
                       }}
-                      className="text-left px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-[10px] font-bold truncate uppercase transition-colors"
+                      className="text-left px-3 py-2 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-xl text-[10px] font-semibold truncate uppercase transition-colors cursor-pointer"
                     >
                       {p.name}
                     </button>
@@ -942,7 +965,7 @@ export default function POSPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setScannedProduct(null)}
-                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl text-[10px] font-black uppercase text-slate-300"
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold uppercase text-slate-300 transition-colors cursor-pointer"
                 >
                   Scan Another
                 </button>
@@ -951,7 +974,7 @@ export default function POSPage() {
                     addToCart(scannedProduct);
                     setShowScanner(false);
                   }}
-                  className="flex-1 py-3 bg-[#f58220] rounded-2xl text-[10px] font-black uppercase text-white hover:opacity-90"
+                  className="flex-1 py-2.5 bg-[#f58220] hover:bg-[#e8740e] rounded-xl text-xs font-bold uppercase text-white transition-all shadow-sm cursor-pointer"
                 >
                   Add to Cart
                 </button>
@@ -961,7 +984,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Create Financial Account Full-Height Side Panel */}
+      {/* Create Financial Account Side Panel */}
       {showAddAccountModal && typeof window !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[9999] flex justify-end">
           {/* Backdrop Overlay */}
@@ -973,10 +996,10 @@ export default function POSPage() {
           {/* Full-Height Right Side Panel */}
           <div className="relative w-full max-w-md bg-white dark:bg-[#020617] h-full shadow-2xl border-l border-slate-100 dark:border-slate-800 flex flex-col z-10 animate-in slide-in-from-right duration-300">
             {/* Panel Header */}
-            <div className="px-6 py-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
               <div>
-                <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">CREATE FINANCIAL ACCOUNT</h2>
-                <p className="text-xs font-semibold text-slate-400 mt-0.5">Add a new payment account for Counter Billing</p>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white uppercase tracking-tight">Create Financial Account</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Add a new payment account for Counter Billing</p>
               </div>
               <button
                 type="button"
@@ -984,15 +1007,15 @@ export default function POSPage() {
                 className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 text-slate-400 dark:text-slate-500 transition-all cursor-pointer"
                 title="Close Panel"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
             {/* Panel Body Form */}
-            <form onSubmit={handleCreateAccount} className="flex-1 flex flex-col justify-between p-6 overflow-y-auto">
-              <div className="space-y-6">
+            <form onSubmit={handleCreateAccount} className="flex-1 flex flex-col justify-between p-5 overflow-y-auto">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Account Name <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -1001,18 +1024,18 @@ export default function POSPage() {
                     placeholder="e.g. Counter Cash Box, HDFC Bank"
                     value={newAccName}
                     onChange={e => setNewAccName(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors"
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Account Type
                   </label>
                   <select
                     value={newAccType}
                     onChange={e => setNewAccType(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors cursor-pointer"
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors cursor-pointer"
                   >
                     <option value="CASH">CASH</option>
                     <option value="BANK">BANK</option>
@@ -1021,7 +1044,7 @@ export default function POSPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                     Opening Balance (₹)
                   </label>
                   <input
@@ -1030,24 +1053,24 @@ export default function POSPage() {
                     placeholder="0"
                     value={newAccBalance}
                     onChange={e => setNewAccBalance(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors"
+                    className="w-full bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-[#f58220] transition-colors font-mono"
                   />
                 </div>
               </div>
 
               {/* Panel Footer */}
-              <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 dark:border-slate-800 mt-6">
+              <div className="flex items-center justify-end gap-2.5 pt-5 border-t border-slate-100 dark:border-slate-800 mt-6">
                 <button
                   type="button"
                   onClick={() => setShowAddAccountModal(false)}
-                  className="px-6 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={creatingAccount}
-                  className="px-6 py-3 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
+                  className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-bold rounded-xl transition-all shadow-2xs cursor-pointer"
                 >
                   {creatingAccount ? "Saving..." : "Save Account"}
                 </button>

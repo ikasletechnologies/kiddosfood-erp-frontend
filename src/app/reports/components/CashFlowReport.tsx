@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { X, Search as SearchIcon } from "lucide-react";
+import { X, Search as SearchIcon, Printer } from "lucide-react";
+import { clsx } from "clsx";
 
 interface ReportData {
   kpiValue: string;
@@ -34,8 +35,8 @@ export default function CentralCashFlowReport({
   if (loading) {
     return (
       <div className="py-20 text-center space-y-3">
-        <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
+        <div className="w-8 h-8 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 animate-pulse">
           Reconciling ledger entries and auditing cash flow...
         </p>
       </div>
@@ -43,50 +44,50 @@ export default function CentralCashFlowReport({
   }
 
   const formatPrice = (amount: number) => {
-    return `₹ ${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const rows = reportData?.rows || [];
   const filteredRows = rows.filter(r => {
     const matchesQuery = String(r.partyName || "").toLowerCase().includes(filterQuery.toLowerCase()) || 
                          String(r.refNo || "").toLowerCase().includes(filterQuery.toLowerCase());
-    const matchesZero = showZero ? true : (r.cashIn > 0 || r.cashOut > 0);
+    const matchesZero = showZero ? true : ((r.cashIn || 0) > 0 || (r.cashOut || 0) > 0);
     return matchesQuery && matchesZero;
   });
 
-  const totalIn = filteredRows.reduce((acc, r) => acc + (r.cashIn || 0), 0);
-  const totalOut = filteredRows.reduce((acc, r) => acc + (r.cashOut || 0), 0);
+  const totalIn = filteredRows.reduce((acc, r) => acc + (Number(r.cashIn) || 0), 0);
+  const totalOut = filteredRows.reduce((acc, r) => acc + (Number(r.cashOut) || 0), 0);
   const closingCash = totalIn - totalOut;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white dark:bg-[#12141c] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-5 space-y-5">
+    <div className="space-y-4 sm:space-y-6 w-full min-w-0">
+      <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl shadow-2xs p-4 sm:p-5 space-y-4 sm:space-y-5 w-full min-w-0">
         
         {/* Custom Header Filters */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex flex-wrap items-center gap-5 text-xs">
-            <span className="font-black text-slate-700 dark:text-slate-350">
-              Opening Cash-in Hand: <span className="text-slate-900 dark:text-white font-bold">{formatPrice(0)}</span>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-gray-100 dark:border-white/5 w-full min-w-0">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-xs">
+            <span className="font-bold text-gray-700 dark:text-slate-300">
+              Opening Cash: <span className="text-gray-900 dark:text-white font-bold font-mono">{formatPrice(0)}</span>
             </span>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input 
                 type="checkbox" 
                 checked={showZero} 
                 onChange={(e) => setShowZero(e.target.checked)}
-                className="w-4 h-4 rounded text-orange-500 border-slate-300 dark:border-slate-700 focus:ring-orange-500 focus:ring-2 dark:bg-slate-800" 
+                className="w-4 h-4 rounded text-[#f58220] border-gray-300 dark:border-white/20 focus:ring-orange-500 cursor-pointer" 
               />
-              <span className="text-slate-600 dark:text-slate-400 font-semibold">Show zero amount transaction</span>
+              <span className="text-gray-600 dark:text-slate-400 font-semibold text-xs">Show zero amount entries</span>
             </label>
           </div>
 
-          <div className="relative w-64 max-w-full">
-            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 animate-pulse" />
+          <div className="relative w-full sm:w-64 max-w-full min-w-0">
+            <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
             <input 
               type="text" 
-              placeholder="Search Cash Flow Transactions..." 
+              placeholder="Search party or ref..." 
               value={filterQuery}
               onChange={(e) => setFilterQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 outline-none focus:border-orange-500"
+              className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold text-gray-800 dark:text-white placeholder:text-gray-400 outline-none focus:border-[#f58220]"
             />
             {filterQuery && (
               <X 
@@ -98,66 +99,49 @@ export default function CentralCashFlowReport({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        {/* Responsive Table */}
+        <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead>
-              <tr className="bg-slate-50 dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-800">
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  DATE
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  REF NO.
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  NAME
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  CATEGORY
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                  TYPE
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">
-                  CASH IN
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">
-                  CASH OUT
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">
-                  RUNNING CASH...
-                </th>
-                <th className="px-4 py-2.5 text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">
-                  PRINT / SHARE
-                </th>
+              <tr className="bg-gray-50/75 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                <th className="px-4 py-3">DATE</th>
+                <th className="px-4 py-3">REF NO.</th>
+                <th className="px-4 py-3">NAME</th>
+                <th className="px-4 py-3">CATEGORY</th>
+                <th className="px-4 py-3">TYPE</th>
+                <th className="px-4 py-3 text-right">CASH IN</th>
+                <th className="px-4 py-3 text-right">CASH OUT</th>
+                <th className="px-4 py-3 text-right">RUNNING CASH</th>
+                <th className="px-4 py-3 text-right">PRINT</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/30">
+            <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs">
               {filteredRows.length > 0 ? (
                 filteredRows.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors">
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-350">{row.date}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-200">{row.refNo}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-slate-100">{row.partyName}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.category}</td>
-                    <td className="px-4 py-3 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.type}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-right text-emerald-600 dark:text-emerald-400">
+                  <tr key={idx} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-3 font-mono text-gray-600 dark:text-slate-400">{row.date}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-gray-900 dark:text-white">{row.refNo}</td>
+                    <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-100 truncate max-w-[180px]">{row.partyName}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{row.category}</td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400">{row.type}</td>
+                    <td className="px-4 py-3 font-mono font-bold text-right text-emerald-600 dark:text-emerald-400">
                       {row.cashIn > 0 ? formatPrice(row.cashIn) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-xs font-bold text-right text-rose-500 dark:text-rose-400">
+                    <td className="px-4 py-3 font-mono font-bold text-right text-rose-500 dark:text-rose-400">
                       {row.cashOut > 0 ? formatPrice(row.cashOut) : "—"}
                     </td>
-                    <td className="px-4 py-3 text-xs font-bold text-right text-slate-700 dark:text-slate-200">{formatPrice(row.runningCash)}</td>
-                    <td className="px-4 py-3 text-xs font-bold text-right">
-                      <button onClick={() => window.print()} className="text-orange-500 hover:underline cursor-pointer select-none">
-                        Print
+                    <td className="px-4 py-3 font-mono font-bold text-right text-gray-800 dark:text-white">{formatPrice(row.runningCash || 0)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => window.print()} className="p-1 text-[#f58220] hover:text-[#e8740e] cursor-pointer inline-flex items-center" title="Print Row">
+                        <Printer size={14} />
                       </button>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={9} className="px-5 py-12 text-center text-slate-400 dark:text-slate-500 font-bold">
-                    No transactions to show
+                  <td colSpan={9} className="px-4 py-12 text-center text-gray-400 dark:text-slate-500 font-semibold">
+                    No cash flow transactions to show
                   </td>
                 </tr>
               )}
@@ -166,18 +150,25 @@ export default function CentralCashFlowReport({
         </div>
 
         {/* Bottom Summary Bars */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-          <div className="bg-emerald-50/50 dark:bg-emerald-950/10 border border-emerald-100 dark:border-emerald-900/20 p-3.5 rounded-xl flex justify-between items-center text-xs">
-            <span className="font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Cash-in</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatPrice(totalIn)}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-gray-100 dark:border-white/5 w-full min-w-0">
+          <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 p-3.5 rounded-xl flex justify-between items-center text-xs">
+            <span className="font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Total Cash-in</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold font-mono text-sm">{formatPrice(totalIn)}</span>
           </div>
-          <div className="bg-rose-50/50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/20 p-3.5 rounded-xl flex justify-between items-center text-xs">
-            <span className="font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Cash-out</span>
-            <span className="text-rose-500 dark:text-rose-400 font-black text-sm">{formatPrice(totalOut)}</span>
+          <div className="bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30 p-3.5 rounded-xl flex justify-between items-center text-xs">
+            <span className="font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Total Cash-out</span>
+            <span className="text-rose-500 dark:text-rose-400 font-bold font-mono text-sm">{formatPrice(totalOut)}</span>
           </div>
-          <div className="bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-900/20 p-3.5 rounded-xl flex justify-between items-center text-xs">
-            <span className="font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Closing Cash-in Hand</span>
-            <span className="text-emerald-600 dark:text-emerald-400 font-black text-sm">{formatPrice(closingCash)}</span>
+          <div className={clsx(
+            "p-3.5 rounded-xl flex justify-between items-center text-xs border",
+            closingCash >= 0
+              ? "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30"
+              : "bg-rose-50/60 dark:bg-rose-950/20 border-rose-100 dark:border-rose-900/30"
+          )}>
+            <span className="font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Net Cash Position</span>
+            <span className={clsx("font-bold font-mono text-sm", closingCash >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+              {formatPrice(closingCash)}
+            </span>
           </div>
         </div>
       </div>
