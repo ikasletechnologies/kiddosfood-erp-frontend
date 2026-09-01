@@ -1974,6 +1974,436 @@ export default function EstimationsPageClient({
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // CONVERSION EDIT FORM VIEW (Vyapar style)
+  // ══════════════════════════════════════════════════════════════════════════
+  if (convertView !== null) {
+    const calcResult = calculateSalesDocumentTotals(items, priceMode, roundOffEnabled);
+    const totalQty = items.reduce((s, i) => s + (i.qty || 0), 0);
+    const totalDisc = calcResult.totalDiscount;
+    const totalTax = calcResult.totalTax;
+
+    return (
+      <div className="min-h-screen bg-[#f3f4f6] dark:bg-[#0f111a] text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 p-3 sm:p-4 md:p-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)]">
+        
+        {/* Top Header / Tab */}
+        <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-t-xl px-4 py-2.5 flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-white/5 px-3 py-1 rounded-lg border border-gray-200 dark:border-white/10">
+              <span className="font-bold text-sm text-gray-800 dark:text-white">
+                {convertView === "SALE" ? "Sale" : "Sale Order"}
+              </span>
+              <button 
+                onClick={handleCloseConversionForm}
+                className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+          <button 
+            onClick={handleCloseConversionForm}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-white rounded-lg transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Form Container */}
+        <div className="bg-white dark:bg-[#181b2a] border border-t-0 border-gray-200 dark:border-white/10 rounded-b-xl p-4 sm:p-6 space-y-6 shadow-sm">
+          
+          {/* Top Form Fields: Party & Meta */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* Left: Customer Info */}
+            <div className="lg:col-span-6 space-y-3">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative flex-1">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    Party / Customer *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={e => {
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDrop(true);
+                      }}
+                      onFocus={() => setShowCustomerDrop(true)}
+                      placeholder="Select or enter customer name..."
+                      className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                    />
+                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  </div>
+                  {showCustomerDrop && customers && customers.length > 0 && (
+                    <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
+                      {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
+                        <div
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCustomer(c);
+                            setCustomerSearch(c.name);
+                            setCustomerPhone(c.contact || c.phone || "");
+                            setShowCustomerDrop(false);
+                          }}
+                          className="px-3 py-2 text-xs hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer text-gray-700 dark:text-slate-200 flex justify-between"
+                        >
+                          <span className="font-medium">{c.name}</span>
+                          <span className="text-gray-400">{c.contact || c.phone || ""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-[10px] text-red-500 mt-0.5 font-medium">BAL: 0</div>
+                </div>
+
+                <div className="w-full sm:w-48">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    Phone No.
+                  </label>
+                  <input
+                    type="text"
+                    value={customerPhone}
+                    onChange={e => setCustomerPhone(e.target.value)}
+                    placeholder="Phone No."
+                    className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                  />
+                </div>
+              </div>
+
+              {/* Billing Address Box */}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                  Billing Address
+                </label>
+                <textarea
+                  rows={2}
+                  value={selectedCustomer?.billingAddress || selectedCustomer?.address || ""}
+                  readOnly
+                  placeholder="Billing Address"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs text-gray-600 dark:text-slate-300 resize-none outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Right: Document Meta */}
+            <div className="lg:col-span-6 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    {convertView === "SALE" ? "Invoice Number" : "Order No."}
+                  </label>
+                  <input
+                    type="text"
+                    value={refNo || "Auto"}
+                    readOnly
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm font-semibold text-gray-700 dark:text-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                    {convertView === "SALE" ? "Invoice Date" : "Order Date"}
+                  </label>
+                  <input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={e => setInvoiceDate(e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                  State of supply
+                </label>
+                <select
+                  value={stateOfSupply}
+                  onChange={e => setStateOfSupply(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                >
+                  <option value="">Select State</option>
+                  {INDIAN_STATES.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Items Table */}
+          <div className="border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 font-bold uppercase tracking-wider border-b border-gray-200 dark:border-white/10">
+                  <tr>
+                    <th className="px-3 py-2.5 w-10 text-center">#</th>
+                    <th className="px-3 py-2.5 min-w-[160px]">ITEM</th>
+                    <th className="px-3 py-2.5 w-20 text-right">QTY</th>
+                    <th className="px-3 py-2.5 w-28">UNIT</th>
+                    <th className="px-3 py-2.5 w-28 text-right">PRICE/UNIT</th>
+                    <th className="px-3 py-2.5 w-32 text-right">DISCOUNT</th>
+                    <th className="px-3 py-2.5 w-32">TAX</th>
+                    <th className="px-3 py-2.5 w-28 text-right">AMOUNT</th>
+                    <th className="px-3 py-2.5 w-10"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5 bg-white dark:bg-[#13151f]">
+                  {items.map((it, idx) => {
+                    const gross = (it.qty || 0) * (it.rate || 0);
+                    const discAmt = it.discountAmount || (gross * (it.discountPct || 0) / 100);
+                    const taxable = gross - discAmt;
+                    const taxAmt = taxable * ((it.taxPct || 0) / 100);
+                    const rowTotal = taxable + taxAmt;
+                    return (
+                      <tr key={it.id || idx} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
+                        <td className="px-3 py-2 text-center text-gray-400 font-medium">{idx + 1}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="text"
+                            value={it.itemSearch}
+                            onChange={e => updateItem(idx, "itemSearch", e.target.value)}
+                            placeholder="Item Name"
+                            className="w-full px-2 py-1 bg-transparent border-b border-transparent hover:border-gray-300 dark:hover:border-white/20 focus:border-[#f58220] outline-none font-medium text-gray-800 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            min="1"
+                            value={it.qty || ""}
+                            onChange={e => updateItem(idx, "qty", parseFloat(e.target.value) || 0)}
+                            className="w-16 px-2 py-1 text-right bg-transparent border border-gray-200 dark:border-white/10 rounded outline-none focus:border-[#f58220] font-mono"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={it.unit}
+                            onChange={e => updateItem(idx, "unit", e.target.value)}
+                            className="w-full px-2 py-1 bg-transparent border border-gray-200 dark:border-white/10 rounded outline-none focus:border-[#f58220]"
+                          >
+                            {UNITS.map(u => (
+                              <option key={u.code} value={u.code}>{u.short}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <input
+                            type="number"
+                            value={it.rate || ""}
+                            onChange={e => updateItem(idx, "rate", parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 text-right bg-transparent border border-gray-200 dark:border-white/10 rounded outline-none focus:border-[#f58220] font-mono"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1 font-mono text-xs">
+                            <span className="text-gray-500">{it.discountPct || 0}%</span>
+                            <span className="text-gray-300">/</span>
+                            <span className="font-semibold text-gray-700 dark:text-slate-200">₹{discAmt.toFixed(1)}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={it.taxPct}
+                            onChange={e => updateItem(idx, "taxPct", parseFloat(e.target.value) || 0)}
+                            className="w-full px-2 py-1 bg-transparent border border-gray-200 dark:border-white/10 rounded outline-none focus:border-[#f58220] text-xs font-medium"
+                          >
+                            {TAX_OPTIONS.map(t => (
+                              <option key={t.label} value={t.value}>{t.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold text-gray-800 dark:text-white font-mono">
+                          ₹{rowTotal.toFixed(1)}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <button
+                            onClick={() => removeRow(idx)}
+                            className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-gray-50 dark:bg-white/5 border-t border-gray-200 dark:border-white/10 font-bold text-gray-700 dark:text-slate-200">
+                  <tr>
+                    <td colSpan={2} className="px-3 py-2.5">
+                      <button
+                        onClick={addRow}
+                        className="px-3 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors uppercase tracking-wider"
+                      >
+                        + ADD ROW
+                      </button>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono">{totalQty}</td>
+                    <td colSpan={2}></td>
+                    <td className="px-3 py-2.5 text-right font-mono">₹{totalDisc.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">₹{totalTax.toFixed(1)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-sm font-black text-gray-900 dark:text-white">
+                      ₹{calcResult.finalTotal.toFixed(1)}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Bottom Section: Payment Type & Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+            
+            {/* Bottom Left Controls */}
+            <div className="lg:col-span-6 space-y-4">
+              <div className="w-48">
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                  Payment Type
+                </label>
+                <select
+                  value={paymentType}
+                  onChange={e => setPaymentType(e.target.value)}
+                  className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Net Banking">Net Banking</option>
+                  <option value="Credit">Credit</option>
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setShowTerms(!showTerms)}
+                  className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-slate-300 rounded-lg text-xs font-semibold border border-gray-200 dark:border-white/10 transition-colors uppercase tracking-wider"
+                >
+                  + ADD TERMS AND CONDITIONS
+                </button>
+                <button
+                  onClick={() => setShowDesc(!showDesc)}
+                  className="px-3 py-1.5 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-slate-300 rounded-lg text-xs font-semibold border border-gray-200 dark:border-white/10 transition-colors uppercase tracking-wider"
+                >
+                  + ADD DESCRIPTION
+                </button>
+              </div>
+
+              {showTerms && (
+                <textarea
+                  rows={2}
+                  value={termsText}
+                  onChange={e => setTermsText(e.target.value)}
+                  placeholder="Terms & Conditions..."
+                  className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                />
+              )}
+
+              {showDesc && (
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="Description / Remarks..."
+                  className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                />
+              )}
+            </div>
+
+            {/* Bottom Right Totals */}
+            <div className="lg:col-span-6 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-gray-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={roundOffEnabled}
+                    onChange={e => setRoundOffEnabled(e.target.checked)}
+                    className="rounded text-[#f58220] focus:ring-[#f58220]"
+                  />
+                  <span>Round Off</span>
+                </label>
+                <span className="font-mono text-gray-500 font-semibold">{calcResult.roundOff.toFixed(1)}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm font-bold text-gray-800 dark:text-white border-t border-gray-200 dark:border-white/10 pt-2">
+                <span>Total</span>
+                <span className="text-base font-mono font-black text-[#f58220]">₹ {calcResult.finalTotal.toFixed(0)}</span>
+              </div>
+
+              {convertView === "SALE" && (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="font-medium text-gray-600 dark:text-slate-400">Received / Advance</span>
+                  <input
+                    type="number"
+                    value={receivedAmount || ""}
+                    onChange={e => setReceivedAmount(parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-24 px-2 py-1 text-right bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded font-mono font-bold outline-none focus:border-[#f58220]"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-sm font-bold text-gray-900 dark:text-white border-t border-gray-200 dark:border-white/10 pt-2">
+                <span>Balance</span>
+                <span className="text-base font-mono font-black">₹ {(calcResult.finalTotal - receivedAmount).toFixed(0)}</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Bottom Right Actions Bar */}
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 dark:border-white/10 pt-4">
+            <button
+              onClick={handleCloseConversionForm}
+              className="px-4 py-2 text-xs font-bold text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 uppercase tracking-wider transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmConversion}
+              disabled={saving}
+              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-lg shadow-blue-500/20 uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </div>
+
+        </div>
+
+        {/* Close Confirmation Modal */}
+        {showCloseConfirmModal && (
+          <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+            <div className="bg-white dark:bg-[#181b2a] rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 p-6 max-w-sm w-full animate-in zoom-in-95">
+              <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-2">
+                {convertView === "SALE" ? "Close Sale" : "Close Sale Order"}
+              </h3>
+              <p className="text-xs text-gray-600 dark:text-slate-400 mb-6">
+                Current changes will be discarded. Do you wish to continue?
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowCloseConfirmModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmCloseConversion}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // LIST VIEW — Simplified Clean UI
   // ══════════════════════════════════════════════════════════════════════════
   const fmt = (d: string) => formatDate(d + "T00:00:00");
@@ -2252,7 +2682,7 @@ export default function EstimationsPageClient({
                                    <button
                                      onClick={() => {
                                        setOpenConvertMenu(null);
-                                       handleOpenConvertModal(est, "SALE");
+                                       handleOpenConversionForm(est, "SALE");
                                      }}
                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
                                    >
@@ -2261,7 +2691,7 @@ export default function EstimationsPageClient({
                                    <button
                                      onClick={() => {
                                        setOpenConvertMenu(null);
-                                       handleOpenConvertModal(est, "SALES_ORDER");
+                                       handleOpenConversionForm(est, "SALES_ORDER");
                                      }}
                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-white/5"
                                    >
@@ -2363,126 +2793,7 @@ export default function EstimationsPageClient({
         />
       )}
 
-      {/* Convert Modal */}
-      {showConvertModal && selectedEstForConvert && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200 p-4" onClick={() => setShowConvertModal(false)}>
-          <div className="bg-white dark:bg-card rounded-2xl shadow-2xl border border-gray-150 dark:border-white/10 w-full max-w-lg mx-auto overflow-hidden relative transform transition-all animate-in zoom-in-95 duration-200 animate-out fade-out slide-out-to-top-5 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="bg-gradient-to-r from-orange-500 to-[#f58220] px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between text-white shrink-0">
-              <div className="min-w-0 pr-2">
-                <h3 className="font-bold text-base sm:text-lg truncate">
-                  {modalConvertType === "SALE" ? "Convert Estimate to Sale" : "Convert Estimate to Sales Order"}
-                </h3>
-                <p className="text-white/80 text-xs mt-0.5 truncate">{selectedEstForConvert.quotationNumber} • {selectedEstForConvert.customer?.name || selectedEstForConvert.customerName || "No Customer Name"}</p>
-              </div>
-              <button
-                onClick={() => setShowConvertModal(false)}
-                className="p-1 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-all shrink-0"
-              >
-                <X size={18} />
-              </button>
-            </div>
 
-            {/* Body */}
-            <div className="p-4 sm:p-6 space-y-4 text-sm text-gray-700 dark:text-slate-300 overflow-y-auto custom-scrollbar flex-1">
-              <div className="bg-orange-50/50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-500/20 rounded-xl p-3.5 sm:p-4 flex items-center justify-between gap-2">
-                <div>
-                  <div className="text-xs text-orange-600 dark:text-orange-400 font-semibold uppercase tracking-wider">Total Payable</div>
-                  <div className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white mt-0.5 font-mono">₹ {(selectedEstForConvert.totalAmount || 0).toLocaleString("en-IN")}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-gray-400 dark:text-slate-500">Items</div>
-                  <div className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5">{selectedEstForConvert.items?.length || 0} line items</div>
-                </div>
-              </div>
-
-              {modalConvertType === "SALE" ? (
-                <div className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
-                  <div className="font-bold mb-1">Conversion Effect:</div>
-                  This will create a Sales Invoice/Sale transaction using the exact estimate amounts. Physical inventory will be deducted according to Sale rules, and an outstanding receivable will be created.
-                </div>
-              ) : (
-                <>
-                  <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded-xl p-3.5 text-xs text-blue-800 dark:text-blue-300">
-                    <div className="font-bold mb-1">Conversion Effect:</div>
-                    This will create a Sales Order. Physical inventory will <strong>NOT</strong> be deducted at this stage.
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <Calendar size={12} /> Delivery Date
-                      </label>
-                      <input
-                        type="date"
-                        value={deliveryDate}
-                        onChange={e => setDeliveryDate(e.target.value)}
-                        className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all"
-                      />
-                    </div>
-
-                    <div className="flex flex-col">
-                      <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <Truck size={12} /> Courier Name
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. Delhivery, BlueDart"
-                        value={courierName}
-                        onChange={e => setCourierName(e.target.value)}
-                        className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                      <AlignLeft size={12} /> Tracking / Waybill Number
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Enter Tracking ID / AWB Number"
-                      value={trackingNumber}
-                      onChange={e => setTrackingNumber(e.target.value)}
-                      className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                    />
-                  </div>
-
-                  <div className="flex flex-col">
-                    <label className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                      <FileText size={12} /> Delivery Address
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Enter the shipping/delivery address..."
-                      value={deliveryAddress}
-                      onChange={e => setDeliveryAddress(e.target.value)}
-                      className="px-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-gray-800 dark:text-white text-xs sm:text-sm outline-none focus:ring-2 focus:ring-[#f58220]/20 focus:border-[#f58220] transition-all resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="bg-gray-50 dark:bg-white/[0.02] border-t border-gray-150 dark:border-white/10 px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-end gap-2.5 sm:gap-3 shrink-0">
-              <button
-                onClick={() => setShowConvertModal(false)}
-                className="px-3.5 sm:px-4 py-2 text-xs font-black text-gray-500 dark:text-slate-400 uppercase tracking-widest hover:bg-white dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-all active:scale-95"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitConvert}
-                disabled={!!converting}
-                className="px-4 sm:px-5 py-2 bg-green-600 text-white text-xs font-black rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all flex items-center justify-center gap-2 uppercase tracking-widest active:scale-95 disabled:opacity-50"
-              >
-                {converting ? "Converting..." : (modalConvertType === "SALE" ? "Convert to Sale" : "Create Sales Order")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   );
