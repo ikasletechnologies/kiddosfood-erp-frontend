@@ -13,11 +13,14 @@ interface GSTR2Row {
   date: string;
   vendorName: string;
   vendorGstin: string;
+  placeOfSupply: string;
   taxableValue: number;
   taxRate: number;
   cgst: number;
   sgst: number;
   igst: number;
+  cessAmount: number;
+  reverseCharge: string;
   totalTax: number;
   eligibleItc: number;
   totalAmount: number;
@@ -72,11 +75,29 @@ export default function GSTR2Page() {
   const rates = useMemo(() => Array.from(new Set(result.data.map((r) => r.taxRate))).sort((a, b) => a - b), [result.data]);
 
   const filteredBills = useMemo(
-    () => result.data.filter((r) => !search || r.vendorName.toLowerCase().includes(search.toLowerCase()) || r.invoiceNumber.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      result.data.filter((r) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+          r.vendorName.toLowerCase().includes(q) ||
+          r.invoiceNumber.toLowerCase().includes(q) ||
+          (r.vendorGstin || "").toLowerCase().includes(q)
+        );
+      }),
     [result.data, search]
   );
   const filteredDebitNotes = useMemo(
-    () => result.debitNotes.filter((r) => !search || r.vendorName.toLowerCase().includes(search.toLowerCase())),
+    () =>
+      result.debitNotes.filter((r) => {
+        if (!search) return true;
+        const q = search.toLowerCase();
+        return (
+          r.vendorName.toLowerCase().includes(q) ||
+          r.returnNumber.toLowerCase().includes(q) ||
+          (r.vendorGstin || "").toLowerCase().includes(q)
+        );
+      }),
     [result.debitNotes, search]
   );
 
@@ -85,12 +106,12 @@ export default function GSTR2Page() {
   const fmt = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const headers = tab === "bills"
-    ? ["Bill No", "PO No", "Date", "Vendor", "Vendor GSTIN", "Tax Rate", "Taxable Value", "CGST", "SGST", "IGST", "Total Tax", "Eligible ITC", "Amount"]
+    ? ["Bill No", "PO No", "Date", "Vendor", "Vendor GSTIN", "Place of Supply", "Tax Rate", "Taxable Value", "Reverse Charge", "CGST", "SGST", "IGST", "Cess", "Total Tax", "Eligible ITC", "Bill Value"]
     : ["Return No", "Date", "Vendor", "Vendor GSTIN", "Taxable Value", "CGST", "SGST", "IGST", "Total Tax"];
 
   const toRows = () =>
     tab === "bills"
-      ? (current as GSTR2Row[]).map((r) => [r.invoiceNumber, r.poNumber, r.date, r.vendorName, r.vendorGstin, r.taxRate, r.taxableValue, r.cgst, r.sgst, r.igst, r.totalTax, r.eligibleItc, r.totalAmount])
+      ? (current as GSTR2Row[]).map((r) => [r.invoiceNumber, r.poNumber, r.date, r.vendorName, r.vendorGstin, r.placeOfSupply || "—", r.taxRate, r.taxableValue, r.reverseCharge || "N", r.cgst, r.sgst, r.igst, r.cessAmount ?? 0, r.totalTax, r.eligibleItc, r.totalAmount])
       : (current as DebitNoteRow[]).map((r) => [r.returnNumber, r.date, r.vendorName, r.vendorGstin, r.taxableValue, r.cgst, r.sgst, r.igst, r.totalTax]);
 
   const filenameBase = `GSTR2_${tab}_${startDate}_${endDate}`;
@@ -148,7 +169,7 @@ export default function GSTR2Page() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
-              placeholder="Search vendor / bill…"
+              placeholder="Search vendor / bill / GSTIN…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="text-sm border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 font-medium bg-white dark:bg-[#13151f] w-48"
@@ -184,7 +205,7 @@ export default function GSTR2Page() {
               <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No data for the selected period.</p>
             </div>
           ) : tab === "bills" ? (
-            <table className="w-full text-sm min-w-[1200px]">
+            <table className="w-full text-sm min-w-[1500px]">
               <thead>
                 <tr className="bg-slate-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
                   {headers.map((h) => <th key={h} className="text-left px-4 py-3 font-bold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wider whitespace-nowrap">{h}</th>)}
@@ -198,11 +219,14 @@ export default function GSTR2Page() {
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.date}</td>
                     <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{r.vendorName}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.vendorGstin}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.placeOfSupply || "—"}</td>
                     <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">{r.taxRate}%</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.taxableValue)}</td>
+                    <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300">{r.reverseCharge || "N"}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.cgst)}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.sgst)}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.igst)}</td>
+                    <td className="px-4 py-3 text-right font-mono">{fmt(r.cessAmount || 0)}</td>
                     <td className="px-4 py-3 text-right font-mono font-semibold">{fmt(r.totalTax)}</td>
                     <td className="px-4 py-3 text-right font-mono text-emerald-600">{fmt(r.eligibleItc)}</td>
                     <td className="px-4 py-3 text-right font-mono">{fmt(r.totalAmount)}</td>

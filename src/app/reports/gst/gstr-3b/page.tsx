@@ -13,9 +13,16 @@ interface ReportData {
   outwardSupplies: OutwardRow[];
   interStateSupplies: { description: string; taxableValue: number; integratedTax: number }[];
   eligibleITC: { available: ItcRow[]; ineligible: ItcRow[] };
+  netGstLiability: { cgst: number; sgst: number; igst: number };
   summary: { totalOutputTax: number; totalInputTax: number; netGstPayable: number };
 }
-const EMPTY: ReportData = { outwardSupplies: [], interStateSupplies: [], eligibleITC: { available: [], ineligible: [] }, summary: { totalOutputTax: 0, totalInputTax: 0, netGstPayable: 0 } };
+const EMPTY: ReportData = {
+  outwardSupplies: [],
+  interStateSupplies: [],
+  eligibleITC: { available: [], ineligible: [] },
+  netGstLiability: { cgst: 0, sgst: 0, igst: 0 },
+  summary: { totalOutputTax: 0, totalInputTax: 0, netGstPayable: 0 },
+};
 
 export default function GSTR3BPage() {
   const [data, setData] = useState<ReportData>(EMPTY);
@@ -50,6 +57,7 @@ export default function GSTR3BPage() {
   const rows: (string | number)[][] = [
     ...data.outwardSupplies.map((r) => ["3.1 Outward", r.description, r.taxableValue, r.cgst, r.sgst, r.igst]),
     ...data.eligibleITC.available.map((r) => ["4 Eligible ITC", r.description, "", r.cgst, r.sgst, r.igst]),
+    ["6 Net GST Payable", "Payable after component-wise ITC utilisation", "", data.netGstLiability.cgst, data.netGstLiability.sgst, data.netGstLiability.igst],
   ];
   const filenameBase = `GSTR3B_${startDate}_${endDate}`;
 
@@ -150,6 +158,32 @@ export default function GSTR3BPage() {
                     <td className="px-5 py-3 text-right font-mono">{fmt(r.igst)}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-white dark:bg-card border border-gray-100 dark:border-white/5 rounded-2xl overflow-hidden shadow-sm">
+            <div className="px-5 py-3 border-b border-gray-100 dark:border-white/5 font-black text-xs uppercase tracking-widest text-slate-500">6. Net GST Payable (after component-wise ITC utilisation)</div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+                  <th className="text-left px-5 py-3 font-bold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wider">Tax Head</th>
+                  <th className="text-right px-5 py-3 font-bold text-slate-500 dark:text-slate-400 uppercase text-[10px] tracking-wider">Net Payable</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                <tr>
+                  <td className="px-5 py-3 text-slate-700 dark:text-slate-200">CGST</td>
+                  <td className="px-5 py-3 text-right font-mono">{fmt(data.netGstLiability.cgst)}</td>
+                </tr>
+                <tr>
+                  <td className="px-5 py-3 text-slate-700 dark:text-slate-200">SGST</td>
+                  <td className="px-5 py-3 text-right font-mono">{fmt(data.netGstLiability.sgst)}</td>
+                </tr>
+                <tr>
+                  <td className="px-5 py-3 text-slate-700 dark:text-slate-200">IGST</td>
+                  <td className="px-5 py-3 text-right font-mono">{fmt(data.netGstLiability.igst)}</td>
+                </tr>
               </tbody>
             </table>
           </div>

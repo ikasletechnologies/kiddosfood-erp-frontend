@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Search, RefreshCw, Calendar, 
   ChevronRight, ArrowUpRight, Filter, ShoppingBag,
-  Clock, CheckCircle2, XCircle, Printer, Plus,
+  Clock, CheckCircle2, XCircle, Printer, Plus, CheckSquare,
   ChevronDown, Trash2, ArrowLeft, FileSpreadsheet,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
   AlertTriangle, X, Pencil } from "lucide-react";
@@ -779,6 +779,10 @@ export default function SalesOrdersPage() {
     }
   };
 
+  const handlePrintOrder = (order: any) => {
+    setPreviewingOrder(order);
+  };
+
   const handleDelete = (id: string) => {
     if (!window.confirm("Are you sure you want to delete this Sales Order?")) return;
     try {
@@ -795,18 +799,27 @@ export default function SalesOrdersPage() {
     }
   };
 
-  const convertToSale = async (order: any) => {
+  const convertToSale = async (order: any, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setConvertingId(order.id);
     try {
-      const localData = localStorage.getItem("sale_orders");
-      if (localData) {
-        const locals = JSON.parse(localData);
-        const updated = locals.map((x: any) => x.id === order.id ? { ...x, status: "CLOSED", balance: 0 } : x);
-        localStorage.setItem("sale_orders", JSON.stringify(updated));
+      try {
+        const res = await api.post(`/api/sales/orders/${order.id}/convert-to-sale`, {});
+        showToast(`Sales Order #${order.orderNo} converted to Sale Invoice!`, "success");
+        const invoiceId = res?.data?.sale?.id || res?.data?.invoice?.id;
+        if (invoiceId) {
+          router.push(`/sales/invoices?id=${invoiceId}`);
+          return;
+        }
+      } catch (_apiErr) {
+        await api.patch(`/api/sales/orders/${order.id}`, { status: "CLOSED", balance: 0 });
+        showToast(`Sales Order #${order.orderNo} converted to Sale Invoice!`, "success");
       }
-      showToast(`Sales Order #${order.orderNo} successfully converted to Sale Invoice!`, "success");
       fetchAllData();
-    } catch (e) {
-      showToast("Conversion failed", "error");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Failed to convert Sales Order to Sale", "error");
+    } finally {
+      setConvertingId(null);
     }
   };
 
@@ -1569,12 +1582,27 @@ export default function SalesOrdersPage() {
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
 
         {/* ── Page Header Toolbar ── */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end w-full min-w-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end gap-2.5 w-full min-w-0">
+          <button
+            onClick={() => {
+              const openOrders = filteredOrders.filter(o => o.status !== "CLOSED" && o.status !== "CANCELLED");
+              if (openOrders.length === 0) {
+                showToast("No unconverted sales orders to convert", "info");
+                return;
+              }
+              if (window.confirm(`Convert ${openOrders.length} open Sales Order(s) to Sale Invoices?`)) {
+                openOrders.forEach(o => convertToSale(o));
+              }
+            }}
+            className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30 text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+          >
+            <CheckSquare className="h-4 w-4" /> Bulk Convert To Sale
+          </button>
           <button
             onClick={() => { resetForm(); setView("create"); }}
-            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-sm transition-colors whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-sm transition-colors whitespace-nowrap cursor-pointer"
           >
-            <Plus className="h-4 w-4" /> New Order
+            <Plus className="h-4 w-4" /> Add Sale Order
           </button>
         </div>
 
@@ -1675,141 +1703,141 @@ export default function SalesOrdersPage() {
             <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
               <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
                 <table className="w-full text-sm min-w-[800px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-3">Party</th>
-                  <th className="text-left px-4 py-3">Order No.</th>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Due Date</th>
-                  <th className="text-right px-4 py-3">Amount</th>
-                  <th className="text-right px-4 py-3">Balance</th>
-                  <th className="text-center px-4 py-3">Status</th>
-                  <th className="text-right px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {filteredOrders.map(o => {
-                  const style = STATUS_STYLES[o.status] || STATUS_STYLES.DRAFT;
-                  return (
-                    <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col items-start gap-1">
-                          <div className="font-medium text-gray-800 dark:text-white text-sm">{o.customerName}</div>
-                          {o.customerPhone && <div className="text-xs text-gray-400 dark:text-slate-500">{o.customerPhone}</div>}
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
-                            {o.partyType || (o.customerId ? "CUSTOMER" : "UNKNOWN")}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gray-600 dark:text-slate-400 text-xs">
-                        {o.orderNo}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
-                        {formatDate(o.invoiceDate)}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
-                        {formatDate(o.dueDate)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm">
-                        ₹{Number(o.finalAmount).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-600 dark:text-red-400 text-sm">
-                        ₹{Number(o.balance).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                          {style.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {o.status === "DRAFT" && (
-                            <>
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Party</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">No.</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Due Date</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">Total Amount</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">Balance</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">Type</th>
+                      <th className="text-center px-4 py-3 whitespace-nowrap">Status</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {filteredOrders.map(o => {
+                      const style = STATUS_STYLES[o.status] || STATUS_STYLES.DRAFT;
+                      const isClosed = o.status === "CLOSED" || o.status === "CONVERTED";
+                      return (
+                        <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col items-start gap-0.5">
+                              <div className="font-medium text-gray-800 dark:text-white text-sm">{o.customerName}</div>
+                              {o.customerPhone && <div className="text-xs text-gray-400 dark:text-slate-500">{o.customerPhone}</div>}
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-white/10">
+                                {o.partyType || (o.customerId ? "CUSTOMER" : "CUSTOMER")}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-slate-200 text-xs whitespace-nowrap">
+                            {o.orderNo}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                            {formatDate(o.invoiceDate)}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                            {formatDate(o.dueDate)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm whitespace-nowrap font-mono">
+                            ₹ {Number(o.finalAmount || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-sm whitespace-nowrap font-mono">
+                            ₹ {Number(o.balance || 0).toFixed(2)}
+                          </td>
+                          <td className="px-4 py-3 text-left font-medium text-gray-700 dark:text-slate-300 text-xs whitespace-nowrap">
+                            Sale Order
+                          </td>
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            {isClosed ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs">
+                                Converted
+                              </span>
+                            ) : o.status === "OVERDUE" ? (
+                              <span className="text-red-500 font-semibold text-xs">
+                                Order Overdue
+                              </span>
+                            ) : (
+                              <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
+                                {style.label}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {o.status === "DRAFT" && (
+                                <>
+                                  <button
+                                    onClick={() => handleEdit(o)}
+                                    className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
+                                  >
+                                    Resume
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleConfirm(o, e)}
+                                    className="px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
+                                  >
+                                    Confirm
+                                  </button>
+                                </>
+                              )}
+                              {o.status !== "DRAFT" && (
+                                <button
+                                  onClick={(e) => convertToSale(o, e)}
+                                  disabled={convertingId === o.id || isClosed}
+                                  className={clsx(
+                                    "px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors border uppercase tracking-wide",
+                                    isClosed
+                                      ? "opacity-40 cursor-not-allowed text-gray-400 bg-gray-100 border-gray-200 dark:bg-white/5 dark:text-slate-500 dark:border-white/10"
+                                      : "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 border-blue-200 dark:border-blue-500/20 cursor-pointer"
+                                  )}
+                                >
+                                  {convertingId === o.id ? "Converting..." : "CONVERT TO SALE"}
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleEdit(o)}
-                                className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
+                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                title="Edit Order"
                               >
-                                Resume
+                                <Pencil className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={(e) => handleConfirm(o, e)}
-                                className="px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
-                              >
-                                Confirm
-                              </button>
-                            </>
-                          )}
-                          {o.status === "CONFIRMED" && !o.proformaInvoiceId && (
-                            <button
-                              onClick={(e) => handleCreateProforma(o, e)}
-                              disabled={convertingId === o.id}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors disabled:opacity-50"
-                            >
-                              {convertingId === o.id ? "..." : "Create Proforma Invoice"}
-                            </button>
-                          )}
-                          {o.proformaInvoiceId && (
-                            <a
-                              href={`/sales/proforma-invoice?id=${o.proformaInvoiceId}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
-                            >
-                              View Proforma Invoice
-                            </a>
-                          )}
-                          {o.status === "DELIVERED" && (
-                            <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                              <Check className="h-3 w-3" /> Done
-                            </span>
-                          )}
-                          <button
-                            onClick={() => handleEdit(o)}
-                            className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                            title="Edit Order"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowRowMenu(showRowMenu === o.id ? null : o.id)}
-                              className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
-                            >
-                              <ChevronRight className="h-4 w-4 rotate-90" />
-                            </button>
-                            {showRowMenu === o.id && (
-                              <div className="absolute right-0 top-8 z-50 w-32 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg py-1 text-left">
+                              <div className="relative">
                                 <button
-                                  onClick={() => { handleEdit(o); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
+                                  onClick={() => setShowRowMenu(showRowMenu === o.id ? null : o.id)}
+                                  className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
                                 >
-                                  Edit
+                                  <ChevronRight className="h-4 w-4 rotate-90" />
                                 </button>
-                                <button
-                                  onClick={() => { setPreviewingOrder(o); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 text-xs text-gray-700 text-left"
-                                >
-                                  Print
-                                </button>
-                                <button
-                                  onClick={() => { handleDelete(o.id); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 text-left border-t border-gray-100 dark:border-white/5"
-                                >
-                                  Delete
-                                </button>
+                                {showRowMenu === o.id && (
+                                  <div className="absolute right-0 top-8 z-50 w-36 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl py-1 text-left">
+                                    <button
+                                      onClick={() => { setShowRowMenu(null); handlePrintOrder(o); }}
+                                      className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
+                                    >
+                                      <Printer className="h-3.5 w-3.5" /> Print
+                                    </button>
+                                    <button
+                                      onClick={() => { setShowRowMenu(null); handleDelete(o.id); }}
+                                      className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 border-t border-gray-100 dark:border-white/5 font-medium"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                                    </button>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
-        )}
-      </div>
 
       {previewingOrder && (
         <GSTInvoice

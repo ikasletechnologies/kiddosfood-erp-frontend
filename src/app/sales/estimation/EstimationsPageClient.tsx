@@ -2573,183 +2573,220 @@ export default function EstimationsPageClient({
         ) : (
           /* ── Table ── */
           <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[240px]">
               <table className="w-full text-sm min-w-[760px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
-                  <th className="text-left px-4 py-3 whitespace-nowrap">{L.noColumn}</th>
-                  <th className="text-left px-4 py-3 whitespace-nowrap">Party Name</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Amount</th>
-                  <th className="text-center px-4 py-3 whitespace-nowrap">Status</th>
-                  <th className="text-right px-4 py-3 whitespace-nowrap">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {filtered.map((est) => {
-                  const style = STATUS_STYLES[est.status] || STATUS_STYLES.DRAFT;
-                  const isDraft = est.status === "DRAFT";
-                  return (
-                    <tr 
-                      key={est.id} 
-                      className={clsx(
-                        "transition-colors",
-                        isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
-                      )}
-                    >
-                      <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
-                        {formatDate(est.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-200 text-xs whitespace-nowrap">
-                        <div>{est.quotationNumber}</div>
-                        {est.status === "CONVERTED" && est.convertedOrderNumber && (
-                          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-bold mt-1 bg-blue-50 dark:bg-blue-500/10 px-1.5 py-0.5 rounded inline-block">
-                            Sales Order: {est.convertedOrderNumber}
-                          </div>
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
+                    <th className="text-left px-4 py-3 whitespace-nowrap">{L.noColumn}</th>
+                    <th className="text-left px-4 py-3 whitespace-nowrap">Party Name</th>
+                    <th className="text-right px-4 py-3 whitespace-nowrap">Amount</th>
+                    <th className="text-right px-4 py-3 whitespace-nowrap">Balance</th>
+                    <th className="text-left px-4 py-3 whitespace-nowrap">Status</th>
+                    <th className="text-right px-4 py-3 whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {filtered.map((est, index) => {
+                    const isDraft = est.status === "DRAFT";
+                    const totalDocAmount = est.items && est.items.length > 0
+                      ? calculateSalesDocumentTotals(est.items, est._rawState?.priceMode, est._rawState?.roundOffEnabled ?? true, est.discountAmount || 0).finalTotal
+                      : (est.totalAmount || 0);
+                    const isConverted = est.status === "CONVERTED";
+                    const isLastRow = index >= filtered.length - 2;
+
+                    return (
+                      <tr 
+                        key={est.id} 
+                        className={clsx(
+                          "transition-colors",
+                          isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                         )}
-                        {est.status === "CONVERTED" && est.convertedInvoiceNumber && (
-                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold mt-1 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 rounded inline-block">
-                            Sale: {est.convertedInvoiceNumber}
+                      >
+                        {/* Date */}
+                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                          {formatDate(est.createdAt)}
+                        </td>
+
+                        {/* Reference No / EST No */}
+                        <td className="px-4 py-3 font-semibold text-gray-800 dark:text-slate-200 text-xs whitespace-nowrap">
+                          {est.quotationNumber || est.proformaNumber || "—"}
+                        </td>
+
+                        {/* Party Name */}
+                        <td className="px-4 py-3 text-xs sm:text-sm whitespace-nowrap">
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="font-medium text-gray-800 dark:text-white">
+                              {est.customer?.name || est.customerName || "—"}
+                            </span>
+                            {!isDraft && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-slate-400 border border-gray-200 dark:border-white/10">
+                                {est.partyType || (est.customerId ? "CUSTOMER" : "CUSTOMER")}
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs sm:text-sm whitespace-nowrap">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="font-medium text-gray-800 dark:text-white">
-                            {est.customer?.name || est.customerName || "—"}
-                          </span>
-                          {!isDraft && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-400 border border-gray-200 dark:border-white/10">
-                              {est.partyType || (est.customerId ? "CUSTOMER" : "UNKNOWN")}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-xs sm:text-sm whitespace-nowrap font-mono">
+                          ₹ {totalDocAmount.toFixed(2)}
+                        </td>
+
+                        {/* Balance */}
+                        <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-xs sm:text-sm whitespace-nowrap font-mono">
+                          ₹ {totalDocAmount.toFixed(2)}
+                        </td>
+
+                        {/* Status — Clear direct links & status text like reference Image 1 */}
+                        <td className="px-4 py-3 text-left whitespace-nowrap">
+                          {isConverted ? (
+                            est.convertedInvoiceId || est.convertedInvoiceNumber ? (
+                              <a
+                                href={`/sales/invoices?id=${est.convertedInvoiceId || ""}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                Sale Invoice {est.convertedInvoiceNumber ? `no. ${est.convertedInvoiceNumber}` : ""}
+                              </a>
+                            ) : est.convertedOrderId || est.convertedOrderNumber ? (
+                              <a
+                                href={`/sales/orders?id=${est.convertedOrderId || ""}`}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                Sales Order {est.convertedOrderNumber ? `no. ${est.convertedOrderNumber}` : ""}
+                              </a>
+                            ) : (
+                              <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm">
+                                Converted
+                              </span>
+                            )
+                          ) : est.status === "SENT" || est.status === "OPEN" || est.status === "PENDING" ? (
+                            <span className="text-[#f58220] font-semibold text-xs sm:text-sm">
+                              Open
+                            </span>
+                          ) : isDraft ? (
+                            <span className="text-slate-500 dark:text-slate-400 font-semibold text-xs sm:text-sm">
+                              Draft
+                            </span>
+                          ) : est.status === "ACCEPTED" ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-xs sm:text-sm">
+                              Accepted
+                            </span>
+                          ) : est.status === "REJECTED" ? (
+                            <span className="text-rose-600 dark:text-rose-400 font-semibold text-xs sm:text-sm">
+                              Rejected
+                            </span>
+                          ) : (
+                            <span className="text-[#f58220] font-semibold text-xs sm:text-sm">
+                              {est.status}
                             </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-800 dark:text-white text-xs sm:text-sm whitespace-nowrap font-mono">
-                        ₹ {(
-                          est.items && est.items.length > 0
-                            ? calculateSalesDocumentTotals(est.items, est._rawState?.priceMode, est._rawState?.roundOffEnabled ?? true, est.discountAmount || 0).finalTotal
-                            : (est.totalAmount || 0)
-                        ).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-center whitespace-nowrap">
-                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                          {style.label}
-                        </span>
-                        {est.status === "CONVERTED" && (est.trackingNumber || est.courierName) && (
-                          <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 font-medium">
-                            {est.courierName ? `${est.courierName}: ` : ""}{est.trackingNumber || "No Tracking ID"}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {!isDraft && (
+                              <div className="relative inline-block text-left">
+                                <button
+                                  disabled={isConverted}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isConverted) return;
+                                    setOpenConvertMenu(openConvertMenu === est.id ? null : est.id);
+                                  }}
+                                  title={isConverted ? "This document has already been converted" : "Convert document"}
+                                  className={clsx(
+                                    "px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors",
+                                    isConverted
+                                      ? "opacity-40 cursor-not-allowed text-gray-400 dark:text-slate-500 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10"
+                                      : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 cursor-pointer"
+                                  )}
+                                >
+                                  <span>Convert</span>
+                                  <ChevronDown size={12} />
+                                </button>
+                                {!isConverted && openConvertMenu === est.id && (
+                                  <div
+                                    className={clsx(
+                                      "absolute right-0 w-44 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl z-50 py-1",
+                                      isLastRow ? "bottom-full mb-1" : "top-full mt-1"
+                                    )}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setOpenConvertMenu(null);
+                                        handleOpenConversionForm(est, "SALE");
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
+                                    >
+                                      <span>Convert to Sale</span>
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setOpenConvertMenu(null);
+                                        handleOpenConversionForm(est, "SALES_ORDER");
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-white/5"
+                                    >
+                                      <span>Convert to Sale Order</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {isDraft ? (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
+                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="Edit Draft"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteDraft(est.id); }}
+                                  className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
+                                  title="Delete Draft"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
+                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="Edit Estimate"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
+                                  className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="Print"
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleDownloadEstimate(est); }}
+                                  className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="Download"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          {est.status === "CONVERTED" && est.convertedOrderId && (
-                             <a
-                               href={`/sales/orders?id=${est.convertedOrderId}`}
-                               onClick={(e) => e.stopPropagation()}
-                               className="px-2 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors mr-1"
-                             >
-                               View Sales Order
-                             </a>
-                          )}
-                          {est.status === "CONVERTED" && est.convertedInvoiceId && (
-                             <a
-                               href={`/sales/invoices?id=${est.convertedInvoiceId}`}
-                               onClick={(e) => e.stopPropagation()}
-                               className="px-2 py-1 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors mr-1"
-                             >
-                               View Sale
-                             </a>
-                          )}
-                          {est.status !== "CONVERTED" && !isDraft && (
-                             <div className="relative inline-block text-left mr-1">
-                               <button
-                                 onClick={(e) => {
-                                   e.stopPropagation();
-                                   setOpenConvertMenu(openConvertMenu === est.id ? null : est.id);
-                                 }}
-                                 className="px-2.5 py-1 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20 rounded text-[10px] font-bold hover:bg-green-100 transition-colors flex items-center gap-1"
-                               >
-                                 <span>Convert</span>
-                                 <ChevronDown size={12} />
-                               </button>
-                               {openConvertMenu === est.id && (
-                                 <div
-                                   className="absolute right-0 mt-1 w-44 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl z-50 py-1"
-                                   onClick={(e) => e.stopPropagation()}
-                                 >
-                                   <button
-                                     onClick={() => {
-                                       setOpenConvertMenu(null);
-                                       handleOpenConversionForm(est, "SALE");
-                                     }}
-                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
-                                   >
-                                     <span>Convert to Sale</span>
-                                   </button>
-                                   <button
-                                     onClick={() => {
-                                       setOpenConvertMenu(null);
-                                       handleOpenConversionForm(est, "SALES_ORDER");
-                                     }}
-                                     className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-white/5"
-                                   >
-                                     <span>Convert to Sale Order</span>
-                                   </button>
-                                 </div>
-                               )}
-                             </div>
-                          )}
-                          {isDraft ? (
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
-                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                                title="Edit Draft"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteDraft(est.id); }}
-                                className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
-                                title="Delete Draft"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
-                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                                title="Edit Estimate"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
-                                title="Print"
-                              >
-                                <Printer className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDownloadEstimate(est); }}
-                                className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
-                                title="Download"
-                              >
-                                <Download className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

@@ -2137,26 +2137,6 @@ function ReportsContent() {
       </div>
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
-        {/* ── Horizontal Navigation Tabs (Pill style) ── */}
-        <div className="bg-white dark:bg-card p-1.5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-1.5 overflow-x-auto custom-scrollbar max-w-full">
-          {filteredChildren.map((child) => {
-            const isActive = selectedChildId === child.id;
-            return (
-              <button
-                key={child.id}
-                onClick={() => handleSelectChild(child.id)}
-                className={clsx(
-                  "px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-2 shrink-0",
-                  isActive
-                    ? "bg-[#f58220] text-white shadow-sm"
-                    : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5"
-                )}
-              >
-                <span>{child.label}</span>
-              </button>
-            );
-          })}
-        </div>
 
         {/* ── Top Summary / KPI Cards ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
