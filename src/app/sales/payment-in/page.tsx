@@ -587,14 +587,18 @@ export default function PaymentInPage() {
                     onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                     onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                   />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
                 </div>
+                {customerSearch && (
+                  <X 
+                    size={14} 
+                    className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCustomerSearch("");
+                      setSelectedCustomer(null);
+                    }} 
+                  />
+                )}
                 <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
               </div>
 

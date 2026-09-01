@@ -69,6 +69,69 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   PAID:     { label: "Paid",     color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
 };
 
+// ── Helper Functions for Product Units ───────────────────────────────────────
+
+function normalizeUnit(raw: string | undefined | null): string {
+  if (!raw) return "NONE";
+  const s = raw.trim().toUpperCase();
+  if (!s || s === "NONE") return "NONE";
+
+  if (s === "KG" || s === "KGS" || s === "KILOGRAM" || s === "KILOGRAMS") return "KGS";
+  if (s === "G" || s === "GRM" || s === "GRAM" || s === "GRAMS" || s === "GM") return "GRM";
+  if (s === "L" || s === "LTR" || s === "LITER" || s === "LITERS" || s === "LITRE" || s === "LITRES") return "LTR";
+  if (s === "PC" || s === "PCS" || s === "PIECE" || s === "PIECES") return "PCS";
+  if (s === "NO" || s === "NOS" || s === "NUMBER" || s === "NUMBERS") return "NOS";
+  if (s === "BOX" || s === "BOXES") return "BOX";
+  if (s === "BAG" || s === "BAGS") return "BAG";
+  if (s === "BDL" || s === "BUNDLE" || s === "BUNDLES") return "BDL";
+  if (s === "CT" || s === "CARAT" || s === "CARATS") return "CT";
+  if (s === "CMS" || s === "CENTIMETER" || s === "CENTIMETERS") return "CMS";
+  if (s === "DZN" || s === "DOZEN" || s === "DOZENS") return "DZN";
+  if (s === "MTR" || s === "METER" || s === "METERS" || s === "METRE") return "MTR";
+  if (s === "PKT" || s === "PACK" || s === "PACKS" || s === "PACKET" || s === "PACKETS") return "PKT";
+  if (s === "ROLL" || s === "ROLLS") return "ROLL";
+  if (s === "SQF" || s === "SQFT" || s === "SQUARE FEET") return "SQF";
+  if (s === "TNE" || s === "TON" || s === "TONS") return "TNE";
+  if (s === "UNT" || s === "UNIT" || s === "UNITS") return "UNT";
+
+  const match = UNITS.find(u => u.code === s || u.short.toUpperCase() === s || u.label.toUpperCase().includes(s));
+  return match ? match.code : s;
+}
+
+function getUnitOptions(item: LineItem): { code: string; short: string; label: string }[] {
+  if (!item.productId && !item.unit) return UNITS;
+  const configured: { code: string; short: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const addUnit = (codeOrName: string, labelStr?: string) => {
+    if (!codeOrName) return;
+    const norm = normalizeUnit(codeOrName);
+    const existingUnit = UNITS.find(u => u.code === norm);
+    const code = existingUnit ? existingUnit.code : norm;
+    const short = existingUnit ? existingUnit.short : codeOrName;
+    const label = labelStr || (existingUnit ? existingUnit.label : short);
+
+    if (!seen.has(code)) {
+      seen.add(code);
+      configured.push({ code, short, label });
+    }
+  };
+
+  if (item.unit && item.unit !== "NONE") {
+    addUnit(item.unit);
+  }
+  if (item.baseUnit) {
+    const baseName = typeof item.baseUnit === "string" ? item.baseUnit : item.baseUnit.shortName || item.baseUnit.name;
+    addUnit(baseName);
+  }
+  (item.conversions || []).forEach((c: any) => {
+    const convUnit = c.unit ? (typeof c.unit === "string" ? c.unit : c.unit.shortName || c.unit.name) : c.unitId;
+    if (convUnit) addUnit(convUnit);
+  });
+
+  return configured.length > 0 ? configured : UNITS;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -79,6 +142,9 @@ interface LineItem {
   rate: number;
   taxPct: number;
   taxLabel: string;
+  productId?: string;
+  baseUnit?: any;
+  conversions?: any[];
 }
 
 function makeItem(): LineItem {
@@ -867,7 +933,7 @@ export default function PurchaseBillsPage() {
                             <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-y-auto"
                               style={{ position: "fixed", top: unitDropRect.top + 2, left: unitDropRect.left, width: 180, maxHeight: 220, zIndex: 9999 }}
                             >
-                              {UNITS.map(u => (
+                              {getUnitOptions(item).map(u => (
                                 <button key={u.code}
                                   className={clsx("w-full text-left px-3 py-2 text-xs border-b border-gray-50 dark:border-white/5 last:border-0 hover:bg-orange-50 dark:hover:bg-white/5",
                                     item.unit === u.code ? "text-orange-600 dark:text-orange-400 font-semibold bg-orange-50 dark:bg-white/5" : "text-gray-700 dark:text-slate-300"
