@@ -41,6 +41,7 @@ export const salesApi = {
   updateDeliveryChallan: (id: string, data: any) => api.patch(`/api/sales/delivery-challans/${id}`, data),
   markDeliveryChallanDelivered: (id: string, data: { receivedBy?: string; deliveredAt?: string; podReference?: string }) =>
     api.post(`/api/sales/delivery-challans/${id}/deliver`, data),
+  convertDeliveryChallanToSale: (id: string) => api.post(`/api/sales/delivery-challans/${id}/convert-to-sale`),
 
   getTransitStock: () => api.get('/api/sales/transit-stock'),
   getDispatchTracking: (params?: { status?: string }) => api.get('/api/sales/dispatch-tracking', { params }),

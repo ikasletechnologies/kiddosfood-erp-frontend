@@ -569,8 +569,11 @@ export default function EstimationsPageClient({
       if (exportDropRef.current && !exportDropRef.current.contains(e.target as Node))
         setExportDropdownOpen(false);
 
-      setOpenConvertMenu(null);
-      setOpenMoreMenu(null);
+      const clickTarget = e.target as HTMLElement;
+      if (!clickTarget.closest("[data-convert-popover]"))
+        setOpenConvertMenu(null);
+      if (!clickTarget.closest("[data-more-popover]"))
+        setOpenMoreMenu(null);
 
       // Close item drop if clicked outside
       if (openItemDrop) {
@@ -2847,6 +2850,7 @@ export default function EstimationsPageClient({
                                       }
                                   }
                                   className="w-56 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-2 animate-in fade-in zoom-in-95 text-left"
+                                  data-convert-popover
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button
@@ -2916,6 +2920,7 @@ export default function EstimationsPageClient({
                                       }
                                   }
                                   className="w-48 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-1.5 animate-in fade-in zoom-in-95 text-left"
+                                  data-more-popover
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <button

@@ -76,6 +76,7 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   DRAFT:      { label: "Draft",       color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
   IN_TRANSIT: { label: "In Transit",  color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   CLOSED:     { label: "Delivered",   color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  CONVERTED:  { label: "Converted",   color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-500/10", border: "border-indigo-200 dark:border-indigo-500/20" },
   CANCELLED:  { label: "Cancelled",   color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
@@ -1023,17 +1024,11 @@ export default function DeliveryChallanPage() {
 
   const convertToSale = async (dc: any) => {
     try {
-      // Simulate conversion
-      const localData = localStorage.getItem("sale_delivery_challans");
-      if (localData) {
-        const locals = JSON.parse(localData);
-        const updated = locals.map((x: any) => x.id === dc.id ? { ...x, status: "CLOSED" } : x);
-        localStorage.setItem("sale_delivery_challans", JSON.stringify(updated));
-      }
+      const res = await salesApi.convertDeliveryChallanToSale(dc.id);
       showToast(`Challan #${dc.challanNo} successfully converted to Sale!`, "success");
       fetchData();
-    } catch (e) {
-      showToast("Conversion failed", "error");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Conversion failed", "error");
     }
   };
 
@@ -1091,6 +1086,7 @@ export default function DeliveryChallanPage() {
     total: challans.length,
     inTransit: challans.filter(d => d.status === "IN_TRANSIT").length,
     closed: challans.filter(d => d.status === "CLOSED").length,
+    converted: challans.filter(d => d.status === "CONVERTED").length,
     draft: challans.filter(d => d.status === "DRAFT").length,
   };
 
@@ -1654,6 +1650,7 @@ export default function DeliveryChallanPage() {
             { label: "Total Challans", value: stats.total,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
             { label: "In Transit",     value: stats.inTransit, color: "text-orange-600 dark:text-orange-400",    dot: "bg-[#f58220]" },
             { label: "Delivered",      value: stats.closed,    color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Converted",      value: stats.converted,    color: "text-indigo-600 dark:text-indigo-400", dot: "bg-indigo-500" },
             { label: "Drafts",         value: stats.draft,     color: "text-amber-600 dark:text-amber-400",   dot: "bg-amber-500" },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
@@ -1686,7 +1683,7 @@ export default function DeliveryChallanPage() {
           </div>
 
           <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar bg-white dark:bg-card p-0.5 shrink-0">
-            {["ALL", "DRAFT", "IN_TRANSIT", "CLOSED"].map(s => (
+            {["ALL", "DRAFT", "IN_TRANSIT", "CLOSED", "CONVERTED"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
@@ -1843,6 +1840,34 @@ export default function DeliveryChallanPage() {
                             >
                               Return Goods
                             </button>
+                          )}
+                          {dc.status === "CLOSED" && (
+                            <button
+                              onClick={() => convertToSale(dc)}
+                              className="px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded transition-colors"
+                            >
+                              Convert to Sale
+                            </button>
+                          )}
+                          {dc.status === "CONVERTED" && (
+                            <div className="flex gap-2">
+                              {dc.convertedOrderId && (
+                                <a
+                                  href={`/sales/order?search=${dc.convertedOrderId}`}
+                                  className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded transition-colors"
+                                >
+                                  View Sale
+                                </a>
+                              )}
+                              {dc.convertedInvoiceId && (
+                                <a
+                                  href={`/sales/tax-invoice?search=${dc.convertedInvoiceId}`}
+                                  className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
+                                >
+                                  View Invoice
+                                </a>
+                              )}
+                            </div>
                           )}
                           <button
                             onClick={() => handleEdit(dc)}

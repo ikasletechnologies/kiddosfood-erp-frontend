@@ -83,6 +83,7 @@ interface ParentReportDef {
 
 interface ReportMeta {
   title: string;
+  subtitle?: string;
   kpiLabel: string;
   tableTitle: string;
   columns: { key: string; label: string }[];
@@ -122,6 +123,12 @@ interface ReportData {
   totalAmount?: number;
   receivableAmount?: number;
   balanceAmount?: number;
+  taxableSales?: number;
+  taxablePurchases?: number;
+  salesGst?: number;
+  purchaseGst?: number;
+  tdsTotal?: number;
+  transactionCount?: number;
 }
 
 // ─── Parent Definitions ───────────────────────────────────────────────────────
@@ -839,6 +846,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "GST Report": {
     title: "GST Report",
+    subtitle: "Party-wise summary of sales GST and purchase / expense GST",
     kpiLabel: "Total Sale Tax",
     tableTitle: "Party-wise GST Tax Summary",
     columns: [
@@ -849,6 +857,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "GST Rate Report": {
     title: "GST Rate Report",
+    subtitle: "Rate-wise summary of taxable sales, purchases and GST",
     kpiLabel: "Tax Collected",
     tableTitle: "Rate-wise GST Summary",
     columns: [
@@ -888,28 +897,36 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "TDS Payable": {
     title: "TDS Payable",
-    kpiLabel: "TDS Payable",
+    subtitle: "TDS deducted on applicable vendor and expense transactions",
+    kpiLabel: "Total TDS Payable",
     tableTitle: "TDS Payable Details",
     columns: [
       { key: "date", label: "Date" },
       { key: "partyName", label: "Deductee" },
+      { key: "documentNo", label: "Document No" },
       { key: "section", label: "Section" },
-      { key: "amount", label: "Payment Amount" },
+      { key: "tdsBase", label: "TDS Base" },
       { key: "tdsRate", label: "TDS Rate" },
       { key: "tdsAmount", label: "TDS Amount" },
+      { key: "netPayment", label: "Net Payment" },
+      { key: "status", label: "Status" },
     ],
   },
   "TDS Receivable": {
     title: "TDS Receivable",
-    kpiLabel: "TDS Receivable",
+    subtitle: "TDS deducted by customers against amounts receivable by Kiddos",
+    kpiLabel: "Total TDS Receivable",
     tableTitle: "TDS Receivable Details",
     columns: [
       { key: "date", label: "Date" },
       { key: "partyName", label: "Deductor" },
+      { key: "documentNo", label: "Invoice / Reference" },
       { key: "section", label: "Section" },
-      { key: "amount", label: "Payment Amount" },
+      { key: "tdsBase", label: "TDS Base" },
       { key: "tdsRate", label: "TDS Rate" },
       { key: "tdsAmount", label: "TDS Amount" },
+      { key: "netPayment", label: "Net Received" },
+      { key: "status", label: "Status" },
     ],
   },
   Expense: {
@@ -1066,9 +1083,15 @@ function fmtDisplayDate(iso: string): string {
   return `${d}/${m}/${y}`;
 }
 
-function fmtCurrency(val: any): string {
+function fmtCurrency(val: any, opts?: { decimals?: number }): string {
   const num = Number(val) || 0;
-  return `₹ ${num.toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const decimals = opts?.decimals;
+  return `₹ ${num.toLocaleString(
+    "en-IN",
+    decimals != null
+      ? { minimumFractionDigits: decimals, maximumFractionDigits: decimals }
+      : { minimumFractionDigits: 0, maximumFractionDigits: 2 }
+  )}`;
 }
 
 function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
@@ -1592,17 +1615,21 @@ function transformGstRateReport(apiData: any): ReportData {
   const totalTaxOut: number = apiData?.totalTaxOut ?? 0;
   const netGst = totalTaxIn - totalTaxOut;
   return {
-    kpiValue: rows.length > 0 ? fmtCurrency(totalTaxIn) : "—",
+    kpiValue: rows.length > 0 ? fmtCurrency(totalTaxIn, { decimals: 2 }) : "—",
     kpiSubText: rows.length > 0
-      ? `Tax In: ${fmtCurrency(totalTaxIn)} | Tax Out: ${fmtCurrency(totalTaxOut)} | Net: ${fmtCurrency(netGst)}`
+      ? `Tax In: ${fmtCurrency(totalTaxIn, { decimals: 2 })} | Tax Out: ${fmtCurrency(totalTaxOut, { decimals: 2 })} | Net: ${fmtCurrency(netGst, { decimals: 2 })}`
       : "No GST data found",
     rows: rows.map((r: any) => ({
       taxName: r.taxName ?? "—",
       taxPercent: r.taxPercent != null ? `${r.taxPercent}%` : "—",
-      taxableSaleAmount: fmtCurrency(r.taxableSaleAmount ?? 0),
-      taxIn: fmtCurrency(r.taxIn ?? 0),
-      taxablePurchaseAmount: fmtCurrency(r.taxablePurchaseAmount ?? 0),
-      taxOut: fmtCurrency(r.taxOut ?? 0),
+      taxableSaleAmount: fmtCurrency(r.taxableSaleAmount ?? 0, { decimals: 2 }),
+      taxIn: fmtCurrency(r.taxIn ?? 0, { decimals: 2 }),
+      taxablePurchaseAmount: fmtCurrency(r.taxablePurchaseAmount ?? 0, { decimals: 2 }),
+      taxOut: fmtCurrency(r.taxOut ?? 0, { decimals: 2 }),
+      _rawTaxableSale: Number(r.taxableSaleAmount) || 0,
+      _rawTaxIn: Number(r.taxIn) || 0,
+      _rawTaxablePurchase: Number(r.taxablePurchaseAmount) || 0,
+      _rawTaxOut: Number(r.taxOut) || 0,
     })),
   };
 }
@@ -1705,8 +1732,8 @@ function transformGstPartyReport(gstr1Data: any, gstr2Data: any): ReportData {
   const rows = Array.from(partyMap.values())
     .map((p) => ({
       partyName: p.partyName,
-      saleTax: fmtCurrency(p.saleTax),
-      purchaseTax: fmtCurrency(p.purchaseTax),
+      saleTax: fmtCurrency(p.saleTax, { decimals: 2 }),
+      purchaseTax: fmtCurrency(p.purchaseTax, { decimals: 2 }),
       _rawSaleTax: Number(p.saleTax.toFixed(2)),
       _rawPurchaseTax: Number(p.purchaseTax.toFixed(2)),
     }))
@@ -1717,11 +1744,67 @@ function transformGstPartyReport(gstr1Data: any, gstr2Data: any): ReportData {
   const totalPurchaseTax = rows.reduce((s, r) => s + r._rawPurchaseTax, 0);
 
   return {
-    kpiValue: fmtCurrency(totalSaleTax),
-    kpiSubText: `Sale Tax: ${fmtCurrency(totalSaleTax)} • Purchase / Expense Tax: ${fmtCurrency(totalPurchaseTax)}`,
+    kpiValue: fmtCurrency(totalSaleTax, { decimals: 2 }),
+    kpiSubText: `Sale Tax: ${fmtCurrency(totalSaleTax, { decimals: 2 })} • Purchase / Expense Tax: ${fmtCurrency(totalPurchaseTax, { decimals: 2 })}`,
     tax: totalSaleTax,
     taxPayable: totalPurchaseTax,
     rows,
+  };
+}
+
+function transformTdsPayable(apiData: any): ReportData {
+  const rows: any[] = Array.isArray(apiData?.data) ? apiData.data : [];
+  const totalTds: number = apiData?.totalTds ?? 0;
+  return {
+    kpiValue: rows.length > 0 ? fmtCurrency(totalTds, { decimals: 2 }) : "—",
+    kpiSubText: rows.length > 0 ? `${rows.length} transaction(s) found` : "No TDS payable records found",
+    tdsTotal: totalTds,
+    transactionCount: rows.length,
+    rows: rows.map((r: any) => {
+      const tdsAmount = Number(r.tdsAmount) || 0;
+      const tdsBase = Number(r.taxableAmount ?? r.totalAmount) || 0;
+      const netPayment = (Number(r.totalAmount) || 0) - tdsAmount;
+      return {
+        date: fmtDate(r.date),
+        partyName: r.partyName || "—",
+        documentNo: r.billNo || r.invoiceNo || "—",
+        section: r.section || "—",
+        tdsBase: fmtCurrency(tdsBase, { decimals: 2 }),
+        tdsRate: r.rate != null ? `${r.rate}%` : "—",
+        tdsAmount: fmtCurrency(tdsAmount, { decimals: 2 }),
+        netPayment: fmtCurrency(netPayment, { decimals: 2 }),
+        status: "Deducted",
+        _rawTdsAmount: tdsAmount,
+      };
+    }),
+  };
+}
+
+function transformTdsReceivable(apiData: any): ReportData {
+  const rows: any[] = Array.isArray(apiData?.data) ? apiData.data : [];
+  const totalTds: number = apiData?.totalTds ?? 0;
+  return {
+    kpiValue: rows.length > 0 ? fmtCurrency(totalTds, { decimals: 2 }) : "—",
+    kpiSubText: rows.length > 0 ? `${rows.length} transaction(s) found` : "No TDS receivable records found",
+    tdsTotal: totalTds,
+    transactionCount: rows.length,
+    rows: rows.map((r: any) => {
+      const tdsAmount = Number(r.tdsAmount) || 0;
+      const tdsBase = Number(r.taxableAmount ?? r.totalAmount) || 0;
+      const netReceived = (Number(r.totalAmount) || 0) - tdsAmount;
+      return {
+        date: fmtDate(r.date),
+        partyName: r.partyName || "—",
+        documentNo: r.invoiceNo || r.billNo || "—",
+        section: r.section || "—",
+        tdsBase: fmtCurrency(tdsBase, { decimals: 2 }),
+        tdsRate: r.rate != null ? `${r.rate}%` : "—",
+        tdsAmount: fmtCurrency(tdsAmount, { decimals: 2 }),
+        netPayment: fmtCurrency(netReceived, { decimals: 2 }),
+        status: "Deducted",
+        _rawTdsAmount: tdsAmount,
+      };
+    }),
   };
 }
 
@@ -2034,9 +2117,9 @@ async function fetchReport(
       case "TCS Receivable":
         return transformGeneric((await reportsApi.getTcsReceivable(params)).data, meta);
       case "TDS Payable":
-        return transformGeneric((await reportsApi.getTdsPayable(params)).data, meta);
+        return transformTdsPayable((await reportsApi.getTdsPayable(params)).data);
       case "TDS Receivable":
-        return transformGeneric((await reportsApi.getTdsReceivable(params)).data, meta);
+        return transformTdsReceivable((await reportsApi.getTdsReceivable(params)).data);
 
       // Financial - Expenses & Orders & Banking
       case "Expense":
@@ -2387,6 +2470,33 @@ function ReportsContent() {
     return { totalAmount, receivableAmount, balanceAmount };
   }, [isPaymentRegister, tableSearchTerm, filteredRows, reportData]);
 
+  // ── Tax / GST Compliance Reports (GST Report, GST Rate Report, TDS Payable/Receivable) ──
+  const isGstReport = activeChild?.id === "GST Report";
+  const isGstRateReport = activeChild?.id === "GST Rate Report";
+  const isTdsPayable = activeChild?.id === "TDS Payable";
+  const isTdsReceivable = activeChild?.id === "TDS Receivable";
+  const isTaxComplianceReport = isGstReport || isGstRateReport || isTdsPayable || isTdsReceivable;
+
+  const taxComplianceSummary = useMemo(() => {
+    if (isGstReport) {
+      const saleTax = filteredRows.reduce((s, r) => s + Number(r._rawSaleTax || 0), 0);
+      const purchaseTax = filteredRows.reduce((s, r) => s + Number(r._rawPurchaseTax || 0), 0);
+      return { saleTax, purchaseTax };
+    }
+    if (isGstRateReport) {
+      const taxableSales = filteredRows.reduce((s, r) => s + Number(r._rawTaxableSale || 0), 0);
+      const salesGst = filteredRows.reduce((s, r) => s + Number(r._rawTaxIn || 0), 0);
+      const taxablePurchases = filteredRows.reduce((s, r) => s + Number(r._rawTaxablePurchase || 0), 0);
+      const purchaseGst = filteredRows.reduce((s, r) => s + Number(r._rawTaxOut || 0), 0);
+      return { taxableSales, salesGst, taxablePurchases, purchaseGst };
+    }
+    if (isTdsPayable || isTdsReceivable) {
+      const tdsTotal = filteredRows.reduce((s, r) => s + Number(r._rawTdsAmount || 0), 0);
+      return { tdsTotal, transactionCount: filteredRows.length };
+    }
+    return null;
+  }, [isGstReport, isGstRateReport, isTdsPayable, isTdsReceivable, filteredRows]);
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       {/* ── Top Header / Breadcrumb Bar ── */}
@@ -2395,20 +2505,29 @@ function ReportsContent() {
           <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg shrink-0">
             <Receipt className="h-5 w-5" />
           </div>
-          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-            {reportTitle}
-          </h1>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+              {reportTitle}
+            </h1>
+            {currentMeta.subtitle && (
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                {currentMeta.subtitle}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => router.push("/sales/invoices")}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            <span>New Invoice</span>
-          </button>
-        </div>
+        {!isTaxComplianceReport && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => router.push("/sales/invoices")}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>New Invoice</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
@@ -2451,6 +2570,136 @@ function ReportsContent() {
                 </div>
                 <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-blue-600 dark:text-blue-400 mt-1 truncate">
                   {loading ? "..." : fmtCurrency(paymentSummary.balanceAmount)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : isGstReport && taxComplianceSummary ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Total Sale Tax
+                </div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).saleTax ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Total Purchase / Expense Tax
+                </div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).purchaseTax ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Current Period
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                  {displayRange}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : isGstRateReport && taxComplianceSummary ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Taxable Sales
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).taxableSales ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Sales GST
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).salesGst ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Taxable Purchases
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).taxablePurchases ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Purchase GST
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).purchaseGst ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (isTdsPayable || isTdsReceivable) && taxComplianceSummary ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  {isTdsPayable ? "Total TDS Payable" : "Total TDS Receivable"}
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).tdsTotal ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  {isTdsPayable ? "TDS Deducted" : "TDS Deducted by Customers"}
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : fmtCurrency((taxComplianceSummary as any).tdsTotal ?? 0, { decimals: 2 })}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Transactions
+                </div>
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : (taxComplianceSummary as any).transactionCount ?? 0}
+                </div>
+              </div>
+            </div>
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-purple-50 dark:ring-purple-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Current Period
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                  {displayRange}
                 </div>
               </div>
             </div>
@@ -2560,6 +2809,17 @@ function ReportsContent() {
               <span>Print</span>
             </button>
 
+            {isTaxComplianceReport && (
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
+                title="Export to Excel"
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Excel</span>
+              </button>
+            )}
+
             <button
               onClick={() => {
                 const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -2610,14 +2870,17 @@ function ReportsContent() {
                         {col.label}
                       </th>
                     ))}
-                    <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
-                      Actions
-                    </th>
+                    {!isTaxComplianceReport && (
+                      <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                        Actions
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-medium">
                   {filteredRows.length > 0 ? (
-                    filteredRows.map((row, rowIdx) => (
+                    <>
+                    {filteredRows.map((row, rowIdx) => (
                       <tr
                         key={rowIdx}
                         className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors"
@@ -2659,21 +2922,52 @@ function ReportsContent() {
                             )}
                           </td>
                         ))}
-                        <td className="px-5 py-3.5 text-right">
-                          <button
-                            onClick={() => handlePrintRow(row)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors inline-flex items-center"
-                            title="Print Single Record"
-                          >
-                            <Printer className="h-4 w-4" />
-                          </button>
+                        {!isTaxComplianceReport && (
+                          <td className="px-5 py-3.5 text-right">
+                            <button
+                              onClick={() => handlePrintRow(row)}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors inline-flex items-center"
+                              title="Print Single Record"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                    {isGstReport && taxComplianceSummary && (
+                      <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">Total</td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).saleTax ?? 0, { decimals: 2 })}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).purchaseTax ?? 0, { decimals: 2 })}
                         </td>
                       </tr>
-                    ))
+                    )}
+                    {isGstRateReport && taxComplianceSummary && (
+                      <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white" colSpan={2}>Total</td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).taxableSales ?? 0, { decimals: 2 })}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).salesGst ?? 0, { decimals: 2 })}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).taxablePurchases ?? 0, { decimals: 2 })}
+                        </td>
+                        <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          {fmtCurrency((taxComplianceSummary as any).purchaseGst ?? 0, { decimals: 2 })}
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   ) : (
                     <tr>
                       <td
-                        colSpan={currentMeta.columns.length + 1}
+                        colSpan={currentMeta.columns.length + (isTaxComplianceReport ? 0 : 1)}
                         className={clsx(
                           "px-5 py-16 text-center text-xs",
                           reportData?.error ? "text-rose-500 dark:text-rose-400 font-medium" : "text-gray-400 dark:text-slate-500"
@@ -2683,6 +2977,8 @@ function ReportsContent() {
                           ? reportData.errorMessage || "Unable to load this report. Please try again."
                           : tableSearchTerm
                           ? `No entries match "${tableSearchTerm}".`
+                          : (isTdsPayable || isTdsReceivable)
+                          ? "No TDS transactions found for the selected period."
                           : "No data records found for the selected period."}
                       </td>
                     </tr>
