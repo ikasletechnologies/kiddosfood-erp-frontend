@@ -199,7 +199,12 @@ export default function PaymentInPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>("");
+  // One receipt can be allocated across several invoices for the same
+  // party — replaces the old single `selectedInvoiceId`. A single selected
+  // invoice is just a one-entry array; FinanceService.createPayment treats
+  // that identically to the legacy single-invoice payload.
+  const [allocations, setAllocations] = useState<{ invoiceId: string; amount: string }[]>([]);
+  const [addInvoiceSel, setAddInvoiceSel] = useState<string>("");
   const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split("T")[0]);
   const [amount, setAmount] = useState<string>("");
   const [paymentMode, setPaymentMode] = useState("Cash");
@@ -354,14 +359,70 @@ export default function PaymentInPage() {
     setPartyType(pt);
     setSelectedCustomer(party);
     setCustomerSearch(party.name);
-    setSelectedInvoiceId(linkedInvoiceId);
     setView("create");
+    // Deferred one tick below once `customerInvoices` for this party has
+    // actually been computed, so the outstanding default is correct.
+    setPendingDeepLinkInvoiceId(linkedInvoiceId);
   }, [searchParamsHook, invoices, customers, dealers, franchises]);
-  const selectedInvoice = customerInvoices.find((inv: any) => inv.id === selectedInvoiceId) || null;
-  const invoicePaidSoFar = selectedInvoice
-    ? (selectedInvoice.payments || []).filter((p: any) => p.status === "PAID" && !p.isCancelled).reduce((s: number, p: any) => s + (p.paidAmount || 0), 0)
-    : 0;
-  const invoiceOutstanding = selectedInvoice ? Math.max(0, selectedInvoice.finalAmount - invoicePaidSoFar) : 0;
+
+  // Per-invoice paid-so-far / outstanding — same calc as before, now run
+  // once per row instead of once for a single selected invoice.
+  const invoiceOutstandingOf = (inv: any) => {
+    const paidSoFar = (inv?.payments || []).filter((p: any) => p.status === "PAID" && !p.isCancelled).reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
+    return { paidSoFar, outstanding: Math.max(0, (inv?.finalAmount || 0) - paidSoFar) };
+  };
+
+  const selectedInvoiceIds = allocations.map(a => a.invoiceId);
+  // Rows for the allocation table — dropped (not shown) if the invoice is no
+  // longer in `customerInvoices` (e.g. party/invoices changed underneath).
+  const allocationRows = allocations
+    .map(a => {
+      const invoice = customerInvoices.find((inv: any) => inv.id === a.invoiceId);
+      if (!invoice) return null;
+      const { paidSoFar, outstanding } = invoiceOutstandingOf(invoice);
+      return { invoiceId: a.invoiceId, amountStr: a.amount, invoice, paidSoFar, outstanding };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const totalOutstanding = allocationRows.reduce((s, r) => s + r.outstanding, 0);
+  const totalAllocation = allocationRows.reduce((s, r) => s + (Number(r.amountStr) || 0), 0);
+
+  // Deep-link needs the invoice's own outstanding as the default allocation
+  // — resolved here once its row is actually available in customerInvoices.
+  const [pendingDeepLinkInvoiceId, setPendingDeepLinkInvoiceId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!pendingDeepLinkInvoiceId) return;
+    const inv = customerInvoices.find((i: any) => i.id === pendingDeepLinkInvoiceId);
+    if (!inv) return;
+    const { outstanding } = invoiceOutstandingOf(inv);
+    setAllocations([{ invoiceId: inv.id, amount: outstanding > 0 ? outstanding.toFixed(2) : "" }]);
+    setPendingDeepLinkInvoiceId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDeepLinkInvoiceId, customerInvoices]);
+
+  // Amount Received auto-tracks the allocation total by default — the
+  // common case needs zero typing in that field. The user can still type a
+  // different figure afterward; handleSave then requires the two to match
+  // (mirrors "Total allocation must equal payment amount").
+  useEffect(() => {
+    if (allocationRows.length > 0) {
+      setAmount(totalAllocation > 0 ? totalAllocation.toFixed(2) : "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalAllocation]);
+
+  const addInvoiceToAllocations = (invoiceId: string) => {
+    if (!invoiceId || selectedInvoiceIds.includes(invoiceId)) return;
+    const inv = customerInvoices.find((i: any) => i.id === invoiceId);
+    const { outstanding } = invoiceOutstandingOf(inv);
+    setAllocations(prev => [...prev, { invoiceId, amount: outstanding > 0 ? outstanding.toFixed(2) : "" }]);
+    setAddInvoiceSel("");
+  };
+  const removeInvoiceFromAllocations = (invoiceId: string) => {
+    setAllocations(prev => prev.filter(a => a.invoiceId !== invoiceId));
+  };
+  const updateAllocationAmount = (invoiceId: string, value: string) => {
+    setAllocations(prev => prev.map(a => a.invoiceId === invoiceId ? { ...a, amount: value } : a));
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -392,9 +453,20 @@ export default function PaymentInPage() {
     if (!selectedCustomer && !isDraft) { showToast("Please select a party", "error"); return; }
     if ((!amount || Number(amount) <= 0) && !isDraft) { showToast("Enter a valid amount", "error"); return; }
     if (!isDraft) {
-      if (!selectedInvoice) { showToast("Select the Tax Invoice this payment is against", "error"); return; }
-      if (Number(amount) > invoiceOutstanding + 0.01) {
-        showToast(`Amount exceeds the outstanding balance (₹${invoiceOutstanding.toFixed(2)}) on this invoice`, "error");
+      if (allocationRows.length === 0) { showToast("Select at least one Tax Invoice this payment is against", "error"); return; }
+      for (const row of allocationRows) {
+        const rowAmt = Number(row.amountStr) || 0;
+        if (rowAmt <= 0) {
+          showToast(`Enter an allocation amount for ${row.invoice.order?.invoiceNum || "the selected invoice"}`, "error");
+          return;
+        }
+        if (rowAmt > row.outstanding + 0.01) {
+          showToast(`Allocation for ${row.invoice.order?.invoiceNum || "an invoice"} (₹${rowAmt.toFixed(2)}) exceeds its outstanding balance (₹${row.outstanding.toFixed(2)})`, "error");
+          return;
+        }
+      }
+      if (Math.abs(totalAllocation - Number(amount)) > 0.01) {
+        showToast(`Total allocation (₹${totalAllocation.toFixed(2)}) must equal the payment amount (₹${Number(amount).toFixed(2)})`, "error");
         return;
       }
       if (!selectedAccountId) {
@@ -427,7 +499,7 @@ export default function PaymentInPage() {
               partyType,
               selectedCustomer,
               customerSearch,
-              selectedInvoiceId,
+              allocations,
               amount,
               paymentMode,
               description,
@@ -452,15 +524,19 @@ export default function PaymentInPage() {
       // FinanceService.createPayment's actual contract: `amount` (not
       // paidAmount), `flow: 'IN'` (required — every submission errored on
       // this alone before), `method` (not paymentMode — the mode string is
-      // resolved server-side via a fixed map), `invoiceId` so the payment
-      // is actually linked to a Tax Invoice and its paid/outstanding gets
-      // recomputed, `linkedDocType: 'INVOICE'` (the only value the
-      // LinkedDocType enum actually has for this — 'CUSTOMER_RECEIPT' and
-      // 'CUSTOMER_PAYMENT' below are not valid enum values and would fail),
-      // and `sourceAccount` — AccountService.validateAccountForPayment
-      // rejects every mode except a franchise's sole CASH account without
-      // one, which is why every non-cash submission failed before this was
-      // wired up to the account picker above.
+      // resolved server-side via a fixed map), `linkedDocType: 'INVOICE'`
+      // (the only value the LinkedDocType enum actually has for this —
+      // 'CUSTOMER_RECEIPT' and 'CUSTOMER_PAYMENT' below are not valid enum
+      // values and would fail), and `sourceAccount` — AccountService.
+      // validateAccountForPayment rejects every mode except a franchise's
+      // sole CASH account without one.
+      //
+      // `allocations` [{invoiceId, amount}] is how the receipt is split
+      // across one or more Tax Invoices — FinanceService.createPayment
+      // treats a single-entry list exactly like the legacy one-invoice
+      // `invoiceId` field (see its `singleInvoiceId` normalization), so a
+      // one-invoice payment here behaves identically to before; only a
+      // 2+-entry list takes the new PaymentAllocation path server-side.
       const methodMap: Record<string, string> = {
         Cash: "CASH",
         Cheque: "CHEQUE",
@@ -478,9 +554,11 @@ export default function PaymentInPage() {
         entityId: selectedCustomer.id,
         entityType: partyType,
         entity: selectedCustomer.name,
-        invoiceId: selectedInvoice.id,
+        allocations: allocationRows.map(row => ({ invoiceId: row.invoiceId, amount: Number(row.amountStr) })),
         linkedDocType: "INVOICE",
-        linkedDocId: selectedInvoice.orderId,
+        // Only meaningful (and only sent) for a true single-invoice
+        // receipt — a multi-invoice one has no single underlying document.
+        linkedDocId: allocationRows.length === 1 ? allocationRows[0].invoice.orderId : undefined,
         type: "INVOICE_LINKED",
         sourceModule: "MANUAL",
         reference: chequeNo || description || undefined,
@@ -528,7 +606,8 @@ export default function PaymentInPage() {
     setPartyType("CUSTOMER");
     setSelectedCustomer(null);
     setCustomerSearch("");
-    setSelectedInvoiceId("");
+    setAllocations([]);
+    setAddInvoiceSel("");
     setAmount("");
     setPaymentMode("Cash");
     setDescription("");
@@ -562,7 +641,16 @@ export default function PaymentInPage() {
     setSelectedCustomer(party);
     setCustomerSearch(raw.customerSearch || (party ? party.name : "") || p.customerName || "");
     setReceiptDate(raw.receiptDate || (p.createdAt ? new Date(p.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]));
-    setSelectedInvoiceId(raw.selectedInvoiceId || p.invoiceId || "");
+    // Backward-compatible with drafts saved before multi-invoice support
+    // (they only have the old single `selectedInvoiceId`).
+    const legacyInvoiceId = raw.selectedInvoiceId || p.invoiceId;
+    setAllocations(
+      Array.isArray(raw.allocations) && raw.allocations.length > 0
+        ? raw.allocations
+        : legacyInvoiceId
+        ? [{ invoiceId: legacyInvoiceId, amount: raw.amount || (p.paidAmount ? String(p.paidAmount) : "") }]
+        : []
+    );
     setAmount(raw.amount || (p.paidAmount ? String(p.paidAmount) : ""));
     setPaymentMode(raw.paymentMode || p.paymentMode || "Cash");
     setDescription(raw.description || p.remarks || p.notes || "");
@@ -625,7 +713,8 @@ export default function PaymentInPage() {
                   setPartyType(pt.value);
                   setSelectedCustomer(null);
                   setCustomerSearch("");
-                  setSelectedInvoiceId("");
+                  setAllocations([]);
+                  setAddInvoiceSel("");
                   setAmount("");
                 }}
                 className={clsx(
@@ -686,7 +775,7 @@ export default function PaymentInPage() {
                     <button
                       key={c.id}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0"
-                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); setSelectedInvoiceId(""); setAmount(""); }}
+                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); setAllocations([]); setAddInvoiceSel(""); setAmount(""); }}
                     >
                       <div className="text-left">
                         <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
@@ -727,40 +816,86 @@ export default function PaymentInPage() {
             </div>
           </div>
 
-          {/* Invoice selection */}
+          {/* Invoice selection — multi-select + per-invoice allocation.
+              A receipt can be split across several Tax Invoices for this
+              party; each gets its own "Pay Now" amount, defaulting to its
+              outstanding balance. */}
           {selectedCustomer && (
             <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm p-6 space-y-3">
-              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Tax Invoice</div>
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Tax Invoices</div>
               {customerInvoices.length === 0 ? (
                 <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding Tax Invoices found for {selectedCustomer.name}.</p>
               ) : (
                 <>
                   <select
-                    value={selectedInvoiceId}
-                    onChange={e => { setSelectedInvoiceId(e.target.value); setAmount(""); }}
+                    value={addInvoiceSel}
+                    onChange={e => addInvoiceToAllocations(e.target.value)}
                     className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] focus:border-[#f58220]"
                   >
-                    <option value="" disabled>Select invoice...</option>
-                    {customerInvoices.map((inv: any) => (
-                      <option key={inv.id} value={inv.id}>
-                        {inv.order?.invoiceNum} — ₹{inv.finalAmount} ({inv.status})
-                      </option>
-                    ))}
+                    <option value="" disabled>+ Add invoice...</option>
+                    {customerInvoices
+                      .filter((inv: any) => !selectedInvoiceIds.includes(inv.id))
+                      .map((inv: any) => (
+                        <option key={inv.id} value={inv.id}>
+                          {inv.order?.invoiceNum} — ₹{inv.finalAmount} ({inv.status})
+                        </option>
+                      ))}
                   </select>
-                  {selectedInvoice && (
-                    <div className="grid grid-cols-3 gap-3 pt-1 text-center">
-                      <div className="p-2 bg-gray-50 dark:bg-white/[0.02] rounded-lg">
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500 uppercase font-semibold">Invoice Total</p>
-                        <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">₹{selectedInvoice.finalAmount.toFixed(2)}</p>
-                      </div>
-                      <div className="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg">
-                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold">Already Paid</p>
-                        <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">₹{invoicePaidSoFar.toFixed(2)}</p>
-                      </div>
-                      <div className="p-2 bg-rose-50 dark:bg-rose-500/10 rounded-lg">
-                        <p className="text-[10px] text-rose-600 dark:text-rose-400 uppercase font-semibold">Outstanding</p>
-                        <p className="text-sm font-bold text-rose-600 dark:text-rose-400 mt-0.5">₹{invoiceOutstanding.toFixed(2)}</p>
-                      </div>
+
+                  {allocationRows.length > 0 && (
+                    <div className="overflow-x-auto custom-scrollbar rounded-lg border border-gray-100 dark:border-white/5">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-white/[0.02] text-[10px] uppercase font-semibold text-gray-400 dark:text-slate-500">
+                            <th className="text-left px-3 py-2">Invoice</th>
+                            <th className="text-left px-3 py-2">Date</th>
+                            <th className="text-right px-3 py-2">Total</th>
+                            <th className="text-right px-3 py-2">Paid</th>
+                            <th className="text-right px-3 py-2">Outstanding</th>
+                            <th className="text-right px-3 py-2 w-32">Pay Now</th>
+                            <th className="w-8" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                          {allocationRows.map(row => (
+                            <tr key={row.invoiceId}>
+                              <td className="px-3 py-2 font-medium text-gray-800 dark:text-white">{row.invoice.order?.invoiceNum || "—"}</td>
+                              <td className="px-3 py-2 text-gray-500 dark:text-slate-400">{row.invoice.createdAt ? formatDate(row.invoice.createdAt) : "—"}</td>
+                              <td className="px-3 py-2 text-right text-gray-700 dark:text-slate-200">₹{row.invoice.finalAmount.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400">₹{row.paidSoFar.toFixed(2)}</td>
+                              <td className="px-3 py-2 text-right text-rose-600 dark:text-rose-400 font-semibold">₹{row.outstanding.toFixed(2)}</td>
+                              <td className="px-3 py-1.5">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={row.outstanding}
+                                  value={row.amountStr}
+                                  onChange={e => updateAllocationAmount(row.invoiceId, e.target.value)}
+                                  className="w-full border border-gray-300 dark:border-white/10 rounded px-2 py-1.5 text-right text-sm text-gray-800 dark:text-white outline-none bg-white dark:bg-[#13151f] focus:border-[#f58220]"
+                                />
+                              </td>
+                              <td className="px-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => removeInvoiceFromAllocations(row.invoiceId)}
+                                  className="text-gray-400 hover:text-rose-500 transition-colors"
+                                  title="Remove"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-gray-50 dark:bg-white/[0.02] font-semibold">
+                            <td className="px-3 py-2 text-gray-600 dark:text-slate-300" colSpan={4}>Total</td>
+                            <td className="px-3 py-2 text-right text-rose-600 dark:text-rose-400">₹{totalOutstanding.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right text-[#f58220]">₹{totalAllocation.toFixed(2)}</td>
+                            <td />
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
                   )}
                 </>
@@ -781,7 +916,7 @@ export default function PaymentInPage() {
                   <input
                     type="number"
                     min={0}
-                    max={selectedInvoice ? invoiceOutstanding : undefined}
+                    max={allocationRows.length > 0 ? totalOutstanding : undefined}
                     placeholder="0.00"
                     value={amount}
                     onChange={e => setAmount(e.target.value)}
