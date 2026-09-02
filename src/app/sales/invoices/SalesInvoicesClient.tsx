@@ -702,15 +702,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
   // ══════════════════════════════════════════════════════════════════════════
   if (viewInvoice) {
+    // GET /api/sales/invoices/:id (FinanceService.getInvoiceById) returns the
+    // Invoice row itself at the top level (id, status, finalAmount, ...) with
+    // Order-owned fields (invoiceNum, customer, orderItems, partyType, ...)
+    // nested under `order` — there is no nested `.invoice` key. Reading
+    // `inv.invoice`/`inv.orderItems`/`inv.customer`/etc. directly always came
+    // back empty, which is why this view showed a blank items table, "—" for
+    // invoice number, "UNPAID" regardless of real status, and never showed
+    // Record Payment for ANY invoice (not just cancelled ones).
     const inv = viewInvoice;
-    const items = inv.orderItems || [];
-    const customer = inv.customer || {};
-    const invoice = inv.invoice || {};
+    const order = inv.order || {};
+    const items = order.orderItems || [];
+    const customer = order.customer || {};
+    const invoice = inv;
     const payments = inv.payments || [];
     const paidAmt = payments
       .filter((p: any) => p.status === "PAID" && !p.isCancelled)
       .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-    const balance = Math.max(0, (inv.totalAmount || 0) - paidAmt);
+    // finalAmount (GST-inclusive) is what the customer actually owes — the
+    // old `inv.totalAmount` read the pre-tax subtotal, understating balance.
+    const balance = Math.max(0, (inv.finalAmount || 0) - paidAmt);
 
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 min-h-screen w-full min-w-0">
@@ -728,11 +739,11 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </button>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                Tax Invoice — {inv.invoiceNum || "—"}
+                Tax Invoice — {order.invoiceNum || "—"}
               </h2>
-              {inv.sourceProformaInvoiceId && (
+              {order.sourceProformaInvoiceId && (
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
-                  Source Proforma: <span className="font-mono font-semibold text-[#f58220]">{inv.sourceProformaNumber || inv.sourceProformaInvoiceId}</span>
+                  Source Proforma: <span className="font-mono font-semibold text-[#f58220]">{order.sourceProformaNumber || order.sourceProformaInvoiceId}</span>
                 </p>
               )}
             </div>
@@ -744,12 +755,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
               : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
             )}>
-              {invoice.status || inv.paymentStatus || "UNPAID"}
+              {invoice.status || order.paymentStatus || "UNPAID"}
             </span>
-            {invoice.id && balance > 0.01 && (
+            {invoice.id && balance > 0.01 && invoice.status !== "CANCELLED" && (
               <button
                 onClick={() => router.push(
-                  `/sales/payment-in?invoiceId=${invoice.id}&partyType=${inv.partyType || "CUSTOMER"}&partyId=${inv.partyId || inv.customerId || ""}`
+                  `/sales/payment-in?invoiceId=${invoice.id}&partyType=${order.partyType || "CUSTOMER"}&partyId=${order.partyId || order.customerId || ""}`
                 )}
                 className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
               >
@@ -771,8 +782,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Party Details</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{inv.partyType || "CUSTOMER"}</span></p>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customer.name || inv.customerName || "—"}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{order.partyType || "CUSTOMER"}</span></p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customer.name || order.customerName || "—"}</p>
                 {customer.contact && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.contact}</p>}
                 {customer.phone && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.phone}</p>}
                 {customer.email && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{customer.email}</p>}
@@ -780,11 +791,11 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               </div>
               <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Invoice Information</p>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-900 dark:text-white">{inv.invoiceNum || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span></div>
                 <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Date</span><span className="text-gray-700 dark:text-slate-300">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
-                {inv.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">State of Supply</span><span className="text-gray-700 dark:text-slate-300">{inv.stateOfSupply}</span></div>}
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Payment Type</span><span className="text-gray-700 dark:text-slate-300">{inv.paymentType || inv.paymentMode || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Order Type</span><span className="text-gray-700 dark:text-slate-300">{inv.orderType || "TAX_INVOICE"}</span></div>
+                {order.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">State of Supply</span><span className="text-gray-700 dark:text-slate-300">{order.stateOfSupply}</span></div>}
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Payment Type</span><span className="text-gray-700 dark:text-slate-300">{order.paymentType || "—"}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Order Type</span><span className="text-gray-700 dark:text-slate-300">{order.orderType || "TAX_INVOICE"}</span></div>
               </div>
             </div>
           </div>
@@ -852,10 +863,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
             {/* Summary card */}
             <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-80 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(inv.subTotal || 0).toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span></div>
               {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Tax</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
               <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Round Off</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span></div>
-              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between"><span className="font-bold text-gray-800 dark:text-white">Total</span><span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.totalAmount || 0).toFixed(2)}</span></div>
+              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between"><span className="font-bold text-gray-800 dark:text-white">Total</span><span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400 font-medium">Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm font-semibold"><span className={balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>Balance</span><span className={clsx("font-mono", balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>₹{balance.toFixed(2)}</span></div>
             </div>

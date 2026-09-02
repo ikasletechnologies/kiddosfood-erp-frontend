@@ -119,6 +119,9 @@ interface ReportData {
   totalCredit?: number;
   openingBalance?: number;
   closingBalance?: number;
+  totalAmount?: number;
+  receivableAmount?: number;
+  balanceAmount?: number;
 }
 
 // ─── Parent Definitions ───────────────────────────────────────────────────────
@@ -541,7 +544,9 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "name", label: "Name" },
       { key: "particulars", label: "Particulars" },
       { key: "type", label: "Type" },
-      { key: "amount", label: "Amount" },
+      { key: "totalAmount", label: "Total Amount" },
+      { key: "receivableAmount", label: "Receivable Amount" },
+      { key: "balanceAmount", label: "Balance Amount" },
       { key: "status", label: "Status" },
     ],
   },
@@ -1195,9 +1200,19 @@ function transformTransactions(data: any): ReportData {
   const totalCredit = hasBackendTotals
     ? Number(data.totalCredit) || 0
     : rows.filter((r: any) => r.accountingType === "CREDIT" || r.type === "CREDIT" || r.side === "OUT" || r.flow === "OUT").reduce((s: number, r: any) => s + (Number(r.amount || r.paidAmount) || 0), 0);
+
+  const totalAmount = Number(data?.totalAmount ?? rows.reduce((s: number, r: any) => s + (Number(r.totalAmount ?? r.orderTotal ?? r.paidAmount ?? r.amount) || 0), 0));
+  const receivableAmount = Number(data?.receivableAmount ?? totalDebit);
+  const balanceAmount = Number(data?.balanceAmount ?? Math.max(0, totalAmount - receivableAmount));
+
   return {
     kpiValue: `${data?.pagination?.totalCount ?? rows.length} Payments`,
     kpiSubText: `Debit: ${fmtCurrency(totalDebit)} • Credit: ${fmtCurrency(totalCredit)}`,
+    totalAmount,
+    receivableAmount,
+    balanceAmount,
+    totalDebit,
+    totalCredit,
     rows: rows.map((r: any) => {
       // 1. Resolve real customer/party/person name (only if real name exists, else "—")
       const partyName =
@@ -1236,18 +1251,28 @@ function transformTransactions(data: any): ReportData {
         r.id?.slice(-6) ||
         "—";
 
+      const rawTotalAmount = Number(r.totalAmount ?? r.orderTotal ?? r.paidAmount ?? r.amount ?? 0);
+      const rawReceivableAmount = Number(r.receivableAmount ?? r.paidAmount ?? r.amount ?? 0);
+      const rawBalanceAmount = Number(r.balanceAmount ?? Math.max(0, rawTotalAmount - rawReceivableAmount));
+
       return {
         date: fmtDate(r.date || r.createdAt),
         refNo,
         name: partyName,
         particulars,
         type: paymentType,
-        amount: fmtCurrency(r.paidAmount ?? r.amount),
+        totalAmount: fmtCurrency(rawTotalAmount),
+        receivableAmount: fmtCurrency(rawReceivableAmount),
+        balanceAmount: fmtCurrency(rawBalanceAmount),
+        amount: fmtCurrency(rawReceivableAmount),
         status: r.status || "—",
+        rawAmount: rawReceivableAmount,
+        rawPaidAmount: rawReceivableAmount,
+        rawTotalAmount,
+        rawReceivableAmount,
+        rawBalanceAmount,
       };
     }),
-    totalDebit,
-    totalCredit,
     pagination: data?.pagination,
   };
 }
@@ -2235,6 +2260,26 @@ function ReportsContent() {
 
   const reportTitle = currentMeta.title || activeChild?.label || "Report";
 
+  const isPaymentRegister = activeChild?.id === "All Transactions" || activeChild?.label === "Payment Register";
+
+  const paymentSummary = useMemo(() => {
+    if (!isPaymentRegister) return null;
+    const isSearching = Boolean(tableSearchTerm.trim());
+
+    if (isSearching) {
+      const totalAmount = filteredRows.reduce((s, r) => s + (Number(r.rawTotalAmount || r.rawAmount || 0)), 0);
+      const receivableAmount = filteredRows.reduce((s, r) => s + (Number(r.rawPaidAmount || r.rawAmount || 0)), 0);
+      const balanceAmount = filteredRows.reduce((s, r) => s + (Number(r.rawBalanceAmount ?? Math.max(0, (r.rawTotalAmount || r.rawAmount || 0) - (r.rawPaidAmount || r.rawAmount || 0)))), 0);
+      return { totalAmount, receivableAmount, balanceAmount };
+    }
+
+    const totalAmount = Number(reportData?.totalAmount ?? reportData?.rows?.reduce((s, r) => s + Number(r.rawTotalAmount || r.rawAmount || 0), 0) ?? 0);
+    const receivableAmount = Number(reportData?.receivableAmount ?? reportData?.totalDebit ?? reportData?.rows?.reduce((s, r) => s + Number(r.rawPaidAmount || r.rawAmount || 0), 0) ?? 0);
+    const balanceAmount = Number(reportData?.balanceAmount ?? Math.max(0, totalAmount - receivableAmount));
+
+    return { totalAmount, receivableAmount, balanceAmount };
+  }, [isPaymentRegister, tableSearchTerm, filteredRows, reportData]);
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       {/* ── Top Header / Breadcrumb Bar ── */}
@@ -2271,43 +2316,86 @@ function ReportsContent() {
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
 
         {/* ── Top Summary / KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
-                {currentMeta.kpiLabel}
-              </div>
-              <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
-                {loading ? "..." : reportData?.kpiValue || "0"}
+        {isPaymentRegister && paymentSummary ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+            {/* 1. TOTAL AMOUNT */}
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Total Amount
+                </div>
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-1 truncate">
+                  {loading ? "..." : fmtCurrency(paymentSummary.totalAmount)}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
-                Summary Details
-              </div>
-              <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
-                {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
+            {/* 2. RECEIVABLE AMOUNT */}
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Receivable Amount
+                </div>
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+                  {loading ? "..." : fmtCurrency(paymentSummary.receivableAmount)}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 sm:col-span-2 md:col-span-1">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
-                Current Period
-              </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
-                {displayRange}
+            {/* 3. BALANCE AMOUNT */}
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Balance Amount
+                </div>
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-blue-600 dark:text-blue-400 mt-1 truncate">
+                  {loading ? "..." : fmtCurrency(paymentSummary.balanceAmount)}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  {currentMeta.kpiLabel}
+                </div>
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                  {loading ? "..." : reportData?.kpiValue || "0"}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Summary Details
+                </div>
+                <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
+                  {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 sm:col-span-2 md:col-span-1">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                  Current Period
+                </div>
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                  {displayRange}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Filters Row ── */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
@@ -2454,16 +2542,28 @@ function ReportsContent() {
                               <span
                                 className={clsx(
                                   "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
-                                  String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED"
+                                  String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED" || String(row[col.key]).toUpperCase() === "PAID"
                                     ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
-                                    : String(row[col.key]).toUpperCase().includes("PROGRESS")
+                                    : String(row[col.key]).toUpperCase().includes("PROGRESS") || String(row[col.key]).toUpperCase() === "PARTIAL"
                                     ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
-                                    : String(row[col.key]).toUpperCase().includes("REJECT")
+                                    : String(row[col.key]).toUpperCase().includes("REJECT") || String(row[col.key]).toUpperCase() === "CANCELLED"
                                     ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
                                     : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
                                 )}
                               >
                                 {row[col.key]}
+                              </span>
+                            ) : col.key === "totalAmount" ? (
+                              <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                                {row[col.key] ?? "—"}
+                              </span>
+                            ) : col.key === "receivableAmount" ? (
+                              <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                {row[col.key] ?? "—"}
+                              </span>
+                            ) : col.key === "balanceAmount" ? (
+                              <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">
+                                {row[col.key] ?? "—"}
                               </span>
                             ) : (
                               row[col.key] ?? "—"
