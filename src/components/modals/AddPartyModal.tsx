@@ -420,7 +420,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           {/* SECTION: Basic Information */}
           <div>
             <label className={sectionLabelClass}>Basic Information</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">{nameLabel} *</label>
                 <input
@@ -431,7 +431,9 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Contact Number</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">
+                  Contact Number {partyType === 'vendor' && <span className="text-rose-500">*</span>}
+                </label>
                 <input
                   placeholder="10 digits..."
                   value={form.contact}

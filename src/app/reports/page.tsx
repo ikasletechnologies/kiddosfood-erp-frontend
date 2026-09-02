@@ -185,6 +185,43 @@ const PARENT_REPORTS: ParentReportDef[] = [
       { id: "Sale Purchase By Party Group", label: "Sale Purchase By Party Group", description: "Transactions grouped by customer tier." },
     ],
   },
+  {
+    id: "inventory",
+    label: "Inventory",
+    description: "Stock summary, low stock alerts, stock detail and item valuation.",
+    children: [
+      { id: "Stock summary", label: "Stock Summary", description: "Current inventory valuation, quantities and stock status." },
+      { id: "Item Report By Party", label: "Item Report By Party", description: "Item-wise sales per party." },
+      { id: "Item Wise Profit And Loss", label: "Item Wise Profit & Loss", description: "Profitability per item." },
+      { id: "Item Category Wise Profit And Loss", label: "Item Category Wise Profit & Loss", description: "Profitability by item category." },
+      { id: "Low Stock Summary", label: "Low Stock Summary", description: "Items below minimum safety threshold." },
+      { id: "Stock Detail", label: "Stock Detail", description: "Stock movement ledger." },
+      { id: "Item Detail", label: "Item Detail", description: "Item master catalog details." },
+      { id: "Sale/ Purchase Report By Item Category", label: "Sale/ Purchase Report By Item Category", description: "Sales vs. purchases by category." },
+      { id: "Stock Summary Report By Item Category", label: "Stock Summary Report By Item Category", description: "Stock summary grouped by category." },
+      { id: "Item Wise Discount", label: "Item Wise Discount", description: "Discounts per item." },
+    ],
+  },
+  {
+    id: "production",
+    label: "Production",
+    description: "Batches, recipes, consumption, wastage and QA reports.",
+    children: [
+      { id: "Batch Manufacturing History", label: "Batch Manufacturing History", description: "Production batch logs." },
+      { id: "Production Planning", label: "Production Planning", description: "Planned batches and schedule." },
+      { id: "QC & Inspection Report", label: "QC & Inspection Report", description: "Quality control inspection logs." },
+      { id: "Material Consumption Report", label: "Material Consumption Report", description: "Raw material consumption." },
+      { id: "Wastage & Scrap Report", label: "Wastage & Scrap Report", description: "Scrap and loss logs." },
+      { id: "Formulation & Recipe Costing", label: "Formulation & Recipe Costing", description: "Recipe costs." },
+      { id: "Packaging & Cartons", label: "Packaging & Cartons", description: "Packaging logs." },
+      { id: "Raw Material Ledger", label: "Raw Material Ledger", description: "Raw material stock ledger." },
+      { id: "Stock Movement History", label: "Stock Movement History", description: "Stock movements." },
+      { id: "Inward & GRN Movements", label: "Inward & GRN Movements", description: "Inward receipts." },
+      { id: "Outward & Dispatch Movements", label: "Outward & Dispatch Movements", description: "Outward dispatches." },
+      { id: "Stock Adjustments & Reconciliation", label: "Stock Adjustments & Reconciliation", description: "Reconciliation logs." },
+      { id: "Finished Goods Stock", label: "Finished Goods Stock", description: "Finished goods inventory." },
+    ],
+  },
 ];
 
 // ─── Subgroup Mapping (Matches navigation.ts REPORT_GROUPS) ───────────────────
@@ -685,15 +722,16 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   "Stock summary": {
     title: "Stock Summary",
     kpiLabel: "Total Stock Value",
-    tableTitle: "Current Stock",
+    tableTitle: "Stock Summary",
     columns: [
       { key: "itemName", label: "Item Name" },
-      { key: "category", label: "Category" },
-      { key: "unit", label: "Unit" },
-      { key: "inStock", label: "In Stock" },
-      { key: "minStock", label: "Min Stock" },
-      { key: "rate", label: "Rate" },
-      { key: "value", label: "Stock Value" },
+      { key: "salePrice", label: "Sale Price" },
+      { key: "purchasePrice", label: "Purchase Price" },
+      { key: "stockQty", label: "Stock Qty" },
+      { key: "availableQty", label: "Available Qty" },
+      { key: "qtyForSale", label: "Qty for Sale" },
+      { key: "reservedQty", label: "Reserved Qty" },
+      { key: "stockValue", label: "Stock Value" },
     ],
   },
   "Item Report By Party": {
@@ -1457,24 +1495,39 @@ function transformAllParties(data: any): ReportData {
 // Financial year an India GST return uses (Apr–Mar), e.g. "2025-2026" for any
 // date between 2025-04-01 and 2026-03-31.
 function transformStockSummary(data: any): ReportData {
-  const rows = toArr(data);
+  const rows = toArr(data?.rows || data);
   const totalValue = rows.reduce(
     (s: number, r: any) =>
-      s + (Number(r.quantity || r.currentStock) || 0) * (Number(r.price || r.unitPrice || r.costPrice) || 0),
+      s + Number(r.stockValue || (Number(r.stockQty || r.currentStock || r.quantity || 0) * Number(r.purchasePrice || r.costPrice || 0))),
+    0
+  );
+  const totalUnits = rows.reduce(
+    (s: number, r: any) => s + Number(r.stockQty || r.currentStock || r.quantity || 0),
     0
   );
   return {
     kpiValue: fmtCurrency(totalValue),
-    kpiSubText: `Items: ${rows.length} • Total Units: ${rows.reduce((s: number, r: any) => s + (Number(r.quantity || r.currentStock) || 0), 0)}`,
-    rows: rows.map((r: any) => ({
-      itemName: r.name || r.itemName || "—",
-      category: formatCategory(r.category || r.categoryName || r.group),
-      unit: r.unit || r.unitOfMeasure || "—",
-      inStock: String(Number(r.quantity || r.currentStock || 0)),
-      minStock: String(Number(r.minQuantity || r.reorderPoint || 0)),
-      rate: fmtCurrency(r.price || r.unitPrice || r.costPrice),
-      value: fmtCurrency((Number(r.quantity || r.currentStock) || 0) * (Number(r.price || r.unitPrice || r.costPrice) || 0)),
-    })),
+    kpiSubText: `Items: ${rows.length} • Total Units: ${totalUnits}`,
+    rows: rows.map((r: any) => {
+      const salePrice = Number(r.salePrice ?? r.sellingPrice ?? r.customerPrice ?? r.basePrice ?? 0);
+      const purchasePrice = Number(r.purchasePrice ?? r.costPrice ?? 0);
+      const stockQty = Number(r.stockQty ?? r.currentStock ?? r.quantity ?? 0);
+      const reservedQty = Number(r.reservedQty ?? r.reservedStock ?? 0);
+      const availableQty = Number(r.availableQty ?? r.availableStock ?? Math.max(0, stockQty - reservedQty));
+      const qtyForSale = Number(r.qtyForSale ?? availableQty);
+      const stockValue = Number(r.stockValue ?? (stockQty > 0 ? stockQty * purchasePrice : 0));
+
+      return {
+        itemName: r.itemName || r.name || "—",
+        salePrice: fmtCurrency(salePrice),
+        purchasePrice: fmtCurrency(purchasePrice),
+        stockQty: `${stockQty} ${r.unit || ""}`.trim(),
+        availableQty: `${availableQty} ${r.unit || ""}`.trim(),
+        qtyForSale: `${qtyForSale} ${r.unit || ""}`.trim(),
+        reservedQty: `${reservedQty} ${r.unit || ""}`.trim(),
+        stockValue: fmtCurrency(stockValue),
+      };
+    }),
   };
 }
 
@@ -1874,7 +1927,7 @@ async function fetchReport(
 
       // Inventory
       case "Stock summary":
-        return transformStockSummary((await inventoryApi.getInventory()).data);
+        return transformStockSummary((await reportsApi.getStockSummary(params)).data);
       case "Item Report By Party":
         return transformGeneric((await reportsApi.getItemByParty(params)).data, meta);
       case "Item Wise Profit And Loss":
@@ -2279,6 +2332,10 @@ function ReportsContent() {
 
     return { totalAmount, receivableAmount, balanceAmount };
   }, [isPaymentRegister, tableSearchTerm, filteredRows, reportData]);
+
+  if (activeChild?.id === "Stock summary" || activeChild?.label === "Stock Summary") {
+    return <CentralStockSummaryReport />;
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
