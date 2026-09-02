@@ -82,7 +82,7 @@ const INDIAN_STATES = [
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:          { label: "Draft",           color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
   PENDING:        { label: "Pending",         color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
-  CONFIRMED:      { label: "Confirmed",       color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  CONFIRMED:      { label: "Confirmed",       color: "text-orange-600 dark:text-orange-400",    bg: "bg-orange-50 dark:bg-orange-500/10",    border: "border-orange-200 dark:border-orange-500/20" },
   PROCESSING:     { label: "Processing",      color: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10",  border: "border-orange-200 dark:border-orange-500/20" },
   SHIPPED:        { label: "Shipped",         color: "text-indigo-600 dark:text-indigo-400",  bg: "bg-indigo-50 dark:bg-indigo-500/10",  border: "border-indigo-200 dark:border-indigo-500/20" },
   DELIVERED:      { label: "Delivered",       color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
@@ -255,6 +255,12 @@ export default function SalesOrdersPage() {
   const [readOnly, setReadOnly] = useState(false);
   const [viewOrderRef, setViewOrderRef] = useState<any>(null);
   const autoOpenedIdRef = useRef<string | null>(null);
+  const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
+
+  // Status Filter Popover State
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [draftSelectedStatuses, setDraftSelectedStatuses] = useState<string[]>([]);
+  const [showStatusFilterPop, setShowStatusFilterPop] = useState(false);
 
   // Dropdown floating close triggers
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
@@ -555,6 +561,7 @@ export default function SalesOrdersPage() {
     setDescription("");
     setShowDesc(false);
     setRoundOffEnabled(true);
+    setLoadedStatus(null);
   };
 
   const handleSave = async (status: "DRAFT" | "OPEN" | "OVERDUE") => {
@@ -617,21 +624,7 @@ export default function SalesOrdersPage() {
           discount: discAmt,
           taxPercent: it.taxPct,
         };
-      }),
-      _rawState: {
-        selectedCustomer,
-        customerSearch,
-        customerPhone,
-        orderDate,
-        dueDate,
-        stateOfSupply,
-        items,
-        priceMode,
-        paymentType,
-        termsText,
-        description,
-        roundOffEnabled
-      }
+      })
     };
 
     try {
@@ -673,10 +666,20 @@ export default function SalesOrdersPage() {
     setSourceQuotationId(order.quotationId || null);
     setDraftId(order.id);
     setOrderNo(order.orderNo);
+    setLoadedStatus(order.status || null);
     const raw = order._rawState || {};
-    setSelectedCustomer(raw.selectedCustomer || null);
-    setCustomerSearch(raw.customerSearch || order.customerName);
-    setCustomerPhone(raw.customerPhone || order.customerPhone || "");
+
+    const matchingCust = order.customer || customers.find((c: any) => c.id === order.customerId || (c.name && c.name.toLowerCase() === order.customerName?.toLowerCase()));
+    const finalCust = raw.selectedCustomer || matchingCust || (order.customerId || order.customerName ? {
+      id: order.customerId || "",
+      name: order.customerName || order.customer?.name || "",
+      phone: order.customerPhone || order.customer?.phone || "",
+      state: order.stateOfSupply || order.customer?.state || ""
+    } : null);
+    setSelectedCustomer(finalCust);
+
+    setCustomerSearch(raw.customerSearch || order.customerName || finalCust?.name || "");
+    setCustomerPhone(raw.customerPhone || order.customerPhone || finalCust?.phone || "");
     setOrderDate(raw.orderDate || (order.orderDate ? new Date(order.orderDate).toISOString().split("T")[0] : order.invoiceDate));
     setDueDate(raw.dueDate || (order.dueDate ? new Date(order.dueDate).toISOString().split("T")[0] : ""));
     setStateOfSupply(raw.stateOfSupply || order.stateOfSupply || "");
@@ -823,7 +826,15 @@ export default function SalesOrdersPage() {
     }
   };
 
-  // ── Filter Computations ──────────────────────────────────────────────────────
+  function getOrderCategory(o: any): "Open" | "Overdue" | "Completed" | "Partial Open" {
+    if (o.status === "CLOSED" || o.status === "CONVERTED" || o.status === "DELIVERED" || o.status === "PAID") return "Completed";
+    const isOverdue = o.status === "OVERDUE" || (o.dueDate && new Date(o.dueDate) < new Date() && (o.balance === undefined || Number(o.balance) > 0));
+    if (isOverdue) return "Overdue";
+    const total = Number(o.finalAmount || o.totalAmount || 0);
+    const bal = Number(o.balance || 0);
+    if (bal > 0 && bal < total) return "Partial Open";
+    return "Open";
+  }
 
   const getFilteredOrders = () => {
     return orders.filter(o => {
@@ -831,7 +842,14 @@ export default function SalesOrdersPage() {
         o.orderNo.toLowerCase().includes(search.toLowerCase()) ||
         o.customerName.toLowerCase().includes(search.toLowerCase());
 
-      const matchStatus = statusFilter === "ALL" || o.status === statusFilter;
+      const cat = getOrderCategory(o);
+      const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
+
+      let matchStatus = statusFilter === "ALL" || o.status === statusFilter;
+      if (statusFilter === "Open") matchStatus = cat === "Open";
+      if (statusFilter === "Overdue") matchStatus = cat === "Overdue";
+      if (statusFilter === "Completed") matchStatus = cat === "Completed";
+      if (statusFilter === "Partial Open") matchStatus = cat === "Partial Open";
 
       let matchDate = true;
       if (dateFilter === "THIS_MONTH") {
@@ -844,15 +862,12 @@ export default function SalesOrdersPage() {
         matchDate = o.invoiceDate >= dateFrom && o.invoiceDate <= dateTo;
       }
 
-      return matchSearch && matchStatus && matchDate;
+      return matchSearch && matchSelectedStatuses && matchStatus && matchDate;
     });
   };
 
   const filteredOrders = getFilteredOrders();
 
-  // Customer / Order Date / State of Supply are locked (not the whole form —
-  // Due Date and line items stay editable) once this order has a source
-  // Estimate. See sourceQuotationId's declaration for why.
   const lockFromQuotation = !!sourceQuotationId;
 
   const filteredCustomers = customers.filter(c =>
@@ -863,9 +878,9 @@ export default function SalesOrdersPage() {
 
   const stats = {
     total: orders.length,
-    open: orders.filter(o => o.status === "OPEN").length,
-    overdue: orders.filter(o => o.status === "OVERDUE").length,
-    closed: orders.filter(o => o.status === "CLOSED").length,
+    open: orders.filter(o => getOrderCategory(o) === "Open").length,
+    overdue: orders.filter(o => getOrderCategory(o) === "Overdue").length,
+    closed: orders.filter(o => getOrderCategory(o) === "Completed").length,
   };
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -879,19 +894,19 @@ export default function SalesOrdersPage() {
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <button
               onClick={() => {
-                if (readOnly) {
+                if (readOnly || (loadedStatus && loadedStatus !== "DRAFT")) {
                   setView("list");
                   resetForm();
                   window.history.replaceState({}, "", window.location.pathname);
                   return;
                 }
                 const hasInput = selectedCustomer || items.some(it => it.itemSearch !== "");
-                if (hasInput) {
+                if (hasInput && !draftId) {
                   handleSave("DRAFT");
-                } else {
-                  setView("list");
-                  resetForm();
                 }
+                setView("list");
+                resetForm();
+                window.history.replaceState({}, "", window.location.pathname);
               }}
               className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0"
               title="Back to Orders"
@@ -1552,7 +1567,7 @@ export default function SalesOrdersPage() {
               {viewOrderRef?.proformaInvoiceId && (
                 <a
                   href={`/sales/proforma-invoice?id=${viewOrderRef.proformaInvoiceId}`}
-                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-colors shadow-sm"
                 >
                   View Proforma Invoice
                 </a>
@@ -1612,7 +1627,7 @@ export default function SalesOrdersPage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
             {[
               { label: "Total Orders", value: stats.total, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
-              { label: "Open Orders",  value: stats.open,  color: "text-blue-600 dark:text-blue-400",   dot: "bg-blue-500" },
+              { label: "Open Orders",  value: stats.open,  color: "text-orange-600 dark:text-orange-400",   dot: "bg-[#f58220]" },
               { label: "Overdue",      value: stats.overdue, color: "text-red-600 dark:text-red-400",   dot: "bg-red-500" },
               { label: "Closed",       value: stats.closed, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
             ].map(s => (
@@ -1634,7 +1649,7 @@ export default function SalesOrdersPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search order or party..."
-                className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-blue-500 bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
               {search && (
                 <X 
@@ -1661,18 +1676,24 @@ export default function SalesOrdersPage() {
               </div>
             )}
             <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none"
+              value={selectedStatuses.length === 1 ? selectedStatuses[0] : (statusFilter === "ALL" && selectedStatuses.length === 0 ? "ALL" : (statusFilter !== "ALL" ? statusFilter : ""))}
+              onChange={e => {
+                const val = e.target.value;
+                if (val === "ALL") {
+                  setStatusFilter("ALL");
+                  setSelectedStatuses([]);
+                } else {
+                  setStatusFilter("ALL");
+                  setSelectedStatuses([val]);
+                }
+              }}
+              className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none cursor-pointer"
             >
               <option value="ALL">All Orders</option>
-              <option value="DRAFT">Draft</option>
-              <option value="PENDING">Pending</option>
-              <option value="CONFIRMED">Confirmed</option>
-              <option value="PROCESSING">Processing</option>
-              <option value="SHIPPED">Shipped</option>
-              <option value="DELIVERED">Delivered</option>
-              <option value="CANCELLED">Cancelled</option>
+              <option value="Open">Open</option>
+              <option value="Overdue">Overdue</option>
+              <option value="Completed">Completed</option>
+              <option value="Partial Open">Partial Open</option>
             </select>
             <div className="flex items-center gap-2 ml-auto">
               <button onClick={fetchAllData} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors" title="Refresh">
@@ -1684,8 +1705,8 @@ export default function SalesOrdersPage() {
           {/* ── Empty State ── */}
           {filteredOrders.length === 0 ? (
             <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-16 sm:py-20 flex flex-col items-center justify-center text-center space-y-4 px-4">
-              <div className="w-16 h-16 bg-blue-50 dark:bg-blue-500/10 rounded-full flex items-center justify-center">
-                <ShoppingBag className="h-8 w-8 text-blue-600" />
+              <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center">
+                <ShoppingBag className="h-8 w-8 text-[#f58220]" />
               </div>
               <div>
                 <p className="text-gray-800 dark:text-white font-semibold text-sm sm:text-base">No Sales Orders</p>
@@ -1704,22 +1725,88 @@ export default function SalesOrdersPage() {
               <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
                 <table className="w-full text-sm min-w-[800px]">
                   <thead>
-                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                      <th className="text-left px-4 py-3 whitespace-nowrap">Party</th>
-                      <th className="text-left px-4 py-3 whitespace-nowrap">No.</th>
-                      <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
-                      <th className="text-left px-4 py-3 whitespace-nowrap">Due Date</th>
-                      <th className="text-right px-4 py-3 whitespace-nowrap">Total Amount</th>
-                      <th className="text-right px-4 py-3 whitespace-nowrap">Balance</th>
-                      <th className="text-left px-4 py-3 whitespace-nowrap">Type</th>
-                      <th className="text-center px-4 py-3 whitespace-nowrap">Status</th>
-                      <th className="text-right px-4 py-3 whitespace-nowrap">Action</th>
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase select-none">
+                      <th className="text-left px-4 py-3 whitespace-nowrap">PARTY</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">NO.</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1">
+                          <span>DATE</span>
+                          <ChevronDown size={11} className="text-gray-500" />
+                        </div>
+                      </th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">DUE DATE</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">TOTAL AMOUNT</th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">BALANCE</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">TYPE</th>
+                      <th className="text-center px-4 py-3 whitespace-nowrap relative">
+                        <div 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDraftSelectedStatuses([...selectedStatuses]);
+                            setShowStatusFilterPop(v => !v);
+                          }}
+                          className="cursor-pointer hover:text-gray-900 dark:hover:text-white"
+                        >
+                          <span>STATUS</span>
+                        </div>
+
+                        {showStatusFilterPop && (
+                          <div 
+                            onClick={(e) => e.stopPropagation()} 
+                            className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 text-left normal-case"
+                          >
+                            <div className="space-y-2 mb-3">
+                              {["Open", "Overdue", "Completed", "Partial Open"].map((st) => (
+                                <label key={st} className="flex items-center gap-2.5 text-xs font-medium text-gray-700 dark:text-slate-200 cursor-pointer hover:text-gray-900 dark:hover:text-white">
+                                  <input
+                                    type="checkbox"
+                                    checked={draftSelectedStatuses.includes(st)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setDraftSelectedStatuses([...draftSelectedStatuses, st]);
+                                      } else {
+                                        setDraftSelectedStatuses(draftSelectedStatuses.filter(s => s !== st));
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                                  />
+                                  <span>{st}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-white/5 pt-2.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDraftSelectedStatuses([]);
+                                  setSelectedStatuses([]);
+                                  setShowStatusFilterPop(false);
+                                }}
+                                className="px-3.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full transition-colors"
+                              >
+                                Clear
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStatuses([...draftSelectedStatuses]);
+                                  setShowStatusFilterPop(false);
+                                }}
+                                className="px-4 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-full shadow-xs transition-colors"
+                              >
+                                Apply
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </th>
+                      <th className="text-right px-4 py-3 whitespace-nowrap">ACTION</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {filteredOrders.map(o => {
-                      const style = STATUS_STYLES[o.status] || STATUS_STYLES.DRAFT;
-                      const isClosed = o.status === "CLOSED" || o.status === "CONVERTED";
+                      const category = getOrderCategory(o);
+                      const isClosed = category === "Completed" || o.status === "CLOSED" || o.status === "CONVERTED";
                       return (
                         <tr key={o.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                           <td className="px-4 py-3">
@@ -1750,17 +1837,21 @@ export default function SalesOrdersPage() {
                             Sale Order
                           </td>
                           <td className="px-4 py-3 text-center whitespace-nowrap">
-                            {isClosed ? (
-                              <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs">
-                                Converted
-                              </span>
-                            ) : o.status === "OVERDUE" ? (
-                              <span className="text-red-500 font-semibold text-xs">
+                            {category === "Overdue" ? (
+                              <span className="text-[#f58220] dark:text-orange-400 font-semibold text-xs">
                                 Order Overdue
                               </span>
+                            ) : category === "Completed" ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
+                                Completed
+                              </span>
+                            ) : category === "Partial Open" ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs">
+                                Partial Open
+                              </span>
                             ) : (
-                              <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                                {style.label}
+                              <span className="text-[#f58220] dark:text-orange-400 font-semibold text-xs">
+                                Confirmed
                               </span>
                             )}
                           </td>
@@ -1770,7 +1861,7 @@ export default function SalesOrdersPage() {
                                 <>
                                   <button
                                     onClick={() => handleEdit(o)}
-                                    className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
+                                    className="px-2.5 py-1 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
                                   >
                                     Resume
                                   </button>
@@ -1790,7 +1881,7 @@ export default function SalesOrdersPage() {
                                     "px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors border uppercase tracking-wide",
                                     isClosed
                                       ? "opacity-40 cursor-not-allowed text-gray-400 bg-gray-100 border-gray-200 dark:bg-white/5 dark:text-slate-500 dark:border-white/10"
-                                      : "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 border-blue-200 dark:border-blue-500/20 cursor-pointer"
+                                      : "text-[#f58220] dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 border-orange-200 dark:border-orange-500/20 cursor-pointer"
                                   )}
                                 >
                                   {convertingId === o.id ? "Converting..." : "CONVERT TO SALE"}

@@ -51,7 +51,7 @@ interface ReturnOrder {
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PENDING:   { label: "Pending Approval", color: "text-[#f58220]",  bg: "bg-orange-50 dark:bg-orange-500/10",  border: "border-orange-200 dark:border-orange-500/20" },
-  APPROVED:  { label: "Approved",         color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  APPROVED:  { label: "Approved",         color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   COMPLETED: { label: "Refund Processed font-bold", color: "text-emerald-600 dark:text-emerald-400 font-bold", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   REJECTED:  { label: "Rejected",         color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
   DRAFT:     { label: "Draft Request",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
@@ -836,7 +836,7 @@ export default function SalesReturnsPage() {
                           {r.status === 'APPROVED' && (
                             <button
                               onClick={() => processStatusChange(r.id, 'COMPLETED')}
-                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
+                              className="px-2.5 py-1 text-xs font-medium text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
                             >
                               Process Refund
                             </button>

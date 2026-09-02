@@ -74,7 +74,7 @@ const INDIAN_STATES = [
 // Unified Color Coding (from Invoice Page status colors)
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:      { label: "Draft",       color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
-  IN_TRANSIT: { label: "In Transit",  color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  IN_TRANSIT: { label: "In Transit",  color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   CLOSED:     { label: "Delivered",   color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   CANCELLED:  { label: "Cancelled",   color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
@@ -1586,7 +1586,7 @@ export default function DeliveryChallanPage() {
                       <tr key={`${r.challanId}-${i}`} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                         <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-800 dark:text-slate-200 whitespace-nowrap">{r.challanNumber}</td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20" : "bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-white/10")}>
+                          <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-bold border", r.sourceDocument === "SALES_INVOICE" ? "bg-orange-50 dark:bg-orange-500/10 text-[#f58220] dark:text-orange-400 border-orange-200 dark:border-orange-500/20" : "bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-slate-400 border-gray-200 dark:border-white/10")}>
                             {r.sourceDocument === "SALES_INVOICE" ? "Sales Invoice" : "Direct"}
                           </span>
                         </td>
@@ -1652,7 +1652,7 @@ export default function DeliveryChallanPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: "Total Challans", value: stats.total,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
-            { label: "In Transit",     value: stats.inTransit, color: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
+            { label: "In Transit",     value: stats.inTransit, color: "text-orange-600 dark:text-orange-400",    dot: "bg-[#f58220]" },
             { label: "Delivered",      value: stats.closed,    color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
             { label: "Drafts",         value: stats.draft,     color: "text-amber-600 dark:text-amber-400",   dot: "bg-amber-500" },
           ].map(s => (

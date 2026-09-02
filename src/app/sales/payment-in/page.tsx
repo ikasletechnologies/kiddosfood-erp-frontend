@@ -73,13 +73,13 @@ function EmptyIllustration() {
   return (
     <div className="w-28 h-28 mx-auto mb-4 relative">
       <div className="absolute inset-0 rounded-full bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center">
-        <div className="w-20 h-16 rounded-lg bg-white dark:bg-card border-2 border-blue-100 dark:border-white/10 flex flex-col gap-1.5 items-start justify-center px-3 shadow-sm">
+        <div className="w-20 h-16 rounded-lg bg-white dark:bg-card border-2 border-orange-100 dark:border-white/10 flex flex-col gap-1.5 items-start justify-center px-3 shadow-sm">
           <div className="w-10 h-1.5 rounded bg-orange-200 dark:bg-orange-500/30" />
           <div className="w-6 h-1.5 rounded bg-orange-100 dark:bg-orange-500/20" />
           <div className="w-8 h-1.5 rounded bg-orange-100 dark:bg-orange-500/20" />
         </div>
         <div className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-500/20 border-2 border-orange-200 dark:border-orange-500/30 flex items-center justify-center">
-          <Wallet size={12} className="text-blue-400 dark:text-blue-300" />
+          <Wallet size={12} className="text-[#f58220] dark:text-orange-400" />
         </div>
       </div>
     </div>

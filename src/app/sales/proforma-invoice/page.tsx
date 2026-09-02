@@ -27,7 +27,7 @@ const FALLBACK_COMPANY = {
 // Proforma Invoice status styling
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:     { label: "Draft",     color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
-  SENT:      { label: "Sent",      color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  SENT:      { label: "Sent",      color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   CONVERTED: { label: "Converted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   CANCELLED: { label: "Cancelled", color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
@@ -177,7 +177,7 @@ export default function ProformaInvoicePage() {
           {[
             { label: "Total", value: stats.total, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
             { label: "Draft", value: stats.draft, color: "text-slate-600 dark:text-slate-400", dot: "bg-slate-400" },
-            { label: "Sent", value: stats.sent, color: "text-blue-600 dark:text-blue-400", dot: "bg-blue-500" },
+            { label: "Sent", value: stats.sent, color: "text-orange-600 dark:text-orange-400", dot: "bg-[#f58220]" },
             { label: "Converted", value: stats.converted, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
           ].map((s) => (
             <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-3.5 sm:p-4 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
@@ -321,7 +321,7 @@ export default function ProformaInvoicePage() {
                               <button
                                 onClick={() => handleConvert(p)}
                                 disabled={convertingId === p.id}
-                                className="px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg border border-blue-200 dark:border-blue-500/20 transition-colors disabled:opacity-50"
+                                className="px-2.5 py-1 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg border border-orange-200 dark:border-orange-500/20 transition-colors disabled:opacity-50"
                               >
                                 {convertingId === p.id ? "Converting..." : "Convert to Tax Invoice"}
                               </button>

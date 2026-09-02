@@ -6,7 +6,7 @@ import {
   Calculator, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Download, Calendar,
   AlignLeft, FileText, ArrowLeft, ArrowRight, FileClock, Pencil, Truck,
-  FileSpreadsheet, Copy
+  FileSpreadsheet, Copy, Filter
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi, salesApi } from "@/lib/api";
@@ -80,7 +80,7 @@ const INDIAN_STATES = [
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   DRAFT:    { label: "Draft",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
-  SENT:     { label: "Sent",     color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-500/10",    border: "border-blue-200 dark:border-blue-500/20" },
+  SENT:     { label: "Sent",     color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   ACCEPTED: { label: "Accepted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
   CONVERTED:{ label: "Converted",color: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
@@ -405,6 +405,11 @@ export default function EstimationsPageClient({
   const [dealers, setDealers] = useState<any[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+
+  // Status Filter Popover State
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [draftSelectedStatuses, setDraftSelectedStatuses] = useState<string[]>([]);
+  const [showStatusFilterPop, setShowStatusFilterPop] = useState(false);
 
   // list date filters
   const now = new Date();
@@ -1120,19 +1125,35 @@ export default function EstimationsPageClient({
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   };
+  function getEstimateCategory(est: any): "Open" | "Overdue" | "Completed" | "Partial Open" {
+    if (est.status === "CONVERTED" || est.status === "CLOSED" || est.status === "COMPLETED" || !!est.convertedInvoiceId || !!est.convertedOrderId) return "Completed";
+    const isOverdue = est.status === "OVERDUE" || (est.validUntil && new Date(est.validUntil) < new Date());
+    if (isOverdue) return "Overdue";
+    return "Open";
+  }
+
   const filtered = estimations.filter(est => {
     const partyName = est.customer?.name || est.customerName;
     const matchSearch = !search.trim() ||
       est.quotationNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
       est.proformaNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
       partyName?.toLowerCase().includes(search.trim().toLowerCase());
-    const matchStatus = statusFilter === "ALL" || est.status === statusFilter;
+    
+    const cat = getEstimateCategory(est);
+    const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
+
+    let matchStatus = statusFilter === "ALL" || est.status === statusFilter;
+    if (statusFilter === "Open") matchStatus = cat === "Open";
+    if (statusFilter === "Overdue") matchStatus = cat === "Overdue";
+    if (statusFilter === "Completed") matchStatus = cat === "Completed";
+    if (statusFilter === "Partial Open") matchStatus = cat === "Partial Open";
+
     let matchDate = true;
     if (est.createdAt && (dateFrom || dateTo)) {
       const ymd = toLocalYMD(new Date(est.createdAt));
       matchDate = (!dateFrom || ymd >= dateFrom) && (!dateTo || ymd <= dateTo);
     }
-    return matchSearch && matchStatus && matchDate;
+    return matchSearch && matchSelectedStatuses && matchStatus && matchDate;
   });
 
   const totalQuotations = filtered.reduce((s, i) => s + (i.totalAmount || 0), 0);
@@ -1464,7 +1485,7 @@ export default function EstimationsPageClient({
                     <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] sm:w-[400px] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
                       {partyType === "CUSTOMER" && (
                         <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-medium"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 font-medium"
                           onClick={() => {
                             const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
                             setNewParty(prev => ({
@@ -2234,7 +2255,7 @@ export default function EstimationsPageClient({
                     <td colSpan={2} className="px-3 py-2.5">
                       <button
                         onClick={addRow}
-                        className="px-3 py-1 bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors uppercase tracking-wider"
+                        className="px-3 py-1 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] dark:text-orange-400 border border-orange-200 dark:border-orange-500/20 rounded-lg text-xs font-bold hover:bg-orange-100 transition-colors uppercase tracking-wider"
                       >
                         + ADD ROW
                       </button>
@@ -2363,7 +2384,7 @@ export default function EstimationsPageClient({
             <button
               onClick={handleConfirmConversion}
               disabled={saving}
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-lg shadow-blue-500/20 uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
+              className="px-6 py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-black rounded-xl shadow-lg shadow-orange-500/20 uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -2390,7 +2411,7 @@ export default function EstimationsPageClient({
                 </button>
                 <button
                   onClick={confirmCloseConversion}
-                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md"
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl shadow-md"
                 >
                   OK
                 </button>
@@ -2576,13 +2597,79 @@ export default function EstimationsPageClient({
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[240px]">
               <table className="w-full text-sm min-w-[760px]">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="text-left px-4 py-3 whitespace-nowrap">Date</th>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase select-none">
+                    <th className="text-left px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <span>Date</span>
+                        <ChevronDown size={11} className="text-gray-500" />
+                      </div>
+                    </th>
                     <th className="text-left px-4 py-3 whitespace-nowrap">{L.noColumn}</th>
                     <th className="text-left px-4 py-3 whitespace-nowrap">Party Name</th>
                     <th className="text-right px-4 py-3 whitespace-nowrap">Amount</th>
                     <th className="text-right px-4 py-3 whitespace-nowrap">Balance</th>
-                    <th className="text-left px-4 py-3 whitespace-nowrap">Status</th>
+                    <th className="text-left px-4 py-3 whitespace-nowrap relative">
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDraftSelectedStatuses([...selectedStatuses]);
+                          setShowStatusFilterPop(v => !v);
+                        }}
+                        className="cursor-pointer hover:text-gray-900 dark:hover:text-white"
+                      >
+                        <span>Status</span>
+                      </div>
+
+                      {showStatusFilterPop && (
+                        <div 
+                          onClick={(e) => e.stopPropagation()} 
+                          className="absolute left-0 top-full mt-1 w-52 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 text-left normal-case"
+                        >
+                          <div className="space-y-2 mb-3">
+                            {["Open", "Overdue", "Completed", "Partial Open"].map((st) => (
+                              <label key={st} className="flex items-center gap-2.5 text-xs font-medium text-gray-700 dark:text-slate-200 cursor-pointer hover:text-gray-900 dark:hover:text-white">
+                                <input
+                                  type="checkbox"
+                                  checked={draftSelectedStatuses.includes(st)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setDraftSelectedStatuses([...draftSelectedStatuses, st]);
+                                    } else {
+                                      setDraftSelectedStatuses(draftSelectedStatuses.filter(s => s !== st));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                                />
+                                <span>{st}</span>
+                              </label>
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-white/5 pt-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDraftSelectedStatuses([]);
+                                setSelectedStatuses([]);
+                                setShowStatusFilterPop(false);
+                              }}
+                              className="px-3.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full transition-colors"
+                            >
+                              Clear
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedStatuses([...draftSelectedStatuses]);
+                                setShowStatusFilterPop(false);
+                              }}
+                              className="px-4 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-full shadow-xs transition-colors"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </th>
                     <th className="text-right px-4 py-3 whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
@@ -2644,7 +2731,7 @@ export default function EstimationsPageClient({
                               <a
                                 href={`/sales/invoices?id=${est.convertedInvoiceId || ""}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
                               >
                                 Sale Invoice {est.convertedInvoiceNumber ? `no. ${est.convertedInvoiceNumber}` : ""}
                               </a>
@@ -2652,12 +2739,12 @@ export default function EstimationsPageClient({
                               <a
                                 href={`/sales/orders?id=${est.convertedOrderId || ""}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
                               >
                                 Sales Order {est.convertedOrderNumber ? `no. ${est.convertedOrderNumber}` : ""}
                               </a>
                             ) : (
-                              <span className="text-blue-600 dark:text-blue-400 font-semibold text-xs sm:text-sm">
+                              <span className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm">
                                 Converted
                               </span>
                             )
@@ -2701,7 +2788,7 @@ export default function EstimationsPageClient({
                                     "px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors",
                                     isConverted
                                       ? "opacity-40 cursor-not-allowed text-gray-400 dark:text-slate-500 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10"
-                                      : "text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 cursor-pointer"
+                                      : "text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 cursor-pointer"
                                   )}
                                 >
                                   <span>Convert</span>
