@@ -207,6 +207,8 @@ export default function PaymentInPage() {
   const [chequeNo, setChequeNo] = useState("");
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
   const periodDropRef = useRef<HTMLDivElement>(null);
   const customerDropRef = useRef<HTMLDivElement>(null);
@@ -278,9 +280,45 @@ export default function PaymentInPage() {
     } catch {}
   }, []);
 
+  // Cash/Bank/UPI accounts a payment can actually be posted to — the same
+  // list AccountService.validateAccountForPayment checks against server-side.
+  // Without collecting this, the backend has no account to post to for any
+  // mode other than a franchise's sole CASH account, and rejects the save.
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await api.get("/api/accounts");
+      const list = Array.isArray((res as any).data) ? (res as any).data : ((res as any).data?.data || []);
+      setAccounts(list.filter((a: any) => a.status === "ACTIVE"));
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    fetchPayments(); fetchCustomers(); fetchDealers(); fetchFranchises(); fetchInvoices();
-  }, [fetchPayments, fetchCustomers, fetchDealers, fetchFranchises, fetchInvoices]);
+    fetchPayments(); fetchCustomers(); fetchDealers(); fetchFranchises(); fetchInvoices(); fetchAccounts();
+  }, [fetchPayments, fetchCustomers, fetchDealers, fetchFranchises, fetchInvoices, fetchAccounts]);
+
+  // Mirrors AccountService.validateAccountForPayment's mode→account-type
+  // eligibility exactly, so the dropdown never offers an account the
+  // backend would reject.
+  const eligibleAccountTypes = (mode: string): string[] => {
+    if (mode === "Cash") return ["CASH"];
+    if (mode === "UPI" || mode === "Card") return ["UPI", "BANK"];
+    // Cheque, Online Transfer, Bank Transfer all resolve to BANK_TRANSFER/CHEQUE
+    // server-side, both of which require a BANK-type account.
+    return ["BANK"];
+  };
+  const eligibleAccounts = accounts.filter((a: any) => eligibleAccountTypes(paymentMode).includes(a.type));
+
+  // Auto-pick the obvious choice (one eligible account) and clear the
+  // selection when it's no longer valid for the newly-chosen mode, instead
+  // of silently carrying over an account of the wrong type.
+  useEffect(() => {
+    if (eligibleAccounts.length === 1) {
+      setSelectedAccountId(eligibleAccounts[0].id);
+    } else if (!eligibleAccounts.some((a: any) => a.id === selectedAccountId)) {
+      setSelectedAccountId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMode, accounts]);
 
   const partySourceList = partyType === "DEALER" ? dealers : partyType === "FRANCHISE" ? franchises : customers;
 
@@ -292,7 +330,7 @@ export default function PaymentInPage() {
         const order = inv.order || {};
         const invPartyType = order.partyType || "CUSTOMER";
         const invPartyId = invPartyType === "CUSTOMER" ? (order.partyId || order.customerId) : order.partyId;
-        return invPartyType === partyType && invPartyId === selectedCustomer.id && inv.status !== "PAID";
+        return invPartyType === partyType && invPartyId === selectedCustomer.id && inv.status !== "PAID" && inv.status !== "CANCELLED";
       })
     : [];
 
@@ -359,6 +397,15 @@ export default function PaymentInPage() {
         showToast(`Amount exceeds the outstanding balance (₹${invoiceOutstanding.toFixed(2)}) on this invoice`, "error");
         return;
       }
+      if (!selectedAccountId) {
+        showToast(
+          eligibleAccounts.length === 0
+            ? `No active ${paymentMode === "Cash" ? "Cash" : paymentMode === "UPI" || paymentMode === "Card" ? "UPI/Bank" : "Bank"} account is configured. Please add one under Banking before receiving this payment.`
+            : "Select the account this payment should be received into",
+          "error"
+        );
+        return;
+      }
     }
 
     if (isDraft && !selectedCustomer && (!amount || Number(amount) <= 0)) {
@@ -385,7 +432,8 @@ export default function PaymentInPage() {
               paymentMode,
               description,
               chequeNo,
-              receiptDate
+              receiptDate,
+              selectedAccountId
             }
           }
         });
@@ -406,9 +454,13 @@ export default function PaymentInPage() {
       // this alone before), `method` (not paymentMode — the mode string is
       // resolved server-side via a fixed map), `invoiceId` so the payment
       // is actually linked to a Tax Invoice and its paid/outstanding gets
-      // recomputed, and `linkedDocType: 'INVOICE'` (the only value the
+      // recomputed, `linkedDocType: 'INVOICE'` (the only value the
       // LinkedDocType enum actually has for this — 'CUSTOMER_RECEIPT' and
-      // 'CUSTOMER_PAYMENT' below are not valid enum values and would fail).
+      // 'CUSTOMER_PAYMENT' below are not valid enum values and would fail),
+      // and `sourceAccount` — AccountService.validateAccountForPayment
+      // rejects every mode except a franchise's sole CASH account without
+      // one, which is why every non-cash submission failed before this was
+      // wired up to the account picker above.
       const methodMap: Record<string, string> = {
         Cash: "CASH",
         Cheque: "CHEQUE",
@@ -422,6 +474,7 @@ export default function PaymentInPage() {
         flow: "IN",
         status: "PAID",
         method: methodMap[paymentMode] || "CASH",
+        sourceAccount: selectedAccountId || undefined,
         entityId: selectedCustomer.id,
         entityType: partyType,
         entity: selectedCustomer.name,
@@ -431,7 +484,14 @@ export default function PaymentInPage() {
         type: "INVOICE_LINKED",
         sourceModule: "MANUAL",
         reference: chequeNo || description || undefined,
+        note: description || undefined,
         createdBy: "SYSTEM",
+        // The receipt date the user actually picked — previously never sent,
+        // so every payment silently recorded at submit-time instead.
+        createdAt: receiptDate ? new Date(receiptDate).toISOString() : undefined,
+        // AccountService.validateAccountForPayment's CHEQUE branch requires
+        // both, in addition to sourceAccount above.
+        ...(paymentMode === "Cheque" ? { chequeNumber: chequeNo, chequeDate: receiptDate } : {}),
         // One key per logical "Record Payment" submission — a retry/
         // double-click that races past the `disabled={saving}` guard hits
         // FinanceService.createPayment's idempotency check and returns the
@@ -453,7 +513,11 @@ export default function PaymentInPage() {
       fetchPayments();
       setView("list");
     } catch (e: any) {
-      showToast(e?.response?.data?.error || "Failed to record payment", "error");
+      // FinanceController.recordPayment's validation-error branch responds
+      // with `{ message }`, not `{ error }` — reading only `.error` here
+      // silently discarded the real reason (missing account, overpayment,
+      // etc.) and showed this generic fallback for every failure.
+      showToast(e?.response?.data?.message || e?.response?.data?.error || "Failed to record payment", "error");
     } finally {
       setSaving(false);
     }
@@ -470,6 +534,7 @@ export default function PaymentInPage() {
     setDescription("");
     setChequeNo("");
     setReceiptDate(new Date().toISOString().split("T")[0]);
+    setSelectedAccountId("");
     setIdempotencyKey(crypto.randomUUID());
   };
 
@@ -502,6 +567,7 @@ export default function PaymentInPage() {
     setPaymentMode(raw.paymentMode || p.paymentMode || "Cash");
     setDescription(raw.description || p.remarks || p.notes || "");
     setChequeNo(raw.chequeNo || p.referenceNo || p.chequeNo || "");
+    setSelectedAccountId(raw.selectedAccountId || p.accountId || "");
     setIdempotencyKey(crypto.randomUUID());
     setView("create");
   };
@@ -734,6 +800,31 @@ export default function PaymentInPage() {
                 >
                   {PAYMENT_MODES.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
+              </div>
+
+              {/* Account — which Cash/Bank/UPI account this payment lands in.
+                  Required by AccountService.validateAccountForPayment for
+                  every mode except a franchise's sole CASH account. */}
+              <div>
+                <label className="text-xs text-gray-500 dark:text-slate-400 mb-1 block">
+                  {paymentMode === "Cash" ? "Cash Account" : paymentMode === "UPI" || paymentMode === "Card" ? "UPI / Bank Account" : "Bank Account"} *
+                </label>
+                {eligibleAccounts.length === 0 ? (
+                  <div className="w-full border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 rounded px-3 py-2 text-xs text-rose-600 dark:text-rose-400">
+                    No active account configured for this mode.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedAccountId}
+                    onChange={e => setSelectedAccountId(e.target.value)}
+                    className="w-full border border-gray-300 dark:border-white/10 rounded px-3 py-2 text-sm text-gray-700 dark:text-white outline-none bg-white dark:bg-[#13151f] focus:border-[#f58220]"
+                  >
+                    <option value="" disabled>Select account...</option>
+                    {eligibleAccounts.map((a: any) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type}) — ₹{(a.balance ?? 0).toLocaleString("en-IN")}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Cheque No (shown if Cheque mode) */}
