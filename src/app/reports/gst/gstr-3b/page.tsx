@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   RefreshCw,
   FileText,
+  FileSpreadsheet,
   Printer,
   Receipt,
   ArrowUpRight,
@@ -259,6 +260,22 @@ export default function GSTR3BPage() {
               >
                 <FileText className="h-3.5 w-3.5 text-rose-500" />
                 <span>PDF</span>
+              </button>
+              <button
+                onClick={() =>
+                  exportExcel(
+                    `${filenameBase}.xlsx`,
+                    "GSTR-3B",
+                    "GSTR-3B Monthly Summary",
+                    headers,
+                    rows
+                  )
+                }
+                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+                title="Export Excel"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Excel</span>
               </button>
             </div>
           </div>

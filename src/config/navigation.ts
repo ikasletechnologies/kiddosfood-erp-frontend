@@ -175,7 +175,6 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
       { label: "GSTR-3B", href: "/reports/gst/gstr-3b" },
       { label: "GSTR-9", href: "/reports/gst/gstr-9" },
       { label: "Sales Summary (HSN)", href: "/reports/gst/hsn-summary" },
-      { label: "SAC Report", href: "/reports/gst/sac-report" },
     ],
   },
 ];
