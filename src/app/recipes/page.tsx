@@ -447,11 +447,10 @@ export default function RecipesPage() {
         </div>
 
         {/* Stats Dashboard */}
-        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-3 sm:gap-4 max-w-md">
           {[
             { label: "Total Formulas", value: recipes.length, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-500/10" },
             { label: "Products Covered", value: new Set(recipes.map((r) => r.productId)).size, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-500/10" },
-            { label: "Avg Ingredients", value: recipes.length ? (recipes.reduce((s, r) => s + (r.recipeItems?.length ?? 0), 0) / recipes.length).toFixed(1) : 0, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
           ].map((stat) => (
             <div key={stat.label} className="bg-white dark:bg-card rounded-2xl border border-gray-100 dark:border-white/5 p-4 sm:p-5 shadow-sm min-w-0">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 truncate">{stat.label}</p>

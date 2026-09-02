@@ -188,12 +188,19 @@ export default function ReceivablesPage() {
         if (seenIds.has(id)) return;
         seenIds.add(id);
 
-        const customer = custMap.get(inv.customerId) || custMap.get((inv.customerName || "").toLowerCase().trim()) || inv.customer || {};
-        const total = Number(inv.grandTotal || inv.totalAmount || inv.amount || inv.total || 0);
-        const paid = Number(inv.paidAmount || inv.advanceAmount || (inv.payments?.reduce((s: number, p: any) => s + (p.amount || 0), 0)) || 0);
+        const customer = custMap.get(inv.order?.customerId || inv.customerId) || custMap.get((inv.order?.customerName || inv.customerName || "").toLowerCase().trim()) || inv.order?.customer || inv.customer || {};
+        const total = Number(inv.finalAmount ?? inv.grandTotal ?? inv.totalAmount ?? inv.amount ?? inv.total ?? 0);
+        
+        // Sum payment amounts checking both paidAmount and amount
+        const directPaymentSum = inv.payments?.reduce((s: number, p: any) => {
+          if (p.isCancelled || (p.status && p.status !== 'PAID' && p.status !== 'SUCCESS')) return s;
+          return s + Number(p.paidAmount ?? p.amount ?? 0);
+        }, 0) || 0;
+        
+        const paid = Number(inv.paidAmount ?? inv.advanceAmount ?? (directPaymentSum > 0 ? directPaymentSum : (inv.status === 'PAID' || inv.order?.paymentStatus === 'PAID' ? total : 0)));
         const outstanding = Math.max(0, total - paid);
 
-        const invDateStr = inv.invoiceDate || inv.date || inv.createdAt || new Date().toISOString();
+        const invDateStr = inv.invoiceDate || inv.date || inv.order?.createdAt || inv.createdAt || new Date().toISOString();
         const dueDateStr = inv.dueDate || invDateStr;
         const dueTime = new Date(dueDateStr).getTime();
 
@@ -216,14 +223,16 @@ export default function ReceivablesPage() {
         else if (daysOverdue > 60) agingBucket = "61-90";
         else if (daysOverdue > 30) agingBucket = "31-60";
 
+        const invNumber = inv.order?.invoiceNum || inv.invoiceNumber || inv.invoiceNo || inv.billNumber || `INV-${id.slice(-6).toUpperCase()}`;
+
         combinedItems.push({
           id,
-          invoiceNumber: inv.invoiceNumber || inv.invoiceNo || inv.billNumber || `INV-${id.slice(-6).toUpperCase()}`,
-          orderId: inv.orderId || inv.salesOrderId,
-          customerId: inv.customerId || customer.id || "",
-          customerName: inv.customerName || customer.name || "Walk-in Customer",
-          customerPhone: inv.customerPhone || customer.phone || customer.mobile || "—",
-          customerEmail: inv.customerEmail || customer.email || "—",
+          invoiceNumber: invNumber,
+          orderId: inv.orderId || inv.order?.id || inv.salesOrderId,
+          customerId: inv.order?.customerId || inv.customerId || customer.id || "",
+          customerName: inv.order?.customerName || inv.order?.customer?.name || inv.customerName || customer.name || (inv.payments?.[0]?.transactionRef) || "Walk-in Customer",
+          customerPhone: inv.order?.customerPhone || inv.order?.customer?.phone || inv.customerPhone || customer.phone || customer.mobile || "—",
+          customerEmail: inv.order?.customerEmail || inv.order?.customer?.email || inv.customerEmail || customer.email || "—",
           invoiceDate: invDateStr,
           dueDate: dueDateStr,
           totalAmount: total,
@@ -232,7 +241,7 @@ export default function ReceivablesPage() {
           status,
           daysOverdue,
           agingBucket,
-          items: inv.items || [],
+          items: inv.order?.orderItems || inv.items || [],
           payments: inv.payments || []
         });
       });
@@ -246,7 +255,13 @@ export default function ReceivablesPage() {
 
         const customer = custMap.get(ord.customerId) || custMap.get((ord.customerName || "").toLowerCase().trim()) || ord.customer || {};
         const total = Number(ord.grandTotal || ord.totalAmount || ord.total || 0);
-        const paid = Number(ord.paidAmount || ord.advanceAmount || (ord.paymentStatus === 'PAID' ? total : 0));
+        
+        const directPaymentSum = ord.payments?.reduce((s: number, p: any) => {
+          if (p.isCancelled || (p.status && p.status !== 'PAID' && p.status !== 'SUCCESS')) return s;
+          return s + Number(p.paidAmount ?? p.amount ?? 0);
+        }, 0) || 0;
+        
+        const paid = Number(ord.paidAmount ?? ord.advanceAmount ?? (directPaymentSum > 0 ? directPaymentSum : (ord.paymentStatus === 'PAID' || ord.status === 'COMPLETED' ? total : 0)));
         const outstanding = Math.max(0, total - paid);
 
         const invDateStr = ord.orderDate || ord.createdAt || new Date().toISOString();

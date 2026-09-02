@@ -462,12 +462,10 @@ export default function RecipeMasterTab() {
       {/* ── Top Bar ── */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 flex-1 w-full min-w-0">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-2.5 sm:gap-3 flex-1 w-full min-w-0 max-w-md">
           {[
             { label: "Total Recipes", value: recipes.length, color: "text-gray-800 dark:text-white", dot: "bg-gray-400" },
-            { label: "Packaged Products", value: recipes.filter(r => r.productId).length, color: "text-green-700 dark:text-green-400", dot: "bg-green-500" },
             { label: "Bulk Formulas", value: recipes.filter(r => !r.productId).length, color: "text-blue-700 dark:text-blue-400", dot: "bg-blue-500" },
-            { label: "Avg Ingredients", value: recipes.length ? (recipes.reduce((acc, r) => acc + (r.recipeItems?.length ?? 0), 0) / recipes.length).toFixed(1) : 0, color: "text-orange-700 dark:text-orange-400", dot: "bg-[#f58220]" },
           ].map(stat => (
             <div key={stat.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-3 sm:px-4 py-2.5 flex items-center gap-2.5 sm:gap-3 shadow-sm min-w-0">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
