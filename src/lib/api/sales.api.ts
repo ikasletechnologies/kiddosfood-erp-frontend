@@ -57,6 +57,10 @@ export const salesApi = {
     api.patch(`/api/sales/returns/${id}`, { status, approvedBy }),
   
   getAnalytics: (params?: any) => api.get('/api/sales/analytics', { params }),
+
+  getInvoices: (params?: any) => api.get('/api/sales/invoices', { params }),
+  getInvoiceById: (id: string) => api.get(`/api/sales/invoices/${id}`),
+  cancelInvoice: (id: string) => api.post(`/api/sales/invoices/${id}/cancel`),
 };
 
 // --- Drafts Management ---

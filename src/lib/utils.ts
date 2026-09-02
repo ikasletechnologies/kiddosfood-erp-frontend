@@ -41,7 +41,7 @@ export function formatDateTime(date: string | number | Date | null | undefined):
 }
 
 export function formatERPNumber(
-  prefix: "PO" | "GRN" | "BT" | "DC" | "INV" | "RCPT" | "PRD",
+  prefix: "PO" | "GRN" | "BT" | "DC" | "INV" | "RCPT" | "PRD" | "SO",
   idOrCode: string | number | undefined,
   dateStr?: string
 ): string {

@@ -289,21 +289,16 @@ export default function SalesOrdersPage() {
   const fetchAllData = useCallback(async () => {
     setLoading(true);
     try {
-      const [custRes, prodRes, ordRes, companyRes] = await Promise.allSettled([
+      const [custRes, prodRes, ordRes, invRes, companyRes] = await Promise.allSettled([
         customersApi.getAll(),
         productsFullApi.getAll(),
         api.get("/api/sales/orders").catch(() => ({ data: [] })),
+        api.get("/api/sales/invoices").catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
       ]);
 
-      // The API returns the raw SalesOrder shape (orderNumber, totalAmount,
-      // createdAt, customer.name, ...) — the table below reads
-      // orderNo/finalAmount/balance/invoiceDate, which don't exist on that
-      // shape at all, so real API-backed orders rendered as blank/undefined
-      // everywhere except locally-cached drafts (which already used the
-      // display field names). Alias them here, once, keeping every original
-      // field via spread so status/id/proformaInvoiceId/quotationId etc.
-      // stay intact for the chain-action buttons below.
+      const invoices = invRes.status === "fulfilled" ? ((invRes.value as any).data || []) : [];
+
       let salesOrders = ordRes.status === "fulfilled" ? ((ordRes.value as any).data || []).map((o: any) => ({
         ...o,
         orderNo: o.orderNumber || o.orderNo,
@@ -327,6 +322,33 @@ export default function SalesOrdersPage() {
       } catch (err) {
         console.error("Failed to load local sales orders", err);
       }
+
+      // Enrich completed/delivered orders with invoice numbers if missing
+      salesOrders = salesOrders.map((o: any) => {
+        let convertedInvoiceNumber = o.convertedInvoiceNumber || o.convertedInvoiceNo || o.invoiceNum;
+        let convertedInvoiceId = o.convertedInvoiceId;
+
+        if (!convertedInvoiceNumber && (o.status === "DELIVERED" || o.status === "CLOSED" || o.status === "CONVERTED" || o.status === "PAID")) {
+          const match = invoices.find((inv: any) => {
+            const invOrder = inv.order || inv;
+            const invCustId = invOrder.customerId || inv.customerId;
+            const invAmt = Number(invOrder.totalAmount || inv.totalAmount || inv.finalAmount || 0);
+            const oAmt = Number(o.finalAmount || o.totalAmount || 0);
+            return (invCustId === o.customerId) && Math.abs(invAmt - oAmt) < 0.1;
+          });
+
+          if (match) {
+            convertedInvoiceId = match.id || match.order?.id || match.orderId;
+            convertedInvoiceNumber = match.order?.invoiceNum || match.invoiceNum || match.invoiceNumber;
+          }
+        }
+
+        return {
+          ...o,
+          convertedInvoiceId,
+          convertedInvoiceNumber
+        };
+      });
 
       setOrders(salesOrders);
       if (custRes.status === "fulfilled") setCustomers((custRes.value as any).data || []);
@@ -1594,34 +1616,37 @@ export default function SalesOrdersPage() {
   // 2. LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
 
         {/* ── Page Header Toolbar ── */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-end gap-2.5 w-full min-w-0">
-          <button
-            onClick={() => {
-              const openOrders = filteredOrders.filter(o => o.status !== "CLOSED" && o.status !== "CANCELLED");
-              if (openOrders.length === 0) {
-                showToast("No unconverted sales orders to convert", "info");
-                return;
-              }
-              if (window.confirm(`Convert ${openOrders.length} open Sales Order(s) to Sale Invoices?`)) {
-                openOrders.forEach(o => convertToSale(o));
-              }
-            }}
-            className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30 text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-xs transition-colors whitespace-nowrap cursor-pointer"
-          >
-            <CheckSquare className="h-4 w-4" /> Bulk Convert To Sale
-          </button>
-          <button
-            onClick={() => { resetForm(); setView("create"); }}
-            className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-sm transition-colors whitespace-nowrap cursor-pointer"
-          >
-            <Plus className="h-4 w-4" /> Add Sale Order
-          </button>
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 md:px-8 py-3.5 sm:py-4 flex items-center justify-between gap-3 w-full min-w-0">
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white uppercase tracking-wider">SALES ORDERS</h1>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => {
+                const openOrders = filteredOrders.filter(o => o.status !== "CLOSED" && o.status !== "CANCELLED");
+                if (openOrders.length === 0) {
+                  showToast("No unconverted sales orders to convert", "info");
+                  return;
+                }
+                if (window.confirm(`Convert ${openOrders.length} open Sales Order(s) to Sale Invoices?`)) {
+                  openOrders.forEach(o => convertToSale(o));
+                }
+              }}
+              className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/30 text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-xs transition-colors whitespace-nowrap cursor-pointer"
+            >
+              <CheckSquare className="h-4 w-4" /> Bulk Convert To Sale
+            </button>
+            <button
+              onClick={() => { resetForm(); setView("create"); }}
+              className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-3.5 sm:px-4 py-2 rounded-xl shadow-sm transition-colors whitespace-nowrap cursor-pointer"
+            >
+              <Plus className="h-4 w-4" /> Add Sale Order
+            </button>
+          </div>
         </div>
 
-        <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
+        <div className="w-full max-w-[1600px] mx-auto p-4 sm:p-6 md:p-8 space-y-5 w-full min-w-0">
 
           {/* ── Summary Stats ── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
@@ -1737,7 +1762,7 @@ export default function SalesOrdersPage() {
                       <th className="text-left px-4 py-3 whitespace-nowrap">DUE DATE</th>
                       <th className="text-right px-4 py-3 whitespace-nowrap">TOTAL AMOUNT</th>
                       <th className="text-right px-4 py-3 whitespace-nowrap">BALANCE</th>
-                      <th className="text-left px-4 py-3 whitespace-nowrap">TYPE</th>
+                      <th className="text-left px-4 py-3 whitespace-nowrap">TRANSACTION TYPE</th>
                       <th className="text-center px-4 py-3 whitespace-nowrap relative">
                         <div 
                           onClick={(e) => {
@@ -1873,20 +1898,23 @@ export default function SalesOrdersPage() {
                                   </button>
                                 </>
                               )}
-                              {o.status !== "DRAFT" && (
+                              {isClosed ? (
+                                <a
+                                  href={o.convertedInvoiceId ? `/sales/invoices?id=${o.convertedInvoiceId}` : `/sales/invoices`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-blue-600 dark:text-blue-400 font-semibold text-xs hover:underline cursor-pointer whitespace-nowrap"
+                                >
+                                  Converted To Invoice No. {o.convertedInvoiceNumber || o.convertedInvoiceNo || o.invoiceNum || (o.convertedInvoiceId ? o.convertedInvoiceId.slice(0, 8) : o.orderNo)}
+                                </a>
+                              ) : o.status !== "DRAFT" ? (
                                 <button
                                   onClick={(e) => convertToSale(o, e)}
-                                  disabled={convertingId === o.id || isClosed}
-                                  className={clsx(
-                                    "px-2.5 py-1 text-xs font-semibold rounded-lg transition-colors border uppercase tracking-wide",
-                                    isClosed
-                                      ? "opacity-40 cursor-not-allowed text-gray-400 bg-gray-100 border-gray-200 dark:bg-white/5 dark:text-slate-500 dark:border-white/10"
-                                      : "text-[#f58220] dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 border-orange-200 dark:border-orange-500/20 cursor-pointer"
-                                  )}
+                                  disabled={convertingId === o.id}
+                                  className="px-2.5 py-1 text-xs font-semibold text-[#f58220] dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 border border-orange-200 dark:border-orange-500/20 rounded-lg transition-colors cursor-pointer uppercase tracking-wide"
                                 >
                                   {convertingId === o.id ? "Converting..." : "CONVERT TO SALE"}
                                 </button>
-                              )}
+                              ) : null}
                               <button
                                 onClick={() => handleEdit(o)}
                                 className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"

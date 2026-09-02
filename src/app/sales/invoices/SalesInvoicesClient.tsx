@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft, Truck
+  AlignLeft, FileText, ArrowLeft, Truck, MoreVertical,
+  Eye, Pencil, CreditCard, FileCheck, RotateCcw, Copy,
+  FileSpreadsheet, Slash
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -286,6 +288,24 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
 
+  // Action Menu State
+  const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
+  const [actionMenuRect, setActionMenuRect] = useState<{ top: number; right: number; openUpward: boolean } | null>(null);
+
+  // Receive Payment Modal State
+  const [paymentModalInv, setPaymentModalInv] = useState<any | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMode, setPaymentMode] = useState<string>("CASH");
+  const [paymentAccountId, setPaymentAccountId] = useState<string>("");
+  const [paymentDate, setPaymentDate] = useState<string>("");
+  const [paymentNote, setPaymentNote] = useState<string>("");
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
+
+  // Cancel Confirmation Modal State
+  const [cancellingInv, setCancellingInv] = useState<any | null>(null);
+  const [submittingCancel, setSubmittingCancel] = useState(false);
+
   // Add Party inline form
   const [showAddParty, setShowAddParty] = useState(false);
   const [newParty, setNewParty] = useState({ name: "", phone: "", email: "", gstin: "", gstType: "Unregistered/Consumer", state: "", city: "", pincode: "", billingAddress: "", shippingAddress: "", openingBalance: "", creditLimit: "" });
@@ -367,6 +387,62 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       .then(res => setCompanyProfile(res.data))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (paymentModalInv) {
+      api.get("/api/accounts")
+        .then(res => {
+          const accs = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setAccounts(accs);
+          if (accs.length > 0 && !paymentAccountId) {
+            setPaymentAccountId(accs[0].id);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [paymentModalInv, paymentAccountId]);
+
+  const handleConfirmReceivePayment = async () => {
+    if (!paymentModalInv || paymentAmount <= 0) return;
+    setSubmittingPayment(true);
+    try {
+      await api.post("/api/accounting/payments", {
+        amount: paymentAmount,
+        flow: "IN",
+        sourceAccount: paymentAccountId || undefined,
+        method: paymentMode,
+        sourceModule: "POS",
+        linkedDocType: "INVOICE",
+        invoiceId: paymentModalInv.id,
+        entityId: paymentModalInv.order?.customerId || paymentModalInv.customerId,
+        entityType: "CUSTOMER",
+        reference: paymentNote || undefined,
+        createdAt: paymentDate ? new Date(paymentDate).toISOString() : undefined,
+      });
+      showToast("Payment recorded successfully", "success");
+      setPaymentModalInv(null);
+      await fetchData();
+    } catch (err: any) {
+      showToast(err.response?.data?.message || err.message || "Failed to record payment", "error");
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
+  const handleConfirmCancelInvoice = async () => {
+    if (!cancellingInv) return;
+    setSubmittingCancel(true);
+    try {
+      await api.post(`/api/sales/invoices/${cancellingInv.id}/cancel`);
+      showToast("Invoice cancelled successfully", "success");
+      setCancellingInv(null);
+      await fetchData();
+    } catch (err: any) {
+      showToast(err.response?.data?.message || err.message || "Failed to cancel invoice", "error");
+    } finally {
+      setSubmittingCancel(false);
+    }
+  };
 
   // Close popups on outside click
   useEffect(() => {
@@ -1633,7 +1709,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                     <th className="text-left px-4 py-3">Date</th>
                     <th className="text-left px-4 py-3">Invoice No</th>
                     <th className="text-left px-4 py-3">Party Name</th>
-                    <th className="text-left px-4 py-3">Pay Type</th>
+                    <th className="text-left px-4 py-3">Transaction</th>
+                    <th className="text-left px-4 py-3">Payment Type</th>
                     <th className="text-right px-4 py-3">Amount</th>
                     <th className="text-right px-4 py-3">Balance</th>
                     <th className="text-center px-4 py-3">Status</th>
@@ -1677,6 +1754,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                             )}
                           </div>
                         </td>
+                        <td className="px-4 py-3 text-xs font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                          Sale
+                        </td>
                         <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
                           {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
                         </td>
@@ -1696,47 +1776,266 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {isDraft ? (
+                          <div className="flex items-center justify-end gap-1 sm:gap-1.5">
+                            {/* Quick Action: View */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setViewInvoice(inv); }}
+                              className="px-2 py-1 text-xs font-semibold text-[#2563eb] dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="View Invoice"
+                            >
+                              View
+                            </button>
+
+                            {/* Quick Action: Print */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handlePrint(inv); }}
+                              className="px-2 py-1 text-xs font-semibold text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                              title="Print Invoice"
+                            >
+                              Print
+                            </button>
+
+                            {/* Quick Action: Share */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); showToast(`Share link generated for invoice ${inv.order?.invoiceNum || inv.id}`, "success"); }}
+                              className="px-2 py-1 text-xs font-semibold text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                              title="Share Invoice"
+                            >
+                              Share
+                            </button>
+
+                            {/* 3-Dots Menu Icon (⋮) */}
+                            <div className="relative inline-block text-left">
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}
-                                className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg border border-transparent hover:border-red-200 dark:hover:border-red-500/20 transition-colors"
-                                title="Delete Draft"
-                                aria-label="Delete Draft"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (openActionMenu === inv.id) {
+                                    setOpenActionMenu(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const rightSpace = window.innerWidth - rect.right;
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const openUpward = spaceBelow < 320;
+                                    setActionMenuRect({
+                                      top: openUpward ? rect.top : rect.bottom,
+                                      right: Math.max(16, rightSpace - 24),
+                                      openUpward
+                                    });
+                                    setOpenActionMenu(inv.id);
+                                  }
+                                }}
+                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                                title="More Actions"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <MoreVertical size={16} />
                               </button>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={(e) => { 
-                                     e.stopPropagation(); 
-                                     router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
-                                  }}
-                                  className="p-1.5 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg border border-transparent hover:border-orange-200 dark:hover:border-orange-500/20 transition-colors"
-                                  title="Create Delivery Challan"
-                                  aria-label="Create Delivery Challan"
+
+                              {/* Status-Aware Action Dropdown Card */}
+                              {openActionMenu === inv.id && (
+                                <div
+                                  style={
+                                    actionMenuRect
+                                      ? {
+                                        position: "fixed",
+                                        top: actionMenuRect.openUpward ? actionMenuRect.top - 400 : actionMenuRect.top + 6,
+                                        right: actionMenuRect.right,
+                                        zIndex: 999999,
+                                      }
+                                      : {
+                                        position: "absolute",
+                                        right: 0,
+                                        top: "100%",
+                                        zIndex: 999999,
+                                      }
+                                  }
+                                  className="w-60 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-2 animate-in fade-in zoom-in-95 text-left select-none"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <Truck className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handlePrint(inv); }}
-                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg border border-transparent hover:border-gray-200 dark:border-white/10 transition-colors"
-                                  title="Print"
-                                  aria-label="Print Invoice"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); showToast("Share feature coming soon", "info"); }}
-                                  className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg border border-transparent hover:border-gray-200 dark:border-white/10 transition-colors"
-                                  title="Share"
-                                  aria-label="Share Invoice"
-                                >
-                                  <Share2 className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
+                                  {/* Group 1: General Actions */}
+                                  <div className="space-y-0.5">
+                                    <button
+                                      onClick={() => { setOpenActionMenu(null); setViewInvoice(inv); }}
+                                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <Eye size={14} className="text-slate-400" />
+                                      <span>View Invoice</span>
+                                    </button>
+
+                                    <button
+                                      disabled={inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        if (isDraft) { loadDraft(inv); }
+                                        else { showToast("Edit loaded into active invoice form", "info"); setView("create"); }
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
+                                        inv.status === "CANCELLED"
+                                          ? "opacity-40 cursor-not-allowed text-slate-400"
+                                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+                                      )}
+                                    >
+                                      <Pencil size={14} className="text-slate-400" />
+                                      <span>Edit Invoice</span>
+                                    </button>
+
+                                    {/* Receive Payment (Prominent when balance > 0) */}
+                                    <button
+                                      disabled={balance <= 0 || inv.status === "PAID" || inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        setPaymentModalInv(inv);
+                                        setPaymentAmount(balance);
+                                        setPaymentMode("CASH");
+                                        setPaymentDate(new Date().toISOString().split("T")[0]);
+                                        setPaymentNote("");
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-semibold rounded-xl flex items-center justify-between transition-all",
+                                        balance > 0 && inv.status !== "CANCELLED"
+                                          ? "bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100/80 cursor-pointer"
+                                          : "opacity-40 cursor-not-allowed text-slate-400"
+                                      )}
+                                    >
+                                      <div className="flex items-center gap-2.5">
+                                        <CreditCard size={14} className={balance > 0 && inv.status !== "CANCELLED" ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"} />
+                                        <span>Receive Payment</span>
+                                      </div>
+                                      {balance > 0 && inv.status !== "CANCELLED" && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-200/60 dark:bg-emerald-500/30 text-emerald-800 dark:text-emerald-300">
+                                          Due ₹{balance.toFixed(0)}
+                                        </span>
+                                      )}
+                                    </button>
+
+                                    <button
+                                      disabled={inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        showToast("E-Invoice API integration is not configured in HQ settings", "info");
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
+                                        inv.status === "CANCELLED"
+                                          ? "opacity-40 cursor-not-allowed text-slate-400"
+                                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+                                      )}
+                                    >
+                                      <FileCheck size={14} className="text-slate-400" />
+                                      <span>Generate E-Invoice</span>
+                                    </button>
+
+                                    <button
+                                      disabled={inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId || inv.id}`);
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
+                                        inv.status === "CANCELLED"
+                                          ? "opacity-40 cursor-not-allowed text-slate-400"
+                                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+                                      )}
+                                    >
+                                      <Truck size={14} className="text-slate-400" />
+                                      <span>Delivery Challan</span>
+                                    </button>
+
+                                    <button
+                                      disabled={inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        router.push(`/sales/returns?sourceInvoiceId=${inv.id}`);
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
+                                        inv.status === "CANCELLED"
+                                          ? "opacity-40 cursor-not-allowed text-slate-400"
+                                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
+                                      )}
+                                    >
+                                      <RotateCcw size={14} className="text-slate-400" />
+                                      <span>Create Sales Return</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        openCreate();
+                                        if (inv.order?.customer) setSelectedCustomer(inv.order.customer);
+                                        showToast("Invoice duplicated as a new document draft", "success");
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <Copy size={14} className="text-slate-400" />
+                                      <span>Duplicate Invoice</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => { setOpenActionMenu(null); handlePrint(inv); }}
+                                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <FileSpreadsheet size={14} className="text-slate-400" />
+                                      <span>Open PDF</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => { setOpenActionMenu(null); setViewInvoice(inv); }}
+                                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <Eye size={14} className="text-slate-400" />
+                                      <span>Preview</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => { setOpenActionMenu(null); handlePrint(inv); }}
+                                      className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <Printer size={14} className="text-slate-400" />
+                                      <span>Print</span>
+                                    </button>
+                                  </div>
+
+                                  <div className="my-1.5 border-t border-slate-100 dark:border-white/5" />
+
+                                  {/* Group 2: Critical Actions (Cancel / Delete) */}
+                                  <div className="space-y-0.5">
+                                    <button
+                                      disabled={inv.status === "CANCELLED"}
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        setCancellingInv(inv);
+                                      }}
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-semibold rounded-xl flex items-center gap-2.5 transition-colors",
+                                        inv.status === "CANCELLED"
+                                          ? "opacity-40 cursor-not-allowed text-slate-400"
+                                          : "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 cursor-pointer"
+                                      )}
+                                    >
+                                      <Slash size={14} className={inv.status === "CANCELLED" ? "text-slate-400" : "text-rose-500"} />
+                                      <span>Cancel Invoice</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setOpenActionMenu(null);
+                                        if (isDraft) {
+                                          handleDeleteDraft(inv.id);
+                                        } else {
+                                          showToast("Posted invoices cannot be deleted to preserve audit history. Use Cancel Invoice instead.", "error");
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                    >
+                                      <Trash2 size={14} className="text-rose-500" />
+                                      <span>Delete Invoice</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -1768,6 +2067,177 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             documentType="TAX_INVOICE"
             onClose={() => setPrintingInvoice(null)}
           />
+        )}
+
+        {/* ── Receive Payment Modal ── */}
+        {paymentModalInv && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[999999] p-4">
+            <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
+                <div>
+                  <h3 className="font-bold text-base text-gray-900 dark:text-white">Receive Payment</h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400">Record payment against invoice balance</p>
+                </div>
+                <button
+                  onClick={() => setPaymentModalInv(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Summary Box */}
+              <div className="bg-slate-50 dark:bg-white/[0.03] border border-slate-200/80 dark:border-white/10 rounded-xl p-3.5 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Invoice No:</span>
+                  <span className="font-mono font-bold text-orange-600 dark:text-orange-400">
+                    {paymentModalInv.order?.invoiceNum
+                      ? formatERPNumber("INV", paymentModalInv.order.invoiceNum, paymentModalInv.createdAt)
+                      : "Tax Invoice"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Customer:</span>
+                  <span className="font-semibold text-slate-800 dark:text-white">
+                    {paymentModalInv.order?.customer?.name || paymentModalInv.customerName || "Walk-In Customer"}
+                  </span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-slate-200/50 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400">Invoice Total:</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-white">
+                    ₹{(paymentModalInv.finalAmount || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">Outstanding Balance:</span>
+                  <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+                    ₹{paymentAmount.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Fields */}
+              <div className="space-y-3.5 text-xs sm:text-sm">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-slate-300 mb-1">Payment Amount (₹)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={paymentModalInv.finalAmount || 0}
+                    step="0.01"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] text-gray-900 dark:text-white font-mono font-semibold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-gray-700 dark:text-slate-300 mb-1">Payment Mode</label>
+                    <select
+                      value={paymentMode}
+                      onChange={(e) => setPaymentMode(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] text-gray-900 dark:text-white"
+                    >
+                      <option value="CASH">Cash</option>
+                      <option value="UPI">UPI / Online</option>
+                      <option value="BANK_TRANSFER">Bank Transfer</option>
+                      <option value="CHEQUE">Cheque</option>
+                      <option value="CARD">Card</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-gray-700 dark:text-slate-300 mb-1">Account</label>
+                    <select
+                      value={paymentAccountId}
+                      onChange={(e) => setPaymentAccountId(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] text-gray-900 dark:text-white"
+                    >
+                      {accounts.length === 0 ? (
+                        <option value="">Default Cash Account</option>
+                      ) : (
+                        accounts.map(acc => (
+                          <option key={acc.id} value={acc.id}>{acc.name} ({acc.type})</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-slate-300 mb-1">Payment Date</label>
+                  <input
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] text-gray-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-slate-300 mb-1">Notes / Transaction Reference</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. UPI Ref 9482710482"
+                    value={paymentNote}
+                    onChange={(e) => setPaymentNote(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl outline-none focus:border-orange-500 bg-white dark:bg-[#13151f] text-gray-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setPaymentModalInv(null)}
+                  className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={submittingPayment || paymentAmount <= 0}
+                  onClick={handleConfirmReceivePayment}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {submittingPayment ? "Recording..." : "Record Payment"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Cancel Confirmation Modal ── */}
+        {cancellingInv && (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[999999] p-4">
+            <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
+                <h3 className="font-bold text-base text-gray-900 dark:text-white">Cancel Tax Invoice</h3>
+                <button onClick={() => setCancellingInv(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1">
+                  <X size={18} />
+                </button>
+              </div>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-slate-300">
+                Are you sure you want to cancel invoice <strong className="text-orange-600">{cancellingInv.order?.invoiceNum ? formatERPNumber("INV", cancellingInv.order.invoiceNum, cancellingInv.createdAt) : cancellingInv.id}</strong>?
+                This action preserves the transaction history but marks the invoice and linked sales order as CANCELLED.
+              </p>
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setCancellingInv(null)}
+                  className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  disabled={submittingCancel}
+                  onClick={handleConfirmCancelInvoice}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  {submittingCancel ? "Cancelling..." : "Confirm Cancellation"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

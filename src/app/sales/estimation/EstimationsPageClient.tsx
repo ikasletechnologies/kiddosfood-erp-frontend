@@ -6,7 +6,7 @@ import {
   Calculator, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Download, Calendar,
   AlignLeft, FileText, ArrowLeft, ArrowRight, FileClock, Pencil, Truck,
-  FileSpreadsheet, Copy, Filter
+  FileSpreadsheet, Copy, Filter, MoreVertical
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi, salesApi } from "@/lib/api";
@@ -16,7 +16,7 @@ import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
-import { formatDate, roundMoney, calculateSalesDocumentTotals } from "@/lib/utils";
+import { formatDate, roundMoney, calculateSalesDocumentTotals, formatERPNumber } from "@/lib/utils";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -30,25 +30,25 @@ const FALLBACK_COMPANY = {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const UNITS = [
-  { label: "None",              short: "None",  code: "NONE" },
-  { label: "Bags (Bag)",       short: "Bag",   code: "BAG" },
-  { label: "Bottles (Btl)",    short: "Btl",   code: "BTL" },
-  { label: "Box (Box)",        short: "Box",   code: "BOX" },
-  { label: "Bundles (Bdl)",    short: "Bdl",   code: "BDL" },
-  { label: "Carats (Ct)",      short: "Ct",    code: "CT" },
-  { label: "Cms",              short: "Cms",   code: "CMS" },
-  { label: "Dozens (Dzn)",     short: "Dzn",   code: "DZN" },
-  { label: "Grams (Grm)",      short: "Grm",   code: "GRM" },
-  { label: "Kilograms (Kgs)",  short: "Kgs",   code: "KGS" },
-  { label: "Liters (Ltr)",     short: "Ltr",   code: "LTR" },
-  { label: "Meters (Mtr)",     short: "Mtr",   code: "MTR" },
-  { label: "Numbers (Nos)",    short: "Nos",   code: "NOS" },
-  { label: "Packs (Pkt)",      short: "Pkt",   code: "PKT" },
-  { label: "Pieces (Pcs)",     short: "Pcs",   code: "PCS" },
-  { label: "Rolls",            short: "Roll",  code: "ROLL" },
-  { label: "Square Feet (Sqf)",short: "Sqf",   code: "SQF" },
-  { label: "Tons (Tne)",       short: "Tne",   code: "TNE" },
-  { label: "Units (Unt)",      short: "Unt",   code: "UNT" },
+  { label: "None", short: "None", code: "NONE" },
+  { label: "Bags (Bag)", short: "Bag", code: "BAG" },
+  { label: "Bottles (Btl)", short: "Btl", code: "BTL" },
+  { label: "Box (Box)", short: "Box", code: "BOX" },
+  { label: "Bundles (Bdl)", short: "Bdl", code: "BDL" },
+  { label: "Carats (Ct)", short: "Ct", code: "CT" },
+  { label: "Cms", short: "Cms", code: "CMS" },
+  { label: "Dozens (Dzn)", short: "Dzn", code: "DZN" },
+  { label: "Grams (Grm)", short: "Grm", code: "GRM" },
+  { label: "Kilograms (Kgs)", short: "Kgs", code: "KGS" },
+  { label: "Liters (Ltr)", short: "Ltr", code: "LTR" },
+  { label: "Meters (Mtr)", short: "Mtr", code: "MTR" },
+  { label: "Numbers (Nos)", short: "Nos", code: "NOS" },
+  { label: "Packs (Pkt)", short: "Pkt", code: "PKT" },
+  { label: "Pieces (Pcs)", short: "Pcs", code: "PCS" },
+  { label: "Rolls", short: "Roll", code: "ROLL" },
+  { label: "Square Feet (Sqf)", short: "Sqf", code: "SQF" },
+  { label: "Tons (Tne)", short: "Tne", code: "TNE" },
+  { label: "Units (Unt)", short: "Unt", code: "UNT" },
 ];
 
 const TAX_OPTIONS = [
@@ -70,20 +70,20 @@ const TAX_OPTIONS = [
 ];
 
 const INDIAN_STATES = [
-  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh",
-  "Goa","Gujarat","Haryana","Himachal Pradesh","Jharkhand","Karnataka",
-  "Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram",
-  "Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana",
-  "Tripura","Uttar Pradesh","Uttarakhand","West Bengal","Delhi",
-  "Jammu & Kashmir","Ladakh",
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
+  "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
+  "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi",
+  "Jammu & Kashmir", "Ladakh",
 ];
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  DRAFT:    { label: "Draft",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
-  SENT:     { label: "Sent",     color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
+  DRAFT: { label: "Draft", color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-50 dark:bg-white/5", border: "border-slate-200 dark:border-white/10" },
+  SENT: { label: "Sent", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   ACCEPTED: { label: "Accepted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
-  REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
-  CONVERTED:{ label: "Converted",color: "text-orange-600 dark:text-orange-400",  bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
+  REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", border: "border-rose-200 dark:border-rose-500/20" },
+  CONVERTED: { label: "Converted", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
 };
 
 // Proforma Invoice shares this exact Estimate/Quotation form and backend model —
@@ -297,9 +297,9 @@ function computeRow(item: LineItem, withTax: boolean) {
 }
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
-const MONTH_NAMES = ["January","February","March","April","May","June",
-  "July","August","September","October","November","December"];
-const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+const DAY_NAMES = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 
 function MiniCalendar({ value, onChange, onClose }: {
   value: string;
@@ -385,7 +385,7 @@ interface EstimationsPageClientProps {
   onCancel?: () => void;
 }
 
-export default function EstimationsPageClient({ 
+export default function EstimationsPageClient({
   documentType = "ESTIMATE",
   initialView = "list",
   initialDraftData = null,
@@ -420,9 +420,9 @@ export default function EstimationsPageClient({
     return `${y}-${m}-${day}`;
   };
   const firstOfMonth = getLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
-  const lastOfMonth  = getLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const lastOfMonth = getLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
-  const [dateTo,   setDateTo]   = useState(lastOfMonth);
+  const [dateTo, setDateTo] = useState(lastOfMonth);
   const [showFromCal, setShowFromCal] = useState(false);
   const [showToCal, setShowToCal] = useState(false);
   const fromCalRef = useRef<HTMLDivElement>(null);
@@ -484,6 +484,9 @@ export default function EstimationsPageClient({
   const [paymentType, setPaymentType] = useState<string>("Cash");
   const [receivedAmount, setReceivedAmount] = useState<number>(0);
   const [openConvertMenu, setOpenConvertMenu] = useState<string | null>(null);
+  const [convertMenuRect, setConvertMenuRect] = useState<{ top: number; right: number; openUpward: boolean } | null>(null);
+  const [openMoreMenu, setOpenMoreMenu] = useState<string | null>(null);
+  const [moreMenuRect, setMoreMenuRect] = useState<{ top: number; right: number; openUpward: boolean } | null>(null);
 
   // Add Party inline form
   const [showAddParty, setShowAddParty] = useState(false);
@@ -550,7 +553,7 @@ export default function EstimationsPageClient({
   useEffect(() => {
     settingsApi.getCompanyProfile()
       .then(res => setCompanyProfile(res.data))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -565,6 +568,9 @@ export default function EstimationsPageClient({
         setShowCalendar(false);
       if (exportDropRef.current && !exportDropRef.current.contains(e.target as Node))
         setExportDropdownOpen(false);
+
+      setOpenConvertMenu(null);
+      setOpenMoreMenu(null);
 
       // Close item drop if clicked outside
       if (openItemDrop) {
@@ -685,7 +691,7 @@ export default function EstimationsPageClient({
       // Estimate's own value is what was actually quoted against).
       setStateOfSupply(draft.stateOfSupply || party?.state || "");
       setRefNo(draft.quotationNumber || draft.proformaNumber || "");
-      
+
       const parentDiscount = Number(draft.discountAmount ?? draft.discount ?? 0);
       const rawItems = draft.items && draft.items.length > 0 ? draft.items : [];
       const totalGross = rawItems.reduce((s: number, i: any) => {
@@ -697,35 +703,35 @@ export default function EstimationsPageClient({
 
       const mappedItems = rawItems.length > 0
         ? rawItems.map((i: any) => {
-            const qty = Number(i.quantity ?? i.qty ?? 1);
-            const rate = Number(i.rate ?? 0);
-            const gross = qty * rate;
+          const qty = Number(i.quantity ?? i.qty ?? 1);
+          const rate = Number(i.rate ?? 0);
+          const gross = qty * rate;
 
-            let discAmt = Number(i.discountAmount ?? i.discount ?? i.discAmt ?? 0);
-            let discPct = Number(i.discountPercent ?? i.discountPct ?? 0);
+          let discAmt = Number(i.discountAmount ?? i.discount ?? i.discAmt ?? 0);
+          let discPct = Number(i.discountPercent ?? i.discountPct ?? 0);
 
-            if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
-              discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
-              discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
-            } else if (!discPct && gross > 0 && discAmt > 0) {
-              discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
-            }
+          if (!hasExplicitItemDiscounts && parentDiscount > 0 && totalGross > 0) {
+            discAmt = parseFloat((parentDiscount * (gross / totalGross)).toFixed(2));
+            discPct = gross > 0 ? parseFloat(((discAmt / gross) * 100).toFixed(2)) : 0;
+          } else if (!discPct && gross > 0 && discAmt > 0) {
+            discPct = parseFloat(((discAmt / gross) * 100).toFixed(2));
+          }
 
-            const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
+          const calculatedDiscAmt = discAmt || (discPct > 0 ? parseFloat((gross * discPct / 100).toFixed(2)) : 0);
 
-            return {
-              id: i.id || `item_${Math.random()}`,
-              productId: i.productId || "",
-              itemSearch: i.productName || i.itemSearch || "",
-              qty,
-              unit: normalizeUnit(i.unit),
-              rate,
-              discountPct: discPct,
-              discountAmount: calculatedDiscAmt,
-              taxPct: Number(i.taxPercent ?? i.taxPct ?? 0),
-              taxLabel: TAX_OPTIONS.find(o => o.value === Number(i.taxPercent ?? i.taxPct ?? 0))?.label || "NONE",
-            };
-          })
+          return {
+            id: i.id || `item_${Math.random()}`,
+            productId: i.productId || "",
+            itemSearch: i.productName || i.itemSearch || "",
+            qty,
+            unit: normalizeUnit(i.unit),
+            rate,
+            discountPct: discPct,
+            discountAmount: calculatedDiscAmt,
+            taxPct: Number(i.taxPercent ?? i.taxPct ?? 0),
+            taxLabel: TAX_OPTIONS.find(o => o.value === Number(i.taxPercent ?? i.taxPct ?? 0))?.label || "NONE",
+          };
+        })
         : [makeItem(), makeItem()];
       setItems(mappedItems);
       setPriceMode("without_tax");
@@ -970,10 +976,10 @@ export default function EstimationsPageClient({
     const isEditableDraft = loadedStatus === null || loadedStatus === "DRAFT";
     const hasData = selectedCustomer || items.some(i => i.productId || i.itemSearch.trim());
     if (hasData && isEditableDraft) {
-       handleSave(true);
+      handleSave(true);
     } else {
-       if (onCancel) onCancel();
-       else setView("list");
+      if (onCancel) onCancel();
+      else setView("list");
     }
   };
 
@@ -1024,47 +1030,57 @@ export default function EstimationsPageClient({
     if (!convertingEstId) return;
     setSaving(true);
     try {
-      if (convertView === "SALE") {
-        await salesApi.convertToSale(convertingEstId, {
-          customerId: selectedCustomer?.id,
-          customerName: selectedCustomer?.name || customerSearch,
-          customerPhone,
-          stateOfSupply,
-          paymentType,
-          receivedAmount,
-          items: items.map(it => ({
-            productId: it.productId,
-            qty: it.qty,
-            unit: it.unit,
-            rate: it.rate,
-            gst: it.taxPct,
-            discount: it.discountPct
-          })),
-          roundOff: roundOff,
-          termsAndConditions: termsText || undefined,
-          description: description || undefined
-        });
-        showToast("Converted Estimate to Sale (Invoice) successfully", "success");
+      if (documentType === "PROFORMA") {
+        if (convertView === "SALE") {
+          await api.post(`/api/sales/proforma-invoices/${convertingEstId}/convert`);
+          showToast("Converted Proforma Invoice to Sale (Invoice) successfully", "success");
+        } else {
+          await api.post(`/api/sales/proforma-invoices/${convertingEstId}/convert-to-sales-order`);
+          showToast("Converted Proforma Invoice to Sales Order successfully", "success");
+        }
       } else {
-        await salesApi.convertToSalesOrder(convertingEstId, {
-          customerId: selectedCustomer?.id,
-          customerName: selectedCustomer?.name || customerSearch,
-          customerPhone,
-          stateOfSupply,
-          dueDate: invoiceDate,
-          deliveryDate: invoiceDate,
-          notes: description || undefined,
-          items: items.map(it => ({
-            productId: it.productId,
-            qty: it.qty,
-            unit: it.unit,
-            rate: it.rate,
-            discountPercent: it.discountPct,
-            discountAmount: it.discountAmount,
-            taxPercent: it.taxPct
-          }))
-        });
-        showToast("Converted Estimate to Sales Order successfully", "success");
+        if (convertView === "SALE") {
+          await salesApi.convertToSale(convertingEstId, {
+            customerId: selectedCustomer?.id,
+            customerName: selectedCustomer?.name || customerSearch,
+            customerPhone,
+            stateOfSupply,
+            paymentType,
+            receivedAmount,
+            items: items.map(it => ({
+              productId: it.productId,
+              qty: it.qty,
+              unit: it.unit,
+              rate: it.rate,
+              gst: it.taxPct,
+              discount: it.discountPct
+            })),
+            roundOff: roundOff,
+            termsAndConditions: termsText || undefined,
+            description: description || undefined
+          });
+          showToast("Converted Estimate to Sale (Invoice) successfully", "success");
+        } else {
+          await salesApi.convertToSalesOrder(convertingEstId, {
+            customerId: selectedCustomer?.id,
+            customerName: selectedCustomer?.name || customerSearch,
+            customerPhone,
+            stateOfSupply,
+            dueDate: invoiceDate,
+            deliveryDate: invoiceDate,
+            notes: description || undefined,
+            items: items.map(it => ({
+              productId: it.productId,
+              qty: it.qty,
+              unit: it.unit,
+              rate: it.rate,
+              discountPercent: it.discountPct,
+              discountAmount: it.discountAmount,
+              taxPercent: it.taxPct
+            }))
+          });
+          showToast("Converted Estimate to Sales Order successfully", "success");
+        }
       }
 
       await fetchData();
@@ -1072,7 +1088,7 @@ export default function EstimationsPageClient({
       setConvertingEstId(null);
       setView("list");
     } catch (err: any) {
-      showToast(err?.response?.data?.error || "Conversion failed", "error");
+      showToast(err?.response?.data?.error || err?.response?.data?.message || err.message || "Conversion failed", "error");
     } finally {
       setSaving(false);
     }
@@ -1138,7 +1154,7 @@ export default function EstimationsPageClient({
       est.quotationNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
       est.proformaNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
       partyName?.toLowerCase().includes(search.trim().toLowerCase());
-    
+
     const cat = getEstimateCategory(est);
     const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
 
@@ -1467,15 +1483,15 @@ export default function EstimationsPageClient({
                       onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                     />
                     {customerSearch && (
-                      <X 
-                        size={14} 
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                      <X
+                        size={14}
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
                           setCustomerSearch("");
                           setSelectedCustomer(null);
                           setCustomerPhone("");
-                        }} 
+                        }}
                       />
                     )}
                     <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
@@ -1589,77 +1605,77 @@ export default function EstimationsPageClient({
             </div>
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
               <table className="w-full text-sm min-w-[700px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th rowSpan={2} className="text-left px-4 py-2.5 w-10 align-middle">#</th>
-                  <th rowSpan={2} className="text-left px-4 py-2.5 align-middle">Item</th>
-                  <th rowSpan={2} className="text-center px-4 py-2.5 w-20 align-middle">Qty</th>
-                  <th rowSpan={2} className="text-left px-4 py-2.5 w-28 align-middle">Unit</th>
-                  <th rowSpan={2} className="text-right px-4 py-2.5 w-28 align-middle">Price/Unit</th>
-                  <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
-                  <th rowSpan={2} className="text-left px-4 py-2.5 w-36 align-middle">Tax</th>
-                  <th rowSpan={2} className="text-right px-4 py-2.5 w-32 align-middle">Amount</th>
-                  <th rowSpan={2} className="w-10 align-middle"></th>
-                </tr>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="text-center px-1.5 py-1.5 w-16">%</th>
-                  <th className="text-right px-2 py-1.5 w-20">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {items.map((item, idx) => {
-                  const { taxAmt, amount } = computeRow(item, priceMode === "with_tax");
-                  const filtProd = products.filter(p =>
-                    !item.itemSearch ||
-                    p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
-                    p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
-                  ).slice(0, 200);
-                  const isItemDropOpen = openItemDrop === item.id;
-                  return (
-                    <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                      <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
-                        <div className="py-1.5">
-                          {idx + 1}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 align-top" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                        <input
-                          className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                          placeholder="Search item..."
-                          value={item.itemSearch}
-                          onChange={e => {
-                            updateItem(idx, "itemSearch", e.target.value);
-                            updateItem(idx, "productId", "");
-                            setOpenItemDrop(item.id);
-                            const rect = e.target.getBoundingClientRect();
-                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
-                          }}
-                          onFocus={e => {
-                            setOpenItemDrop(item.id);
-                            const rect = e.target.getBoundingClientRect();
-                            setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
-                          }}
-                        />
-            {item.itemSearch && (
-              <X 
-                size={14} 
-                className="absolute right-6 top-5 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => updateItem(idx, "itemSearch", "")} 
-              />
-            )}
-                        {isItemDropOpen && (
-                          <div
-                            className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col item-dropdown-container"
-                            style={
-                              itemDropRect
-                                ? {
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th rowSpan={2} className="text-left px-4 py-2.5 w-10 align-middle">#</th>
+                    <th rowSpan={2} className="text-left px-4 py-2.5 align-middle">Item</th>
+                    <th rowSpan={2} className="text-center px-4 py-2.5 w-20 align-middle">Qty</th>
+                    <th rowSpan={2} className="text-left px-4 py-2.5 w-28 align-middle">Unit</th>
+                    <th rowSpan={2} className="text-right px-4 py-2.5 w-28 align-middle">Price/Unit</th>
+                    <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
+                    <th rowSpan={2} className="text-left px-4 py-2.5 w-36 align-middle">Tax</th>
+                    <th rowSpan={2} className="text-right px-4 py-2.5 w-32 align-middle">Amount</th>
+                    <th rowSpan={2} className="w-10 align-middle"></th>
+                  </tr>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-center px-1.5 py-1.5 w-16">%</th>
+                    <th className="text-right px-2 py-1.5 w-20">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {items.map((item, idx) => {
+                    const { taxAmt, amount } = computeRow(item, priceMode === "with_tax");
+                    const filtProd = products.filter(p =>
+                      !item.itemSearch ||
+                      p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
+                      p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
+                    ).slice(0, 200);
+                    const isItemDropOpen = openItemDrop === item.id;
+                    return (
+                      <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
+                        <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500 align-top">
+                          <div className="py-1.5">
+                            {idx + 1}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 align-top" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
+                          <input
+                            className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                            placeholder="Search item..."
+                            value={item.itemSearch}
+                            onChange={e => {
+                              updateItem(idx, "itemSearch", e.target.value);
+                              updateItem(idx, "productId", "");
+                              setOpenItemDrop(item.id);
+                              const rect = e.target.getBoundingClientRect();
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                            }}
+                            onFocus={e => {
+                              setOpenItemDrop(item.id);
+                              const rect = e.target.getBoundingClientRect();
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                            }}
+                          />
+                          {item.itemSearch && (
+                            <X
+                              size={14}
+                              className="absolute right-6 top-5 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                              onClick={() => updateItem(idx, "itemSearch", "")}
+                            />
+                          )}
+                          {isItemDropOpen && (
+                            <div
+                              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col item-dropdown-container"
+                              style={
+                                itemDropRect
+                                  ? {
                                     position: "fixed",
                                     top: itemDropRect.top + 4,
                                     left: itemDropRect.left,
                                     width: itemDropRect.width,
                                     zIndex: 9999,
                                   }
-                                : {
+                                  : {
                                     position: "absolute",
                                     left: 0,
                                     top: "100%",
@@ -1667,128 +1683,128 @@ export default function EstimationsPageClient({
                                     width: "320px",
                                     zIndex: 9999,
                                   }
-                            }
-                          >
-                            <button
-                              type="button"
-                              className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                setActiveItemIdx(idx);
-                                setShowAddProduct(true);
-                                setOpenItemDrop(null);
-                              }}
+                              }
                             >
-                              <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
-                              Add New Product
-                            </button>
-                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                              {filtProd.length === 0 ? (
-                                <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
-                              ) : (
-                                filtProd.map(p => (
-                                  <button
-                                    key={p.id}
-                                    className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                                    onMouseDown={() => selectProduct(idx, p)}
-                                  >
-                                    <div>
-                                      <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                      <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
-                                    </div>
-                                  </button>
-                                ))
-                              )}
+                              <button
+                                type="button"
+                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  setActiveItemIdx(idx);
+                                  setShowAddProduct(true);
+                                  setOpenItemDrop(null);
+                                }}
+                              >
+                                <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                                Add New Product
+                              </button>
+                              <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                {filtProd.length === 0 ? (
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
+                                ) : (
+                                  filtProd.map(p => (
+                                    <button
+                                      key={p.id}
+                                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
+                                      onMouseDown={() => selectProduct(idx, p)}
+                                    >
+                                      <div>
+                                        <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
+                                      </div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.qty === 0 ? "" : item.qty}
-                          onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
-                        />
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
-                        <select
-                          value={item.unit}
-                          onChange={e => updateItem(idx, "unit", e.target.value)}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
-                        >
-                          {getUnitOptions(item).map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
-                        </select>
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
-                        <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
                           <input
                             type="number"
                             min={0}
-                            value={item.rate === 0 ? "" : item.rate}
-                            onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                            value={item.qty === 0 ? "" : item.qty}
+                            onChange={e => updateItem(idx, "qty", Number(e.target.value))}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
                           />
-                        </div>
-                      </td>
-                      <td className="px-2 py-2.5 align-top">
-                        <input
-                          type="number" min={0} max={100}
-                          value={item.discountPct || ""}
-                          placeholder="0"
-                          onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
-                        />
-                      </td>
-                      <td className="px-2 py-2.5 align-top">
-                        <input
-                          type="number" min={0}
-                          value={item.discountAmount || ""}
-                          placeholder="0.00"
-                          onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
-                        />
-                      </td>
-                      <td className="px-4 py-2.5 align-top">
-                        <select
-                          value={item.taxLabel || "NONE"}
-                          onChange={e => {
-                            const label = e.target.value;
-                            const option = TAX_OPTIONS.find(o => o.label === label);
-                            const val = option ? option.value : 0;
-                            updateItem(idx, "taxLabel", label);
-                            updateItem(idx, "taxPct", val);
-                          }}
-                          className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
-                        >
-                          {TAX_OPTIONS.map((o, index) => (
-                            <option key={index} value={o.label} className="dark:bg-card">{o.label}</option>
-                          ))}
-                        </select>
-                        <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 dark:text-slate-200 align-top">
-                        <div className="py-1.5">
-                          {amount > 0 ? `₹${amount.toFixed(2)}` : "—"}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-center align-top">
-                        <div className="py-1">
-                          <button
-                            onClick={() => removeRow(idx)}
-                            className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <select
+                            value={item.unit}
+                            onChange={e => updateItem(idx, "unit", e.target.value)}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
                           >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {getUnitOptions(item).map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-slate-500">₹</span>
+                            <input
+                              type="number"
+                              min={0}
+                              value={item.rate === 0 ? "" : item.rate}
+                              onChange={e => updateItem(idx, "rate", Number(e.target.value))}
+                              className="w-full pl-6 pr-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                            />
+                          </div>
+                        </td>
+                        <td className="px-2 py-2.5 align-top">
+                          <input
+                            type="number" min={0} max={100}
+                            value={item.discountPct || ""}
+                            placeholder="0"
+                            onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-center outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-2 py-2.5 align-top">
+                          <input
+                            type="number" min={0}
+                            value={item.discountAmount || ""}
+                            placeholder="0.00"
+                            onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-right outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 align-top">
+                          <select
+                            value={item.taxLabel || "NONE"}
+                            onChange={e => {
+                              const label = e.target.value;
+                              const option = TAX_OPTIONS.find(o => o.label === label);
+                              const val = option ? option.value : 0;
+                              updateItem(idx, "taxLabel", label);
+                              updateItem(idx, "taxPct", val);
+                            }}
+                            className="w-full px-2 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400 cursor-pointer"
+                          >
+                            {TAX_OPTIONS.map((o, index) => (
+                              <option key={index} value={o.label} className="dark:bg-card">{o.label}</option>
+                            ))}
+                          </select>
+                          <div className="text-[10px] text-right text-gray-400 dark:text-slate-500 mt-0.5">₹{taxAmt > 0 ? taxAmt.toFixed(2) : "0.00"}</div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-sm font-semibold text-gray-700 dark:text-slate-200 align-top">
+                          <div className="py-1.5">
+                            {amount > 0 ? `₹${amount.toFixed(2)}` : "—"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-center align-top">
+                          <div className="py-1">
+                            <button
+                              onClick={() => removeRow(idx)}
+                              className="p-1 hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-300 dark:text-slate-600 hover:text-red-500 dark:hover:text-red-400 rounded transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
             <div className="px-4 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
               <button
@@ -2005,7 +2021,7 @@ export default function EstimationsPageClient({
 
     return (
       <div className="min-h-screen bg-[#f3f4f6] dark:bg-[#0f111a] text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 p-3 sm:p-4 md:p-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)]">
-        
+
         {/* Top Header / Tab */}
         <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-t-xl px-4 py-2.5 flex items-center justify-between shadow-2xs">
           <div className="flex items-center gap-3">
@@ -2013,7 +2029,7 @@ export default function EstimationsPageClient({
               <span className="font-bold text-sm text-gray-800 dark:text-white">
                 {convertView === "SALE" ? "Sale" : "Sale Order"}
               </span>
-              <button 
+              <button
                 onClick={handleCloseConversionForm}
                 className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
               >
@@ -2021,7 +2037,7 @@ export default function EstimationsPageClient({
               </button>
             </div>
           </div>
-          <button 
+          <button
             onClick={handleCloseConversionForm}
             className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-white rounded-lg transition-colors"
           >
@@ -2031,10 +2047,10 @@ export default function EstimationsPageClient({
 
         {/* Form Container */}
         <div className="bg-white dark:bg-[#181b2a] border border-t-0 border-gray-200 dark:border-white/10 rounded-b-xl p-4 sm:p-6 space-y-6 shadow-sm">
-          
+
           {/* Top Form Fields: Party & Meta */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            
+
             {/* Left: Customer Info */}
             <div className="lg:col-span-6 space-y-3">
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -2276,7 +2292,7 @@ export default function EstimationsPageClient({
 
           {/* Bottom Section: Payment Type & Summary */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
-            
+
             {/* Bottom Left Controls */}
             <div className="lg:col-span-6 space-y-4">
               <div className="w-48">
@@ -2461,8 +2477,8 @@ export default function EstimationsPageClient({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: L.statLabel, value: `₹${totalQuotations.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
-            { label: "Converted",         value: `₹${totalConverted.toLocaleString("en-IN")}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-            { label: "Open",              value: `₹${totalOpen.toLocaleString("en-IN")}`,       color: "text-[#f58220]",   dot: "bg-[#f58220]" },
+            { label: "Converted", value: `₹${totalConverted.toLocaleString("en-IN")}`, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Open", value: `₹${totalOpen.toLocaleString("en-IN")}`, color: "text-[#f58220]", dot: "bg-[#f58220]" },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
@@ -2485,10 +2501,10 @@ export default function EstimationsPageClient({
               className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                onClick={() => setSearch("")}
               />
             )}
           </div>
@@ -2593,8 +2609,8 @@ export default function EstimationsPageClient({
           </div>
         ) : (
           /* ── Table ── */
-          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[240px]">
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 w-full min-w-0 shadow-2xs">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full min-h-[380px] pb-24">
               <table className="w-full text-sm min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase select-none">
@@ -2609,7 +2625,7 @@ export default function EstimationsPageClient({
                     <th className="text-right px-4 py-3 whitespace-nowrap">Amount</th>
                     <th className="text-right px-4 py-3 whitespace-nowrap">Balance</th>
                     <th className="text-left px-4 py-3 whitespace-nowrap relative">
-                      <div 
+                      <div
                         onClick={(e) => {
                           e.stopPropagation();
                           setDraftSelectedStatuses([...selectedStatuses]);
@@ -2621,8 +2637,8 @@ export default function EstimationsPageClient({
                       </div>
 
                       {showStatusFilterPop && (
-                        <div 
-                          onClick={(e) => e.stopPropagation()} 
+                        <div
+                          onClick={(e) => e.stopPropagation()}
                           className="absolute left-0 top-full mt-1 w-52 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 text-left normal-case"
                         >
                           <div className="space-y-2 mb-3">
@@ -2683,8 +2699,8 @@ export default function EstimationsPageClient({
                     const isLastRow = index >= filtered.length - 2;
 
                     return (
-                      <tr 
-                        key={est.id} 
+                      <tr
+                        key={est.id}
                         className={clsx(
                           "transition-colors",
                           isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
@@ -2724,29 +2740,33 @@ export default function EstimationsPageClient({
                           ₹ {totalDocAmount.toFixed(2)}
                         </td>
 
-                        {/* Status — Clear direct links & status text like reference Image 1 */}
+                        {/* Status — Formatted ERP invoice/order numbers without raw UUIDs */}
                         <td className="px-4 py-3 text-left whitespace-nowrap">
                           {isConverted ? (
-                            est.convertedInvoiceId || est.convertedInvoiceNumber ? (
+                            est.convertedInvoiceNumber || est.convertedInvoiceId ? (
                               <a
-                                href={`/sales/invoices?id=${est.convertedInvoiceId || ""}`}
+                                href={`/sales/invoices${est.convertedInvoiceId ? `?id=${est.convertedInvoiceId}` : ''}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[#2563eb] dark:text-blue-400 font-medium text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
                               >
-                                Sale Invoice {est.convertedInvoiceNumber ? `no. ${est.convertedInvoiceNumber}` : ""}
+                                Sale Invoice no. {formatERPNumber("INV", est.convertedInvoiceNumber || est.convertedInvoiceId, est.createdAt)}
                               </a>
-                            ) : est.convertedOrderId || est.convertedOrderNumber ? (
+                            ) : est.convertedOrderNumber || est.convertedOrderId ? (
                               <a
-                                href={`/sales/orders?id=${est.convertedOrderId || ""}`}
+                                href={`/sales/orders${est.convertedOrderId ? `?id=${est.convertedOrderId}` : ''}`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                className="text-[#2563eb] dark:text-blue-400 font-medium text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
                               >
-                                Sales Order {est.convertedOrderNumber ? `no. ${est.convertedOrderNumber}` : ""}
+                                Sales Order no. {formatERPNumber("SO", est.convertedOrderNumber || est.convertedOrderId, est.createdAt)}
                               </a>
                             ) : (
-                              <span className="text-[#f58220] dark:text-orange-400 font-semibold text-xs sm:text-sm">
-                                Converted
-                              </span>
+                              <a
+                                href="/sales/invoices"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[#2563eb] dark:text-blue-400 font-medium text-xs sm:text-sm hover:underline inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                Sale Invoice no. {est.proformaNumber ? est.proformaNumber.replace(/^PI-/, 'INV-') : formatERPNumber("INV", est.id, est.createdAt)}
+                              </a>
                             )
                           ) : est.status === "SENT" || est.status === "OPEN" || est.status === "PENDING" ? (
                             <span className="text-[#f58220] font-semibold text-xs sm:text-sm">
@@ -2771,102 +2791,165 @@ export default function EstimationsPageClient({
                           )}
                         </td>
 
-                        {/* Actions */}
+                        {/* Actions — Clean Convert button & 3-dots menu like reference Image 2 */}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
-                            {!isDraft && (
-                              <div className="relative inline-block text-left">
-                                <button
-                                  disabled={isConverted}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (isConverted) return;
-                                    setOpenConvertMenu(openConvertMenu === est.id ? null : est.id);
-                                  }}
-                                  title={isConverted ? "This document has already been converted" : "Convert document"}
-                                  className={clsx(
-                                    "px-2.5 py-1 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors",
-                                    isConverted
-                                      ? "opacity-40 cursor-not-allowed text-gray-400 dark:text-slate-500 bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10"
-                                      : "text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 cursor-pointer"
-                                  )}
-                                >
-                                  <span>Convert</span>
-                                  <ChevronDown size={12} />
-                                </button>
-                                {!isConverted && openConvertMenu === est.id && (
-                                  <div
-                                    className={clsx(
-                                      "absolute right-0 w-44 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl z-50 py-1",
-                                      isLastRow ? "bottom-full mb-1" : "top-full mt-1"
-                                    )}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <button
-                                      onClick={() => {
-                                        setOpenConvertMenu(null);
-                                        handleOpenConversionForm(est, "SALE");
-                                      }}
-                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
-                                    >
-                                      <span>Convert to Sale</span>
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setOpenConvertMenu(null);
-                                        handleOpenConversionForm(est, "SALES_ORDER");
-                                      }}
-                                      className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium border-t border-gray-100 dark:border-white/5"
-                                    >
-                                      <span>Convert to Sale Order</span>
-                                    </button>
-                                  </div>
+                            {/* Convert Button */}
+                            <div className="relative inline-flex items-center text-left">
+                              <button
+                                disabled={isConverted}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isConverted) return;
+                                  if (openConvertMenu === est.id) {
+                                    setOpenConvertMenu(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const rightSpace = window.innerWidth - rect.right;
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const openUpward = spaceBelow < 160;
+                                    setConvertMenuRect({
+                                      top: openUpward ? rect.top : rect.bottom,
+                                      right: Math.max(16, rightSpace - 24),
+                                      openUpward
+                                    });
+                                    setOpenConvertMenu(est.id);
+                                  }
+                                }}
+                                title={isConverted ? "This document has already been converted" : "Convert document"}
+                                className={clsx(
+                                  "px-2 py-1 text-xs sm:text-sm font-semibold flex items-center gap-1 transition-colors",
+                                  isConverted
+                                    ? "text-slate-300 dark:text-slate-600 cursor-not-allowed select-none"
+                                    : "text-[#2563eb] dark:text-blue-400 hover:text-[#1d4ed8] cursor-pointer"
                                 )}
-                              </div>
-                            )}
+                              >
+                                <span>Convert</span>
+                                <ChevronDown size={14} className={isConverted ? "text-slate-300 dark:text-slate-600" : "text-[#2563eb] dark:text-blue-400"} />
+                              </button>
 
-                            {isDraft ? (
-                              <>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
-                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                                  title="Edit Draft"
+                              {/* Convert Popover Card */}
+                              {!isConverted && openConvertMenu === est.id && (
+                                <div
+                                  style={
+                                    convertMenuRect
+                                      ? {
+                                        position: "fixed",
+                                        top: convertMenuRect.openUpward ? convertMenuRect.top - 110 : convertMenuRect.top + 6,
+                                        right: convertMenuRect.right,
+                                        zIndex: 999999,
+                                      }
+                                      : {
+                                        position: "absolute",
+                                        right: 0,
+                                        top: "100%",
+                                        zIndex: 999999,
+                                      }
+                                  }
+                                  className="w-56 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-2 animate-in fade-in zoom-in-95 text-left"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteDraft(est.id); }}
-                                  className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
-                                  title="Delete Draft"
+                                  <button
+                                    onClick={() => {
+                                      setOpenConvertMenu(null);
+                                      handleOpenConversionForm(est, "SALE");
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-white bg-sky-100/80 dark:bg-blue-500/20 hover:bg-sky-200/70 dark:hover:bg-blue-500/30 rounded-xl flex items-center justify-between cursor-pointer transition-all"
+                                  >
+                                    <span>Convert to Sale</span>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setOpenConvertMenu(null);
+                                      handleOpenConversionForm(est, "SALES_ORDER");
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white rounded-xl flex items-center justify-between cursor-pointer transition-all mt-1"
+                                  >
+                                    <span>Convert to Sale Order</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* 3-Dots Menu Icon (⋮) */}
+                            <div className="relative inline-flex items-center text-left">
+                              <button
+                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (openMoreMenu === est.id) {
+                                    setOpenMoreMenu(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const rightSpace = window.innerWidth - rect.right;
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const openUpward = spaceBelow < 200;
+                                    setMoreMenuRect({
+                                      top: openUpward ? rect.top : rect.bottom,
+                                      right: Math.max(16, rightSpace - 24),
+                                      openUpward
+                                    });
+                                    setOpenMoreMenu(est.id);
+                                  }
+                                }}
+                                title="More Actions"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+
+                              {/* 3-Dots Popover Card */}
+                              {openMoreMenu === est.id && (
+                                <div
+                                  style={
+                                    moreMenuRect
+                                      ? {
+                                        position: "fixed",
+                                        top: moreMenuRect.openUpward ? moreMenuRect.top - 170 : moreMenuRect.top + 6,
+                                        right: moreMenuRect.right,
+                                        zIndex: 999999,
+                                      }
+                                      : {
+                                        position: "absolute",
+                                        right: 0,
+                                        top: "100%",
+                                        zIndex: 999999,
+                                      }
+                                  }
+                                  className="w-48 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-1.5 animate-in fade-in zoom-in-95 text-left"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); loadDraft(est); }}
-                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                                  title="Edit Estimate"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handlePrintEstimate(est); }}
-                                  className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
-                                  title="Print"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </button>
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); handleDownloadEstimate(est); }}
-                                  className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
-                                  title="Download"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </button>
-                              </>
-                            )}
+                                  <button
+                                    onClick={() => { setOpenMoreMenu(null); loadDraft(est); }}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Pencil size={14} className="text-slate-400" />
+                                    <span>Edit Document</span>
+                                  </button>
+                                  <button
+                                    onClick={() => { setOpenMoreMenu(null); handlePrintEstimate(est); }}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Printer size={14} className="text-slate-400" />
+                                    <span>Print Document</span>
+                                  </button>
+                                  <button
+                                    onClick={() => { setOpenMoreMenu(null); handleDownloadEstimate(est); }}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Download size={14} className="text-slate-400" />
+                                    <span>Download PDF</span>
+                                  </button>
+                                  <div className="my-1 border-t border-slate-100 dark:border-white/5" />
+                                  <button
+                                    onClick={() => { setOpenMoreMenu(null); handleDeleteDraft(est.id); }}
+                                    className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
+                                  >
+                                    <Trash2 size={14} className="text-rose-500" />
+                                    <span>Delete</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
