@@ -184,6 +184,86 @@ const PARENT_REPORTS: ParentReportDef[] = [
   },
 ];
 
+// ─── Subgroup Mapping (Matches navigation.ts REPORT_GROUPS) ───────────────────
+
+const REPORT_SUBGROUP_NAMES: Record<string, string> = {
+  // Transaction Reports
+  "Sale": "Transaction Reports",
+  "Purchase": "Transaction Reports",
+  "Day book": "Transaction Reports",
+  "All Transactions": "Transaction Reports",
+  "Payment Register": "Transaction Reports",
+  "Profit And Loss": "Transaction Reports",
+  "Bill Wise Profit": "Transaction Reports",
+  "Cash flow": "Transaction Reports",
+  "Trial Balance Report": "Transaction Reports",
+  "Balance Sheet": "Transaction Reports",
+
+  // Party Reports
+  "Party Statement": "Party Reports",
+  "Party wise Profit & Loss": "Party Reports",
+  "All parties": "Party Reports",
+  "Party Report By Item": "Party Reports",
+  "Sale Purchase By Party": "Party Reports",
+  "Sale Purchase By Party Group": "Party Reports",
+
+  // Item / Stock Reports
+  "Stock summary": "Item / Stock Reports",
+  "Item Report By Party": "Item / Stock Reports",
+  "Item Wise Profit And Loss": "Item / Stock Reports",
+  "Item Category Wise Profit And Loss": "Item / Stock Reports",
+  "Low Stock Summary": "Item / Stock Reports",
+  "Stock Detail": "Item / Stock Reports",
+  "Item Detail": "Item / Stock Reports",
+  "Sale/ Purchase Report By Item Category": "Item / Stock Reports",
+  "Stock Summary Report By Item Category": "Item / Stock Reports",
+  "Item Wise Discount": "Item / Stock Reports",
+
+  // Business Status
+  "Bank Statement": "Business Status",
+  "Discount Report": "Business Status",
+
+  // Tax / GST Reports
+  "GST Report": "Tax / GST Reports",
+  "GST Rate Report": "Tax / GST Reports",
+  "Form No. 27EQ": "Tax / GST Reports",
+  "TCS Receivable": "Tax / GST Reports",
+  "TDS Payable": "Tax / GST Reports",
+  "TDS Receivable": "Tax / GST Reports",
+
+  // Expense Reports
+  "Expense": "Expense Reports",
+  "Expense Category Report": "Expense Reports",
+  "Expense Item Report": "Expense Reports",
+
+  // Sales Order Reports
+  "Sale Orders": "Sales Order Reports",
+  "Sale Order Item": "Sales Order Reports",
+
+  // Franchise Reports
+  "Franchise Performance Summary": "Franchise Reports",
+  "Franchise Dues & Balances": "Franchise Reports",
+
+  // Loan Account Reports
+  "Loan Statement": "Loan Account Reports",
+
+  // Production Reports
+  "Batch Manufacturing History": "Production Reports",
+  "Production Planning": "Production Reports",
+  "QC & Inspection Report": "Production Reports",
+  "Material Consumption Report": "Production Reports",
+  "Wastage & Scrap Report": "Production Reports",
+  "Formulation & Recipe Costing": "Production Reports",
+  "Packaging & Cartons": "Production Reports",
+  "Packaging": "Production Reports",
+  "Raw Material Ledger": "Production Reports",
+  "Stock Movement History": "Production Reports",
+  "Inward & GRN Movements": "Production Reports",
+  "Outward & Dispatch Movements": "Production Reports",
+  "Stock Adjustments & Reconciliation": "Production Reports",
+  "Finished Goods Stock": "Production Reports",
+};
+
 // ─── Static Report Metadata ───────────────────────────────────────────────────
 
 const REPORT_METADATA: Record<string, ReportMeta> = {
@@ -454,10 +534,11 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   "All Transactions": {
     title: "Payment Register",
     kpiLabel: "Total Volume",
-    tableTitle: "Payment Vouchers & Ledger Entries",
+    tableTitle: "Payment Vouchers & Transactions",
     columns: [
       { key: "date", label: "Date" },
       { key: "refNo", label: "Ref No" },
+      { key: "name", label: "Name" },
       { key: "particulars", label: "Particulars" },
       { key: "type", label: "Type" },
       { key: "amount", label: "Amount" },
@@ -1110,21 +1191,61 @@ function transformTransactions(data: any): ReportData {
   const hasBackendTotals = data && (data.totalDebit !== undefined || data.totalCredit !== undefined);
   const totalDebit = hasBackendTotals
     ? Number(data.totalDebit) || 0
-    : rows.filter((r: any) => r.type === "DEBIT" || r.side === "IN").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+    : rows.filter((r: any) => r.accountingType === "DEBIT" || r.type === "DEBIT" || r.side === "IN" || r.flow === "IN").reduce((s: number, r: any) => s + (Number(r.amount || r.paidAmount) || 0), 0);
   const totalCredit = hasBackendTotals
     ? Number(data.totalCredit) || 0
-    : rows.filter((r: any) => r.type === "CREDIT" || r.side === "OUT").reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+    : rows.filter((r: any) => r.accountingType === "CREDIT" || r.type === "CREDIT" || r.side === "OUT" || r.flow === "OUT").reduce((s: number, r: any) => s + (Number(r.amount || r.paidAmount) || 0), 0);
   return {
     kpiValue: `${data?.pagination?.totalCount ?? rows.length} Payments`,
     kpiSubText: `Debit: ${fmtCurrency(totalDebit)} • Credit: ${fmtCurrency(totalCredit)}`,
-    rows: rows.map((r: any) => ({
-      date: fmtDate(r.date || r.createdAt),
-      refNo: r.referenceNumber || r.refNo || r._id?.slice(-6) || "—",
-      particulars: r.particulars || r.description || r.narration || "—",
-      type: r.type || r.transactionType || "—",
-      amount: fmtCurrency(r.amount),
-      status: r.status || "—",
-    })),
+    rows: rows.map((r: any) => {
+      // 1. Resolve real customer/party/person name (only if real name exists, else "—")
+      const partyName =
+        r.name ||
+        r.partyName ||
+        r.customerName ||
+        r.customer?.name ||
+        r.vendor?.name ||
+        r.dealer?.name ||
+        r.franchise?.name ||
+        (r.entity && !r.entity.toLowerCase().includes("payment") && !r.entity.toLowerCase().includes("manual entry") ? r.entity : null) ||
+        "—";
+
+      // 2. Resolve payment note / voucher context / particulars
+      const particulars =
+        r.particulars ||
+        r.description ||
+        r.narration ||
+        r.transactionRef ||
+        r.note ||
+        (r.sourceModule ? `${r.sourceModule} Payment` : "Payment Voucher");
+
+      // 3. Resolve real payment mode (CASH, UPI, CARD, BANK_TRANSFER, CHEQUE, etc.)
+      const paymentType =
+        r.paymentMode ||
+        r.method ||
+        r.paymentType ||
+        (r.type && r.type !== "DEBIT" && r.type !== "CREDIT" ? r.type : "—");
+
+      // 4. Resolve payment reference number (e.g. PAY-2026-0011)
+      const refNo =
+        r.paymentNumber ||
+        r.referenceNumber ||
+        r.refNo ||
+        r.transactionRef ||
+        r.id?.slice(-6) ||
+        "—";
+
+      return {
+        date: fmtDate(r.date || r.createdAt),
+        refNo,
+        name: partyName,
+        particulars,
+        type: paymentType,
+        amount: fmtCurrency(r.paidAmount ?? r.amount),
+        status: r.status || "—",
+      };
+    }),
     totalDebit,
     totalCredit,
     pagination: data?.pagination,
@@ -2105,6 +2226,15 @@ function ReportsContent() {
     }
   };
 
+  const reportGroupLabel =
+    (activeChild && REPORT_SUBGROUP_NAMES[activeChild.id]) ||
+    (activeChild && REPORT_SUBGROUP_NAMES[activeChild.label]) ||
+    activeChild?.category ||
+    activeParent?.label ||
+    "Transaction Reports";
+
+  const reportTitle = currentMeta.title || activeChild?.label || "Report";
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       {/* ── Top Header / Breadcrumb Bar ── */}
@@ -2114,13 +2244,15 @@ function ReportsContent() {
             <Receipt className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
+            <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
               <span>Reports</span>
               <span>/</span>
-              <span className="text-gray-900 dark:text-white font-semibold truncate">{activeParent.label}</span>
+              <span className="text-gray-600 dark:text-slate-400 truncate">{reportGroupLabel}</span>
+              <span>/</span>
+              <span className="text-gray-900 dark:text-white font-semibold truncate">{reportTitle}</span>
             </div>
             <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              {activeParent.label} — {activeChild?.label || "Report"}
+              {reportGroupLabel} — {reportTitle}
             </h1>
           </div>
         </div>

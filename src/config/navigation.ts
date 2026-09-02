@@ -80,7 +80,7 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
       { label: "Sale", href: reportLink("financial", "Sale") },
       { label: "Purchase", href: reportLink("financial", "Purchase") },
       { label: "Day Book", href: "/accounting/day-book" },
-      { label: "All Transactions", href: reportLink("financial", "All Transactions") },
+      { label: "Payment Register", href: reportLink("financial", "All Transactions") },
       { label: "Profit & Loss", href: "/accounting/profit-loss" },
       { label: "Bill Wise Profit", href: reportLink("financial", "Bill Wise Profit") },
       { label: "Cash Flow", href: "/accounting/cash-flow" },
