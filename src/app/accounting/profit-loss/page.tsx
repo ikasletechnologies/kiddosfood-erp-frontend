@@ -1,667 +1,585 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { reportsApi } from '@/lib/api';
 import { 
   TrendingUp, 
   TrendingDown, 
-  FileSpreadsheet, 
   Printer, 
-  Calendar, 
-  ChevronRight, 
-  ChevronDown, 
+  Search,
+  ChevronDown,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  ArrowUpRight,
+  ArrowDownRight,
+  DollarSign,
+  X,
+  PieChart
 } from 'lucide-react';
-import { cn } from "@/lib/utils";
+import { clsx } from "clsx";
 
-// Expandable Section Interface
-interface ExpandableState {
-  directExpenses: boolean;
-  taxPayable: boolean;
-  taxReceivable: boolean;
-  indirectExpenses: boolean;
+// Currency Formatter
+const fmtCurrency = (val: number | string | undefined | null) => {
+  const num = Number(val || 0);
+  return `₹${num.toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+};
+
+// Date Presets Helper
+const getDateRange = (preset: string, customStart?: string, customEnd?: string) => {
+  const now = new Date();
+  let from = new Date();
+  let to = new Date();
+
+  switch (preset) {
+    case "Today":
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+      break;
+    case "Yesterday":
+      from.setDate(now.getDate() - 1);
+      from.setHours(0, 0, 0, 0);
+      to.setDate(now.getDate() - 1);
+      to.setHours(23, 59, 59, 999);
+      break;
+    case "This Week": {
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      from = new Date(now.setDate(diff));
+      from.setHours(0, 0, 0, 0);
+      to = new Date();
+      to.setHours(23, 59, 59, 999);
+      break;
+    }
+    case "This Month":
+      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      break;
+    case "Last Month":
+      from = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      to = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      break;
+    case "This Quarter": {
+      const qMonth = Math.floor(now.getMonth() / 3) * 3;
+      from = new Date(now.getFullYear(), qMonth, 1, 0, 0, 0, 0);
+      to = new Date(now.getFullYear(), qMonth + 3, 0, 23, 59, 59, 999);
+      break;
+    }
+    case "This Year":
+      from = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+      to = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+      break;
+    case "Custom":
+      if (customStart) {
+        from = new Date(customStart);
+        from.setHours(0, 0, 0, 0);
+      }
+      if (customEnd) {
+        to = new Date(customEnd);
+        to.setHours(23, 59, 59, 999);
+      }
+      break;
+    default:
+      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      to = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+  }
+
+  return {
+    from: from.toISOString().split("T")[0],
+    to: to.toISOString().split("T")[0],
+  };
+};
+
+interface AccountRow {
+  name: string;
+  category: string;
+  amount: number;
+  type: 'INCOME' | 'EXPENSE';
+  isBold?: boolean;
 }
 
 export default function ProfitLossPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [viewType, setViewType] = useState<'vyapar' | 'accounting'>('vyapar');
-  
-  // Date Filters
-  const [startDate, setStartDate] = useState(() => {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Date Filter State
+  const [dateFilter, setDateFilter] = useState("This Month");
+  const [customStartDate, setCustomStartDate] = useState(() => {
     const d = new Date();
-    d.setDate(1); // First day of current month
-    return d.toISOString().split('T')[0];
+    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
   });
-  const [endDate, setEndDate] = useState(() => {
-    return new Date().toISOString().split('T')[0];
-  });
-
-  // Expandable groups
-  const [expanded, setExpanded] = useState<ExpandableState>({
-    directExpenses: true,
-    taxPayable: true,
-    taxReceivable: true,
-    indirectExpenses: true,
-  });
-
-  // Ref for printing
-  const printRef = useRef<HTMLDivElement>(null);
+  const [customEndDate, setCustomEndDate] = useState(() => new Date().toISOString().split("T")[0]);
 
   // Fetch detailed Profit and Loss from backend
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await reportsApi.getDetailedProfit({ startDate, endDate });
+      const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+      const res = await reportsApi.getDetailedProfit({ startDate: from, endDate: to });
       setData(res.data);
     } catch (err) {
       console.error('Failed to fetch detailed P&L data', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFilter, customStartDate, customEndDate]);
 
   useEffect(() => {
     fetchData();
-  }, [startDate, endDate]);
+  }, [fetchData]);
 
-  const toggleGroup = (key: keyof ExpandableState) => {
-    setExpanded(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+  // Financial values from source of truth
+  const revenue = Number(data?.totalRevenue || data?.revenue || 0);
+  const otherIncome = Number(data?.otherIncome || 0);
+  const taxReceivable = Number(data?.taxReceivable || 0);
+  const totalIncome = revenue + otherIncome + taxReceivable;
 
-  // Safe formatting helper to match Vyapar design exactly
-  const formatPrice = (amount: number) => {
-    const absVal = Math.abs(amount || 0);
-    return `₹ ${absVal.toFixed(2)}`;
-  };
+  const cogs = Number(data?.cogs || data?.purchase || 0);
+  const directExpenses = Number(data?.directExpenses || 0);
+  const indirectExpenses = Number(data?.indirectExpenses || data?.expenses || data?.totalExpenses || 0);
+  const taxPayable = Number(data?.taxPayable ?? data?.tax ?? 0);
+  const totalExpenses = cogs + directExpenses + indirectExpenses + taxPayable;
 
-  // Safe parsing of numbers
-  const revenue = data?.revenue || 0;
-  const cogs = data?.cogs || 0;
-  const grossProfit = data?.grossProfit || (revenue - cogs);
-  const expenses = data?.expenses || 0;
-  const netProfit = data?.netProfit || (grossProfit - expenses);
+  const grossProfit = Number(data?.grossProfit ?? (revenue - cogs));
+  const netProfit = Number(data?.netProfit ?? (totalIncome - totalExpenses));
 
-  // Handler for Exporting to CSV (Excel compatible)
-  const handleExportCSV = () => {
-    const rows = [
-      ["PROFIT AND LOSS REPORT"],
-      [`Period: From ${startDate} To ${endDate}`],
-      [],
-      ["Particulars", "Amount"],
-      ["Sale (+)", revenue.toFixed(2)],
-      ["Credit Note (-)", "0.00"],
-      ["Sale FA (+)", "0.00"],
-      ["Purchase (-)", cogs.toFixed(2)],
-      ["Debit Note (+)", "0.00"],
-      ["Purchase FA (-)", "0.00"],
-      ["Direct Expenses (-)", "0.00"],
-      ["  Other Direct Expenses (-)", "0.00"],
-      ["  Payment-in Discount (-)", "0.00"],
-      ["Tax Payable (-)", "0.00"],
-      ["  GST Payable (-)", "0.00"],
-      ["  TCS Payable (-)", "0.00"],
-      ["  TDS Payable (-)", "0.00"],
-      ["Tax Receivable (+)", "0.00"],
-      ["  GST Receivable (+)", "0.00"],
-      ["  TCS Receivable (+)", "0.00"],
-      ["  TDS Receivable (+)", "0.00"],
-      ["Opening Stock (-)", "0.00"],
-      ["Closing Stock (+)", "0.00"],
-      ["Opening Stock FA (-)", "0.00"],
-      ["Closing Stock FA (+)", "0.00"],
-      ["Gross Profit", grossProfit.toFixed(2)],
-      ["Other Income (+)", "0.00"],
-      ["Indirect Expenses (-)", expenses.toFixed(2)],
-      ["  Other Expense", expenses.toFixed(2)],
-      ["  Loan Interest Expense", "0.00"],
-      ["  Loan Processing Fee Expense", "0.00"],
-      ["  Loan Charges Expense", "0.00"],
-      ["Net Profit", netProfit.toFixed(2)]
+  const marginPercentage = totalIncome > 0 ? ((netProfit / totalIncome) * 100).toFixed(1) : "0.0";
+  const grossMarginPercentage = revenue > 0 ? ((grossProfit / revenue) * 100).toFixed(1) : "0.0";
+
+  // Build Structured Income Rows
+  const incomeRows: AccountRow[] = useMemo(() => {
+    const list: AccountRow[] = [
+      { name: "Sales Revenue (Tax Exclusive)", category: "Operating Revenue", amount: revenue, type: "INCOME" },
+      { name: "Other Operating Income", category: "Other Income", amount: otherIncome, type: "INCOME" },
     ];
+    if (taxReceivable > 0) {
+      list.push({ name: "GST Input Tax Credit / Receivable", category: "Tax Credit", amount: taxReceivable, type: "INCOME" });
+    }
+    return list;
+  }, [revenue, otherIncome, taxReceivable]);
 
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + rows.map(e => e.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Profit_Loss_Report_${startDate}_to_${endDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  // Build Structured Expense Rows
+  const expenseRows: AccountRow[] = useMemo(() => {
+    const list: AccountRow[] = [
+      { name: "Cost of Goods Sold (COGS) / Purchases", category: "Direct Cost", amount: cogs, type: "EXPENSE" },
+    ];
+    if (directExpenses > 0) {
+      list.push({ name: "Direct Operating Expenses", category: "Direct Expense", amount: directExpenses, type: "EXPENSE" });
+    }
+    list.push({ name: "Indirect & Operational Expenses", category: "Overheads", amount: indirectExpenses, type: "EXPENSE" });
+    if (taxPayable > 0) {
+      list.push({ name: "GST Output Tax Payable", category: "Tax Liability", amount: taxPayable, type: "EXPENSE" });
+    }
+    return list;
+  }, [cogs, directExpenses, indirectExpenses, taxPayable]);
+
+  // Filtered Rows for Search
+  const filteredIncomeRows = useMemo(() => {
+    if (!searchQuery.trim()) return incomeRows;
+    const q = searchQuery.toLowerCase().trim();
+    return incomeRows.filter(r => r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q));
+  }, [incomeRows, searchQuery]);
+
+  const filteredExpenseRows = useMemo(() => {
+    if (!searchQuery.trim()) return expenseRows;
+    const q = searchQuery.toLowerCase().trim();
+    return expenseRows.filter(r => r.name.toLowerCase().includes(q) || r.category.toLowerCase().includes(q));
+  }, [expenseRows, searchQuery]);
 
   const handlePrint = () => {
     window.print();
   };
 
+  const { from: activeFrom, to: activeTo } = getDateRange(dateFilter, customStartDate, customEndDate);
+
   return (
-    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-slate-800 dark:text-slate-100 print:bg-white print:p-0 w-full min-w-0">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-[#020617] text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
       
-      {/* Header controls (hidden on Print) */}
-      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-5 w-full min-w-0">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white uppercase flex items-center gap-2">
-              Profit and Loss Report
-            </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 shrink-0">
-              <Sparkles size={12} className="animate-pulse" /> Live Audit
-            </span>
+      {/* ── Clean ERP Top Header ── */}
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs w-full min-w-0 print:hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
+            <TrendingUp className="h-5 w-5" />
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Real-time corporate performance auditing and margin tracking
-          </p>
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+            Profit &amp; Loss
+          </h1>
         </div>
 
-        {/* Date Filter & Export Row */}
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          {/* Custom Styled Date Pickers to match Vyapar */}
-          <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-1 shadow-sm">
-            <div className="flex items-center px-2 text-slate-400">
-              <Calendar size={14} />
-            </div>
-            <div className="flex items-center gap-1 text-xs sm:text-sm font-semibold">
-              <span className="text-slate-400 text-[11px] uppercase tracking-wider pl-1 select-none">From</span>
-              <input 
-                type="date" 
-                value={startDate} 
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-transparent border-none text-slate-700 dark:text-slate-200 focus:ring-0 p-1 font-bold outline-none cursor-pointer w-28 sm:w-32"
-              />
-              <span className="text-slate-300 dark:text-slate-600">|</span>
-              <span className="text-slate-400 text-[11px] uppercase tracking-wider select-none">To</span>
-              <input 
-                type="date" 
-                value={endDate} 
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-transparent border-none text-slate-700 dark:text-slate-200 focus:ring-0 p-1 font-bold outline-none cursor-pointer w-28 sm:w-32"
-              />
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Print Profit & Loss Statement"
+          >
+            <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />
+            <span>Print</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main Content Area ── */}
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
+
+        {/* ── Top Summary / KPI Cards ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+          {/* Card 1: TOTAL INCOME */}
+          <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Total Income
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+                {loading ? "..." : fmtCurrency(totalIncome)}
+              </div>
+              <div className="text-[11px] font-medium text-gray-400 dark:text-slate-500 mt-0.5 truncate">
+                Sales: {fmtCurrency(revenue)}
+              </div>
             </div>
           </div>
 
-          {/* Export / Print Action Buttons */}
-          <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
-            <button 
-              onClick={handleExportCSV}
-              title="Export Excel / CSV"
-              className="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 shadow-sm transition-all duration-150 active:scale-95"
-            >
-              <FileSpreadsheet size={16} />
-            </button>
-            <button 
-              onClick={handlePrint}
-              title="Print Statement"
-              className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/20 dark:hover:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/30 shadow-sm transition-all duration-150 active:scale-95"
-            >
-              <Printer size={16} />
-            </button>
-            <button 
+          {/* Card 2: TOTAL EXPENSES */}
+          <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-500/20 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                Total Expenses
+              </div>
+              <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-rose-600 dark:text-rose-400 mt-1 truncate">
+                {loading ? "..." : fmtCurrency(totalExpenses)}
+              </div>
+              <div className="text-[11px] font-medium text-gray-400 dark:text-slate-500 mt-0.5 truncate">
+                COGS: {fmtCurrency(cogs)}
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: NET PROFIT / LOSS */}
+          <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
+            <div className={clsx(
+              "w-2.5 h-2.5 rounded-full shrink-0",
+              netProfit >= 0
+                ? "bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20"
+                : "bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-500/20"
+            )} />
+            <div className="min-w-0">
+              <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                {netProfit >= 0 ? "Net Profit" : "Net Loss"}
+              </div>
+              <div className={clsx(
+                "text-xl sm:text-2xl font-black font-mono tracking-tight mt-1 truncate",
+                netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+              )}>
+                {loading ? "..." : fmtCurrency(Math.abs(netProfit))}
+              </div>
+              <div className="text-[11px] font-medium text-gray-400 dark:text-slate-500 mt-0.5 truncate">
+                Margin: {marginPercentage}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Toolbar: Search & Date Filter ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-card border border-gray-200 dark:border-white/5 p-3 sm:p-3.5 rounded-xl shadow-2xs print:hidden w-full min-w-0">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
+            {/* Search Input */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+              <input
+                type="text"
+                placeholder="Search account / category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 outline-none focus:border-[#f58220]"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Date Preset Filter */}
+            <div className="relative shrink-0">
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="appearance-none pl-3 pr-8 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm font-medium text-gray-700 dark:text-slate-200 outline-none cursor-pointer focus:border-[#f58220]"
+              >
+                <option value="Today" className="dark:bg-card">Today</option>
+                <option value="Yesterday" className="dark:bg-card">Yesterday</option>
+                <option value="This Week" className="dark:bg-card">This Week</option>
+                <option value="This Month" className="dark:bg-card">This Month</option>
+                <option value="Last Month" className="dark:bg-card">Last Month</option>
+                <option value="This Quarter" className="dark:bg-card">This Quarter</option>
+                <option value="This Year" className="dark:bg-card">This Year</option>
+                <option value="Custom" className="dark:bg-card">Custom Date Range</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" />
+            </div>
+
+            {/* Custom Date Pickers */}
+            {dateFilter === "Custom" && (
+              <div className="flex items-center gap-2 border border-gray-200 dark:border-white/10 rounded-lg px-3 py-1.5 bg-gray-50 dark:bg-[#13151f] text-xs shrink-0">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="text-xs text-gray-700 dark:text-white outline-none bg-transparent"
+                />
+                <span className="text-gray-400 dark:text-slate-500 text-xs">to</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="text-xs text-gray-700 dark:text-white outline-none bg-transparent"
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
               onClick={fetchData}
               title="Refresh Data"
-              className="p-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-150 active:scale-95"
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors"
             >
-              <RotateCcw size={16} />
+              <RotateCcw className={clsx("h-4 w-4", loading && "animate-spin text-orange-500")} />
             </button>
           </div>
         </div>
-      </div>
 
-      {/* View Switcher (hidden on Print) */}
-      <div className="flex flex-wrap items-center gap-3 sm:gap-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 p-3 rounded-xl shadow-sm print:hidden w-full min-w-0">
-        <span className="text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider select-none">
-          View :
-        </span>
-        <div className="flex items-center gap-4 sm:gap-6">
-          <label className="flex items-center gap-2 cursor-pointer group select-none">
-            <input 
-              type="radio" 
-              name="viewType" 
-              checked={viewType === 'vyapar'} 
-              onChange={() => setViewType('vyapar')}
-              className="w-4 h-4 text-orange-500 border-slate-300 focus:ring-orange-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-700" 
-            />
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-orange-500 transition-colors">
-              KiddosFood View
-            </span>
-          </label>
-
-          <label className="flex items-center gap-2 cursor-pointer group select-none">
-            <input 
-              type="radio" 
-              name="viewType" 
-              checked={viewType === 'accounting'} 
-              onChange={() => setViewType('accounting')}
-              className="w-4 h-4 text-orange-500 border-slate-300 focus:ring-orange-500 focus:ring-2 dark:border-slate-600 dark:bg-slate-700" 
-            />
-            <span className="text-sm font-bold text-slate-700 dark:text-slate-200 group-hover:text-orange-500 transition-colors">
-              Accounting View
-            </span>
-          </label>
-        </div>
-      </div>
-
-      {/* Main Report Container */}
-      <div 
-        ref={printRef}
-        className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden p-4 sm:p-6 print:border-none print:shadow-none print:p-0 w-full min-w-0"
-      >
-        
-        {/* Print Header Block */}
-        <div className="hidden print:block text-center mb-8 border-b-2 border-slate-900 pb-5">
-          <h1 className="text-2xl font-black uppercase text-slate-900">PROFIT & LOSS STATEMENT</h1>
-          <p className="text-sm font-bold text-slate-600 mt-1">Financial Period: {startDate} To {endDate}</p>
-          <div className="text-[10px] text-slate-400 mt-2">Generated on {new Date().toLocaleString()} | Enterprise Audit System</div>
+        {/* ── Print Statement Header (Hidden on screen, visible on Print) ── */}
+        <div className="hidden print:block text-center border-b border-gray-300 pb-4 mb-4">
+          <h2 className="text-2xl font-bold uppercase tracking-tight text-gray-900">Profit &amp; Loss Statement</h2>
+          <p className="text-xs font-semibold text-gray-600 mt-1">Period: {activeFrom} to {activeTo}</p>
         </div>
 
-        {loading ? (
-          <div className="py-20 text-center space-y-3">
-            <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
-              Computing Ledger Balances & Consolidating COGS...
-            </p>
-          </div>
-        ) : viewType === 'vyapar' ? (
+        {/* ── Main Structured Profit & Loss Content ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 w-full min-w-0">
           
-          /* =========================================================================
-             VYAPAR SHEET VIEW
-             ========================================================================= */
-          <div className="overflow-x-auto custom-scrollbar w-full max-w-full select-text">
-            <table className="w-full text-left border-collapse min-w-[500px]">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/50 border-y border-slate-200 dark:border-slate-700/60">
-                  <th className="px-4 py-3 text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Particulars
-                  </th>
-                  <th className="px-4 py-3 text-xs sm:text-sm font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-44">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-700/30">
-                
-                {/* 1. Sale (+) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200 pl-4">
-                    Sale (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-emerald-600 dark:text-emerald-400">
-                    {formatPrice(revenue)}
-                  </td>
-                </tr>
+          {/* ═══════════════════════════════════════════
+              1. INCOME & REVENUE SECTION
+              ═══════════════════════════════════════════ */}
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs flex flex-col justify-between min-w-0">
+            <div>
+              <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-emerald-50/40 dark:bg-emerald-500/5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ArrowUpRight className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider truncate">
+                    Income / Revenue
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
+                  {fmtCurrency(totalIncome)}
+                </span>
+              </div>
 
-                {/* 2. Credit Note (-) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Credit Note (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-rose-500 dark:text-rose-400/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 3. Sale FA (+) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Sale FA (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-emerald-600 dark:text-emerald-500/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 4. Purchase (-) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Purchase (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-rose-500 dark:text-rose-400">
-                    {formatPrice(cogs)}
-                  </td>
-                </tr>
-
-                {/* 5. Debit Note (+) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Debit Note (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-emerald-600 dark:text-emerald-500/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 6. Purchase FA (-) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Purchase FA (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-rose-500 dark:text-rose-400/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 7. Direct Expenses (-) */}
-                <tr 
-                  onClick={() => toggleGroup('directExpenses')}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer select-none transition-colors"
-                >
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    {expanded.directExpenses ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                    Direct Expenses (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-rose-500 dark:text-rose-400">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {expanded.directExpenses && (
-                  <>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Other Direct Expenses (-)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
+              <div className="overflow-x-auto custom-scrollbar w-full">
+                <table className="w-full text-left text-xs font-medium min-w-[320px]">
+                  <thead>
+                    <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
+                      <th className="px-4 sm:px-5 py-3">Account / Particulars</th>
+                      <th className="px-4 sm:px-5 py-3 text-right">Amount</th>
                     </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Payment-in Discount (-)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                  </>
-                )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">
+                          Loading revenue accounts...
+                        </td>
+                      </tr>
+                    ) : filteredIncomeRows.length > 0 ? (
+                      filteredIncomeRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 sm:px-5 py-3 text-gray-800 dark:text-slate-200">
+                            <div className="font-semibold text-gray-900 dark:text-white truncate">{row.name}</div>
+                            <div className="text-[10px] text-gray-400 dark:text-slate-500 truncate">{row.category}</div>
+                          </td>
+                          <td className="px-4 sm:px-5 py-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                            {fmtCurrency(row.amount)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-6 text-center text-gray-400 dark:text-slate-500 text-xs">
+                          No matching income accounts found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                {/* 8. Tax Payable (-) */}
-                <tr 
-                  onClick={() => toggleGroup('taxPayable')}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer select-none transition-colors"
-                >
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    {expanded.taxPayable ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                    Tax Payable (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-rose-500 dark:text-rose-400">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {expanded.taxPayable && (
-                  <>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        GST Payable (-)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        TCS Payable (-)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        TDS Payable (-)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                  </>
-                )}
-
-                {/* 9. Tax Receivable (+) */}
-                <tr 
-                  onClick={() => toggleGroup('taxReceivable')}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer select-none transition-colors"
-                >
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    {expanded.taxReceivable ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                    Tax Receivable (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-emerald-600 dark:text-emerald-400">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {expanded.taxReceivable && (
-                  <>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        GST Receivable (+)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-emerald-500 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        TCS Receivable (+)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-emerald-500 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        TDS Receivable (+)
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-emerald-500 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                  </>
-                )}
-
-                {/* 10. Stock & FA */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Opening Stock (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-rose-500 dark:text-rose-400/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Closing Stock (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-emerald-600 dark:text-emerald-500/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Opening Stock FA (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-rose-500 dark:text-rose-400/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Closing Stock FA (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-emerald-600 dark:text-emerald-500/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 11. GROSS PROFIT TOTAL ROW */}
-                <tr className="bg-slate-100/50 dark:bg-slate-900 border-y-2 border-slate-300 dark:border-slate-700">
-                  <td className="px-4 py-3 text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-                    Gross Profit
-                  </td>
-                  <td className="px-4 py-3 text-sm font-black text-right text-emerald-600 dark:text-emerald-400">
-                    {formatPrice(grossProfit)}
-                  </td>
-                </tr>
-
-                {/* 12. Other Income (+) */}
-                <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Other Income (+)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-semibold text-right text-emerald-600 dark:text-emerald-500/80">
-                    {formatPrice(0)}
-                  </td>
-                </tr>
-
-                {/* 13. Indirect Expenses (-) */}
-                <tr 
-                  onClick={() => toggleGroup('indirectExpenses')}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 cursor-pointer select-none transition-colors"
-                >
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    {expanded.indirectExpenses ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                    Indirect Expenses (-)
-                  </td>
-                  <td className="px-4 py-2.5 text-[13px] sm:text-sm font-bold text-right text-rose-500 dark:text-rose-400">
-                    {formatPrice(expenses)}
-                  </td>
-                </tr>
-
-                {expanded.indirectExpenses && (
-                  <>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Other Expense
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(expenses)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Loan Interest Expense
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Loan Processing Fee Expense
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                    <tr className="bg-slate-50/30 dark:bg-slate-800/10 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-medium text-slate-500 dark:text-slate-400 pl-8">
-                        Loan Charges Expense
-                      </td>
-                      <td className="px-4 py-2 text-[13px] sm:text-sm font-semibold text-right text-rose-400 pl-8">
-                        {formatPrice(0)}
-                      </td>
-                    </tr>
-                  </>
-                )}
-
-                {/* 14. NET PROFIT TOTAL ROW */}
-                <tr className="bg-slate-900 text-white dark:bg-slate-950 dark:text-white border-y-2 border-slate-900 dark:border-slate-950">
-                  <td className="px-4 py-3.5 text-sm font-black uppercase tracking-wider">
-                    Net Profit
-                  </td>
-                  <td className="px-4 py-3.5 text-sm font-black text-right text-emerald-400">
-                    {formatPrice(netProfit)}
-                  </td>
-                </tr>
-
-              </tbody>
-            </table>
+            {/* Income Subtotal Footer */}
+            <div className="px-4 sm:px-5 py-3.5 border-t border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.02] flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+                Total Income
+              </span>
+              <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400">
+                {fmtCurrency(totalIncome)}
+              </span>
+            </div>
           </div>
-        ) : (
-          
-          /* =========================================================================
-             ACCOUNTING STATEMENT VIEW (Traditional P&L Format)
-             ========================================================================= */
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 divide-y lg:divide-y-0 lg:divide-x divide-slate-200 dark:divide-slate-700">
+
+          {/* ═══════════════════════════════════════════
+              2. EXPENSES SECTION
+              ═══════════════════════════════════════════ */}
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs flex flex-col justify-between min-w-0">
+            <div>
+              <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-rose-50/40 dark:bg-rose-500/5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ArrowDownRight className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span className="text-xs font-bold text-rose-800 dark:text-rose-300 uppercase tracking-wider truncate">
+                    Expenses &amp; Direct Costs
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold text-rose-700 dark:text-rose-400 shrink-0">
+                  {fmtCurrency(totalExpenses)}
+                </span>
+              </div>
+
+              <div className="overflow-x-auto custom-scrollbar w-full">
+                <table className="w-full text-left text-xs font-medium min-w-[320px]">
+                  <thead>
+                    <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
+                      <th className="px-4 sm:px-5 py-3">Account / Particulars</th>
+                      <th className="px-4 sm:px-5 py-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-8 text-center text-gray-400 dark:text-slate-500">
+                          Loading expense accounts...
+                        </td>
+                      </tr>
+                    ) : filteredExpenseRows.length > 0 ? (
+                      filteredExpenseRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                          <td className="px-4 sm:px-5 py-3 text-gray-800 dark:text-slate-200">
+                            <div className="font-semibold text-gray-900 dark:text-white truncate">{row.name}</div>
+                            <div className="text-[10px] text-gray-400 dark:text-slate-500 truncate">{row.category}</div>
+                          </td>
+                          <td className="px-4 sm:px-5 py-3 text-right font-mono font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                            {fmtCurrency(row.amount)}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={2} className="px-4 py-6 text-center text-gray-400 dark:text-slate-500 text-xs">
+                          No matching expense accounts found
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Expenses Subtotal Footer */}
+            <div className="px-4 sm:px-5 py-3.5 border-t border-gray-200 dark:border-white/10 bg-gray-50/80 dark:bg-white/[0.02] flex items-center justify-between">
+              <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+                Total Expenses
+              </span>
+              <span className="text-sm font-black font-mono text-rose-600 dark:text-rose-400">
+                {fmtCurrency(totalExpenses)}
+              </span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ── Net Operating Summary Card ── */}
+        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-2xs w-full min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             
-            {/* TRADING ACCOUNT SECTION */}
-            <div className="space-y-6">
-              <div className="border-b border-slate-200 dark:border-slate-700 pb-2">
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <TrendingDown size={14} className="text-rose-500" />
-                  Part I: Trading Account (Direct Debits / Sales)
-                </h3>
+            {/* Margin Metrics */}
+            <div className="flex flex-wrap items-center gap-4 sm:gap-6 min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-2 bg-blue-50 dark:bg-blue-500/10 text-blue-600 rounded-lg shrink-0">
+                  <PieChart className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                    Gross Profit (Margin)
+                  </div>
+                  <div className="text-sm sm:text-base font-bold text-gray-900 dark:text-white font-mono mt-0.5">
+                    {fmtCurrency(grossProfit)} <span className="text-xs text-gray-400 font-normal">({grossMarginPercentage}%)</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Sales Invoiced (Revenue)</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(revenue)}</span>
+              <div className="h-8 w-px bg-gray-200 dark:bg-white/10 hidden sm:block" />
+
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className={clsx(
+                  "p-2 rounded-lg shrink-0",
+                  netProfit >= 0 ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600" : "bg-rose-50 dark:bg-rose-500/10 text-rose-600"
+                )}>
+                  <DollarSign className="h-4 w-4" />
                 </div>
-                <div className="flex justify-between items-center text-sm border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">(-) Cost of Goods Sold (Recipe / Materials consumed)</span>
-                  <span className="font-bold text-rose-500 dark:text-rose-400">{formatPrice(cogs)}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm font-black bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-lg border border-slate-100 dark:border-slate-800">
-                  <span className="uppercase text-xs tracking-wider">Gross Trading Profit (Margin)</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">{formatPrice(grossProfit)}</span>
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                    Net Profit Margin
+                  </div>
+                  <div className={clsx(
+                    "text-sm sm:text-base font-bold font-mono mt-0.5",
+                    netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                  )}>
+                    {marginPercentage}%
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* PROFIT & LOSS ACCOUNT SECTION */}
-            <div className="space-y-6 pt-6 lg:pt-0 lg:pl-8">
-              <div className="border-b border-slate-200 dark:border-slate-700 pb-2">
-                <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <TrendingUp size={14} className="text-emerald-500" />
-                  Part II: Profit & Loss A/c (Operational Overhead)
-                </h3>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">Gross Trading Profit b/d</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(grossProfit)}</span>
+            {/* Net Total Highlighting */}
+            <div className="flex items-center justify-between sm:justify-end gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-white/5">
+              <div className="text-right">
+                <div className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                  Final Net Result
                 </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">(+) Other Operating Incomes</span>
-                  <span className="font-bold text-emerald-500 dark:text-emerald-400">{formatPrice(0)}</span>
-                </div>
-                <div className="flex justify-between items-center text-sm border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <span className="font-semibold text-slate-600 dark:text-slate-400">(-) Indirect/Operational Expenses</span>
-                  <span className="font-bold text-rose-500 dark:text-rose-400">{formatPrice(expenses)}</span>
-                </div>
-                
-                <div className="flex justify-between items-center text-sm font-black bg-slate-900 text-white dark:bg-slate-950 p-3 rounded-lg border border-slate-900">
-                  <span className="uppercase text-xs tracking-wider">Net Operating Earnings</span>
-                  <span className="text-emerald-400">{formatPrice(netProfit)}</span>
+                <div className={clsx(
+                  "text-lg sm:text-xl font-black font-mono tracking-tight",
+                  netProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                )}>
+                  {netProfit >= 0 ? "+ " : "- "}{fmtCurrency(Math.abs(netProfit))}
                 </div>
               </div>
+              <span className={clsx(
+                "px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider shrink-0",
+                netProfit >= 0
+                  ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                  : "bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300"
+              )}>
+                {netProfit >= 0 ? "Profitable" : "Net Loss"}
+              </span>
             </div>
 
           </div>
-        )}
+        </div>
 
-        {/* Signature & Audit Stamp (Visible on Print ONLY) */}
-        <div className="hidden print:flex justify-between items-end mt-16 pt-8 border-t border-slate-300">
+        {/* ── Signature & Stamp (Visible on Print ONLY) ── */}
+        <div className="hidden print:flex justify-between items-end mt-16 pt-8 border-t border-gray-400">
           <div>
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">Verified By</p>
-            <div className="w-48 border-b border-slate-400 mt-8" />
-            <p className="text-[10px] text-slate-500 mt-1">Authorized Chartered Accountant</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-600">Prepared &amp; Verified By</p>
+            <div className="w-48 border-b border-gray-600 mt-8" />
+            <p className="text-[10px] text-gray-500 mt-1">Authorized Accountant</p>
           </div>
           <div className="text-right">
-            <p className="text-xs font-black uppercase tracking-wider text-slate-400">Stamp & Seal</p>
-            <div className="w-32 h-20 border border-slate-300 border-dashed rounded mt-2 flex items-center justify-center text-[10px] text-slate-300">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-600">Stamp &amp; Seal</p>
+            <div className="w-32 h-16 border border-gray-400 border-dashed rounded mt-2 flex items-center justify-center text-[10px] text-gray-400">
               AFFIX SEAL HERE
             </div>
           </div>

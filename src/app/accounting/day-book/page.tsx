@@ -434,16 +434,9 @@ export default function DayBookPage() {
           <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
             <Receipt className="h-5 w-5" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
-              <span>Accounting</span>
-              <span>/</span>
-              <span className="text-gray-900 dark:text-white font-semibold truncate">Day Book</span>
-            </div>
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              Day Book Transactions
-            </h1>
-          </div>
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+            Day Book
+          </h1>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

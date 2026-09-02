@@ -595,7 +595,29 @@ export default function PaymentInPage() {
       // with `{ message }`, not `{ error }` — reading only `.error` here
       // silently discarded the real reason (missing account, overpayment,
       // etc.) and showed this generic fallback for every failure.
-      showToast(e?.response?.data?.message || e?.response?.data?.error || "Failed to record payment", "error");
+      const code = e?.response?.data?.code;
+      const message = e?.response?.data?.message || e?.response?.data?.error || "";
+      // The invoice list was loaded once when the page opened; if another
+      // payment settled one of the selected invoices in the meantime, the
+      // backend correctly rejects against its own live outstanding balance
+      // (see FinanceService.createPayment's ALLOCATION_EXCEEDS_OUTSTANDING/
+      // legacy overpayment guard) — but the local `invoices` state is now
+      // stale. Refetching lets `customerInvoices`/`allocationRows` recompute
+      // from fresh data, which naturally drops any invoice that's now fully
+      // paid instead of leaving a dead row the user can only resubmit.
+      const isStaleOutstanding =
+        code === "ALLOCATION_EXCEEDS_OUTSTANDING" ||
+        code === "ALLOCATION_TOTAL_MISMATCH" ||
+        /exceeds the outstanding balance/i.test(message);
+      if (isStaleOutstanding) {
+        showToast(
+          "One of these invoices was already settled by another payment. Refreshing the invoice list — please re-check the amounts.",
+          "error"
+        );
+        fetchInvoices();
+      } else {
+        showToast(message || "Failed to record payment", "error");
+      }
     } finally {
       setSaving(false);
     }
@@ -1061,7 +1083,7 @@ export default function PaymentInPage() {
       {/* ── Page Header Toolbar ── */}
       <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
         <button
-          onClick={() => setView("create")}
+          onClick={() => { fetchInvoices(); setView("create"); }}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
         >
           <Plus className="h-4 w-4" /> Add Payment-In

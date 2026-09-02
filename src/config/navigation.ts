@@ -83,7 +83,6 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
       { label: "Payment Register", href: reportLink("financial", "All Transactions") },
       { label: "Profit & Loss", href: "/accounting/profit-loss" },
       { label: "Bill Wise Profit", href: reportLink("financial", "Bill Wise Profit") },
-      { label: "Cash Flow", href: "/accounting/cash-flow" },
       { label: "Trial Balance", href: "/accounting/trial-balance" },
       { label: "Balance Sheet", href: "/accounting/balance-sheet" },
     ],

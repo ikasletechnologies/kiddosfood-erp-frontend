@@ -508,9 +508,9 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
     ],
   },
   Purchase: {
-    title: "Purchase Orders",
+    title: "Purchase Invoices",
     kpiLabel: "Total Purchases",
-    tableTitle: "Purchase Orders",
+    tableTitle: "Purchase Invoices",
     columns: [
       { key: "date", label: "Date" },
       { key: "poNo", label: "PO No" },
@@ -2395,18 +2395,9 @@ function ReportsContent() {
           <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg shrink-0">
             <Receipt className="h-5 w-5" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
-              <span>Reports</span>
-              <span>/</span>
-              <span className="text-gray-600 dark:text-slate-400 truncate">{reportGroupLabel}</span>
-              <span>/</span>
-              <span className="text-gray-900 dark:text-white font-semibold truncate">{reportTitle}</span>
-            </div>
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              {reportGroupLabel} — {reportTitle}
-            </h1>
-          </div>
+          <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+            {reportTitle}
+          </h1>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -2558,17 +2549,8 @@ function ReportsContent() {
 
           <div className="flex-1 hidden sm:block" />
 
-          {/* CSV Export & Print */}
+          {/* Print & Refresh */}
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
-              title="Export CSV"
-            >
-              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>CSV</span>
-            </button>
-
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
