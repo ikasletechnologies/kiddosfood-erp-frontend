@@ -839,15 +839,12 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "GST Report": {
     title: "GST Report",
-    kpiLabel: "Net GST",
-    tableTitle: "GST Summary",
+    kpiLabel: "Total Sale Tax",
+    tableTitle: "Party-wise GST Tax Summary",
     columns: [
-      { key: "date", label: "Date" },
-      { key: "description", label: "Description" },
-      { key: "taxableAmount", label: "Taxable Amount" },
-      { key: "gstRate", label: "GST Rate" },
-      { key: "gstAmount", label: "GST Amount" },
-      { key: "type", label: "Type" },
+      { key: "partyName", label: "Party Name" },
+      { key: "saleTax", label: "Sale Tax" },
+      { key: "purchaseTax", label: "Purchase / Expense Tax" },
     ],
   },
   "GST Rate Report": {
@@ -855,12 +852,12 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
     kpiLabel: "Tax Collected",
     tableTitle: "Rate-wise GST Summary",
     columns: [
-      { key: "gstRate", label: "GST Rate" },
-      { key: "taxableAmount", label: "Taxable Amount" },
-      { key: "cgst", label: "CGST" },
-      { key: "sgst", label: "SGST" },
-      { key: "igst", label: "IGST" },
-      { key: "totalTax", label: "Total Tax" },
+      { key: "taxName", label: "GST Rate" },
+      { key: "taxPercent", label: "Tax %" },
+      { key: "taxableSaleAmount", label: "Taxable Sales" },
+      { key: "taxIn", label: "Sales GST" },
+      { key: "taxablePurchaseAmount", label: "Taxable Purchases" },
+      { key: "taxOut", label: "Purchase GST" },
     ],
   },
   "Form No. 27EQ": {
@@ -1588,6 +1585,28 @@ function transformSaleOrderItems(data: any): ReportData {
   };
 }
 
+function transformGstRateReport(apiData: any): ReportData {
+  // Backend returns: { data: GstRateRow[], totalTaxIn: number, totalTaxOut: number }
+  const rows: any[] = Array.isArray(apiData?.data) ? apiData.data : [];
+  const totalTaxIn: number = apiData?.totalTaxIn ?? 0;
+  const totalTaxOut: number = apiData?.totalTaxOut ?? 0;
+  const netGst = totalTaxIn - totalTaxOut;
+  return {
+    kpiValue: rows.length > 0 ? fmtCurrency(totalTaxIn) : "—",
+    kpiSubText: rows.length > 0
+      ? `Tax In: ${fmtCurrency(totalTaxIn)} | Tax Out: ${fmtCurrency(totalTaxOut)} | Net: ${fmtCurrency(netGst)}`
+      : "No GST data found",
+    rows: rows.map((r: any) => ({
+      taxName: r.taxName ?? "—",
+      taxPercent: r.taxPercent != null ? `${r.taxPercent}%` : "—",
+      taxableSaleAmount: fmtCurrency(r.taxableSaleAmount ?? 0),
+      taxIn: fmtCurrency(r.taxIn ?? 0),
+      taxablePurchaseAmount: fmtCurrency(r.taxablePurchaseAmount ?? 0),
+      taxOut: fmtCurrency(r.taxOut ?? 0),
+    })),
+  };
+}
+
 function transformGeneric(data: any, meta?: ReportMeta): ReportData {
   const rows = toArr(data);
   const totalAmount = rows.reduce((s: number, r: any) => {
@@ -1620,6 +1639,89 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
         status: r.status || "—",
       };
     }),
+  };
+}
+
+function transformGstPartyReport(gstr1Data: any, gstr2Data: any): ReportData {
+  const sales = (gstr1Data?.sale || []) as any[];
+  const saleReturns = (gstr1Data?.saleReturn || []) as any[];
+  const creditNotes = (gstr1Data?.creditNotes || []) as any[];
+
+  const purchases = (gstr2Data?.data || []) as any[];
+  const debitNotes = (gstr2Data?.debitNotes || []) as any[];
+
+  interface PartySummary {
+    partyName: string;
+    saleTax: number;
+    purchaseTax: number;
+  }
+
+  const partyMap = new Map<string, PartySummary>();
+
+  const getParty = (name: string, gstin?: string): PartySummary => {
+    const cleanGstin = (gstin || "").trim().replace(/[—\-]/g, "");
+    const cleanName = (name || "").trim() || "Cash Customer";
+    const key = cleanGstin.length > 5 ? `gstin_${cleanGstin.toUpperCase()}` : `name_${cleanName.toLowerCase()}`;
+    let entry = partyMap.get(key);
+    if (!entry) {
+      entry = { partyName: cleanName, saleTax: 0, purchaseTax: 0 };
+      partyMap.set(key, entry);
+    }
+    return entry;
+  };
+
+  // Sales
+  for (const s of sales) {
+    const entry = getParty(s.partyName, s.gstin || s.customerGstin);
+    entry.saleTax += Number(s.totalTax ?? ((s.cgst || 0) + (s.sgst || 0) + (s.igst || 0) + (s.cessAmount || 0)));
+  }
+
+  // Sales Returns
+  for (const sr of saleReturns) {
+    const entry = getParty(sr.partyName, sr.gstin || sr.customerGstin);
+    entry.saleTax -= Number(sr.totalTax ?? ((sr.cgst || 0) + (sr.sgst || 0) + (sr.igst || 0) + (sr.cessAmount || 0)));
+  }
+
+  // Credit Notes
+  for (const cn of creditNotes) {
+    const entry = getParty(cn.partyName, cn.gstin);
+    const tax = Math.abs(Number(cn.totalTax ?? ((cn.cgst || 0) + (cn.sgst || 0) + (cn.igst || 0))));
+    entry.saleTax -= tax;
+  }
+
+  // Purchases
+  for (const p of purchases) {
+    const entry = getParty(p.vendorName, p.vendorGstin);
+    entry.purchaseTax += Number(p.totalTax ?? ((p.cgst || 0) + (p.sgst || 0) + (p.igst || 0) + (p.cessAmount || 0)));
+  }
+
+  // Debit Notes
+  for (const dn of debitNotes) {
+    const entry = getParty(dn.vendorName, dn.vendorGstin);
+    const tax = Math.abs(Number(dn.totalTax ?? ((dn.cgst || 0) + (dn.sgst || 0) + (dn.igst || 0))));
+    entry.purchaseTax -= tax;
+  }
+
+  const rows = Array.from(partyMap.values())
+    .map((p) => ({
+      partyName: p.partyName,
+      saleTax: fmtCurrency(p.saleTax),
+      purchaseTax: fmtCurrency(p.purchaseTax),
+      _rawSaleTax: Number(p.saleTax.toFixed(2)),
+      _rawPurchaseTax: Number(p.purchaseTax.toFixed(2)),
+    }))
+    .filter((p) => Math.abs(p._rawSaleTax) > 0 || Math.abs(p._rawPurchaseTax) > 0)
+    .sort((a, b) => a.partyName.localeCompare(b.partyName));
+
+  const totalSaleTax = rows.reduce((s, r) => s + r._rawSaleTax, 0);
+  const totalPurchaseTax = rows.reduce((s, r) => s + r._rawPurchaseTax, 0);
+
+  return {
+    kpiValue: fmtCurrency(totalSaleTax),
+    kpiSubText: `Sale Tax: ${fmtCurrency(totalSaleTax)} • Purchase / Expense Tax: ${fmtCurrency(totalPurchaseTax)}`,
+    tax: totalSaleTax,
+    taxPayable: totalPurchaseTax,
+    rows,
   };
 }
 
@@ -1918,10 +2020,15 @@ async function fetchReport(
       // /reports/gst/* — see the "GST Reports" sidebar section.
 
       // Financial - Taxes
-      case "GST Report":
-        return transformGeneric((await reportsApi.getGstReport(params)).data, meta);
+      case "GST Report": {
+        const [gstr1Res, gstr2Res] = await Promise.all([
+          reportsApi.getGSTR1(params).catch(() => ({ data: { sale: [], creditNotes: [] } })),
+          reportsApi.getGSTR2(params).catch(() => ({ data: { data: [], debitNotes: [] } })),
+        ]);
+        return transformGstPartyReport(gstr1Res.data, gstr2Res.data);
+      }
       case "GST Rate Report":
-        return transformGeneric((await reportsApi.getGstRateReport(params)).data, meta);
+        return transformGstRateReport((await reportsApi.getGstRateReport(params)).data);
       case "Form No. 27EQ":
         return transformGeneric((await reportsApi.getForm27eq(params)).data, meta);
       case "TCS Receivable":

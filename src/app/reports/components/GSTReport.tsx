@@ -8,6 +8,7 @@ import {
   ShoppingCart as ShoppingCartIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import * as XLSX from "xlsx";
 import { reportsApi } from "@/lib/api/accounting.api";
 
 interface GstRow {
@@ -64,7 +65,28 @@ export default function GSTReport({
   };
 
   const handleExcel = () => {
-    toast.success("Excel report exported successfully!");
+    if (data.length === 0) {
+      toast.error("No data to export");
+      return;
+    }
+    const wsData: any[][] = [
+      ["Party Name", "Sale Tax", "Purchase / Expense Tax"],
+      ...data.map((r) => [
+        r.partyName,
+        Number(r.saleTax) || 0,
+        Number(r.purchaseTax) || 0,
+      ]),
+      [
+        "TOTAL",
+        totalTaxIn,
+        totalTaxOut,
+      ],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "GST Report");
+    XLSX.writeFile(wb, `gst_report_${startDate}_${endDate}.xlsx`);
+    toast.success("Excel exported!");
   };
 
   const fmtDate = (dateStr: string) => {
@@ -182,10 +204,10 @@ export default function GSTReport({
         {!loading && (
           <div className="bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-700 px-5 py-4 flex items-center justify-between text-xs font-bold uppercase tracking-wide">
             <div className="text-emerald-600 dark:text-emerald-400">
-              Total Tax In: <span className="text-[14px] ml-1">{fmt(totalTaxIn)}</span>
+              Total Sale Tax: <span className="text-[14px] ml-1">{fmt(totalTaxIn)}</span>
             </div>
             <div className="text-red-600 dark:text-red-400">
-              Total Tax Out: <span className="text-[14px] ml-1">{fmt(totalTaxOut)}</span>
+              Total Purchase / Expense Tax: <span className="text-[14px] ml-1">{fmt(totalTaxOut)}</span>
             </div>
           </div>
         )}
