@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { customersApi } from '@/lib/api';
-import { Search, User, ArrowUpRight, ArrowDownLeft, FileText } from 'lucide-react';
+import {  Search, User, ArrowUpRight, ArrowDownLeft, FileText , X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -64,6 +64,13 @@ export default function CustomerLedgerPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
         </div>
       </div>
 

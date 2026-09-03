@@ -260,6 +260,13 @@ export default function FranchiseStockPage() {
             placeholder="Search by product name, SKU, or category..."
             className="bg-transparent text-xs font-bold text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-gray-400"
           />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
         </div>
 
         {viewTab === "BATCHES" && (

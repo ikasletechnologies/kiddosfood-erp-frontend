@@ -704,6 +704,13 @@ export default function RecipeMasterTab() {
                     placeholder="Search category..."
                     className="w-full text-xs outline-none py-0.5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 bg-transparent"
                   />
+            {categorySearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setCategorySearchQuery("")} 
+              />
+            )}
                 </div>
                 <div className="max-h-48 overflow-y-auto">
                   {uniqueCategories.filter(c => c.toLowerCase().includes(categorySearchQuery.trim().toLowerCase())).length === 0 ? (
@@ -858,6 +865,13 @@ export default function RecipeMasterTab() {
                             placeholder="Search material..."
                             className="w-full text-xs outline-none py-0.5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 bg-transparent"
                           />
+            {materialSearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setMaterialSearchQuery("")} 
+              />
+            )}
                         </div>
                         <div className="max-h-48 overflow-y-auto">
                           {materials.filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase())).length === 0 ? (

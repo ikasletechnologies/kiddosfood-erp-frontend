@@ -13,14 +13,16 @@ import { X,
   ShoppingCart as ShoppingCartIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { accountingApi } from "@/lib/api/accounting.api";
+import { reportsApi } from "@/lib/api/accounting.api";
 
-interface Expense {
+interface ExpenseItemRow {
   id: string;
-  category: string;
-  amount: number;
   date: string;
-  description?: string;
+  category: string;
+  expenseItem: string;
+  quantity: number;
+  unitRate: number;
+  amount: number;
 }
 
 export default function CentralExpenseItemReport({
@@ -44,11 +46,11 @@ export default function CentralExpenseItemReport({
   });
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseItemRow[]>([]);
   const [fetching, setFetching] = useState(false);
 
   // Sorting
-  const [sortField, setSortField] = useState<"itemName" | "unitPrice" | "quantity" | "amount">("itemName");
+  const [sortField, setSortField] = useState<"date" | "category" | "expenseItem" | "quantity" | "unitRate" | "amount">("date");
   const [sortAsc, setSortAsc] = useState(true);
 
   // Calculate Dates based on Period dropdown
@@ -77,13 +79,12 @@ export default function CentralExpenseItemReport({
 
   const fetchExpenses = () => {
     setFetching(true);
-    accountingApi
-      .getExpenses({
+    reportsApi.getExpenseItem({
         startDate,
         endDate,
       })
       .then((res: any) => {
-        setExpenses(res.data?.expenses || []);
+        setExpenses(res.data || []);
       })
       .catch(() => {
         toast.error("Failed to load expenses");
@@ -113,29 +114,12 @@ export default function CentralExpenseItemReport({
   // Search Filter
   const searchedExpenses = expenses.filter((e) => {
     const matchesCategory = (e.category || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDesc = (e.description || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesDesc = (e.expenseItem || "").toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory || matchesDesc;
   });
 
-  // Aggregate by category representing items
-  const aggregates: Record<string, { quantity: number; totalAmount: number }> = {};
-  searchedExpenses.forEach((e) => {
-    const itemName = e.category || "General Expense";
-    if (!aggregates[itemName]) {
-      aggregates[itemName] = { quantity: 0, totalAmount: 0 };
-    }
-    aggregates[itemName].quantity += 1;
-    aggregates[itemName].totalAmount += e.amount;
-  });
-
-  let aggregatedRows = Object.entries(aggregates).map(([itemName, data]) => ({
-    itemName,
-    quantity: data.quantity,
-    unitPrice: data.totalAmount / data.quantity,
-    amount: data.totalAmount,
-  }));
-
-  // Apply Sorting
+  // Sorting logic
+  let aggregatedRows = [...searchedExpenses];
   aggregatedRows.sort((a, b) => {
     let valA: any = a[sortField];
     let valB: any = b[sortField];
@@ -145,7 +129,7 @@ export default function CentralExpenseItemReport({
     return sortAsc ? valA - valB : valB - valA;
   });
 
-  const toggleSort = (field: "itemName" | "unitPrice" | "quantity" | "amount") => {
+  const toggleSort = (field: "date" | "category" | "expenseItem" | "quantity" | "unitRate" | "amount") => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
     } else {
@@ -275,7 +259,7 @@ export default function CentralExpenseItemReport({
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 select-none">
                 <th
-                  onClick={() => toggleSort("itemName")}
+                  onClick={() => toggleSort("expenseItem")}
                   className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
                 >
                   <div className="flex items-center gap-1">
@@ -284,7 +268,7 @@ export default function CentralExpenseItemReport({
                   </div>
                 </th>
                 <th
-                  onClick={() => toggleSort("unitPrice")}
+                  onClick={() => toggleSort("unitRate")}
                   className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
                 >
                   <div className="flex items-center gap-1">
@@ -315,14 +299,14 @@ export default function CentralExpenseItemReport({
             <tbody>
               {fetching || loading ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-24">
+                  <td colSpan={6} className="text-center py-24">
                     <div className="w-8 h-8 border-4 border-red-650 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-slate-400 mt-3 font-medium">Fetching expense item ledger...</p>
                   </td>
                 </tr>
               ) : aggregatedRows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="text-center py-32 text-slate-400 text-xs font-semibold">
+                  <td colSpan={6} className="text-center py-32 text-slate-400 text-xs font-semibold">
                     <ShoppingCartIcon size={24} className="mx-auto text-slate-300 dark:text-slate-700 mb-2" />
                     No transactions to show
                   </td>
@@ -333,16 +317,22 @@ export default function CentralExpenseItemReport({
                     key={idx}
                     className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors"
                   >
-                    <td className="px-5 py-3.5 text-[13px] font-bold text-slate-850 dark:text-slate-200">
-                      {r.itemName}
+                    <td className="px-5 py-3.5 text-[13px] font-bold text-slate-800 dark:text-slate-200">
+                      {fmtDate(r.date)}
                     </td>
-                    <td className="px-5 py-3.5 text-[13px] font-medium text-slate-600 dark:text-slate-400 tabular-nums">
-                      {fmt(r.unitPrice)}
+                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                      {r.category}
                     </td>
-                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-900 dark:text-white tabular-nums">
+                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                      {r.expenseItem}
+                    </td>
+                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
                       {r.quantity}
                     </td>
-                    <td className="px-5 py-3.5 text-[13px] font-black text-slate-900 dark:text-white tabular-nums">
+                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                      {fmt(r.unitRate)}
+                    </td>
+                    <td className="px-5 py-3.5 text-[13px] font-black text-slate-900 dark:text-white text-right tabular-nums">
                       {fmt(r.amount)}
                     </td>
                   </tr>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import {
+import { 
   Scale,
   RefreshCw,
   Search,
@@ -13,6 +13,7 @@ import {
   AlertCircle,
   FileSpreadsheet,
   BookOpen,
+  X
 } from "lucide-react";
 import { clsx } from "clsx";
 import { reportsApi } from "@/lib/api/accounting.api";
@@ -279,6 +280,13 @@ export default function TrialBalancePage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs sm:text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 outline-none focus:border-[#f58220] transition-colors"
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
 
           {/* Date Filter Dropdown */}

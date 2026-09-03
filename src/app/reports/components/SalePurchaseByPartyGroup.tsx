@@ -13,8 +13,8 @@ import { reportsApi } from "@/lib/api/accounting.api";
 
 interface SalePurchaseGroupRow {
   groupName: string;
-  saleAmount: number;
-  purchaseAmount: number;
+  totalSale: number;
+  totalPurchase: number;
 }
 
 export default function CentralSalePurchaseByPartyGroup({
@@ -67,8 +67,8 @@ export default function CentralSalePurchaseByPartyGroup({
     r.groupName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalSaleAmt = filtered.reduce((s, r) => s + r.saleAmount, 0);
-  const totalPurchaseAmt = filtered.reduce((s, r) => s + r.purchaseAmount, 0);
+  const totalSaleAmt = filtered.reduce((s, r) => s + (r.totalSale || 0), 0);
+  const totalPurchaseAmt = filtered.reduce((s, r) => s + (r.totalPurchase || 0), 0);
 
   return (
     <div className="flex flex-col h-full bg-[#f1f5f9] dark:bg-[#090a0f] space-y-4 p-6 overflow-hidden">
@@ -185,8 +185,8 @@ export default function CentralSalePurchaseByPartyGroup({
                 filtered.map((row, idx) => (
                   <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors bg-white dark:bg-[#12141c]">
                     <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white font-medium">{row.groupName}</td>
-                    <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-center font-medium">{fmt(row.saleAmount)}</td>
-                    <td className="px-4 py-4 text-right">{fmt(row.purchaseAmount)}</td>
+                    <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-center font-medium">{fmt(row.totalSale)}</td>
+                    <td className="px-4 py-4 text-right">{fmt(row.totalPurchase)}</td>
                   </tr>
                 ))
               )}

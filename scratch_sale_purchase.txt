@@ -1,0 +1,216 @@
+﻿
+    }
+  
+>   static async getSalePurchaseByParty(filters: {
+      franchiseId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    }) {
+      const { franchiseId, startDate, endDate } = filters;
+      const { start, end } = parseInclusiveDates(startDate, endDate);
+  
+      const partyMap = new Map<string, { partyName: string; partyType: string; saleAmount: number; purchaseAmount: 
+number; net: number }>();
+  
+      // Fetch Sales
+      const orders = await prisma.order.findMany({
+        where: finalSaleWhere({
+          franchiseId,
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        }),
+        include: { customer: true }
+      });
+  
+      for (const order of orders) {
+        const isCash = !order.customerId;
+        const partyName = order.customer ? order.customer.name : (order.customerName || 'Cash Customer');
+        const partyType = isCash ? 'Cash Customers' : 'Customers';
+        if (!partyMap.has(partyName)) {
+          partyMap.set(partyName, { partyName, partyType, saleAmount: 0, purchaseAmount: 0, net: 0 });
+        }
+        partyMap.get(partyName)!.saleAmount += order.totalAmount;
+      }
+  
+      // Fetch Purchases
+      const pos = await prisma.procurementOrder.findMany({
+        where: {
+          franchiseId,
+          status: { not: 'CANCELLED' },
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        },
+        include: { vendor: true }
+      });
+  
+      for (const po of pos) {
+        const partyName = po.vendor?.name || 'Unknown Vendor';
+        const partyType = 'Vendors';
+        if (!partyMap.has(partyName)) {
+          partyMap.set(partyName, { partyName, partyType, saleAmount: 0, purchaseAmount: 0, net: 0 });
+        }
+        partyMap.get(partyName)!.purchaseAmount += po.totalAmount;
+      }
+  
+      const report = Array.from(partyMap.values())
+        .map(r => ({
+          ...r,
+          net: r.saleAmount - r.purchaseAmount
+        }))
+        .filter(r => r.saleAmount !== 0 || r.purchaseAmount !== 0);
+  
+      return report;
+    }
+  
+    static async getLoans(filters: { franchiseId: string }) {
+      return prisma.loanAccount.findMany({
+        where: { franchiseId: filters.franchiseId },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+  
+    static async addLoanAccount(data: {
+      franchiseId: string;
+      accountName: string;
+      accountNumber?: string;
+      lenderName?: string;
+      loanType: string;
+      principalAmount: number;
+      interestRate: number;
+      loanDate: Date;
+    }) {
+      const { franchiseId, accountName, accountNumber, lenderName, loanType, principalAmount, interestRate, loanDate } 
+= data;
+      
+      // Create Loan Account
+      const loan = await prisma.loanAccount.create({
+        data: {
+          franchiseId,
+          accountName,
+          accountNumber,
+          lenderName,
+          loanType: loanType || "RECEIVED",
+          principalAmount,
+          interestRate,
+          loanDate: loanDate || new Date(),
+          outstandingBalance: principalAmount,
+          principalPaid: 0,
+          interestPaid: 0
+        }
+      });
+  
+      // Create initial transaction: DISBURSEMENT
+    }
+  
+>   static async getSalePurchaseByPartyGroupData(franchiseId: string, startDate?: string, endDate?: string) {
+>     const parties = await this.getSalePurchaseByParty({
+        franchiseId,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined
+      });
+  
+      const groupMap: Record<string, { groupName: string; saleAmount: number; purchaseAmount: number; net: number }> = 
+{};
+      const getGroup = (name: string) => {
+        if (!groupMap[name]) groupMap[name] = { groupName: name, saleAmount: 0, purchaseAmount: 0, net: 0 };
+        return groupMap[name];
+      };
+  
+      for (const party of parties) {
+        const group = getGroup(party.partyType);
+        group.saleAmount += party.saleAmount;
+        group.purchaseAmount += party.purchaseAmount;
+        group.net += party.net;
+      }
+  
+      return Object.values(groupMap).filter(r => r.saleAmount !== 0 || r.purchaseAmount !== 0);
+    }
+  
+    /**
+     * Receivables side of getAllPartiesData (CUSTOMER/DEALER/FRANCHISE) â€” real
+     * outstanding balance summed per party from actual Tax Invoices (Order+
+     * Invoice+Payment), NOT CustomerLedger. Deliberately not ledger-sourced:
+     * POSService.checkout and the fixed FinanceService.createInvoice never
+     * reliably post SALE/PAYMENT ledger entries for every flow (see
+     * CustomerService.getOutstandingBalances, which this generalizes to
+     * DEALER/FRANCHISE using the same partyType/partyId fields
+     * DealerService.getTransactions already keys off).
+     *
+     * Per-order outstanding = order.totalAmount âˆ’ Î£(non-cancelled
+     * Payment.paidAmount for that order/invoice). Orders with no resolvable
+     * real party (Walk-in: partyType CUSTOMER with no customerId, or a
+     * Dealer/Franchise sale with no partyId) are excluded â€” there is no real
+     * debtor identity to attach that balance to, and lumping every Walk-in
+     * sale into one shared fake "Walk-in Customer" bucket would mix unrelated
+     * people's debts. In practice this exclusion is close to a no-op: POS
+     * checkout (the only flow that creates Walk-in orders) always writes
+     * paymentStatus: 'PAID', so a real unpaid Walk-in balance should not occur
+     * â€” see PosService.checkout.
+     */
+    private static async getPartyReceivables(params: {
+      franchiseId?: string;
+      dateFilter: any;
+      partyType?: 'CUSTOMER' | 'DEALER' | 'FRANCHISE';
+    }): Promise<Array<{ id: string; partyType: string; name: string; email: string | null; phone: string | null; 
+currentBalance: number; creditLimit: number | null }>> {
+      const { franchiseId, dateFilter, partyType } = params;
+  
+      const orders = await prisma.order.findMany({
+        where: {
+          status: { not: 'CANCELLED' },
+          ...(franchiseId ? { franchiseId } : {}),
+          ...dateFilter
+        },
+        select: {
+          partyType: true,
+          partyId: true,
+          customerId: true,
+          totalAmount: true,
+          payments: { select: { paidAmount: true, isCancelled: true, status: true } },
+          // See sumOrderPaidWithAllocations â€” a multi-invoice receipt's share
+          // of this order lives here, not in `payments` (that Payment's
+          // orderId is null), and was previously invisible to this aggregate,
+          // which could leave an already-fully-paid invoice showing as due.
+          invoice: { select: { allocations: { select: { amount: true, payment: { select: { status: true, isCancelled: 
+true } } } } } }
+        }
+      });
+  
+      // key = `${partyType}:${partyId}`
+      const balances = new Map<string, number>();
+      for (const o of orders) {
+        const resolvedType = o.partyType || 'CUSTOMER';
+        const resolvedId = resolvedType === 'CUSTOMER' ? o.customerId : o.partyId;
+        if (!resolvedId) continue; // No real master-table row for this party (Walk-in etc) â€” not trackable.
+        if (partyType && resolvedType !== partyType) continue;
+  
+        const paid = this.sumOrderPaidWithAllocations(
+          o.payments,
+          o.invoice?.allocations,
+          (p) => !p.isCancelled && p.status !== 'CANCELLED'
+        );
+        const due = (o.totalAmount || 0) - paid;
+        if (due <= 0.01) continue; // Fully-paid (or overpaid, which the createPayment guard should prevent) â€” 
+nothing outstanding.
+  
+        const key = `${resolvedType}:${resolvedId}`;
+        balances.set(key, (balances.get(key) || 0) + due);
+      }
+  
+      if (balances.size === 0) return [];
+  
+      const customerIds: string[] = [];
+      const dealerIds: string[] = [];
+      const franchiseIds: string[] = [];
+      for (const key of balances.keys()) {
+        const [pt, id] = key.split(':');
+        if (pt === 'CUSTOMER') customerIds.push(id);
+        else if (pt === 'DEALER') dealerIds.push(id);
+        else if (pt === 'FRANCHISE') franchiseIds.push(id);
+      }
+
+

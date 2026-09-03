@@ -739,6 +739,13 @@ export default function FinishedGoodsStockClient() {
             placeholder="Search by Product Name or SKU..."
             className="bg-transparent text-xs font-medium text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-slate-400"
           />
+            {searchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearchTerm("")} 
+              />
+            )}
         </div>
 
         {/* Demand Filter Buttons & View Switcher */}

@@ -438,6 +438,13 @@ export default function DealersClient() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-800 dark:text-white rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
+            {searchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearchQuery("")} 
+              />
+            )}
           </div>
           
           <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-white/5 relative filter-popover-container">
@@ -651,6 +658,13 @@ export default function DealersClient() {
                     onChange={(e) => setTransactionSearchQuery(e.target.value)}
                     onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
                   />
+            {transactionSearchQuery && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setTransactionSearchQuery("")} 
+              />
+            )}
                   {transactionSearchQuery && (
                     <X 
                       size={14} 

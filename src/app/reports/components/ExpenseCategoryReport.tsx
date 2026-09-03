@@ -10,7 +10,7 @@ import {
   ShoppingCart as ShoppingCartIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import { accountingApi } from "@/lib/api/accounting.api";
+import { reportsApi } from "@/lib/api/accounting.api";
 
 interface Expense {
   id: string;
@@ -36,18 +36,19 @@ export default function CentralExpenseCategoryReport({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   });
 
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categoryRows, setCategoryRows] = useState<any[]>([]);
+  const [totalExpense, setTotalExpense] = useState<number>(0);
   const [fetching, setFetching] = useState(false);
 
   const fetchExpenses = () => {
     setFetching(true);
-    accountingApi
-      .getExpenses({
+    reportsApi.getExpenseCategory({
         startDate,
         endDate,
       })
       .then((res: any) => {
-        setExpenses(res.data?.expenses || []);
+        setCategoryRows(res.data?.categoryBreakdown || []);
+        setTotalExpense(res.data?.summary?.totalExpenses || 0);
       })
       .catch(() => {
         toast.error("Failed to load expenses");
@@ -74,25 +75,7 @@ export default function CentralExpenseCategoryReport({
     router.push("/accounting/expenses");
   };
 
-  // Group by Category
-  const categoryAggregates: Record<string, number> = {};
-  expenses.forEach((e) => {
-    const cat = e.category || "General Expense";
-    categoryAggregates[cat] = (categoryAggregates[cat] || 0) + e.amount;
-  });
-
-  const categoryRows = Object.entries(categoryAggregates).map(([category, amount]) => {
-    // Dynamically categorize typical Direct vs Indirect expenses
-    const directKeywords = ["rent", "cogs", "raw material", "freight", "carriage", "factory"];
-    const isDirect = directKeywords.some((kw) => category.toLowerCase().includes(kw));
-    return {
-      category,
-      type: isDirect ? "Direct Expense" : "Indirect Expense",
-      amount,
-    };
-  });
-
-  const totalExpense = categoryRows.reduce((sum, row) => sum + row.amount, 0);
+  
 
   const fmtDate = (dateStr: string) => {
     if (!dateStr) return "—";
@@ -163,21 +146,22 @@ export default function CentralExpenseCategoryReport({
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expense Category</th>
-                <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Category Type</th>
+                <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Transaction Count</th>
+   <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">% of Total</th>
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {fetching || loading ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-24">
+                  <td colSpan={4} className="text-center py-24">
                     <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-slate-400 mt-3 font-medium">Fetching expense categories...</p>
                   </td>
                 </tr>
               ) : categoryRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="text-center py-32 text-slate-400 text-xs font-semibold">
+                  <td colSpan={4} className="text-center py-32 text-slate-400 text-xs font-semibold">
                     <ShoppingCartIcon size={24} className="mx-auto text-slate-300 dark:text-slate-700 mb-2" />
                     No transactions to show
                   </td>
@@ -192,10 +176,13 @@ export default function CentralExpenseCategoryReport({
                       {r.category}
                     </td>
                     <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
-                      {r.type}
+                      {r.count}
+                    </td>
+                    <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                      {totalExpense > 0 ? ((r.totalAmount / totalExpense) * 100).toFixed(1) : 0}%
                     </td>
                     <td className="px-5 py-3.5 text-[13px] font-black text-slate-900 dark:text-white text-right tabular-nums">
-                      {fmt(r.amount)}
+                      {fmt(r.totalAmount)}
                     </td>
                   </tr>
                 ))

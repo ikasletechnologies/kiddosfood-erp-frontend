@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
+import { 
   Search,
   ChevronDown,
   Printer,
@@ -11,6 +11,7 @@ import {
   Plus,
   Receipt,
   AlertTriangle,
+  X
 } from "lucide-react";
 import { clsx } from "clsx";
 import toast from "react-hot-toast";
@@ -2570,7 +2571,7 @@ function ReportsContent() {
           </div>
         </div>
 
-        {!isTaxComplianceReport && (
+        {!isTaxComplianceReport && !activeChild?.id.includes("Expense") && !activeChild?.id.includes("Party") && !activeChild?.id.includes("All Parties") && !activeChild?.id.includes("Sale Purchase By Party") && (
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => router.push("/sales/invoices")}
@@ -2809,6 +2810,13 @@ function ReportsContent() {
               onChange={(e) => setTableSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 outline-none focus:border-[#f58220]"
             />
+            {tableSearchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setTableSearchTerm("")} 
+              />
+            )}
           </div>
 
           {/* Date Preset Filter */}

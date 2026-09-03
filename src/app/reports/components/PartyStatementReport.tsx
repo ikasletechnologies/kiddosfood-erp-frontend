@@ -22,6 +22,7 @@ export default function CentralPartyStatementReport({
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-31");
   const [partyName, setPartyName] = useState("");
+  const [customerId, setCustomerId] = useState("");
   
   // Real data state
   const [data, setData] = useState<any>(null);
@@ -47,7 +48,7 @@ export default function CentralPartyStatementReport({
     }).finally(() => {
       setLoading(false);
     });
-  }, [startDate, endDate]);
+  }, [startDate, endDate, customerId]);
 
   const transactions = (data?.transactions || []).filter((t: any) => {
     if (!partyName || !partyName.trim()) return true;
