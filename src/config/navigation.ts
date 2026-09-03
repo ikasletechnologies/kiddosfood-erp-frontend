@@ -120,7 +120,6 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
     label: "Business Status",
     items: [
       { label: "Bank Statement", href: reportLink("financial", "Bank Statement") },
-      { label: "Discount Report", href: reportLink("financial", "Discount Report") },
     ],
   },
   {
@@ -154,7 +153,6 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
     icon: Store,
     label: "Franchise Reports",
     items: [
-      { label: "Franchise Performance", href: reportLink("franchise", "Franchise Performance Summary") },
       { label: "Franchise Outstanding", href: reportLink("franchise", "Franchise Dues & Balances") },
     ],
   },
@@ -193,12 +191,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: AlertTriangle,
         label: "Inventory Alerts",
         href: "/alerts",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: BarChart3,
-        label: "Franchise Performance",
-        href: "/franchise/analytics",
         roles: SUPER_ONLY,
       },
     ],
@@ -399,7 +391,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Receipt,
-        label: "Tax Invoice",
+        label: "Sale Invoice",
         href: "/sales/invoices",
         roles: SUPER_ONLY,
       },

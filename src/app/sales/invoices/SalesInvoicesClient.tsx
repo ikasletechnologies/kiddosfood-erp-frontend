@@ -18,6 +18,7 @@ import api from "@/lib/api/base";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { exportReportToExcel } from "@/lib/excelExport";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -291,6 +292,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // Action Menu State
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
   const [actionMenuRect, setActionMenuRect] = useState<{ top: number; right: number; openUpward: boolean } | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   // Receive Payment Modal State
   const [paymentModalInv, setPaymentModalInv] = useState<any | null>(null);
@@ -443,6 +445,41 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       setSubmittingCancel(false);
     }
   };
+
+  // Close action menu on outside click or Escape key
+  useEffect(() => {
+    if (!openActionMenu) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (actionMenuRef.current && actionMenuRef.current.contains(target as Node)) {
+        return;
+      }
+      if (target.closest && target.closest(`[data-action-btn="${openActionMenu}"]`)) {
+        return;
+      }
+      setOpenActionMenu(null);
+      setActionMenuRect(null);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpenActionMenu(null);
+        setActionMenuRect(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openActionMenu]);
 
   // Close popups on outside click
   useEffect(() => {
@@ -739,7 +776,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </button>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                Tax Invoice — {order.invoiceNum || "—"}
+                Sale Invoice — {order.invoiceNum || "—"}
               </h2>
               {order.sourceProformaInvoiceId && (
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
@@ -1571,6 +1608,51 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // ════════════════════════════════════════════════════════════════════════════
   const fmt = (d: string) => formatDate(d + "T00:00:00");
 
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      showToast("No invoices to export", "error");
+      return;
+    }
+
+    const columns = [
+      { header: "Date", key: "formattedDate" },
+      { header: "Invoice #", key: "invoiceNumber" },
+      { header: "Customer / Party Name", key: "partyName" },
+      { header: "Party Type", key: "partyType" },
+      { header: "Payment Type", key: "paymentType" },
+      { header: "Total Amount (₹)", key: "total", format: "currency" as const },
+      { header: "Balance Due (₹)", key: "balance", format: "currency" as const },
+      { header: "Status", key: "status" },
+    ];
+
+    const data = filtered.map((inv) => ({
+      formattedDate: inv.invoiceDate ? formatDate(inv.invoiceDate + "T00:00:00") : "—",
+      invoiceNumber: inv.invoiceNumber || "—",
+      partyName: inv.customer?.name || inv.customerName || "Walk-In Customer",
+      partyType: inv.partyType || "RETAIL",
+      paymentType: inv.paymentType || "CASH",
+      total: Number(inv.totalAmount || 0),
+      balance: Number(inv.balanceAmount || 0),
+      status: (inv.status || "SENT").toUpperCase(),
+    }));
+
+    exportReportToExcel({
+      filename: `Sale-Invoices_${dateFrom}_${dateTo}.xlsx`,
+      sheetName: "Sale Invoices",
+      title: "Sale Invoices Register",
+      subtitle: `${fmt(dateFrom)} to ${fmt(dateTo)}`,
+      columns,
+      data,
+      totals: {
+        partyName: "Total",
+        total: totalAmt,
+        balance: balanceAmt,
+      },
+    });
+
+    showToast(`Exported ${filtered.length} invoices to Excel`, "success");
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
 
@@ -1582,19 +1664,29 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
           <div className="min-w-0">
             <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              Tax Invoices
+              Sale Invoices
             </h1>
             <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
-              Create, track, and manage GST tax invoices
+              Create, track, and manage GST sale invoices
             </p>
           </div>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
-        >
-          <Plus className="h-4 w-4 shrink-0" /> <span>New Invoice</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 text-xs sm:text-sm font-semibold px-3.5 py-2.5 rounded-xl shadow-2xs hover:bg-gray-50 dark:hover:bg-white/5 transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
+            title="Excel Report"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>Excel Report</span>
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Plus className="h-4 w-4 shrink-0" /> <span>New Invoice</span>
+          </button>
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
@@ -1699,7 +1791,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               <p className="text-gray-900 dark:text-white font-bold text-base sm:text-lg">No Invoices Found</p>
               <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">
                 {search || statusFilter !== "ALL"
-                  ? "No tax invoices match your search or filter criteria."
+                  ? "No sale invoices match your search or filter criteria."
                   : "Create an invoice to start billing your customers."}
               </p>
             </div>
@@ -1806,27 +1898,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               Print
                             </button>
 
-                            {/* Quick Action: Share */}
-                            <button
-                              onClick={(e) => { e.stopPropagation(); showToast(`Share link generated for invoice ${inv.order?.invoiceNum || inv.id}`, "success"); }}
-                              className="px-2 py-1 text-xs font-semibold text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-                              title="Share Invoice"
-                            >
-                              Share
-                            </button>
-
                             {/* 3-Dots Menu Icon (⋮) */}
                             <div className="relative inline-block text-left">
                               <button
+                                data-action-btn={inv.id}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (openActionMenu === inv.id) {
                                     setOpenActionMenu(null);
+                                    setActionMenuRect(null);
                                   } else {
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     const rightSpace = window.innerWidth - rect.right;
                                     const spaceBelow = window.innerHeight - rect.bottom;
-                                    const openUpward = spaceBelow < 320;
+                                    const openUpward = spaceBelow < 380;
                                     setActionMenuRect({
                                       top: openUpward ? rect.top : rect.bottom,
                                       right: Math.max(16, rightSpace - 24),
@@ -1835,7 +1920,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                     setOpenActionMenu(inv.id);
                                   }
                                 }}
-                                className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                                className={clsx(
+                                  "p-1 rounded-lg transition-colors cursor-pointer",
+                                  openActionMenu === inv.id
+                                    ? "bg-orange-100 dark:bg-orange-500/20 text-[#f58220] dark:text-[#f58220]"
+                                    : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5"
+                                )}
                                 title="More Actions"
                               >
                                 <MoreVertical size={16} />
@@ -1844,12 +1934,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               {/* Status-Aware Action Dropdown Card */}
                               {openActionMenu === inv.id && (
                                 <div
+                                  ref={actionMenuRef}
                                   style={
                                     actionMenuRect
                                       ? {
                                         position: "fixed",
-                                        top: actionMenuRect.openUpward ? actionMenuRect.top - 400 : actionMenuRect.top + 6,
-                                        right: actionMenuRect.right,
+                                        ...(actionMenuRect.openUpward
+                                          ? { bottom: `${window.innerHeight - actionMenuRect.top + 6}px` }
+                                          : { top: `${actionMenuRect.top + 6}px` }),
+                                        right: `${actionMenuRect.right}px`,
+                                        maxHeight: actionMenuRect.openUpward
+                                          ? `${Math.max(200, actionMenuRect.top - 16)}px`
+                                          : `${Math.max(200, window.innerHeight - actionMenuRect.top - 16)}px`,
                                         zIndex: 999999,
                                       }
                                       : {
@@ -1859,7 +1955,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                         zIndex: 999999,
                                       }
                                   }
-                                  className="w-60 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-2 animate-in fade-in zoom-in-95 text-left select-none"
+                                  className="w-60 bg-white dark:bg-[#181b2a] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl shadow-slate-400/20 dark:shadow-none p-2 animate-in fade-in zoom-in-95 text-left select-none overflow-y-auto custom-scrollbar"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   {/* Group 1: General Actions */}
@@ -2104,7 +2200,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   <span className="font-mono font-bold text-orange-600 dark:text-orange-400">
                     {paymentModalInv.order?.invoiceNum
                       ? formatERPNumber("INV", paymentModalInv.order.invoiceNum, paymentModalInv.createdAt)
-                      : "Tax Invoice"}
+                      : "Sale Invoice"}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -2223,7 +2319,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[999999] p-4">
             <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
               <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
-                <h3 className="font-bold text-base text-gray-900 dark:text-white">Cancel Tax Invoice</h3>
+                <h3 className="font-bold text-base text-gray-900 dark:text-white">Cancel Sale Invoice</h3>
                 <button onClick={() => setCancellingInv(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-white p-1">
                   <X size={18} />
                 </button>

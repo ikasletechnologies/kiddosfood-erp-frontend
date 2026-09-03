@@ -453,7 +453,7 @@ export default function PaymentInPage() {
     if (!selectedCustomer && !isDraft) { showToast("Please select a party", "error"); return; }
     if ((!amount || Number(amount) <= 0) && !isDraft) { showToast("Enter a valid amount", "error"); return; }
     if (!isDraft) {
-      if (allocationRows.length === 0) { showToast("Select at least one Tax Invoice this payment is against", "error"); return; }
+      if (allocationRows.length === 0) { showToast("Select at least one Sale Invoice this payment is against", "error"); return; }
       for (const row of allocationRows) {
         const rowAmt = Number(row.amountStr) || 0;
         if (rowAmt <= 0) {
@@ -844,9 +844,9 @@ export default function PaymentInPage() {
               outstanding balance. */}
           {selectedCustomer && (
             <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm p-6 space-y-3">
-              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Tax Invoices</div>
+              <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Sale Invoices</div>
               {customerInvoices.length === 0 ? (
-                <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding Tax Invoices found for {selectedCustomer.name}.</p>
+                <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding Sale Invoices found for {selectedCustomer.name}.</p>
               ) : (
                 <>
                   <select

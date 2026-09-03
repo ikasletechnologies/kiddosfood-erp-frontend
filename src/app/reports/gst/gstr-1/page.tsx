@@ -241,7 +241,7 @@ export default function GSTR1Page() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">GSTR-1 (OUTWARD SUPPLIES & RETURNS)</h1>
           <p className="text-xs text-gray-600 mt-0.5">
-            Period: {appliedRange.startDate} to {appliedRange.endDate} &bull; Section: {tab === "sale" ? "Tax Invoices" : "Sales Return"}
+            Period: {appliedRange.startDate} to {appliedRange.endDate} &bull; Section: {tab === "sale" ? "Sale Invoices" : "Sales Return"}
             {search && ` &bull; Search: "${search}"`}
           </p>
         </div>
@@ -263,7 +263,7 @@ export default function GSTR1Page() {
               GSTR-1 (Outward Supplies)
             </h1>
             <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              Outward taxable supplies — final Tax Invoices and approved Sales Returns
+              Outward taxable supplies — final Sale Invoices and approved Sales Returns
             </p>
           </div>
         </div>

@@ -18,6 +18,7 @@ import { clsx } from "clsx";
 import { reportsApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
+import { exportReportToExcel } from "@/lib/excelExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -163,10 +164,45 @@ export default function TrialBalancePage() {
   const difference = Math.abs(totalDebit - totalCredit);
   const isBalanced = difference < 0.01;
 
-  // ── Print Handler ────────────────────────────────────────────────────────────
-
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportExcel = () => {
+    if (filteredRows.length === 0) {
+      toast.error("No entries to export");
+      return;
+    }
+
+    const columns = [
+      { header: "Account / Ledger Name", key: "name" },
+      { header: "Debit Amount (₹)", key: "debit", format: "currency" as const },
+      { header: "Credit Amount (₹)", key: "credit", format: "currency" as const },
+    ];
+
+    const data = filteredRows.map((r) => ({
+      name: r.name,
+      debit: Number(r.debit || 0),
+      credit: Number(r.credit || 0),
+    }));
+
+    const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+
+    exportReportToExcel({
+      filename: `Trial-Balance_${dateFilter.replace(/\s+/g, "-")}.xlsx`,
+      sheetName: "Trial Balance",
+      title: "Trial Balance Report",
+      subtitle: `${from} to ${to}`,
+      columns,
+      data,
+      totals: {
+        name: "Total",
+        debit: totalDebit,
+        credit: totalCredit,
+      },
+    });
+
+    toast.success(`Exported ${filteredRows.length} ledgers to Excel`);
   };
 
   return (
@@ -184,6 +220,15 @@ export default function TrialBalancePage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Excel Report"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel Report</span>
+          </button>
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"

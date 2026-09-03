@@ -135,7 +135,7 @@ export default function POSPage() {
   const [scannedProduct, setScannedProduct] = useState<any>(null);
 
   const handleReturnProduct = () => {
-    const invNum = prompt("Enter Tax Invoice Number to Return:");
+    const invNum = prompt("Enter Sale Invoice Number to Return:");
     if (invNum) {
       toast.success(`Invoice ${invNum} verified. Items restocked and credit note created.`);
     }

@@ -6,6 +6,7 @@ import {
   TrendingUp, 
   TrendingDown, 
   Printer, 
+  FileSpreadsheet,
   Search,
   ChevronDown,
   RotateCcw,
@@ -17,6 +18,8 @@ import {
   PieChart
 } from 'lucide-react';
 import { clsx } from "clsx";
+import { toast } from "react-hot-toast";
+import { exportReportToExcel } from "@/lib/excelExport";
 
 // Currency Formatter
 const fmtCurrency = (val: number | string | undefined | null) => {
@@ -193,6 +196,50 @@ export default function ProfitLossPage() {
     window.print();
   };
 
+  const handleExportExcel = () => {
+    const columns = [
+      { header: "Type", key: "type" },
+      { header: "Category", key: "category" },
+      { header: "Account / Particulars", key: "name" },
+      { header: "Amount (₹)", key: "amount", format: "currency" as const },
+    ];
+
+    const data: Record<string, any>[] = [
+      ...filteredIncomeRows.map((r) => ({
+        type: "INCOME",
+        category: r.category,
+        name: r.name,
+        amount: r.amount,
+      })),
+      ...filteredExpenseRows.map((r) => ({
+        type: "EXPENSE",
+        category: r.category,
+        name: r.name,
+        amount: r.amount,
+      })),
+    ];
+
+    if (data.length === 0) {
+      toast.error("No entries to export");
+      return;
+    }
+
+    exportReportToExcel({
+      filename: `Profit-and-Loss_${dateFilter.replace(/\s+/g, "-")}.xlsx`,
+      sheetName: "Profit & Loss",
+      title: "Profit & Loss Statement",
+      subtitle: `${activeFrom} to ${activeTo}`,
+      columns,
+      data,
+      totals: {
+        name: `Net Profit: ₹${netProfit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+        amount: netProfit,
+      },
+    });
+
+    toast.success("Exported Profit & Loss to Excel");
+  };
+
   const { from: activeFrom, to: activeTo } = getDateRange(dateFilter, customStartDate, customEndDate);
 
   return (
@@ -210,6 +257,15 @@ export default function ProfitLossPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Excel Report"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel Report</span>
+          </button>
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"

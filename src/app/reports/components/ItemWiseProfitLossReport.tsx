@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { X, 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
-  AlertCircleIcon, RefreshCwIcon, TrendingUpIcon
+  AlertCircleIcon, RefreshCwIcon, TrendingUpIcon, FileSpreadsheet
 } from "lucide-react";
 import { reportsApi } from "@/lib/api/accounting.api";
+import { exportReportToExcel } from "@/lib/excelExport";
+import { toast } from "react-hot-toast";
 
 interface ProfitLossRow {
   itemName: string;
@@ -33,7 +35,6 @@ export default function ItemWiseProfitLossReport() {
     async function fetchData() {
       try {
         setLoading(true);
-        // Uses the newly registered endpoint /api/reports/item-profit-loss
         const res = await reportsApi.getItemProfitLoss({ startDate, endDate });
         const data = await res.data;
         
@@ -42,16 +43,16 @@ export default function ItemWiseProfitLossReport() {
         const formatted = rows.map((r: any) => ({
           itemName: r.itemName || r.name || "—",
           sale: Number(r.sale ?? 0),
-          saleReturn: Number(r.saleReturn ?? 0),
+          saleReturn: Number(r.saleReturn ?? r.creditNote ?? 0),
           purchase: Number(r.purchase ?? 0),
-          purchaseReturn: Number(r.purchaseReturn ?? 0),
+          purchaseReturn: Number(r.purchaseReturn ?? r.debitNote ?? 0),
           openingStock: Number(r.openingStock ?? 0),
           closingStock: Number(r.closingStock ?? 0),
           taxReceivable: Number(r.taxReceivable ?? 0),
           taxPayable: Number(r.taxPayable ?? 0),
           mfgCost: Number(r.mfgCost ?? 0),
           consumptionCost: Number(r.consumptionCost ?? 0),
-          netProfitLoss: Number(r.netProfitLoss ?? 0)
+          netProfitLoss: Number(r.netProfitLoss ?? r.profit ?? 0)
         }));
 
         setReportData(formatted);
@@ -70,42 +71,66 @@ export default function ItemWiseProfitLossReport() {
   );
 
   const totalSale = filtered.reduce((sum, r) => sum + r.sale, 0);
+  const totalSaleReturn = filtered.reduce((sum, r) => sum + r.saleReturn, 0);
   const totalPurchase = filtered.reduce((sum, r) => sum + r.purchase, 0);
+  const totalPurchaseReturn = filtered.reduce((sum, r) => sum + r.purchaseReturn, 0);
+  const totalOpeningStock = filtered.reduce((sum, r) => sum + r.openingStock, 0);
+  const totalClosingStock = filtered.reduce((sum, r) => sum + r.closingStock, 0);
+  const totalTaxReceivable = filtered.reduce((sum, r) => sum + r.taxReceivable, 0);
+  const totalTaxPayable = filtered.reduce((sum, r) => sum + r.taxPayable, 0);
+  const totalMfgCost = filtered.reduce((sum, r) => sum + r.mfgCost, 0);
+  const totalConsumptionCost = filtered.reduce((sum, r) => sum + r.consumptionCost, 0);
   const totalNetProfit = filtered.reduce((sum, r) => sum + r.netProfitLoss, 0);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const handleExportCSV = () => {
-    const headers = [
-      "Item Name", "Sale", "Cr. Note / Sale Return", "Purchase", "Dr. Note / Purchase Return", 
-      "Opening Stock", "Closing Stock", "Tax Receivable", "Tax Payable", "Mfg. Cost", 
-      "Consumption Cost", "Net Profit/Loss"
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error("No entries to export");
+      return;
+    }
+
+    const columns = [
+      { header: "Item Name", key: "itemName" },
+      { header: "Sale (₹)", key: "sale", format: "currency" as const },
+      { header: "Cr. Note / Sale Return (₹)", key: "saleReturn", format: "currency" as const },
+      { header: "Purchase (₹)", key: "purchase", format: "currency" as const },
+      { header: "Dr. Note / Purchase Return (₹)", key: "purchaseReturn", format: "currency" as const },
+      { header: "Opening Stock (₹)", key: "openingStock", format: "currency" as const },
+      { header: "Closing Stock (₹)", key: "closingStock", format: "currency" as const },
+      { header: "Tax Receivable (₹)", key: "taxReceivable", format: "currency" as const },
+      { header: "Tax Payable (₹)", key: "taxPayable", format: "currency" as const },
+      { header: "Mfg. Cost (₹)", key: "mfgCost", format: "currency" as const },
+      { header: "Consumption Cost (₹)", key: "consumptionCost", format: "currency" as const },
+      { header: "Net Profit/Loss (₹)", key: "netProfitLoss", format: "currency" as const },
     ];
-    const rows = filtered.map(r => [
-      r.itemName,
-      r.sale.toFixed(2),
-      r.saleReturn.toFixed(2),
-      r.purchase.toFixed(2),
-      r.purchaseReturn.toFixed(2),
-      r.openingStock.toFixed(2),
-      r.closingStock.toFixed(2),
-      r.taxReceivable.toFixed(2),
-      r.taxPayable.toFixed(2),
-      r.mfgCost.toFixed(2),
-      r.consumptionCost.toFixed(2),
-      r.netProfitLoss.toFixed(2)
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Item_Wise_Profit_Loss_Report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    exportReportToExcel({
+      filename: `Item_Wise_Profit_Loss_${startDate || "All"}_${endDate || "All"}.xlsx`,
+      sheetName: "Item Profit & Loss",
+      title: "Item Wise Profit & Loss Details",
+      subtitle: startDate && endDate ? `${startDate} to ${endDate}` : "All Time",
+      columns,
+      data: filtered,
+      totals: {
+        itemName: "Total",
+        sale: totalSale,
+        saleReturn: totalSaleReturn,
+        purchase: totalPurchase,
+        purchaseReturn: totalPurchaseReturn,
+        openingStock: totalOpeningStock,
+        closingStock: totalClosingStock,
+        taxReceivable: totalTaxReceivable,
+        taxPayable: totalTaxPayable,
+        mfgCost: totalMfgCost,
+        consumptionCost: totalConsumptionCost,
+        netProfitLoss: totalNetProfit,
+      },
+    });
+
+    toast.success(`Exported ${filtered.length} items to Excel`);
   };
 
   return (
@@ -157,18 +182,20 @@ export default function ItemWiseProfitLossReport() {
           </div>
 
           <button 
-            onClick={handleExportCSV}
-            className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50"
-            title="Excel Export"
+            onClick={handleExportExcel}
+            className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50 flex items-center gap-1.5 text-xs font-bold"
+            title="Excel Report"
           >
-            <FileTextIcon size={16} />
+            <FileSpreadsheet size={16} />
+            <span className="hidden sm:inline">Excel Report</span>
           </button>
           <button 
             onClick={handlePrint}
-            className="p-2 bg-orange-50 dark:bg-orange-950/20 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-950/40 rounded-xl transition-all border border-orange-100 dark:border-orange-900/50"
+            className="p-2 bg-orange-50 dark:bg-orange-950/20 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-950/40 rounded-xl transition-all border border-orange-100 dark:border-orange-900/50 flex items-center gap-1.5 text-xs font-bold"
             title="Print"
           >
             <PrinterIcon size={16} />
+            <span className="hidden sm:inline">Print</span>
           </button>
         </div>
       </div>
@@ -209,7 +236,7 @@ export default function ItemWiseProfitLossReport() {
       {/* Table Container */}
       <div className="bg-white dark:bg-[#12141c] border border-slate-100 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden flex flex-col flex-1">
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-          <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Item Wise Margins Overview</h3>
+          <h3 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">Item Wise Profit & Loss Details</h3>
         </div>
 
         <div className="overflow-x-auto flex-1">
@@ -227,7 +254,7 @@ export default function ItemWiseProfitLossReport() {
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Sale</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Cr. Note / Sale Return</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Purchase</th>
-                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Dr. Note / Pur Return</th>
+                  <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Dr. Note / Purchase Return</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Opening Stock</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Closing Stock</th>
                   <th className="px-4 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Tax Receivable</th>
@@ -239,33 +266,51 @@ export default function ItemWiseProfitLossReport() {
               </thead>
               <tbody>
                 {filtered.length > 0 ? (
-                  filtered.map((row, idx) => (
-                    <tr 
-                      key={idx}
-                      className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors"
-                    >
-                      <td className="px-4 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">{row.itemName}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-700 dark:text-slate-400 text-right">₹ {row.sale.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-rose-500 text-right">₹ {row.saleReturn.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-700 dark:text-slate-400 text-right">₹ {row.purchase.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-emerald-500 text-right">₹ {row.purchaseReturn.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">{row.openingStock}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">{row.closingStock}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">₹ {row.taxReceivable.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">₹ {row.taxPayable.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">₹ {row.mfgCost.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-xs font-semibold text-slate-600 text-right">₹ {row.consumptionCost.toFixed(2)}</td>
-                      <td className={`px-4 py-4 text-xs font-black text-right ${row.netProfitLoss >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                        ₹ {row.netProfitLoss.toFixed(2)}
+                  <>
+                    {filtered.map((row, idx) => (
+                      <tr 
+                        key={idx}
+                        className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors text-xs font-semibold"
+                      >
+                        <td className="px-4 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">{row.itemName}</td>
+                        <td className="px-4 py-4 text-slate-700 dark:text-slate-300 text-right font-mono">₹ {row.sale.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-amber-600 dark:text-amber-400 text-right font-mono">₹ {row.saleReturn.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-emerald-600 dark:text-emerald-400 text-right font-mono">₹ {row.purchase.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-amber-600 dark:text-amber-400 text-right font-mono">₹ {row.purchaseReturn.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-slate-600 dark:text-slate-400 text-right font-mono">₹ {row.openingStock.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-slate-600 dark:text-slate-400 text-right font-mono">₹ {row.closingStock.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-blue-600 dark:text-blue-400 text-right font-mono">₹ {row.taxReceivable.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-blue-600 dark:text-blue-400 text-right font-mono">₹ {row.taxPayable.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-purple-600 dark:text-purple-400 text-right font-mono">₹ {row.mfgCost.toFixed(2)}</td>
+                        <td className="px-4 py-4 text-purple-600 dark:text-purple-400 text-right font-mono">₹ {row.consumptionCost.toFixed(2)}</td>
+                        <td className={`px-4 py-4 font-mono font-black text-right ${row.netProfitLoss >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                          ₹ {row.netProfitLoss.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-50 dark:bg-slate-900/60 font-bold border-t-2 border-slate-200 dark:border-slate-700 text-xs">
+                      <td className="px-4 py-4 text-slate-900 dark:text-white uppercase">Total</td>
+                      <td className="px-4 py-4 text-slate-900 dark:text-white text-right font-mono">₹ {totalSale.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-amber-600 dark:text-amber-400 text-right font-mono">₹ {totalSaleReturn.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-emerald-600 dark:text-emerald-400 text-right font-mono">₹ {totalPurchase.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-amber-600 dark:text-amber-400 text-right font-mono">₹ {totalPurchaseReturn.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-slate-700 dark:text-slate-300 text-right font-mono">₹ {totalOpeningStock.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-slate-700 dark:text-slate-300 text-right font-mono">₹ {totalClosingStock.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-blue-600 dark:text-blue-400 text-right font-mono">₹ {totalTaxReceivable.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-blue-600 dark:text-blue-400 text-right font-mono">₹ {totalTaxPayable.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-purple-600 dark:text-purple-400 text-right font-mono">₹ {totalMfgCost.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-purple-600 dark:text-purple-400 text-right font-mono">₹ {totalConsumptionCost.toFixed(2)}</td>
+                      <td className={`px-4 py-4 font-mono font-black text-right ${totalNetProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        ₹ {totalNetProfit.toFixed(2)}
                       </td>
                     </tr>
-                  ))
+                  </>
                 ) : (
                   <tr>
                     <td colSpan={12} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <AlertCircleIcon size={24} className="opacity-40" />
-                        <span className="text-xs font-bold">No entries to display.</span>
+                        <span className="text-xs font-bold">No data records found for the selected period.</span>
                       </div>
                     </td>
                   </tr>
@@ -274,18 +319,6 @@ export default function ItemWiseProfitLossReport() {
             </table>
           )}
         </div>
-
-        {/* Totals Summary Footer */}
-        {!loading && filtered.length > 0 && (
-          <div className="bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 px-6 py-4 flex items-center justify-between shrink-0 font-black text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            <span>Total Amount</span>
-            <div className="flex items-center gap-8">
-              <span>Sale: <strong className="text-slate-900 dark:text-white text-sm font-black">₹ {totalSale.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></span>
-              <span>Purchase: <strong className="text-slate-900 dark:text-white text-sm font-black">₹ {totalPurchase.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></span>
-              <span>Net Profit: <strong className="text-emerald-600 dark:text-emerald-400 text-sm font-black">₹ {totalNetProfit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong></span>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -33,6 +33,7 @@ import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import { reportsApi } from "@/lib/api/accounting.api";
 import { formatDate } from "@/lib/utils";
+import { exportReportToExcel } from "@/lib/excelExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -353,34 +354,56 @@ export default function DayBookPage() {
     }, 250);
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (filteredEntries.length === 0) {
       toast.error("No entries to export");
       return;
     }
-    const headers = ["Date", "Ref No", "Name", "Type", "Payment Type", "Total", "Money In", "Money Out", "Particulars"];
-    const rows = filteredEntries.map((e) => [
-      formatDate(e.date || e.createdAt),
-      e.refNo,
-      e.name || e.partyName || "—",
-      e.type || e.transactionType,
-      e.paymentType || e.paymentMode,
-      e.total,
-      e.moneyIn ?? "",
-      e.moneyOut ?? "",
-      `"${(e.particulars || "").replace(/"/g, '""')}"`,
-    ]);
 
-    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `DayBook_${dateFilter.replace(/\s+/g, "_")}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success(`Exported ${filteredEntries.length} entries`);
+    const columns = [
+      { header: "Date", key: "formattedDate" },
+      { header: "Ref No", key: "refNo" },
+      { header: "Name / Party", key: "party" },
+      { header: "Type", key: "type" },
+      { header: "Payment Type", key: "paymentType" },
+      { header: "Total (₹)", key: "total", format: "currency" as const },
+      { header: "Money In (₹)", key: "moneyIn", format: "currency" as const },
+      { header: "Money Out (₹)", key: "moneyOut", format: "currency" as const },
+      { header: "Particulars", key: "particulars" },
+    ];
+
+    const data = filteredEntries.map((e) => ({
+      formattedDate: formatDate(e.date || e.createdAt),
+      refNo: e.refNo,
+      party: e.name || e.partyName || "—",
+      type: e.type || e.transactionType,
+      paymentType: e.paymentType || e.paymentMode,
+      total: Number(e.total || e.amount || 0),
+      moneyIn: e.moneyIn !== null && e.moneyIn !== undefined ? Number(e.moneyIn) : "",
+      moneyOut: e.moneyOut !== null && e.moneyOut !== undefined ? Number(e.moneyOut) : "",
+      particulars: e.particulars || "",
+    }));
+
+    const totalMoneyIn = filteredEntries.reduce((s, e) => s + (Number(e.moneyIn) || 0), 0);
+    const totalMoneyOut = filteredEntries.reduce((s, e) => s + (Number(e.moneyOut) || 0), 0);
+    const totalTransAmt = filteredEntries.reduce((s, e) => s + (Number(e.total || e.amount) || 0), 0);
+    const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+
+    exportReportToExcel({
+      filename: `Day-Book_${dateFilter.replace(/\s+/g, "-")}.xlsx`,
+      sheetName: "Day Book",
+      title: "Day Book Transaction Report",
+      subtitle: `${from} to ${to}`,
+      columns,
+      data,
+      totals: {
+        total: totalTransAmt,
+        moneyIn: totalMoneyIn,
+        moneyOut: totalMoneyOut,
+      },
+    });
+
+    toast.success(`Exported ${filteredEntries.length} entries to Excel`);
   };
 
   const handleCopyShareLink = (entry: DayBookEntry) => {
@@ -441,17 +464,17 @@ export default function DayBookPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
-            title="Export CSV"
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Excel Report"
           >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span className="hidden sm:inline">Export CSV</span>
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel Report</span>
           </button>
 
           <button
             onClick={handlePrintFullReport}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
             title="Print Day Book"
           >
             <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />

@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { X, 
   SearchIcon, FileTextIcon, PrinterIcon, ChevronDownIcon, 
-  AlertCircleIcon
+  AlertCircleIcon, FileSpreadsheet
 } from "lucide-react";
 import { reportsApi } from "@/lib/api/accounting.api";
+import { exportReportToExcel } from "@/lib/excelExport";
+import { toast } from "react-hot-toast";
 
 interface StockDetailRow {
   itemName: string;
@@ -74,24 +76,41 @@ export default function StockDetailReport() {
     window.print();
   };
 
-  const handleExportCSV = () => {
-    const headers = [
-      "Item Name", "Begining Quantity", "Quantity In", "Purchase Amount", 
-      "Quantity Out", "Sale Amount", "Closing Quantity"
+  const handleExportExcel = () => {
+    if (filtered.length === 0) {
+      toast.error("No entries to export");
+      return;
+    }
+
+    const columns = [
+      { header: "Item Name", key: "itemName" },
+      { header: "Beginning Quantity", key: "beginningQuantity", format: "number" as const },
+      { header: "Quantity In", key: "quantityIn", format: "number" as const },
+      { header: "Purchase Amount (₹)", key: "purchaseAmount", format: "currency" as const },
+      { header: "Quantity Out", key: "quantityOut", format: "number" as const },
+      { header: "Sale Amount (₹)", key: "saleAmount", format: "currency" as const },
+      { header: "Closing Quantity", key: "closingQuantity", format: "number" as const },
     ];
-    const rows = filtered.map(r => [
-      r.itemName, r.beginningQuantity, r.quantityIn, r.purchaseAmount.toFixed(2),
-      r.quantityOut, r.saleAmount.toFixed(2), r.closingQuantity
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Stock_Detail_Report_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    exportReportToExcel({
+      filename: `Stock_Detail_${startDate || "All"}_${endDate || "All"}.xlsx`,
+      sheetName: "Stock Detail",
+      title: "Stock Detail Report",
+      subtitle: startDate && endDate ? `${startDate} to ${endDate}` : "All Time",
+      columns,
+      data: filtered,
+      totals: {
+        itemName: "Total",
+        beginningQuantity: totalBegQty,
+        quantityIn: totalQtyIn,
+        purchaseAmount: totalPurAmt,
+        quantityOut: totalQtyOut,
+        saleAmount: totalSaleAmt,
+        closingQuantity: totalClosingQty,
+      },
+    });
+
+    toast.success(`Exported ${filtered.length} items to Excel`);
   };
 
   return (
@@ -146,18 +165,20 @@ export default function StockDetailReport() {
           </div>
 
           <button 
-            onClick={handleExportCSV}
-            className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50"
-            title="Excel Export"
+            onClick={handleExportExcel}
+            className="p-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 rounded-xl transition-all border border-emerald-100 dark:border-emerald-900/50 flex items-center gap-1.5 text-xs font-bold"
+            title="Excel Report"
           >
-            <FileTextIcon size={16} />
+            <FileSpreadsheet size={16} />
+            <span className="hidden sm:inline">Excel Report</span>
           </button>
           <button 
             onClick={handlePrint}
-            className="p-2 bg-orange-50 dark:bg-orange-950/20 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-950/40 rounded-xl transition-all border border-orange-100 dark:border-orange-900/50"
+            className="p-2 bg-orange-50 dark:bg-orange-950/20 text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-950/40 rounded-xl transition-all border border-orange-100 dark:border-orange-900/50 flex items-center gap-1.5 text-xs font-bold"
             title="Print"
           >
             <PrinterIcon size={16} />
+            <span className="hidden sm:inline">Print</span>
           </button>
         </div>
       </div>

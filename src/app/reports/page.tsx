@@ -8,11 +8,11 @@ import {
   Printer,
   FileSpreadsheet,
   RefreshCw,
-  Plus,
   Receipt,
   AlertTriangle,
 } from "lucide-react";
 import { clsx } from "clsx";
+import { exportReportToExcel } from "@/lib/excelExport";
 import toast from "react-hot-toast";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import { reportsApi, accountingApi } from "@/lib/api/accounting.api";
@@ -129,6 +129,10 @@ interface ReportData {
   purchaseGst?: number;
   tdsTotal?: number;
   transactionCount?: number;
+  totalSaleQty?: number;
+  totalSaleAmt?: number;
+  totalPurchaseQty?: number;
+  totalPurchaseAmt?: number;
 }
 
 // ─── Parent Definitions ───────────────────────────────────────────────────────
@@ -173,16 +177,14 @@ const PARENT_REPORTS: ParentReportDef[] = [
 
       // Banking & Loans
       { id: "Bank Statement", label: "Bank Statement", category: "Banking & Loans", description: "Bank transactions and balance." },
-      { id: "Discount Report", label: "Discount Report", category: "Banking & Loans", description: "Discounts allowed on invoices." },
       { id: "Loan Statement", label: "Loan Statement", category: "Banking & Loans", description: "Loan accounts, EMI and interest." },
     ],
   },
   {
     id: "franchise",
     label: "Franchise",
-    description: "Branch performance, dues & balances, party statements and party-wise P&L.",
+    description: "Branch dues & balances, party statements and party-wise P&L.",
     children: [
-      { id: "Franchise Performance Summary", label: "Franchise Performance", description: "Branch revenue and operating metrics." },
       { id: "Franchise Dues & Balances", label: "Franchise Outstanding", description: "Branch dues and outstanding limits." },
       { id: "Party Statement", label: "Party Statement", description: "Party ledger statement." },
       { id: "Party wise Profit & Loss", label: "Party wise Profit & Loss", description: "Profitability per party relationship." },
@@ -268,7 +270,6 @@ const REPORT_SUBGROUP_NAMES: Record<string, string> = {
 
   // Business Status
   "Bank Statement": "Business Status",
-  "Discount Report": "Business Status",
 
   // Tax / GST Reports
   "GST Report": "Tax / GST Reports",
@@ -743,27 +744,34 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
   },
   "Item Report By Party": {
     title: "Item Report By Party",
-    kpiLabel: "Total Transactions",
-    tableTitle: "Item-Party Transactions",
+    kpiLabel: "Total Records",
+    tableTitle: "Item Ledger Grouped By Party",
     columns: [
       { key: "partyName", label: "Party Name" },
       { key: "itemName", label: "Item Name" },
-      { key: "quantity", label: "Qty Sold" },
-      { key: "amount", label: "Amount" },
-      { key: "date", label: "Last Date" },
+      { key: "saleQuantity", label: "Sale Quantity" },
+      { key: "saleAmount", label: "Sale Amount" },
+      { key: "purchaseQuantity", label: "Purchase Quantity" },
+      { key: "purchaseAmount", label: "Purchase Amount" },
     ],
   },
   "Item Wise Profit And Loss": {
-    title: "Item Wise Profit & Loss",
-    kpiLabel: "Item Profit",
-    tableTitle: "Item Profitability",
+    title: "Item Wise Profit & Loss Details",
+    kpiLabel: "Total Items",
+    tableTitle: "Item Wise Profit & Loss Details",
     columns: [
       { key: "itemName", label: "Item Name" },
-      { key: "quantitySold", label: "Qty Sold" },
-      { key: "revenue", label: "Revenue" },
-      { key: "cost", label: "Cost" },
-      { key: "profit", label: "Profit" },
-      { key: "margin", label: "Margin %" },
+      { key: "sale", label: "Sale" },
+      { key: "saleReturn", label: "Cr. Note / Sale Return" },
+      { key: "purchase", label: "Purchase" },
+      { key: "purchaseReturn", label: "Dr. Note / Purchase Return" },
+      { key: "openingStock", label: "Opening Stock" },
+      { key: "closingStock", label: "Closing Stock" },
+      { key: "taxReceivable", label: "Tax Receivable" },
+      { key: "taxPayable", label: "Tax Payable" },
+      { key: "mfgCost", label: "Mfg. Cost" },
+      { key: "consumptionCost", label: "Consumption Cost" },
+      { key: "netProfitLoss", label: "Net Profit/Loss" },
     ],
   },
   "Item Category Wise Profit And Loss": {
@@ -801,7 +809,6 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "date", label: "Date" },
       { key: "itemName", label: "Item Name" },
       { key: "type", label: "Type" },
-      { key: "reference", label: "Reference" },
       { key: "quantityIn", label: "Qty In" },
       { key: "quantityOut", label: "Qty Out" },
       { key: "balance", label: "Balance" },
@@ -1581,7 +1588,6 @@ function transformStockDetail(data: any): ReportData {
         date: fmtDate(r.date || r.createdAt),
         itemName: r.item?.name || r.itemName || "—",
         type: r.type || r.movementType || "—",
-        reference: r.reference || r.referenceNo || "—",
         quantityIn: isIn ? String(Number(r.quantity || 0)) : "—",
         quantityOut: !isIn ? String(Number(r.quantity || 0)) : "—",
         balance: String(Number(r.runningBalance || r.stockAfter || 0)),
@@ -1684,6 +1690,96 @@ function transformGstRateReport(apiData: any): ReportData {
       _rawTaxablePurchase: Number(r.taxablePurchaseAmount) || 0,
       _rawTaxOut: Number(r.taxOut) || 0,
     })),
+  };
+}
+
+function transformItemReportByParty(data: any): ReportData {
+  const rawRows = toArr(data?.rows || data);
+  const rows = rawRows.map((r: any) => {
+    const saleQty = Number(r.saleQuantity ?? r.saleQty ?? 0);
+    const saleAmt = Number(r.saleAmount ?? r.saleValue ?? 0);
+    const purchaseQty = Number(r.purchaseQuantity ?? r.purchaseQty ?? 0);
+    const purchaseAmt = Number(r.purchaseAmount ?? r.purchaseValue ?? 0);
+
+    return {
+      partyName: r.partyName || r.customerName || r.vendorName || "—",
+      itemName: r.itemName || r.name || "—",
+      saleQuantity: saleQty,
+      saleAmount: fmtCurrency(saleAmt),
+      purchaseQuantity: purchaseQty,
+      purchaseAmount: fmtCurrency(purchaseAmt),
+      _rawSaleQty: saleQty,
+      _rawSaleAmt: saleAmt,
+      _rawPurchaseQty: purchaseQty,
+      _rawPurchaseAmt: purchaseAmt,
+    };
+  });
+
+  const totalSaleQty = rows.reduce((s: number, r: any) => s + r._rawSaleQty, 0);
+  const totalSaleAmt = rows.reduce((s: number, r: any) => s + r._rawSaleAmt, 0);
+  const totalPurchaseQty = rows.reduce((s: number, r: any) => s + r._rawPurchaseQty, 0);
+  const totalPurchaseAmt = rows.reduce((s: number, r: any) => s + r._rawPurchaseAmt, 0);
+
+  return {
+    kpiValue: `${rows.length} Records`,
+    kpiSubText: `Sales: ${fmtCurrency(totalSaleAmt)} • Purchases: ${fmtCurrency(totalPurchaseAmt)}`,
+    totalSaleQty,
+    totalSaleAmt,
+    totalPurchaseQty,
+    totalPurchaseAmt,
+    rows,
+  };
+}
+
+function transformItemWiseProfitLoss(data: any): ReportData {
+  const rawRows = toArr(data?.rows || data);
+  const rows = rawRows.map((r: any) => {
+    const sale = Number(r.sale ?? 0);
+    const saleReturn = Number(r.saleReturn ?? r.creditNote ?? 0);
+    const purchase = Number(r.purchase ?? 0);
+    const purchaseReturn = Number(r.purchaseReturn ?? r.debitNote ?? 0);
+    const openingStock = Number(r.openingStock ?? 0);
+    const closingStock = Number(r.closingStock ?? 0);
+    const taxReceivable = Number(r.taxReceivable ?? 0);
+    const taxPayable = Number(r.taxPayable ?? 0);
+    const mfgCost = Number(r.mfgCost ?? 0);
+    const consumptionCost = Number(r.consumptionCost ?? 0);
+    const netProfitLoss = Number(r.netProfitLoss ?? r.profit ?? 0);
+
+    return {
+      itemName: r.itemName || r.name || "—",
+      sale: fmtCurrency(sale),
+      saleReturn: fmtCurrency(saleReturn),
+      purchase: fmtCurrency(purchase),
+      purchaseReturn: fmtCurrency(purchaseReturn),
+      openingStock: fmtCurrency(openingStock),
+      closingStock: fmtCurrency(closingStock),
+      taxReceivable: fmtCurrency(taxReceivable),
+      taxPayable: fmtCurrency(taxPayable),
+      mfgCost: fmtCurrency(mfgCost),
+      consumptionCost: fmtCurrency(consumptionCost),
+      netProfitLoss: fmtCurrency(netProfitLoss),
+      _rawSale: sale,
+      _rawSaleReturn: saleReturn,
+      _rawPurchase: purchase,
+      _rawPurchaseReturn: purchaseReturn,
+      _rawOpeningStock: openingStock,
+      _rawClosingStock: closingStock,
+      _rawTaxReceivable: taxReceivable,
+      _rawTaxPayable: taxPayable,
+      _rawMfgCost: mfgCost,
+      _rawConsumptionCost: consumptionCost,
+      _rawNetProfitLoss: netProfitLoss,
+    };
+  });
+
+  const totalSale = rows.reduce((s: number, r: any) => s + r._rawSale, 0);
+  const totalNetProfit = rows.reduce((s: number, r: any) => s + r._rawNetProfitLoss, 0);
+
+  return {
+    kpiValue: `${rows.length} Items`,
+    kpiSubText: `Total Sale: ${fmtCurrency(totalSale)} • Net Profit/Loss: ${fmtCurrency(totalNetProfit)}`,
+    rows,
   };
 }
 
@@ -2114,9 +2210,9 @@ async function fetchReport(
       case "Stock summary":
         return transformStockSummary((await reportsApi.getStockSummary(params)).data);
       case "Item Report By Party":
-        return transformGeneric((await reportsApi.getItemByParty(params)).data, meta);
+        return transformItemReportByParty((await reportsApi.getItemByParty(params)).data);
       case "Item Wise Profit And Loss":
-        return transformGeneric((await reportsApi.getItemProfitLoss(params)).data, meta);
+        return transformItemWiseProfitLoss((await reportsApi.getItemProfitLoss(params)).data);
       case "Item Category Wise Profit And Loss":
         return transformGeneric((await reportsApi.getItemCategoryProfitLoss(params)).data, meta);
       case "Low Stock Summary":
@@ -2462,6 +2558,82 @@ function ReportsContent() {
     toast.error("Sharing is not supported in this browser");
   };
 
+  const handleExportExcel = async () => {
+    if (!activeChild) return;
+    const toastId = toast.loading("Generating complete Excel export...");
+    try {
+      const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
+      const fullData = await fetchReport(activeChild.id, {
+        startDate: from,
+        endDate: to,
+        search: tableSearchTerm.trim() || undefined,
+        limit: 10000,
+      });
+      const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
+        Object.values(row).some((val) =>
+          String(val).toLowerCase().includes(tableSearchTerm.toLowerCase())
+        )
+      );
+      if (rowsToExport.length === 0) {
+        toast.error("No data to export", { id: toastId });
+        return;
+      }
+      const cols = currentMeta.columns.map((c) => ({
+        header: c.label,
+        key: c.key,
+        format: (["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout"].some((k) => c.key.toLowerCase().includes(k)) ? "currency" : ["quantity", "qty", "count", "units", "items"].some((k) => c.key.toLowerCase().includes(k)) ? "number" : "string") as any
+      }));
+
+      // Calculate totals if applicable
+      let totalsRow: Record<string, any> | undefined = undefined;
+      if (isPaymentRegister && paymentSummary) {
+        totalsRow = {
+          name: "Total",
+          totalAmount: paymentSummary.totalAmount,
+          receivableAmount: paymentSummary.receivableAmount,
+          balanceAmount: paymentSummary.balanceAmount,
+        };
+      } else if (isItemReportByParty) {
+        totalsRow = {
+          partyName: "Total",
+          saleQuantity: rowsToExport.reduce((sum, r) => sum + Number(r._rawSaleQty ?? r.saleQuantity ?? 0), 0),
+          saleAmount: rowsToExport.reduce((sum, r) => sum + Number(r._rawSaleAmt ?? r.saleAmount ?? 0), 0),
+          purchaseQuantity: rowsToExport.reduce((sum, r) => sum + Number(r._rawPurchaseQty ?? r.purchaseQuantity ?? 0), 0),
+          purchaseAmount: rowsToExport.reduce((sum, r) => sum + Number(r._rawPurchaseAmt ?? r.purchaseAmount ?? 0), 0),
+        };
+      } else if (isItemWiseProfitLoss) {
+        totalsRow = {
+          itemName: "Total",
+          sale: rowsToExport.reduce((sum, r) => sum + Number(r._rawSale ?? 0), 0),
+          saleReturn: rowsToExport.reduce((sum, r) => sum + Number(r._rawSaleReturn ?? 0), 0),
+          purchase: rowsToExport.reduce((sum, r) => sum + Number(r._rawPurchase ?? 0), 0),
+          purchaseReturn: rowsToExport.reduce((sum, r) => sum + Number(r._rawPurchaseReturn ?? 0), 0),
+          openingStock: rowsToExport.reduce((sum, r) => sum + Number(r._rawOpeningStock ?? 0), 0),
+          closingStock: rowsToExport.reduce((sum, r) => sum + Number(r._rawClosingStock ?? 0), 0),
+          taxReceivable: rowsToExport.reduce((sum, r) => sum + Number(r._rawTaxReceivable ?? 0), 0),
+          taxPayable: rowsToExport.reduce((sum, r) => sum + Number(r._rawTaxPayable ?? 0), 0),
+          mfgCost: rowsToExport.reduce((sum, r) => sum + Number(r._rawMfgCost ?? 0), 0),
+          consumptionCost: rowsToExport.reduce((sum, r) => sum + Number(r._rawConsumptionCost ?? 0), 0),
+          netProfitLoss: rowsToExport.reduce((sum, r) => sum + Number(r._rawNetProfitLoss ?? 0), 0),
+        };
+      }
+
+      exportReportToExcel({
+        filename: `${(activeChild?.label || "Report").replace(/\s+/g, "-")}_${from}_${to}.xlsx`,
+        sheetName: (activeChild?.label || "Report").slice(0, 31),
+        title: `${currentMeta.title || activeChild?.label || "Report"}`,
+        subtitle: `${from} to ${to}`,
+        columns: cols,
+        data: rowsToExport,
+        totals: totalsRow,
+      });
+
+      toast.success(`Excel Exported (${rowsToExport.length} records)`, { id: toastId });
+    } catch {
+      toast.error("Export failed", { id: toastId });
+    }
+  };
+
   const handleExportCSV = async () => {
     if (!activeChild) return;
     const toastId = toast.loading("Generating complete CSV export...");
@@ -2528,6 +2700,8 @@ function ReportsContent() {
   const isGstRateReport = activeChild?.id === "GST Rate Report";
   const isTdsPayable = activeChild?.id === "TDS Payable";
   const isTdsReceivable = activeChild?.id === "TDS Receivable";
+  const isItemReportByParty = activeChild?.id === "Item Report By Party";
+  const isItemWiseProfitLoss = activeChild?.id === "Item Wise Profit And Loss";
   const isTaxComplianceReport = isGstReport || isGstRateReport || isTdsPayable || isTdsReceivable;
 
   const taxComplianceSummary = useMemo(() => {
@@ -2569,18 +2743,6 @@ function ReportsContent() {
             )}
           </div>
         </div>
-
-        {!isTaxComplianceReport && (
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => router.push("/sales/invoices")}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
-            >
-              <Plus className="h-4 w-4 shrink-0" />
-              <span>New Invoice</span>
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
@@ -2851,27 +3013,25 @@ function ReportsContent() {
 
           <div className="flex-1 hidden sm:block" />
 
-          {/* Print & Refresh */}
+          {/* Print, Excel & Refresh */}
           <div className="flex items-center gap-2 shrink-0">
             <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+              title="Export to Excel"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Excel Report</span>
+            </button>
+
+            <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
               title="Print"
             >
               <Printer className="h-4 w-4 text-gray-500 dark:text-slate-400" />
               <span>Print</span>
             </button>
-
-            {isTaxComplianceReport && (
-              <button
-                onClick={handleExportCSV}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs"
-                title="Export to Excel"
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Excel</span>
-              </button>
-            )}
 
             <button
               onClick={() => {
@@ -2923,7 +3083,7 @@ function ReportsContent() {
                         {col.label}
                       </th>
                     ))}
-                    {!isTaxComplianceReport && (
+                    {!isTaxComplianceReport && !isItemReportByParty && !isItemWiseProfitLoss && (
                       <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
                         Actions
                       </th>
@@ -2958,7 +3118,47 @@ function ReportsContent() {
                                 >
                                   {row[col.key]}
                                 </span>
+                              ) : col.key === "netProfitLoss" ? (
+                                <span className={clsx("font-mono font-bold", (row._rawNetProfitLoss ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                                  {row[col.key] ?? "—"}
+                                </span>
                               ) : col.key === "totalAmount" ? (
+                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "sale" || col.key === "saleAmount" ? (
+                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "purchase" || col.key === "purchaseAmount" ? (
+                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "saleReturn" || col.key === "purchaseReturn" ? (
+                                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "taxPayable" || col.key === "taxReceivable" ? (
+                                <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "mfgCost" || col.key === "consumptionCost" ? (
+                                <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "saleQuantity" || col.key === "purchaseQuantity" ? (
+                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
+                                  {row[col.key] ?? "0"}
+                                </span>
+                              ) : col.key === "quantityIn" ? (
+                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "quantityOut" ? (
+                                <span className="font-mono font-semibold text-rose-600 dark:text-rose-400">
+                                  {row[col.key] ?? "—"}
+                                </span>
+                              ) : col.key === "balance" ? (
                                 <span className="font-mono font-semibold text-gray-900 dark:text-white">
                                   {row[col.key] ?? "—"}
                                 </span>
@@ -2975,7 +3175,7 @@ function ReportsContent() {
                               )}
                             </td>
                           ))}
-                          {!isTaxComplianceReport && (
+                          {!isTaxComplianceReport && !isItemReportByParty && !isItemWiseProfitLoss && (
                             <td className="px-5 py-3.5 text-right">
                               <button
                                 onClick={() => handlePrintRow(row)}
@@ -3016,11 +3216,73 @@ function ReportsContent() {
                           </td>
                         </tr>
                       )}
+                      {isItemReportByParty && filteredRows.length > 0 && (
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white" colSpan={2}>Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                            {filteredRows.reduce((sum, r) => sum + Number(r._rawSaleQty ?? r.saleQuantity ?? 0), 0)}
+                          </td>
+                          <td className="px-5 py-3.5 text-orange-600 dark:text-orange-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((sum, r) => sum + Number(r._rawSaleAmt ?? 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                            {filteredRows.reduce((sum, r) => sum + Number(r._rawPurchaseQty ?? r.purchaseQuantity ?? 0), 0)}
+                          </td>
+                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((sum, r) => sum + Number(r._rawPurchaseAmt ?? 0), 0))}
+                          </td>
+                        </tr>
+                      )}
+                      {isItemWiseProfitLoss && filteredRows.length > 0 && (
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 text-xs">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawSale || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawSaleReturn || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawPurchase || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawPurchaseReturn || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawOpeningStock || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawClosingStock || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawTaxReceivable || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawTaxPayable || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawMfgCost || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono">
+                            {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawConsumptionCost || 0), 0))}
+                          </td>
+                          <td className="px-5 py-3.5 font-mono">
+                            {(() => {
+                              const netTotal = filteredRows.reduce((s, r) => s + Number(r._rawNetProfitLoss || 0), 0);
+                              return (
+                                <span className={netTotal >= 0 ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-rose-600 dark:text-rose-400 font-bold"}>
+                                  {fmtCurrency(netTotal)}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      )}
                     </>
                   ) : (
                     <tr>
                       <td
-                        colSpan={currentMeta.columns.length + (isTaxComplianceReport ? 0 : 1)}
+                        colSpan={currentMeta.columns.length + (isTaxComplianceReport || isItemReportByParty || isItemWiseProfitLoss ? 0 : 1)}
                         className={clsx(
                           "px-5 py-16 text-center text-xs",
                           reportData?.error ? "text-rose-500 dark:text-rose-400 font-medium" : "text-gray-400 dark:text-slate-500"

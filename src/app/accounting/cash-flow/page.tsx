@@ -29,6 +29,7 @@ import { clsx } from "clsx";
 import { accountingApi, reportsApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
+import { exportReportToExcel } from "@/lib/excelExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -427,44 +428,52 @@ export default function CashFlowPage() {
     }, 250);
   };
 
-  const handleExportCSV = () => {
+  const handleExportExcel = () => {
     if (!filteredEntries.length) {
       toast.error("No transactions to export for the selected period");
       return;
     }
     const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
-    const headers = [
-      "Date",
-      "Ref No.",
-      "Name",
-      "Category",
-      "Type",
-      "Cash In",
-      "Cash Out",
-      "Running Balance",
-      "Particulars",
+    const columns = [
+      { header: "Date", key: "formattedDate" },
+      { header: "Ref No", key: "refNo" },
+      { header: "Party / Account", key: "party" },
+      { header: "Category", key: "category" },
+      { header: "Type", key: "type" },
+      { header: "Cash In (₹)", key: "cashIn", format: "currency" as const },
+      { header: "Cash Out (₹)", key: "cashOut", format: "currency" as const },
+      { header: "Running Balance (₹)", key: "runningBalance", format: "currency" as const },
+      { header: "Particulars", key: "particulars" },
     ];
-    const rows = filteredEntries.map((e) => [
-      `"${formatDate(e.date || e.createdAt)}"`,
-      `"${(e.refNo || "").replace(/"/g, '""')}"`,
-      `"${(e.name || e.partyName || "—").replace(/"/g, '""')}"`,
-      `"${(e.category || "").replace(/"/g, '""')}"`,
-      `"${(e.type || "").replace(/"/g, '""')}"`,
-      `"${e.cashIn ? Number(e.cashIn).toFixed(2) : ""}"`,
-      `"${e.cashOut ? Number(e.cashOut).toFixed(2) : ""}"`,
-      `"${Number(e.runningBalance).toFixed(2)}"`,
-      `"${(e.particulars || "").replace(/"/g, '""')}"`,
-    ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Cash_Flow_${from}_${to}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success(`Exported ${filteredEntries.length} Cash Flow records to CSV`);
+    const data = filteredEntries.map((e) => ({
+      formattedDate: formatDate(e.date || e.createdAt),
+      refNo: e.refNo || "—",
+      party: e.name || e.partyName || "—",
+      category: e.category || "—",
+      type: e.type || e.transactionType || "—",
+      cashIn: e.cashIn !== null && e.cashIn !== undefined ? Number(e.cashIn) : "",
+      cashOut: e.cashOut !== null && e.cashOut !== undefined ? Number(e.cashOut) : "",
+      runningBalance: Number(e.runningBalance || 0),
+      particulars: e.particulars || "",
+    }));
+
+    exportReportToExcel({
+      filename: `Cash-Flow_${dateFilter.replace(/\s+/g, "-")}.xlsx`,
+      sheetName: "Cash Flow",
+      title: "Cash Flow Statement",
+      subtitle: `${from} to ${to}`,
+      columns,
+      data,
+      totals: {
+        type: "Total",
+        cashIn: computedSummary.cashIn,
+        cashOut: computedSummary.cashOut,
+        runningBalance: computedSummary.closing,
+      },
+    });
+
+    toast.success(`Exported ${filteredEntries.length} entries to Excel`);
   };
 
   const handleCopyShareLink = (entry: CashFlowEntry) => {
@@ -515,12 +524,12 @@ export default function CashFlowPage() {
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={handleExportCSV}
+            onClick={handleExportExcel}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
-            title="Export CSV"
+            title="Excel Report"
           >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span className="hidden sm:inline">Export CSV</span>
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel Report</span>
           </button>
 
           <button

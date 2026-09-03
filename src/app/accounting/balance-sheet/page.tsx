@@ -24,6 +24,7 @@ import {
 import { clsx } from "clsx";
 import { reportsApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
+import { exportReportToExcel } from "@/lib/excelExport";
 import { formatDate } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -154,10 +155,60 @@ export default function BalanceSheetPage() {
   const difference = Math.abs(totalAssets - totalLiabilitiesAndEquity);
   const isBalanced = difference < 0.01;
 
-  // ── Print Handler ────────────────────────────────────────────────────────────
-
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportExcel = () => {
+    if (!data) {
+      toast.error("No balance sheet data to export");
+      return;
+    }
+
+    const columns = [
+      { header: "Classification", key: "section" },
+      { header: "Group / Category", key: "category" },
+      { header: "Account / Ledger / Particulars", key: "name" },
+      { header: "Amount (₹)", key: "amount", format: "currency" as const },
+    ];
+
+    const rows: Record<string, any>[] = [];
+
+    // Assets
+    (data.assets || []).forEach((a) => {
+      rows.push({
+        section: "ASSETS",
+        category: a.name,
+        name: a.name,
+        amount: a.amount,
+      });
+    });
+
+    // Liabilities & Equity
+    (data.liabilities || []).forEach((l) => {
+      rows.push({
+        section: "LIABILITIES & EQUITY",
+        category: l.name,
+        name: l.name,
+        amount: l.amount,
+      });
+    });
+
+    exportReportToExcel({
+      filename: `Balance-Sheet_${asOfDate || "latest"}.xlsx`,
+      sheetName: "Balance Sheet",
+      title: "Balance Sheet Statement",
+      subtitle: `As of ${asOfDate || new Date().toLocaleDateString("en-IN")}`,
+      columns,
+      data: rows,
+      totals: {
+        category: `Total Assets: ₹${totalAssets.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+        name: `Total Liabilities & Equity: ₹${totalLiabilitiesAndEquity.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+        amount: totalAssets,
+      },
+    });
+
+    toast.success("Exported Balance Sheet to Excel");
   };
 
   // ── Filtered breakdown items ─────────────────────────────────────────────────
@@ -198,6 +249,15 @@ export default function BalanceSheetPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
+            title="Excel Report"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Excel Report</span>
+          </button>
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
