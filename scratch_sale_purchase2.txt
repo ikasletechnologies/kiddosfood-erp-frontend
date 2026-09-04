@@ -1,0 +1,133 @@
+﻿
+          
+          if (!partyItemMap.has(key)) {
+            partyItemMap.set(key, { partyName, itemName, uom, saleQuantity: 0, saleAmount: 0, purchaseQuantity: 0, 
+purchaseAmount: 0 });
+          }
+          const row = partyItemMap.get(key);
+          row.saleQuantity += item.quantity;
+          row.saleAmount += (item.totalAmount || (item.quantity * ((item as any).unitPrice || 0)));
+        }
+      }
+  
+      // Process Purchases
+      for (const po of pos) {
+        const partyName = (po as any).vendor?.name || 'Unknown Vendor';
+        for (const item of (po as any).poItems || []) {
+          const itemName = item.inventoryItem?.name || item.itemName || 'Unknown Item';
+          const uom = item.inventoryItem?.unit || 'Unit';
+          const key = `${partyName}_${itemName}`;
+          
+          if (!partyItemMap.has(key)) {
+            partyItemMap.set(key, { partyName, itemName, uom, saleQuantity: 0, saleAmount: 0, purchaseQuantity: 0, 
+purchaseAmount: 0 });
+          }
+          const row = partyItemMap.get(key);
+          row.purchaseQuantity += item.quantity;
+          row.purchaseAmount += item.totalAmount;
+        }
+      }
+  
+      return Array.from(partyItemMap.values());
+    }
+  
+>   static async getSalePurchaseByParty(filters: {
+      franchiseId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    }) {
+      const { franchiseId, startDate, endDate } = filters;
+      const { start, end } = parseInclusiveDates(startDate, endDate);
+  
+      const partyMap = new Map<string, { partyName: string; partyType: string; saleAmount: number; purchaseAmount: 
+number; net: number }>();
+  
+      // Fetch Sales
+      const orders = await prisma.order.findMany({
+        where: finalSaleWhere({
+          franchiseId,
+          createdAt: {
+            ...(start ? { gte: start } : {}),
+            ...(end ? { lte: end } : {})
+          }
+        }),
+        include: { customer: true }
+      });
+  
+      for (const order of orders) {
+        const isCash = !order.customerId;
+        const partyName = order.customer ? order.customer.name : (order.customerName || 'Cash Customer');
+        const partyType = isCash ? 'Cash Customers' : 'Customers';
+        if (!partyMap.has(partyName)) {
+          partyMap.set(partyName, { partyName, partyType, saleAmount: 0, purchaseAmount: 0, net: 0 });
+        }
+        partyMap.get(partyName)!.saleAmount += order.totalAmount;
+      }
+        if (!categoryMap[cat]) categoryMap[cat] = { category: cat, count: 0, totalAmount: 0, paidAmount: 0, 
+unpaidAmount: 0 };
+        categoryMap[cat].count += 1;
+        categoryMap[cat].totalAmount += e.amount;
+        categoryMap[cat].paidAmount += e.paidAmount || 0;
+        categoryMap[cat].unpaidAmount += e.amount - (e.paidAmount || 0);
+      });
+  
+      const totalAmount = expenses.reduce((s, e) => s + e.amount, 0);
+      const totalPaid = expenses.reduce((s, e) => s + (e.paidAmount || 0), 0);
+  
+      return {
+        expenses,
+        categoryBreakdown: Object.values(categoryMap),
+        summary: {
+          totalExpenses: Number(totalAmount.toFixed(2)),
+          totalPaid: Number(totalPaid.toFixed(2)),
+          totalUnpaid: Number((totalAmount - totalPaid).toFixed(2)),
+          count: expenses.length
+        }
+      };
+    }
+  
+    static async getExpenseCategoryReportData(franchiseIdOrFilters?: any, startDateParam?: string, endDateParam?: 
+string) {
+      return this.getExpensesReportData(franchiseIdOrFilters, startDateParam, endDateParam);
+    }
+  
+    static async getExpenseItemReportData(franchiseIdOrFilters?: any, startDateParam?: string, endDateParam?: string, 
+categoryParam?: string) {
+      return this.getExpensesReportData(franchiseIdOrFilters, startDateParam, endDateParam, categoryParam);
+    }
+  
+>   static async getSalePurchaseByPartyGroupData(franchiseId: string, startDate?: string, endDate?: string) {
+>     const parties = await this.getSalePurchaseByParty({
+        franchiseId,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined
+      });
+  
+      const groupMap: Record<string, { groupName: string; saleAmount: number; purchaseAmount: number; net: number }> = 
+{};
+      const getGroup = (name: string) => {
+        if (!groupMap[name]) groupMap[name] = { groupName: name, saleAmount: 0, purchaseAmount: 0, net: 0 };
+        return groupMap[name];
+      };
+  
+      for (const party of parties) {
+        const group = getGroup(party.partyType);
+        group.saleAmount += party.saleAmount;
+        group.purchaseAmount += party.purchaseAmount;
+        group.net += party.net;
+      }
+  
+      return Object.values(groupMap).filter(r => r.saleAmount !== 0 || r.purchaseAmount !== 0);
+    }
+  
+    /**
+     * Receivables side of getAllPartiesData (CUSTOMER/DEALER/FRANCHISE) â€” real
+     * outstanding balance summed per party from actual Tax Invoices (Order+
+     * Invoice+Payment), NOT CustomerLedger. Deliberately not ledger-sourced:
+     * POSService.checkout and the fixed FinanceService.createInvoice never
+     * reliably post SALE/PAYMENT ledger entries for every flow (see
+     * CustomerService.getOutstandingBalances, which this generalizes to
+     * DEALER/FRANCHISE using the same partyType/partyId fields
+     * DealerService.getTransactions already keys off).
+
+

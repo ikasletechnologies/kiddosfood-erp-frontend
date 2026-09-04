@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import {
+import { 
   Search,
   ChevronDown,
   Printer,
@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Receipt,
   AlertTriangle,
+  X
 } from "lucide-react";
 import { clsx } from "clsx";
 import { exportReportToExcel } from "@/lib/excelExport";
@@ -2743,6 +2744,18 @@ function ReportsContent() {
             )}
           </div>
         </div>
+
+        {!isTaxComplianceReport && !activeChild?.id.includes("Expense") && !activeChild?.id.includes("Party") && !activeChild?.id.includes("All Parties") && !activeChild?.id.includes("Sale Purchase By Party") && (
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => router.push("/sales/invoices")}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-semibold rounded-lg shadow-sm transition-all shadow-orange-500/10 whitespace-nowrap"
+            >
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>New Invoice</span>
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
@@ -2971,6 +2984,13 @@ function ReportsContent() {
               onChange={(e) => setTableSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 outline-none focus:border-[#f58220]"
             />
+            {tableSearchTerm && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setTableSearchTerm("")} 
+              />
+            )}
           </div>
 
           {/* Date Preset Filter */}

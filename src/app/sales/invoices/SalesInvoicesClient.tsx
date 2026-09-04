@@ -975,6 +975,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                       />
+            {customerSearch && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setCustomerSearch("")} 
+              />
+            )}
                       {customerSearch && (
                         <X 
                           size={14} 

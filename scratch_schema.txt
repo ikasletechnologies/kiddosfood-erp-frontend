@@ -1,0 +1,91 @@
+﻿
+> model Order {
+    id                      String        @id @default(uuid())
+    invoiceNum              String        @unique
+    partyType               PartyType?
+    partyId                 String?
+    customerId              String?
+    customerName            String?
+    branchId                String?
+    franchiseId             String
+    orderType               String        @default("DINE_IN")
+    status                  OrderStatus   @default(COMPLETED)
+    subTotal                Float
+    taxAmount               Float
+    discountAmount          Float         @default(0)
+    totalAmount             Float
+    paymentStatus           String        @default("PAID")
+    paymentType             String        @default("CASH")
+    stateOfSupply           String?
+    inventory_deducted      Boolean       @default(false)
+    sourceQuotationId       String?
+    sourceProformaInvoiceId String?
+    createdAt               DateTime      @default(now())
+    delivery                Delivery?
+    invoice                 Invoice?
+    customer                Customer?     @relation(fields: [customerId], references: [id])
+    franchise               Franchise     @relation(fields: [franchiseId], references: [id])
+    orderItems              OrderItem[]
+    payments                Payment[]
+    returns                 ReturnOrder[]
+  
+    @@index([franchiseId, createdAt])
+    @@index([createdAt])
+    @@index([franchiseId, status])
+    @@index([customerId, paymentStatus])
+    @@index([franchiseId, paymentStatus])
+  }
+  
+> model OrderItem {
+    id          String  @id @default(uuid())
+    orderId     String
+    productId   String
+    quantity    Float
+    unit        String  @default("NONE")
+    price       Float
+    discountPct Float   @default(0)
+    taxAmount   Float?
+    totalAmount Float?
+    batchNumber String?
+    unitCost    Float?
+    totalCost   Float?
+    order       Order   @relation(fields: [orderId], references: [id])
+    product     Product @relation(fields: [productId], references: [id])
+  }
+  
+  model Payment {
+    id                  String                @id @default(uuid())
+    orderId             String?
+    paymentMode         PaymentMode           @default(CASH)
+    paidAmount          Float
+    transactionRef      String?
+    status              String                @default("SUCCESS")
+    invoiceId           String?
+    createdAt           DateTime              @default(now())
+    accountId           String?
+    entityId            String?
+    entityType          String?
+    type                AccountingPaymentType @default(INVOICE_LINKED)
+    approvedBy          String?
+    cancelledAt         DateTime?
+    createdBy           String?
+    isCancelled         Boolean               @default(false)
+    linkedDocId         String?
+    linkedDocType       LinkedDocType?
+    paymentNumber       String?               @unique
+    idempotencyKey      String?               @unique
+    reversalOfPaymentId String?
+    sourceModule        PaymentSourceModule   @default(MANUAL)
+    vendorInvoiceId     String?
+    account             Account?              @relation(fields: [accountId], references: [id])
+    invoice             Invoice?              @relation(fields: [invoiceId], references: [id])
+    order               Order?                @relation(fields: [orderId], references: [id])
+    vendorInvoice       VendorInvoice?        @relation(fields: [vendorInvoiceId], references: [id])
+    allocations         PaymentAllocation[]
+  
+    @@index([orderId])
+    @@index([status, createdAt])
+  }
+  
+
+

@@ -13,8 +13,8 @@ import { reportsApi } from "@/lib/api/accounting.api";
 
 interface SalePurchaseRow {
   partyName: string;
-  saleAmount: number;
-  purchaseAmount: number;
+  totalSale: number;
+  totalPurchase: number;
 }
 
 export default function CentralSalePurchaseByParty({
@@ -69,8 +69,8 @@ export default function CentralSalePurchaseByParty({
     r.partyName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalSaleAmt = filtered.reduce((s, r) => s + r.saleAmount, 0);
-  const totalPurchaseAmt = filtered.reduce((s, r) => s + r.purchaseAmount, 0);
+  const totalSaleAmt = filtered.reduce((s, r) => s + (r.totalSale || 0), 0);
+  const totalPurchaseAmt = filtered.reduce((s, r) => s + (r.totalPurchase || 0), 0);
 
   return (
     <div className="flex flex-col h-full bg-[#f1f5f9] dark:bg-[#090a0f] space-y-4 p-6 overflow-hidden">
@@ -192,8 +192,8 @@ export default function CentralSalePurchaseByParty({
                   <tr key={idx} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition-colors bg-blue-50/30 dark:bg-blue-900/10">
                     <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-center">{idx + 1}</td>
                     <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white font-bold">{row.partyName}</td>
-                    <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-center font-medium text-emerald-500">{fmt(row.saleAmount)}</td>
-                    <td className="px-4 py-4 text-right">{fmt(row.purchaseAmount)}</td>
+                    <td className="px-4 py-4 border-r border-slate-100 dark:border-slate-800 text-center font-medium text-emerald-500">{fmt(row.totalSale)}</td>
+                    <td className="px-4 py-4 text-right">{fmt(row.totalPurchase)}</td>
                   </tr>
                 ))
               )}

@@ -43,6 +43,7 @@ export default function CentralExpenseReport({
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [fetching, setFetching] = useState(false);
+  const [summary, setSummary] = useState({ totalExpenses: 0, totalPaid: 0, totalUnpaid: 0 });
 
   const fetchExpenses = () => {
     setFetching(true);
@@ -53,6 +54,7 @@ export default function CentralExpenseReport({
       })
       .then((res: any) => {
         setExpenses(res.data?.expenses || []);
+        if (res.data?.summary) setSummary(res.data.summary);
       })
       .catch(() => {
         toast.error("Failed to load expenses");
@@ -185,13 +187,14 @@ export default function CentralExpenseReport({
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Payee</th>
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Payment Mode</th>
+   <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Status</th>
                 <th className="px-5 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
               </tr>
             </thead>
             <tbody>
               {fetching || loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-24">
+                  <td colSpan={8} className="text-center py-24">
                     <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="text-xs text-slate-400 mt-3 font-medium">Fetching business expenses...</p>
                   </td>
@@ -220,6 +223,11 @@ export default function CentralExpenseReport({
                     <td className="px-5 py-3.5 text-[13px] font-semibold text-slate-600 dark:text-slate-400">
                       {e.paymentMode || "CASH"}
                     </td>
+                    <td className="px-5 py-3.5 text-[13px] font-black text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] uppercase tracking-wide ${e.status === 'PAID' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        {e.status || 'UNPAID'}
+                      </span>
+                    </td>
                     <td className="px-5 py-3.5 text-[13px] font-black text-slate-900 dark:text-white text-right tabular-nums">
                       {fmt(e.amount)}
                     </td>
@@ -232,9 +240,13 @@ export default function CentralExpenseReport({
 
         {/* SUMMARY FOOTER */}
         {expenses.length > 0 && (
-          <div className="bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-700 p-5 flex justify-end items-center text-right font-black">
+          <div className="bg-slate-50 dark:bg-slate-800/40 border-t border-slate-200 dark:border-slate-700 p-5 flex flex-wrap justify-between items-center text-right font-black gap-4">
+            <div className="flex items-center gap-6 text-[13px]">
+              <div className="text-slate-500">Paid: <span className="text-green-600">{fmt(summary.totalPaid)}</span></div>
+              <div className="text-slate-500">Pending: <span className="text-orange-500">{fmt(summary.totalUnpaid)}</span></div>
+            </div>
             <div className="text-slate-800 dark:text-slate-200 text-[14px]">
-              Total Expense: <span className="text-red-600 dark:text-red-400 text-[16px]">{fmt(totalExpense)}</span>
+              Total Expense: <span className="text-red-600 dark:text-red-400 text-[16px]">{fmt(summary.totalExpenses)}</span>
             </div>
           </div>
         )}

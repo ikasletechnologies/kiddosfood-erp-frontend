@@ -1,0 +1,17 @@
+﻿
+> C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\app.ts:353:app.get('/api/reports/sale-purchase-by-party', 
+authenticate, authorizeRole(['SUPER_ADMIN', 'FRANCHISE_ADMIN']), FinanceController.getSalePurchaseByParty);
+> C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\app.ts:354:app.get('/api/reports/sale-purchase-by-party-gr
+oup', authenticate, authorizeRole(['SUPER_ADMIN', 'FRANCHISE_ADMIN']), FinanceController.getSalePurchaseByPartyGroup);
+  C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\app.ts:355:app.get('/api/reports/all-parties', 
+authenticate, authorizeRole(['SUPER_ADMIN', 'FRANCHISE_ADMIN']), FinanceController.getAllPartiesReport);
+  C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\app.ts:356:app.get('/api/reports/party-invoices', 
+authenticate, authorizeRole(['SUPER_ADMIN', 'FRANCHISE_ADMIN']), FinanceController.getPartyInvoices);
+> C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\modules\users\nav.controller.ts:99:                  { 
+title: 'Sale Purchase By Party', path: '/reports/sale-purchase-by-party' },
+> C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\modules\users\nav.controller.ts:100:                  { 
+title: 'Sale Purchase By Party Group', path: '/reports/sale-purchase-by-party-group' }
+  C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\modules\users\nav.controller.ts:101:                ]
+  C:\Users\acer\OneDrive\Documents\ERPKIDDOS\erp-backend\src\modules\users\nav.controller.ts:102:              },
+
+

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import {
+import { 
   Truck,
   CheckCircle2,
   Package,
@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   RotateCcw,
   Search,
+  X
 } from "lucide-react";
 import { clsx } from "clsx";
 import { salesApi } from "@/lib/api";
@@ -123,6 +124,13 @@ export default function DispatchTrackingPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="bg-transparent border-none text-slate-700 dark:text-white focus:ring-0 p-1 font-semibold text-sm outline-none w-64 placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-lg overflow-x-auto custom-scrollbar max-w-full bg-white dark:bg-card">
             {["ALL", "IN_TRANSIT", "DELIVERED", "DRAFT"].map(s => (

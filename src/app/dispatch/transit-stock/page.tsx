@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Truck, Search, CheckCircle, RefreshCw, Calendar } from "lucide-react";
+import {  Truck, Search, CheckCircle, RefreshCw, Calendar , X } from "lucide-react";
 import { clsx } from "clsx";
 import { salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -143,6 +143,13 @@ export default function TransitStockPage() {
               placeholder="Search by Challan, Party, Product or Batch..."
               className="w-full pl-9 pr-8 py-2 border border-gray-300 dark:border-white/10 bg-white dark:bg-[#13151f] text-slate-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 rounded-lg text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none"
             />
+            {search && (
+              <X 
+                size={14} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                onClick={() => setSearch("")} 
+              />
+            )}
           </div>
           <button
             onClick={fetchTransitStock}

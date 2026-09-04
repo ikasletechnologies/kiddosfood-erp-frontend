@@ -1922,30 +1922,13 @@ export default function SalesOrdersPage() {
                               >
                                 <Pencil className="h-4 w-4" />
                               </button>
-                              <div className="relative">
-                                <button
-                                  onClick={() => setShowRowMenu(showRowMenu === o.id ? null : o.id)}
-                                  className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
-                                >
-                                  <ChevronRight className="h-4 w-4 rotate-90" />
-                                </button>
-                                {showRowMenu === o.id && (
-                                  <div className="absolute right-0 top-8 z-50 w-36 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl py-1 text-left">
-                                    <button
-                                      onClick={() => { setShowRowMenu(null); handlePrintOrder(o); }}
-                                      className="w-full text-left px-3 py-1.5 text-xs text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 font-medium"
-                                    >
-                                      <Printer className="h-3.5 w-3.5" /> Print
-                                    </button>
-                                    <button
-                                      onClick={() => { setShowRowMenu(null); handleDelete(o.id); }}
-                                      className="w-full text-left px-3 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 flex items-center gap-2 border-t border-gray-100 dark:border-white/5 font-medium"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" /> Delete
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                              <button
+                                onClick={() => handlePrintOrder(o)}
+                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                title="Print Order"
+                              >
+                                <Printer className="h-4 w-4" />
+                              </button>
                             </div>
                           </td>
                         </tr>
