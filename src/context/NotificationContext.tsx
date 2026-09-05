@@ -58,7 +58,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       read: false,
     };
     setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Keep last 50
-    
+
     // Show toast
     toast(newNotif.title, {
       icon: "🔔",

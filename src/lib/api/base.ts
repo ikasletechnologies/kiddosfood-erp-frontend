@@ -1,11 +1,19 @@
 import axios from 'axios';
 
+const rawBase =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  'http://localhost:5000';
+
+const baseURL = rawBase.replace(/\/api\/?$/, '').replace(/\/+$/, '');
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
 
 let isRefreshing = false;
 let failedQueue: any[] = [];
@@ -18,7 +26,7 @@ const processQueue = (error: any, token: string | null = null) => {
       prom.resolve(token);
     }
   });
-  
+
   failedQueue = [];
 };
 
@@ -87,9 +95,9 @@ api.interceptors.response.use(
 
     // If error is 401 and we haven't retried yet
     if (error.response?.status === 401 && !originalRequest._retry) {
-      
+
       if (isRefreshing) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
         }).then(token => {
           originalRequest.headers.Authorization = `Bearer ${token}`;
@@ -107,9 +115,9 @@ api.interceptors.response.use(
         try {
           console.log('🔄 Attempting token refresh...');
           const response = await axios.post(`${api.defaults.baseURL}/api/auth/refresh`, { refreshToken });
-          
+
           const { accessToken, refreshToken: newRefreshToken } = response.data;
-          
+
           localStorage.setItem('access_token', accessToken);
           localStorage.setItem('refresh_token', newRefreshToken);
 
