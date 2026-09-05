@@ -102,10 +102,12 @@ export async function GET(
       };
     };
 
-    // IF API KEYS ARE NOT SET, FALLBACK TO HIGH-QUALITY MOCK DATA (GREAT FOR DEV/SANDBOX)
+    // IF API KEYS ARE NOT SET, RETURN AN ERROR
     if (!sandboxApiKey || !sandboxSecret) {
-      const mockResult = await getMockData(gstin);
-      return NextResponse.json(mockResult);
+      return NextResponse.json(
+        { error: "Sandbox API credentials are not configured in the environment variables." },
+        { status: 500 }
+      );
     }
 
     // REAL THIRD-PARTY SECURE API INTEGRATION (SANDBOX.CO.IN)
@@ -157,10 +159,10 @@ export async function GET(
     if (!response.ok) {
       const errText = await response.text();
       console.error("Sandbox API error response:", errText);
-      console.warn("Falling back to mock data due to Sandbox API error.");
-      const mockResult = await getMockData(gstin);
-      mockResult.message = `Fallback Mock Mode (Sandbox Error: ${response.status})`;
-      return NextResponse.json(mockResult);
+      return NextResponse.json(
+        { error: `Sandbox API failed (${response.status}): ${errText}` },
+        { status: response.status }
+      );
     }
 
     const result = await response.json();
