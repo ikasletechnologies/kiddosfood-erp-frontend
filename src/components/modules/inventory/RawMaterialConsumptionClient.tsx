@@ -62,17 +62,25 @@ export default function RawMaterialConsumptionClient() {
   }, [fetchItems]);
 
   const downloadCSV = () => {
-    const headers = ["Date", "Item Name", "SKU", "Type", "Quantity", "Unit", "Valuation (₹)", "Notes"];
-    const rows = filtered.map(item => [
-      formatDate(item.date),
-      item.itemName || "",
-      item.sku || "",
-      item.consumptionType || "",
-      item.quantity.toFixed(2),
-      item.unit || "",
-      item.value.toFixed(2),
-      item.notes || ""
-    ]);
+    const headers = ["Date", "Batch / Ref", "Material", "Qty", "Unit", "Source", "Reason / Notes", "Valuation (₹)"];
+    const rows = filtered.map(item => {
+      const source = item.consumptionType || "Production";
+      const prefix = source === "Production Consumption" ? "PRD" : source === "Damage" ? "WST" : source === "Expiry" ? "EXP" : "ADJ";
+      const batchRef = `${prefix}-${item.id.substring(0, 4).toUpperCase()}`;
+      const material = `${item.itemName || ""}${item.sku ? ` (${item.sku})` : ""}`;
+      const reason = item.notes || (source === "Production Consumption" ? "Recipe" : source === "Damage" ? "Spillage" : "Stock Count");
+
+      return [
+        formatDate(item.date),
+        batchRef,
+        material,
+        item.quantity.toFixed(2),
+        item.unit || "",
+        source,
+        reason,
+        (item.value || 0).toFixed(2)
+      ];
+    });
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
