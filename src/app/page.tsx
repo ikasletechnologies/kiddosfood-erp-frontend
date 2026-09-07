@@ -618,12 +618,13 @@ export default function Dashboard() {
             </Link>
 
             <Link
-              href="/franchise-orders"
-              className="flex-1 sm:flex-initial px-3 sm:px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap text-center"
+              href="/sales/invoices/new"
+              className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold px-3 sm:px-3.5 py-1.5 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0"
             >
-              <Send size={13} strokeWidth={2.5} className="shrink-0" />
-              <span>Dispatch</span>
+              <Plus size={14} strokeWidth={2.5} className="shrink-0" />
+              <span>New Invoice</span>
             </Link>
+
           </div>
         </div>
       </div>

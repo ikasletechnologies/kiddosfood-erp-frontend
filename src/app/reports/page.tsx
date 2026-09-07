@@ -10,7 +10,8 @@ import {
   RefreshCw,
   Receipt,
   AlertTriangle,
-  X
+  X,
+  Plus
 } from "lucide-react";
 import { clsx } from "clsx";
 import { exportReportToExcel } from "@/lib/excelExport";

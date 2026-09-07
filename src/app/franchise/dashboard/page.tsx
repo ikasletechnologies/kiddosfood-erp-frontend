@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-  Package, AlertTriangle, TrendingUp, RefreshCw, ArrowRight, Truck,
+  Package, AlertTriangle, TrendingUp, RefreshCw, ArrowRight, Truck, ArrowLeft,
   Landmark, CreditCard, ChevronRight, BarChart3, Undo2, Users,
   Receipt, Plus, ClipboardList, CheckCircle2, AlertCircle, ShoppingCart
 } from "lucide-react";
@@ -61,6 +61,15 @@ export default function FranchiseDashboardPage() {
       {/* ── Top Action Toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-white/10">
         <div className="flex items-center gap-2">
+          {user?.role === "SUPER_ADMIN" && (
+            <Link
+              href="/franchise"
+              className="p-1.5 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 transition-colors flex items-center justify-center"
+              title="Back to Franchise Management"
+            >
+              <ArrowLeft size={16} />
+            </Link>
+          )}
           <button
             type="button"
             onClick={fetchAll}

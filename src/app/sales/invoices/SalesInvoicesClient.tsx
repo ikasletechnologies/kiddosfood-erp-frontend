@@ -975,18 +975,11 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                       />
-            {customerSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setCustomerSearch("")} 
-              />
-            )}
                       {customerSearch && (
                         <X 
                           size={14} 
                           className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                          onClick={() => setCustomerSearch("")} 
+                          onClick={() => { setCustomerSearch(""); setSelectedCustomer(null); setCustomerPhone(""); }} 
                         />
                       )}
                       <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
@@ -1038,12 +1031,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
-                  <input
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500 transition-colors"
-                    placeholder="Phone Number"
-                    value={customerPhone}
-                    onChange={e => setCustomerPhone(e.target.value)}
-                  />
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 pr-8 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500 transition-colors"
+                      placeholder="Phone Number"
+                      value={customerPhone}
+                      onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, ""))}
+                    />
+                    {customerPhone && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomerPhone("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1051,13 +1058,24 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 min-w-0">
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Invoice Number</label>
-                  <input
-                    type="text"
-                    placeholder="Auto"
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Auto"
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 pr-8 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500"
+                    />
+                    {invoiceNumber && (
+                      <button
+                        type="button"
+                        onClick={() => setInvoiceNumber("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Invoice Date</label>
@@ -1068,7 +1086,16 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                       className="w-full flex items-center justify-between text-xs sm:text-sm text-gray-700 dark:text-slate-200 border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-[#13151f] hover:border-orange-400 transition-colors"
                     >
                       <span className="truncate">{invoiceDate ? formatDate(invoiceDate + "T00:00:00") : "Pick date"}</span>
-                      <Calendar size={14} className="text-[#f58220] shrink-0" />
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {invoiceDate && (
+                          <X
+                            size={14}
+                            className="text-slate-600 dark:text-slate-300 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setInvoiceDate(""); }}
+                          />
+                        )}
+                        <Calendar size={14} className="text-[#f58220]" />
+                      </div>
                     </button>
                     {showCalendar && (
                       <div className="absolute right-0 top-full mt-1.5 z-[200]">
@@ -1143,32 +1170,43 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
                         {/* ITEM */}
                         <td className="px-3 py-2" style={{ position: "relative", overflow: "visible" }}>
-                          <input
-                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500"
-                            placeholder="Search item..."
-                            value={item.itemSearch}
-                            onChange={e => {
-                              updateItem(idx, "itemSearch", e.target.value);
-                              updateItem(idx, "productId", "");
-                              setOpenItemDrop(item.id);
-                            }}
-                            onFocus={e => {
-                              setOpenItemDrop(item.id);
-                              if (typeof window !== "undefined") {
-                                const rect = (e.target as HTMLElement).getBoundingClientRect();
-                                const dropWidth = Math.min(300, window.innerWidth - 32);
-                                const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
-                                setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
-                              }
-                            }}
-                          />
-                          {item.itemSearch && (
-                            <X 
-                              size={14} 
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                              onClick={() => updateItem(idx, "itemSearch", "")} 
+                          <div className="flex items-center gap-1 w-full">
+                            <input
+                              className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 min-w-0"
+                              placeholder="Search item..."
+                              value={item.itemSearch}
+                              onChange={e => {
+                                updateItem(idx, "itemSearch", e.target.value);
+                                updateItem(idx, "productId", "");
+                                setOpenItemDrop(item.id);
+                              }}
                             />
-                          )}
+                            {item.itemSearch && (
+                              <X
+                                size={12}
+                                className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
+                                onClick={() => updateItem(idx, "itemSearch", "")}
+                              />
+                            )}
+                            <ChevronDown
+                              size={12}
+                              className="text-gray-400 dark:text-slate-500 shrink-0 cursor-pointer"
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (openItemDrop === item.id) {
+                                  setOpenItemDrop(null);
+                                } else {
+                                  setOpenItemDrop(item.id);
+                                  const rect = (e.target as HTMLElement).closest("td")?.getBoundingClientRect();
+                                  if (rect && typeof window !== "undefined") {
+                                    const dropWidth = Math.min(300, window.innerWidth - 32);
+                                    const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
+                                    setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
                           
                           {item.productId && (
                             <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
@@ -1202,19 +1240,31 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col"
                               style={{ position: "fixed", top: itemDropRect.top + 4, left: itemDropRect.left, width: itemDropRect.width, zIndex: 9999 }}
                             >
-                              <button
-                                type="button"
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold text-left transition-colors cursor-pointer"
-                                onMouseDown={(e) => { 
-                                  e.preventDefault(); 
-                                  setAddingItemIdx(idx);
-                                  setShowAddItem(true); 
-                                  setOpenItemDrop(null);
-                                }}
-                              >
-                                <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
-                                Add Item
-                              </button>
+                              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5">
+                                <button
+                                  type="button"
+                                  className="flex-1 flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 font-semibold text-left transition-colors cursor-pointer"
+                                  onMouseDown={(e) => { 
+                                    e.preventDefault(); 
+                                    setAddingItemIdx(idx);
+                                    setShowAddItem(true); 
+                                    setOpenItemDrop(null);
+                                  }}
+                                >
+                                  <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                                  Add Item
+                                </button>
+                                <button
+                                  type="button"
+                                  className="p-2 mr-1 text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenItemDrop(null);
+                                  }}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
                               <div className="max-h-48 overflow-y-auto custom-scrollbar">
                                 {filtProd.length === 0 ? (
                                   <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No matching products</div>
@@ -1516,7 +1566,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               <div className="flex rounded-xl overflow-hidden shadow-sm border border-orange-200 dark:border-orange-500/20">
                 <button
                   type="button"
-                  onClick={() => showToast("Share feature coming soon", "info")}
+                  onClick={() => setShowShareDrop(v => !v)}
                   className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] border-r border-orange-400/50 transition-colors cursor-pointer"
                 >
                   Share
@@ -1532,10 +1582,34 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               {showShareDrop && (
                 <div className="absolute bottom-full right-0 mb-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl text-xs w-44 z-50 p-1 animate-in zoom-in-95 duration-150">
                   <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg cursor-pointer">Generate e-Invoice</button>
-                  <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer">
+                  <button 
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer"
+                    onClick={async () => {
+                      setShowShareDrop(false);
+                      if (navigator.share) {
+                        try {
+                          await navigator.share({
+                            title: 'Invoice',
+                            text: 'Please find the attached invoice.',
+                            url: window.location.href,
+                          });
+                        } catch (err) {
+                          console.log('Error sharing', err);
+                        }
+                      } else {
+                        showToast("Share API not supported in your browser.", "error");
+                      }
+                    }}
+                  >
                     <Share2 size={13} /> Share
                   </button>
-                  <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer">
+                  <button 
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer"
+                    onClick={() => {
+                      setShowShareDrop(false);
+                      window.print();
+                    }}
+                  >
                     <Printer size={13} /> Print
                   </button>
                   <button
