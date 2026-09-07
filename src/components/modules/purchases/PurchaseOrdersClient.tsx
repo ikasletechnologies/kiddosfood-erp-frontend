@@ -270,10 +270,38 @@ export default function PurchaseOrdersClient() {
 
   const getReceivedQty = (itemId: string) => {
     if (!viewingDetailsPO || !viewingDetailsPO.goodsReceipts) return 0;
+    // GoodsReceiptItem's join key to the PO item is `materialId`, not
+    // `itemId` (which doesn't exist on that model) — this previously always
+    // failed to match, so Received/Pending here silently showed 0/full-qty
+    // regardless of what was actually received.
     return viewingDetailsPO.goodsReceipts.reduce((sum: number, grn: any) => {
-      const grnItem = grn.items?.find((i: any) => i.itemId === itemId);
+      const grnItem = grn.items?.find((i: any) => i.materialId === itemId);
       return sum + (grnItem?.receivedQty || 0);
     }, 0);
+  };
+
+  // Actual/received unit price for a PO line, from completed GRNs only (the
+  // point at which it's actually recognized financially) — weighted by
+  // accepted qty across GRNs if the same material was received more than
+  // once. The PO's own price (item.price) is never touched; this is purely
+  // additional display so "PO Price ₹50 vs Actual ₹55" is visible without
+  // mutating the historical PO record.
+  const getActualPriceInfo = (itemId: string): { actualPrice: number; overridden: boolean } | null => {
+    if (!viewingDetailsPO || !viewingDetailsPO.goodsReceipts) return null;
+    let qtySum = 0;
+    let valueSum = 0;
+    let overridden = false;
+    viewingDetailsPO.goodsReceipts.forEach((grn: any) => {
+      if (grn.status !== "COMPLETED") return;
+      const grnItem = grn.items?.find((i: any) => i.materialId === itemId);
+      if (grnItem && grnItem.acceptedQty > 0) {
+        qtySum += grnItem.acceptedQty;
+        valueSum += grnItem.acceptedQty * grnItem.price;
+        if (grnItem.priceOverridden) overridden = true;
+      }
+    });
+    if (qtySum === 0) return null;
+    return { actualPrice: valueSum / qtySum, overridden };
   };
 
   const getAuditTimeline = () => {
@@ -913,7 +941,9 @@ export default function PurchaseOrdersClient() {
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Received</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Pending</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest">Unit</th>
-                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Price</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">PO Price</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Actual Price</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Variance</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">GST</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Total</th>
                       </tr>
@@ -922,6 +952,8 @@ export default function PurchaseOrdersClient() {
                       {viewingDetailsPO.poItems?.map((item: any, idx: number) => {
                         const rQty = getReceivedQty(item.inventoryItemId);
                         const pQty = Math.max(0, item.quantity - rQty);
+                        const actualInfo = getActualPriceInfo(item.inventoryItemId);
+                        const variance = actualInfo ? Number((actualInfo.actualPrice - item.price).toFixed(2)) : 0;
                         return (
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
@@ -931,6 +963,24 @@ export default function PurchaseOrdersClient() {
                             <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{pQty}</td>
                             <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.price)}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold">
+                              {actualInfo ? (
+                                <span className={actualInfo.overridden ? "text-amber-600 dark:text-amber-400" : "text-slate-700 dark:text-slate-300"}>
+                                  {formatCurrency(actualInfo.actualPrice)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold">
+                              {actualInfo && variance !== 0 ? (
+                                <span className={variance > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}>
+                                  {variance > 0 ? "+" : ""}{formatCurrency(variance)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-500">—</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">{item.gstRate || 0}%</td>
                             <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
                           </tr>
