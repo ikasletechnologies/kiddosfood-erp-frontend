@@ -78,10 +78,16 @@ export async function GET(
         sampleAddress: "Industrial Area, Phase-I, India"
       };
 
-      const panPart = gstinCode.substring(2, 12);
-      const companyWord = panPart.charCodeAt(0) % 2 === 0 ? "Enterprises" : "Solutions";
-      const industryWord = panPart.charCodeAt(4) % 2 === 0 ? "Global" : "Industries";
-      const legalName = `S.R. ${industryWord} ${companyWord} Ltd.`;
+      const sum = gstinCode.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const firstNames = ["Reliance", "Tata", "Adani", "Infosys", "Wipro", "HCL", "Mahindra", "Bajaj", "TVS", "Larsen & Toubro"];
+      const lastNames = ["Industries", "Technologies", "Consultancy", "Motors", "Enterprises", "Retail", "Steel", "Power", "Holdings", "Group"];
+      const suffixes = ["Ltd", "Pvt Ltd", "Corp", "LLP"];
+      
+      const firstName = firstNames[sum % firstNames.length];
+      const lastName = lastNames[(sum * 3) % lastNames.length];
+      const suffix = suffixes[(sum * 7) % suffixes.length];
+      
+      const legalName = `${firstName} ${lastName} ${suffix}`;
 
       await new Promise((resolve) => setTimeout(resolve, 800));
 
@@ -102,10 +108,12 @@ export async function GET(
       };
     };
 
-    // IF API KEYS ARE NOT SET, RETURN MOCK DATA
+    // IF API KEYS ARE NOT SET, RETURN AN ERROR
     if (!sandboxApiKey || !sandboxSecret) {
-      const mockResult = await getMockData(gstin);
-      return NextResponse.json(mockResult);
+      return NextResponse.json(
+        { error: "Sandbox API credentials are not configured in the environment variables." },
+        { status: 500 }
+      );
     }
 
     // REAL THIRD-PARTY SECURE API INTEGRATION (SANDBOX.CO.IN)
@@ -123,9 +131,11 @@ export async function GET(
 
     if (!authResponse.ok) {
       const authErr = await authResponse.text();
-      console.warn("Sandbox authentication failed, falling back to mock data:", authErr);
-      const mockResult = await getMockData(gstin);
-      return NextResponse.json(mockResult);
+      console.error("Sandbox authentication failed:", authErr);
+      return NextResponse.json(
+        { error: "Sandbox authentication failed. Please verify API key and secret in your env." },
+        { status: 401 }
+      );
     }
 
     const authData = await authResponse.json();
