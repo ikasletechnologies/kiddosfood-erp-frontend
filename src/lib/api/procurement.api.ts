@@ -12,6 +12,7 @@ export const vendorsApi = {
   linkMaterial: (data: { vendorId: string; materialId: string; price: number; quantity: number }) =>
     api.post('/api/vendors/link-material', data),
   getLedger: (id: string, params: any = {}) => api.get(`/api/vendors/${id}/ledger`, { params }),
+  getReturnableMaterials: (id: string) => api.get(`/api/vendors/${id}/returnable-materials`),
   getAging: (id: string) => api.get(`/api/vendors/${id}/aging`),
   getNextPaymentNumber: (date?: string) => api.get('/api/vendors/next-payment-number', { params: { date } }),
   recordPayment: (id: string, data: { amount: number; note: string; accountId: string; type?: string; paymentMode?: string; referenceId?: string; vendorInvoiceId?: string; transactionRef?: string; idempotencyKey?: string; allowOverpayment?: boolean; date?: string }) => api.post(`/api/vendors/${id}/payment`, data),
