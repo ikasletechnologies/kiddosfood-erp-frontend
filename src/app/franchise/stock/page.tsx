@@ -2,11 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { X,
-  Package, RefreshCw, AlertTriangle, CheckCircle2,
-  Clock, ShoppingCart, Filter, ArrowRight, Send,
-  Plus, Search, Building2, Check, ShieldCheck,
-  Truck, Eye, ExternalLink, Calendar
+import {
+  X, Package, RefreshCw, Clock,
+  Plus, Search, Truck, ArrowRight, Send
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
@@ -31,11 +29,10 @@ export default function FranchiseStockPage() {
 
   const [viewTab, setViewTab] = useState<"CATALOG" | "BATCHES">("CATALOG");
 
-  const [batches, setBatches]       = useState<any[]>([]);
-  const [products, setProducts]     = useState<any[]>([]);
-  const [branchRequests, setBranchRequests] = useState<any[]>([]);
+  const [batches, setBatches]           = useState<any[]>([]);
+  const [products, setProducts]         = useState<any[]>([]);
   const [branchOrders, setBranchOrders] = useState<any[]>([]);
-  const [loading, setLoading]       = useState(true);
+  const [loading, setLoading]           = useState(true);
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter]   = useState("ALL");
   const [searchTerm, setSearchTerm]       = useState("");
@@ -50,23 +47,28 @@ export default function FranchiseStockPage() {
   const fetchData = useCallback(async (pid?: string) => {
     setLoading(true);
     try {
-      const [bRes, pRes, reqRes, ordRes] = await Promise.all([
+      const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+      const parsedUser = userStr ? JSON.parse(userStr) : null;
+      const effectiveBranchId = branchId || parsedUser?.franchiseId;
+
+      const [bRes, pRes, ordRes] = await Promise.all([
         productBatchesApi.getAll({ productId: pid || undefined }),
-        productsFullApi.getAll(),
-        franchiseProductRequestsApi.getAll({ franchiseId: branchId }),
-        franchiseOrdersApi.getAll({ franchiseId: branchId }),
+        productsFullApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}),
+        franchiseOrdersApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}),
       ]);
 
-      const allBatches: any[] = Array.isArray(bRes?.data) ? bRes.data : [];
+      const allBatches: any[] = Array.isArray(bRes?.data) ? bRes.data : Array.isArray(bRes?.data?.data) ? bRes.data.data : [];
       // Scope batches strictly to this franchise if franchise user
-      const scopedBatches = branchId
-        ? allBatches.filter((b) => b.franchiseId === branchId)
+      const scopedBatches = effectiveBranchId
+        ? allBatches.filter((b) => b.franchiseId === effectiveBranchId)
         : allBatches;
 
+      const prodData = Array.isArray(pRes?.data) ? pRes.data : Array.isArray(pRes?.data?.data) ? pRes.data.data : [];
+      const ordData = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
+
       setBatches(scopedBatches);
-      setProducts(Array.isArray(pRes?.data) ? pRes.data : []);
-      setBranchRequests(Array.isArray(reqRes?.data) ? reqRes.data : []);
-      setBranchOrders(Array.isArray(ordRes?.data) ? ordRes.data : []);
+      setProducts(prodData);
+      setBranchOrders(ordData);
     } catch (e) {
       console.error("Failed to load franchise stock data:", e);
     } finally {
@@ -114,7 +116,11 @@ export default function FranchiseStockPage() {
       return;
     }
 
-    if (!branchId) {
+    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    const parsedUser = userStr ? JSON.parse(userStr) : null;
+    const effectiveBranchId = branchId || parsedUser?.franchiseId;
+
+    if (!effectiveBranchId) {
       toast.error("Your user account is not linked to any franchise branch");
       return;
     }
@@ -122,7 +128,7 @@ export default function FranchiseStockPage() {
     setSubmittingRequest(true);
     try {
       const res = await franchiseProductRequestsApi.create({
-        franchiseId: branchId,
+        franchiseId: effectiveBranchId,
         requestNotes: requestNote.trim() || undefined,
         requiredByDate: requestRequiredBy || undefined,
         products: [
@@ -137,13 +143,12 @@ export default function FranchiseStockPage() {
 
       const created = res?.data;
       const reqNum = created?.requestNumber || `FPR-${Date.now().toString().slice(-4)}`;
-      const fName = (user as any)?.franchiseName || (user as any)?.franchise?.name || "Blackbulls";
+      const fName = (user as any)?.franchiseName || (user as any)?.franchise?.name || "Branch";
 
-      // Dispatch local notification event to guarantee immediate display in Notification Drawer & Toast
       window.dispatchEvent(
         new CustomEvent("erp:notify-stock-request", {
           detail: {
-            franchiseId: branchId,
+            franchiseId: effectiveBranchId,
             franchiseName: fName,
             requestNumber: reqNum,
             id: created?.id || "",
@@ -176,7 +181,6 @@ export default function FranchiseStockPage() {
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 py-8 px-4">
       {/* ── Header Toolbar ── */}
       <div className="flex items-center justify-end gap-6 pb-2 border-b border-slate-200 dark:border-white/10">
-
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={() => fetchData(productFilter || undefined)}
@@ -185,17 +189,6 @@ export default function FranchiseStockPage() {
           >
             <RefreshCw size={16} className={clsx(loading && "animate-spin text-orange-500")} />
           </button>
-
-          <Link
-            href="/franchise/requests"
-            className="h-10 px-4 flex items-center gap-2 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200/70 dark:border-white/10 transition-all whitespace-nowrap"
-          >
-            <Send size={14} className="text-slate-400" />
-            <span>My Requests</span>
-            <span className="px-1.5 py-0.5 rounded-md bg-slate-200 dark:bg-white/10 text-[10px] font-mono font-bold">
-              {branchRequests.length}
-            </span>
-          </Link>
 
           <Link
             href="/franchise-orders"
@@ -252,7 +245,7 @@ export default function FranchiseStockPage() {
 
       {/* ── Search Bar ── */}
       <div className="bg-white dark:bg-card border border-slate-100 dark:border-white/5 rounded-[2rem] p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-transparent w-full sm:w-80">
+        <div className="relative flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-transparent w-full sm:w-80">
           <Search size={16} className="text-slate-400" />
           <input
             value={searchTerm}
@@ -260,13 +253,13 @@ export default function FranchiseStockPage() {
             placeholder="Search by product name, SKU, or category..."
             className="bg-transparent text-xs font-bold text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-gray-400"
           />
-            {searchTerm && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchTerm("")} 
-              />
-            )}
+          {searchTerm && (
+            <X 
+              size={14} 
+              className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+              onClick={() => setSearchTerm("")} 
+            />
+          )}
         </div>
 
         {viewTab === "BATCHES" && (
@@ -302,7 +295,7 @@ export default function FranchiseStockPage() {
         )}
       </div>
 
-      {/* ── View 1: Franchise Finished Goods Product Cards (Exact User Requirement #9) ── */}
+      {/* ── View 1: Franchise Finished Goods Product Cards ── */}
       {viewTab === "CATALOG" && (
         <div className="space-y-6">
           {loading ? (
@@ -312,32 +305,24 @@ export default function FranchiseStockPage() {
           ) : filteredProducts.length === 0 ? (
             <div className="py-20 text-center bg-white dark:bg-card rounded-[2.5rem] border border-gray-100 dark:border-white/5 p-8 space-y-3">
               <Package size={48} strokeWidth={1} className="mx-auto text-slate-300" />
-              <p className="text-sm font-bold text-gray-700 dark:text-slate-300">No products found</p>
-              <p className="text-xs text-gray-400">Try changing your search keywords.</p>
+              <p className="text-sm font-bold text-gray-700 dark:text-slate-300">No products found in franchise inventory</p>
+              <p className="text-xs text-gray-400">Products will appear here once dispatched from HQ and inwarded by your branch.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.map((prod: any) => {
                 // 1. Branch Available & Damaged Stock
                 const prodBatches = batches.filter((b) => b.productId === prod.id);
-                const branchAvailable = prodBatches
+                const batchSum = prodBatches
                   .filter((b) => (b.expiryStatus ?? "VALID") !== "EXPIRED")
                   .reduce((acc, b) => acc + Number(b.quantity || 0), 0);
                 const branchDamaged = prodBatches
                   .filter((b) => b.expiryStatus === "EXPIRED")
                   .reduce((acc, b) => acc + Number(b.quantity || 0), 0);
 
-                // 2. Pending Requested Quantity for this branch
-                let pendingRequestedQty = 0;
-                branchRequests.forEach((r) => {
-                  if (r.status === "PENDING") {
-                    const prods = r.products ?? (r.details as any)?.products ?? [];
-                    const m = prods.find((p: any) => p.productId === prod.id || p.productName?.toLowerCase() === prod.name?.toLowerCase());
-                    if (m) pendingRequestedQty += Number(m.requestedQuantity || 0);
-                  }
-                });
+                const branchAvailable = prodBatches.length > 0 ? batchSum : Number(prod.currentStock || 0);
 
-                // 3. In-Transit Quantity heading to this branch
+                // 2. In-Transit Quantity heading to this branch
                 let inTransitQty = 0;
                 branchOrders.forEach((o) => {
                   if (o.status === "DISPATCHED") {
@@ -391,16 +376,9 @@ export default function FranchiseStockPage() {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-2 gap-2 pt-1 text-center">
-                          <div className="p-2.5 bg-amber-50/60 dark:bg-amber-950/20 rounded-2xl border border-amber-100 dark:border-amber-900/30">
-                            <p className="text-[8px] font-black text-amber-600 dark:text-amber-400 uppercase">Pending Requested</p>
-                            <p className="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">
-                              {pendingRequestedQty} {prod.unit || "KG"}
-                            </p>
-                          </div>
-
+                        <div className="pt-1 text-center">
                           <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
-                            <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase">In-Transit Supply</p>
+                            <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase">In-Transit Supply from HQ</p>
                             <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
                               {inTransitQty} {prod.unit || "KG"}
                             </p>
@@ -423,20 +401,12 @@ export default function FranchiseStockPage() {
                         <Plus size={16} strokeWidth={2.5} /> Request Stock from HQ
                       </button>
 
-                      <div className="flex gap-2">
-                        <Link
-                          href={`/franchise/requests?productId=${prod.id}`}
-                          className="flex-1 text-center py-2 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-[10px] font-black uppercase text-slate-500 transition-colors"
-                        >
-                          View My Requests
-                        </Link>
-                        <Link
-                          href="/franchise-orders"
-                          className="flex-1 text-center py-2 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-[10px] font-black uppercase text-slate-500 transition-colors"
-                        >
-                          Incoming Supply
-                        </Link>
-                      </div>
+                      <Link
+                        href="/franchise-orders"
+                        className="w-full block text-center py-2 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 rounded-xl text-[10px] font-black uppercase text-slate-500 transition-colors"
+                      >
+                        View Incoming Orders / Shipments
+                      </Link>
                     </div>
                   </div>
                 );

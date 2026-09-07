@@ -148,7 +148,13 @@ export default function POSPage() {
 
   const fetchProducts = useCallback(() => {
     setProdsLoad(true);
-    api.get("/api/products", { params: { take: 300 } })
+    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    const user = userStr ? JSON.parse(userStr) : null;
+    const params: any = { take: 300 };
+    if (user?.franchiseId) {
+      params.franchiseId = user.franchiseId;
+    }
+    api.get("/api/products", { params })
       .then(res => {
         const data: any[] = res.data?.data || res.data || [];
         const mapped = data.map(p => ({

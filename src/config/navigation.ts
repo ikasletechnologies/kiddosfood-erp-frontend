@@ -459,6 +459,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/accounting/ledgers",
         roles: SUPER_ONLY,
       },
+      {
+        icon: Landmark,
+        label: "Bank Accounts",
+        href: "/franchise/bank-accounts",
+        roles: FRANCHISE_ONLY,
+      },
     ],
   },
   {
@@ -652,27 +658,21 @@ export const franchiseMenuSections: MenuSection[] = [
     items: [
       {
         icon: Landmark,
-        label: "Business Accounts",
-        href: "/banking/accounts",
-        roles: SUPER_ONLY,
+        label: "Bank Accounts",
+        href: "/franchise/bank-accounts",
+        roles: FRANCHISE_ONLY,
       },
       {
         icon: CreditCard,
-        label: "Collections",
-        href: "/accounting/payments",
-        roles: SUPER_ONLY,
+        label: "Settlement",
+        href: "/franchise/payments",
+        roles: FRANCHISE_ONLY,
       },
       {
         icon: TrendingUp,
         label: "Outstanding",
-        href: "/accounting/ledgers",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: FileText,
-        label: "Cheque Management",
-        href: "/accounting/cheques",
-        roles: SUPER_ONLY,
+        href: "/franchise/supplier-ledger",
+        roles: FRANCHISE_ONLY,
       },
     ],
   },

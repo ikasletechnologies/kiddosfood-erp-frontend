@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowRight, Printer, AlertCircle, AlertTriangle, CheckCircle2,
-  RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart
+  RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart,
+  ClipboardList, Package, ExternalLink
 } from "lucide-react";
-import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
+import { recipesApi, inventoryApi, franchiseApi, productionApi, franchiseOrdersApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { RECIPE_UNITS } from "@/lib/recipe-units";
 import { convertUnit } from "@/lib/unitConversion";
+import clsx from "clsx";
 
 interface RecipeItem {
   id: string;
@@ -30,11 +33,34 @@ interface Recipe {
   yieldUnit: string;
   instructions?: string;
   productId: string;
+  product?: {
+    id: string;
+    name: string;
+  };
   recipeItems: RecipeItem[];
 }
 
-export default function ProductionPlanningPage() {
+interface LinkedFranchiseOrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unit?: string;
+}
+
+interface LinkedFranchiseOrder {
+  id: string;
+  orderNumber: string;
+  franchiseName: string;
+  status: string;
+  items: LinkedFranchiseOrderItem[];
+}
+
+function ProductionPlanningContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const franchiseOrderIdParam = searchParams.get("franchiseOrderId");
+  const targetProductIdParam = searchParams.get("productId");
+
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
   const [warehouses, setWarehouses] = useState<any[]>([]);
@@ -47,6 +73,15 @@ export default function ProductionPlanningPage() {
   const [franchiseId, setFranchiseId] = useState<string>("");
   const [launching, setLaunching] = useState(false);
 
+  // Franchise Order Link State
+  const [linkedOrder, setLinkedOrder] = useState<LinkedFranchiseOrder | null>(null);
+  const [activeOrderItemIndex, setActiveOrderItemIndex] = useState<number>(0);
+  const [missingRecipeForProduct, setMissingRecipeForProduct] = useState<{
+    name: string;
+    quantity: number;
+    productId: string;
+  } | null>(null);
+
   // Add Warehouse modal
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
   const [newWhName, setNewWhName] = useState("");
@@ -55,46 +90,127 @@ export default function ProductionPlanningPage() {
 
   const recipe = recipes.find((r) => r.id === selectedRecipeId);
 
+  // Helper to select a specific franchise order item and match its recipe
+  const applyOrderItemSelection = useCallback(
+    (orderItem: LinkedFranchiseOrderItem, recipeList: Recipe[]) => {
+      // Find matching recipe by productId or product name
+      const matched = recipeList.find((r) => {
+        const matchId = r.productId === orderItem.productId || r.product?.id === orderItem.productId;
+        const matchName =
+          r.name?.trim().toLowerCase() === orderItem.productName?.trim().toLowerCase() ||
+          r.product?.name?.trim().toLowerCase() === orderItem.productName?.trim().toLowerCase();
+        return matchId || matchName;
+      });
+
+      if (matched) {
+        setSelectedRecipeId(matched.id);
+        setTargetYield(orderItem.quantity || matched.yieldQty || 100);
+        setTargetUnit(orderItem.unit || matched.yieldUnit || "KG");
+        setMissingRecipeForProduct(null);
+      } else {
+        setSelectedRecipeId("");
+        setTargetYield(orderItem.quantity || 1);
+        setTargetUnit(orderItem.unit || "KG");
+        setMissingRecipeForProduct({
+          name: orderItem.productName,
+          quantity: orderItem.quantity,
+          productId: orderItem.productId,
+        });
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     async function initData() {
+      setLoading(true);
       try {
         const [rRes, wRes, fRes] = await Promise.all([
           recipesApi.getAll(),
           inventoryApi.getWarehouses(),
-          franchiseApi.getAll()
+          franchiseApi.getAll(),
         ]);
-        setRecipes(rRes.data || []);
+
+        const recipeList: Recipe[] = rRes.data || [];
+        setRecipes(recipeList);
+
         const whList = wRes.data || [];
         setWarehouses(whList);
-        if (rRes.data?.length > 0) {
-          setSelectedRecipeId(rRes.data[0].id);
-          setTargetYield(rRes.data[0].yieldQty || 100);
-          setTargetUnit(rRes.data[0].yieldUnit || "KG");
-        }
         if (whList.length > 0) {
           setSelectedWarehouseId(whList[0].id);
         }
+
         const franchiseList = fRes.data || [];
         if (franchiseList.length > 0) {
           const hq = franchiseList.find((f: any) => f.isHQ);
           const fallback = [...franchiseList].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
           setFranchiseId((hq || fallback).id);
         }
-      } catch {
+
+        // Check if opened with a Franchise Order reference
+        if (franchiseOrderIdParam) {
+          try {
+            const foRes = await franchiseOrdersApi.getById(franchiseOrderIdParam);
+            const foData = foRes.data;
+
+            if (foData) {
+              const items: LinkedFranchiseOrderItem[] = (foData.items || []).map((i: any) => ({
+                productId: i.productId || i.product?.id,
+                productName: i.product?.name || i.productName || "Product",
+                quantity: Number(i.quantity || 1),
+                unit: i.product?.unit || i.unit || "KG",
+              }));
+
+              const orderObj: LinkedFranchiseOrder = {
+                id: foData.id,
+                orderNumber: foData.orderNumber || `FO-${foData.id.slice(0, 6)}`,
+                franchiseName: foData.franchise?.name || "Franchise",
+                status: foData.status,
+                items,
+              };
+
+              setLinkedOrder(orderObj);
+
+              // Determine initial active item index
+              let initialIdx = 0;
+              if (targetProductIdParam) {
+                const foundIdx = items.findIndex((it) => it.productId === targetProductIdParam);
+                if (foundIdx >= 0) initialIdx = foundIdx;
+              }
+              setActiveOrderItemIndex(initialIdx);
+
+              if (items.length > 0) {
+                applyOrderItemSelection(items[initialIdx], recipeList);
+              }
+            }
+          } catch (foErr) {
+            console.error("Failed to load originating franchise order:", foErr);
+            toast.error("Could not load details for the requested Franchise Order.");
+          }
+        } else {
+          // Standard manual planning flow
+          if (recipeList.length > 0) {
+            setSelectedRecipeId(recipeList[0].id);
+            setTargetYield(recipeList[0].yieldQty || 100);
+            setTargetUnit(recipeList[0].yieldUnit || "KG");
+          }
+        }
+      } catch (e) {
+        console.error(e);
         toast.error("Failed to load recipes or warehouses");
       } finally {
         setLoading(false);
       }
     }
     initData();
-  }, []);
+  }, [franchiseOrderIdParam, targetProductIdParam, applyOrderItemSelection]);
 
   useEffect(() => {
     if (!selectedWarehouseId) return;
     async function loadStock() {
       setStockLoading(true);
       try {
-        const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId, undefined, 'ALL');
+        const res = await inventoryApi.getRawMaterialStockSummary(selectedWarehouseId, undefined, "ALL");
         setWarehouseStock(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.error("Warehouse stock load error:", err);
@@ -112,7 +228,14 @@ export default function ProductionPlanningPage() {
     if (found) {
       setTargetYield(found.yieldQty || 100);
       setTargetUnit(found.yieldUnit || "KG");
+      setMissingRecipeForProduct(null);
     }
+  };
+
+  const handleSwitchOrderItem = (idx: number) => {
+    if (!linkedOrder || !linkedOrder.items[idx]) return;
+    setActiveOrderItemIndex(idx);
+    applyOrderItemSelection(linkedOrder.items[idx], recipes);
   };
 
   const recipeUnit = recipe?.yieldUnit || "KG";
@@ -120,7 +243,7 @@ export default function ProductionPlanningPage() {
   const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
 
-  const getAvailableStock = (itemId: string, itemSku: string, recipeUnit: string) => {
+  const getAvailableStock = (itemId: string, itemSku: string, itemRecipeUnit: string) => {
     if (!Array.isArray(warehouseStock)) return 0;
     const found = warehouseStock.find((fi: any) => {
       const matchSku = fi.sku && itemSku && fi.sku.trim().toLowerCase() === itemSku.trim().toLowerCase();
@@ -128,7 +251,7 @@ export default function ProductionPlanningPage() {
       return matchSku || matchId;
     });
     if (!found) return 0;
-    return convertUnit(found.availableStock ?? 0, found.unit, recipeUnit);
+    return convertUnit(found.availableStock ?? 0, found.unit, itemRecipeUnit);
   };
 
   const EPSILON = 0.000001;
@@ -159,8 +282,8 @@ export default function ProductionPlanningPage() {
         })
         .filter((item) => item.shortage > 0);
 
-      sessionStorage.setItem('prefilledPoItems', JSON.stringify(shortageItems));
-      router.push('/purchases/new');
+      sessionStorage.setItem("prefilledPoItems", JSON.stringify(shortageItems));
+      router.push("/purchases/new");
       return;
     }
     if (!selectedWarehouseId) {
@@ -185,8 +308,22 @@ export default function ProductionPlanningPage() {
         expiryDate: expiryDate.toISOString().split("T")[0],
         productionType: "FINISHED_GOOD",
       });
-      toast.success(`Production started for ${recipe.name}`);
-      router.push('/production/batches?tab=ACTIVE_RUNS');
+
+      // If originated from a Franchise Order in APPROVED state, update order status to IN_PRODUCTION
+      if (linkedOrder?.id) {
+        try {
+          if (linkedOrder.status === "APPROVED") {
+            await franchiseOrdersApi.updateStatus(linkedOrder.id, "IN_PRODUCTION");
+          }
+        } catch (statusErr) {
+          console.error("Non-blocking order status update error:", statusErr);
+        }
+        toast.success(`Production started for ${recipe.name} (Order: ${linkedOrder.orderNumber})`);
+      } else {
+        toast.success(`Production started for ${recipe.name}`);
+      }
+
+      router.push("/production/batches?tab=ACTIVE_RUNS");
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Failed to start production. Verify ingredient stock.");
     } finally {
@@ -195,10 +332,16 @@ export default function ProductionPlanningPage() {
   };
 
   const handleAddWarehouse = async () => {
-    if (!newWhName.trim()) { toast.error("Warehouse name is required"); return; }
+    if (!newWhName.trim()) {
+      toast.error("Warehouse name is required");
+      return;
+    }
     setSavingWh(true);
     try {
-      const res = await inventoryApi.createWarehouse({ name: newWhName.trim(), location: newWhLocation.trim() || undefined });
+      const res = await inventoryApi.createWarehouse({
+        name: newWhName.trim(),
+        location: newWhLocation.trim() || undefined,
+      });
       const created = res.data;
       setWarehouses((prev) => [...prev, created]);
       setSelectedWarehouseId(created.id);
@@ -221,13 +364,72 @@ export default function ProductionPlanningPage() {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col items-center justify-center p-6">
         <div className="w-10 h-10 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Planning Scheduler Loading...</p>
+        <p className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+          Planning Scheduler Loading...
+        </p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full min-w-0 animate-in fade-in duration-300">
+
+      {/* ── Franchise Order Context Banner (When opened from FO) ── */}
+      {linkedOrder && (
+        <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
+          <div className="flex items-start gap-3">
+            <div className="p-2.5 bg-indigo-600 text-white rounded-xl shrink-0 mt-0.5 shadow-sm">
+              <ClipboardList size={20} />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
+                  Producing for Franchise Order
+                </span>
+                <span className="font-mono font-bold text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                  {linkedOrder.orderNumber}
+                </span>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  · {linkedOrder.franchiseName}
+                </span>
+              </div>
+              <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80 font-medium mt-1">
+                Product requirements and batch scaling pre-populated from this order.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Multi-product tabs if order contains >1 item */}
+            {linkedOrder.items.length > 1 && (
+              <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-slate-900 rounded-xl border border-indigo-200 dark:border-indigo-800 overflow-x-auto max-w-full">
+                {linkedOrder.items.map((it, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSwitchOrderItem(idx)}
+                    className={clsx(
+                      "px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer",
+                      activeOrderItemIndex === idx
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-indigo-600"
+                    )}
+                  >
+                    {it.productName} × {it.quantity}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Link
+              href="/franchise-orders"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 bg-white dark:bg-card hover:bg-indigo-100/50 text-xs font-bold transition-colors"
+            >
+              Back to Franchise Orders
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Top Header Toolbar ── */}
       <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-2xs w-full min-w-0">
@@ -258,9 +460,9 @@ export default function ProductionPlanningPage() {
 
           <button
             onClick={handleStartProductionDirect}
-            disabled={launching || multiplier <= 0}
+            disabled={launching || multiplier <= 0 || !recipe}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 ${
-              multiplier <= 0
+              !recipe || multiplier <= 0
                 ? "bg-gray-300 dark:bg-white/10 text-gray-600 dark:text-slate-400"
                 : hasShortage
                 ? "bg-rose-600 hover:bg-rose-700 text-white"
@@ -272,6 +474,8 @@ export default function ProductionPlanningPage() {
                 <RefreshCw size={14} className="animate-spin" />
                 <span>Launching...</span>
               </>
+            ) : !recipe ? (
+              <span>Select Recipe First</span>
             ) : multiplier <= 0 ? (
               <span>Enter Batch Yield</span>
             ) : hasShortage ? (
@@ -331,7 +535,7 @@ export default function ProductionPlanningPage() {
               onChange={(e) => setTargetUnit(e.target.value)}
               className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-2.5 py-2 text-xs font-bold focus:border-[#f58220] outline-none cursor-pointer shrink-0"
             >
-              {RECIPE_UNITS.map(u => (
+              {RECIPE_UNITS.map((u) => (
                 <option key={u} value={u} className="dark:bg-card">{u}</option>
               ))}
             </select>
@@ -365,6 +569,31 @@ export default function ProductionPlanningPage() {
           </select>
         </div>
       </div>
+
+      {/* ── No Recipe Warning Alert Card (When product has no recipe configured) ── */}
+      {missingRecipeForProduct && !recipe && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center space-y-3 animate-in fade-in duration-300">
+          <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+            <AlertTriangle size={24} />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-base font-bold text-amber-900 dark:text-amber-300">
+              No Recipe Configured for &ldquo;{missingRecipeForProduct.name}&rdquo;
+            </h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 max-w-lg mx-auto font-medium">
+              The Franchise Order requested <strong>{missingRecipeForProduct.quantity} units</strong> of {missingRecipeForProduct.name}, but no formulation recipe exists for this product in the system yet.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Link
+              href={`/recipes`}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+            >
+              <Plus size={14} /> Configure Recipe in Recipe Manager <ExternalLink size={12} />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Main Formulation & Ingredients Layout ── */}
       {recipe ? (
@@ -535,7 +764,7 @@ export default function ProductionPlanningPage() {
           </div>
 
         </div>
-      ) : (
+      ) : !missingRecipeForProduct ? (
         <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 text-center p-6">
           <div className="w-14 h-14 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center text-[#f58220] mb-3">
             <ChefHat size={28} />
@@ -543,7 +772,7 @@ export default function ProductionPlanningPage() {
           <p className="text-sm font-bold text-gray-800 dark:text-white">Select a Formula to Begin Scaling Calculations</p>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Choose a recipe above and enter a target batch yield to calculate ingredient needs.</p>
         </div>
-      )}
+      ) : null}
 
       {/* ── Add Warehouse Modal ── */}
       {showAddWarehouse && (
@@ -603,5 +832,22 @@ export default function ProductionPlanningPage() {
       )}
 
     </div>
+  );
+}
+
+export default function ProductionPlanningPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 dark:bg-background flex flex-col items-center justify-center p-6">
+          <div className="w-10 h-10 border-3 border-[#f58220] border-t-transparent rounded-full animate-spin mb-4" />
+          <p className="text-xs font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+            Planning Scheduler Loading...
+          </p>
+        </div>
+      }
+    >
+      <ProductionPlanningContent />
+    </Suspense>
   );
 }

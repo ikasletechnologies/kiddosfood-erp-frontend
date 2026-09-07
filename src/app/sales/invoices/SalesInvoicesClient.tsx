@@ -11,7 +11,7 @@ import {
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi, dealersApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -19,6 +19,12 @@ import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { exportReportToExcel } from "@/lib/excelExport";
+
+const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "DEALER", label: "Dealer" },
+  { value: "FRANCHISE", label: "Franchise" },
+];
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -233,11 +239,14 @@ export function getPartyDisplayName(order: any, invoice?: any): string {
   if (invoice?.customerName && typeof invoice.customerName === "string" && invoice.customerName.trim() && invoice.customerName !== "Unknown") {
     return invoice.customerName.trim();
   }
-  if (o.customer?.name && typeof o.customer.name === "string" && o.customer.name.trim()) {
-    return o.customer.name.trim();
+  if (o.dealer?.name && typeof o.dealer.name === "string" && o.dealer.name.trim()) {
+    return o.dealer.name.trim();
   }
   if (o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
     return o.franchise.name.trim();
+  }
+  if (o.customer?.name && typeof o.customer.name === "string" && o.customer.name.trim()) {
+    return o.customer.name.trim();
   }
   return "Walk-In Customer";
 }
@@ -251,7 +260,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN";
 
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>(user?.franchiseId || "");
+  const [partyType, setPartyType] = useState<"CUSTOMER" | "DEALER" | "FRANCHISE">("CUSTOMER");
+  const [sourceOrderType, setSourceOrderType] = useState<"FRANCHISE" | "DEALER" | "CUSTOMER" | null>(null);
 
   // shared
   const [view, setView] = useState<"list" | "create">(initialView);
@@ -349,19 +361,37 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   useEffect(() => {
     const action = searchParams.get("action");
     const viewParam = searchParams.get("view");
-    const franchiseOrderId = searchParams.get("franchiseOrderId") || searchParams.get("sourceOrderId");
+    const franchiseOrderId = searchParams.get("franchiseOrderId") || (searchParams.get("source") === "FRANCHISE" ? (searchParams.get("orderId") || searchParams.get("sourceOrderId")) : searchParams.get("sourceOrderId"));
+    const dealerOrderId = searchParams.get("dealerOrderId") || (searchParams.get("source") === "DEALER" ? (searchParams.get("orderId") || searchParams.get("sourceOrderId")) : null);
+    const dealerId = searchParams.get("dealerId") || (searchParams.get("partyType") === "DEALER" ? searchParams.get("partyId") : null);
+    const customerId = searchParams.get("customerId") || (searchParams.get("partyType") === "CUSTOMER" ? searchParams.get("partyId") : null);
+    const sourceParam = searchParams.get("source")?.toUpperCase() || searchParams.get("partyType")?.toUpperCase();
 
-    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create" || franchiseOrderId) {
+    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create" || franchiseOrderId || dealerOrderId || dealerId || customerId) {
       setView("create");
+    }
+
+    if (franchiseOrderId || sourceParam === "FRANCHISE") {
+      setPartyType("FRANCHISE");
+      setSourceOrderType("FRANCHISE");
+    } else if (dealerOrderId || dealerId || sourceParam === "DEALER") {
+      setPartyType("DEALER");
+      setSourceOrderType("DEALER");
+    } else if (sourceParam === "CUSTOMER" || customerId) {
+      setPartyType("CUSTOMER");
+      setSourceOrderType("CUSTOMER");
     }
 
     if (franchiseOrderId) {
       setSourceFranchiseOrderId(franchiseOrderId);
+      setPartyType("FRANCHISE");
+      setSourceOrderType("FRANCHISE");
       Promise.all([
         api.get(`/api/franchise-orders/${franchiseOrderId}`),
         productsFullApi.getAll({ stockSource: "HQ" }).catch(() => ({ data: [] })),
+        franchiseApi.getAll().catch(() => ({ data: [] })),
       ])
-        .then(([foRes, prodRes]) => {
+        .then(([foRes, prodRes, franRes]) => {
           const order = foRes.data;
           if (!order) return;
 
@@ -371,21 +401,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             ? prodRes.data
             : [];
 
+          const fList = (franRes?.data as any)?.franchises || franRes?.data || [];
+          const fr = order.franchise || (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId) : null) || {};
+
           if (order.franchiseId) {
             setSelectedFranchiseId(order.franchiseId);
           }
 
-          // Auto-fetch Customer/Franchise details
-          const fr = order.franchise || {};
+          // Auto-fetch Customer/Franchise details with actual Franchise name (e.g. gym)
+          const resolvedFrName = fr.name || (order.franchiseName && order.franchiseName !== "Unknown" ? order.franchiseName : "") || (order.franchiseId ? (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId)?.name : "") : "") || "Franchise";
           const partyObj = {
             id: fr.id || order.franchiseId,
-            name: fr.name || "Franchise Customer",
+            name: resolvedFrName,
             contact: fr.contactNum || "",
             phone: fr.contactNum || "",
             state: fr.state || fr.location || "Tamil Nadu",
             gstin: fr.gstin || "",
             gstNumber: fr.gstin || "",
             isFranchise: true,
+            partyType: "FRANCHISE",
+            raw: fr,
           };
           setSelectedCustomer(partyObj);
           setCustomerSearch(partyObj.name);
@@ -403,6 +438,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           // Default delivery charge from order if any
           if (order.deliveryCharges !== undefined) {
             setDeliveryCharge(order.deliveryCharges);
+          }
+
+          if (order.hasInvoice) {
+            showToast(`An invoice (${order.invoiceNum || "INV"}) has already been generated for order ${order.orderNumber}.`, "info");
           }
 
           // Auto-populate ordered products with real HQ stock
@@ -448,6 +487,54 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           console.error("Failed to load franchise order for invoice:", err);
           showToast("Failed to load franchise order details", "error");
         });
+    } else if (dealerId) {
+      setPartyType("DEALER");
+      setSourceOrderType("DEALER");
+      dealersApi.getAll().then((res: any) => {
+        const dList = res.data?.dealers || res.data || [];
+        const dl = Array.isArray(dList) ? dList.find((d: any) => d.id === dealerId) : null;
+        if (dl) {
+          const partyObj = {
+            id: dl.id,
+            name: dl.name,
+            contact: dl.phone || "",
+            phone: dl.phone || "",
+            state: dl.state || dl.address || "",
+            gstin: dl.gstin || "",
+            gstNumber: dl.gstin || "",
+            isDealer: true,
+            partyType: "DEALER",
+            raw: dl,
+          };
+          setSelectedCustomer(partyObj);
+          setCustomerSearch(partyObj.name);
+          setCustomerPhone(partyObj.phone);
+          if (partyObj.state) setStateOfSupply(partyObj.state);
+        }
+      }).catch(() => {});
+    } else if (customerId) {
+      setPartyType("CUSTOMER");
+      setSourceOrderType("CUSTOMER");
+      customersApi.getById(customerId).then((res: any) => {
+        const cust = res.data?.customer || res.data;
+        if (cust) {
+          const partyObj = {
+            id: cust.id,
+            name: cust.name,
+            contact: cust.contact || cust.phone || "",
+            phone: cust.phone || cust.contact || "",
+            state: cust.state || "",
+            gstin: cust.gstNumber || cust.gstin || "",
+            gstNumber: cust.gstNumber || cust.gstin || "",
+            partyType: "CUSTOMER",
+            raw: cust,
+          };
+          setSelectedCustomer(partyObj);
+          setCustomerSearch(partyObj.name);
+          setCustomerPhone(partyObj.phone);
+          if (partyObj.state) setStateOfSupply(partyObj.state);
+        }
+      }).catch(() => {});
     }
 
     const id = searchParams.get("id");
@@ -458,8 +545,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         if (res.data) setViewInvoice(res.data);
       } catch {
         try {
-          const res = await api.get(`/api/sales/orders/${id}`);
-          if (res.data) setViewInvoice(res.data);
+          const allRes = await api.get("/api/sales/invoices");
+          const found = (allRes.data || []).find((x: any) => x.id === id || x.orderId === id || x.order?.invoiceNum === id);
+          if (found) setViewInvoice(found);
         } catch {
           showToast("Failed to load invoice details", "error");
         }
@@ -471,11 +559,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [invRes, custRes, prodRes, franRes] = await Promise.allSettled([
+      const [invRes, custRes, prodRes, franRes, dealRes] = await Promise.allSettled([
         api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}`).catch(() => ({ data: [] })),
         customersApi.getAll(),
         productsFullApi.getAll({ stockSource: "HQ" }),
         franchiseApi.getAll(),
+        dealersApi.getAll().catch(() => ({ data: [] })),
       ]);
 
       if (invRes.status === "fulfilled") {
@@ -492,6 +581,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       if (franRes.status === "fulfilled") {
         const fData = (franRes.value.data as any)?.franchises || franRes.value.data || [];
         setFranchises(Array.isArray(fData) ? fData : []);
+      }
+      if (dealRes.status === "fulfilled") {
+        const dData = (dealRes.value.data as any)?.dealers || dealRes.value.data || [];
+        setDealers(Array.isArray(dData) ? dData : []);
       }
     } catch {
       showToast("Failed to load invoices", "error");
@@ -638,6 +731,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setDraftId(null);
     setDeliveryCharge(0);
     setSourceFranchiseOrderId(null);
+    setSourceOrderType(null);
+    setPartyType("CUSTOMER");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -656,10 +751,27 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   };
 
   const selectCustomer = (c: any) => {
-    setSelectedCustomer(c);
+    const isFr = partyType === "FRANCHISE" || c.isFranchise;
+    const isDl = partyType === "DEALER" || c.isDealer;
+    const resolvedType = isFr ? "FRANCHISE" : isDl ? "DEALER" : "CUSTOMER";
+    const partyObj = {
+      id: c.id,
+      name: c.name || "",
+      contact: c.contact || c.contactNum || c.phone || "",
+      phone: c.phone || c.contact || c.contactNum || "",
+      state: c.state || (isFr ? c.location : isDl ? c.address : c.state) || "",
+      gstin: c.gstin || c.gstNumber || "",
+      gstNumber: c.gstin || c.gstNumber || "",
+      isFranchise: isFr,
+      isDealer: isDl,
+      partyType: resolvedType,
+      raw: c,
+    };
+    setSelectedCustomer(partyObj);
     setCustomerSearch(c.name || "");
-    setCustomerPhone(c.contact || c.phone || "");
-    if (c.state) setStateOfSupply(c.state);
+    setCustomerPhone(partyObj.phone);
+    if (partyObj.state) setStateOfSupply(partyObj.state);
+    if (isFr && c.id) setSelectedFranchiseId(c.id);
     setShowCustomerDrop(false);
   };
 
@@ -701,12 +813,19 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   };
 
   const handleSave = async (isDraft = false) => {
+    const effectivePartyType: "CUSTOMER" | "DEALER" | "FRANCHISE" =
+      partyType || (sourceFranchiseOrderId ? "FRANCHISE" : selectedCustomer?.isFranchise ? "FRANCHISE" : selectedCustomer?.isDealer ? "DEALER" : "CUSTOMER");
+    const partyLabel = effectivePartyType === "FRANCHISE" ? "franchise" : effectivePartyType === "DEALER" ? "dealer" : "customer";
+
     const hasAnyData = !!selectedCustomer || !!customerSearch.trim() || items.some(i => i.productId || i.itemSearch.trim());
     if (isDraft && !hasAnyData) {
       setView("list");
       return;
     }
-    if (!isDraft && !selectedCustomer) { showToast("Please select a customer", "error"); return; }
+    if (!isDraft && !selectedCustomer && !customerSearch.trim()) {
+      showToast(`Please select a ${partyLabel}`, "error");
+      return;
+    }
 
     const validItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
     if (!isDraft && validItems.length === 0) { showToast("Add at least one item with price", "error"); return; }
@@ -716,11 +835,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setSaving(true);
     try {
       const payload: any = {
-        franchiseId: selectedFranchiseId || undefined,
-        partyType: sourceFranchiseOrderId ? "FRANCHISE" : (selectedCustomer?.isFranchise ? "FRANCHISE" : undefined),
-        partyId: (sourceFranchiseOrderId || selectedCustomer?.isFranchise) ? selectedCustomer?.id : undefined,
-        customerId: (!sourceFranchiseOrderId && !selectedCustomer?.isFranchise) ? selectedCustomer?.id : undefined,
-        customerName: selectedCustomer ? selectedCustomer.name : (customerSearch || undefined),
+        franchiseId: selectedFranchiseId || (effectivePartyType === "FRANCHISE" ? selectedCustomer?.id : undefined) || undefined,
+        partyType: effectivePartyType,
+        partyId: selectedCustomer?.id || undefined,
+        dealerId: effectivePartyType === "DEALER" ? selectedCustomer?.id : undefined,
+        customerId: effectivePartyType === "CUSTOMER" ? selectedCustomer?.id : undefined,
+        customerName: selectedCustomer ? selectedCustomer.name : (customerSearch.trim() || undefined),
         customerPhone,
         invoiceNum: invoiceNumber.trim() || undefined,
         invoiceDate,
@@ -749,7 +869,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           id: draftId || undefined,
           type: "SALES_INVOICE",
           name: selectedCustomer?.name || customerSearch || "Draft Invoice",
-          state: { ...payload, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
+          state: { ...payload, partyType: effectivePartyType, selectedCustomer, customerSearch, customerPhone, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
         });
         if (dRes?.data?.id) setDraftId(dRes.data.id);
         showToast("Draft saved successfully", "success");
@@ -790,6 +910,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const raw = inv.order || inv;
     const rawState = raw._rawState || {};
     setDraftId(inv.id);
+    const draftPartyType = rawState.partyType || (raw.partyType === "FRANCHISE" || rawState.sourceFranchiseOrderId || rawState.selectedCustomer?.isFranchise ? "FRANCHISE" : raw.partyType === "DEALER" || rawState.selectedCustomer?.isDealer ? "DEALER" : "CUSTOMER");
+    setPartyType(draftPartyType);
+    if (rawState.sourceFranchiseOrderId || raw.sourceFranchiseOrderId) {
+      setSourceFranchiseOrderId(rawState.sourceFranchiseOrderId || raw.sourceFranchiseOrderId);
+      setSourceOrderType("FRANCHISE");
+    }
     setSelectedCustomer(rawState.selectedCustomer || raw.customer || null);
     setCustomerSearch(rawState.customerSearch || raw.customer?.name || raw.customerName || "");
     setCustomerPhone(rawState.customerPhone || raw.customerPhone || raw.customer?.phone || "");
@@ -857,11 +983,15 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const receivedAmt  = nonDraft.filter(i => i.status === "PAID").reduce((s, i) => s + (i.finalAmount || 0), 0);
   const balanceAmt   = totalAmt - receivedAmt;
 
-  const filteredCustomers = customers.filter(c =>
+  const currentPartyList = partyType === "FRANCHISE" ? franchises : partyType === "DEALER" ? dealers : customers;
+  const filteredCustomers = currentPartyList.filter((c: any) =>
     !customerSearch ||
     (c.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (c.contact && c.contact.includes(customerSearch)) ||
-    (c.phone && c.phone.includes(customerSearch))
+    (c.contact && String(c.contact).includes(customerSearch)) ||
+    (c.contactNum && String(c.contactNum).includes(customerSearch)) ||
+    (c.phone && String(c.phone).includes(customerSearch)) ||
+    (c.location && String(c.location).toLowerCase().includes(customerSearch.toLowerCase())) ||
+    (c.address && String(c.address).toLowerCase().includes(customerSearch.toLowerCase()))
   );
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1084,10 +1214,40 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           {/* Customer + Invoice Details */}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
-              {/* Left: Customer */}
+              {/* Left: Customer / Party */}
               <div className="space-y-3 sm:space-y-4 min-w-0">
+                {!sourceFranchiseOrderId && (
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party Type</label>
+                    <div className="flex flex-wrap items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-[#13151f] w-fit p-0.5">
+                      {PARTY_TYPES.map(pt => (
+                        <button
+                          key={pt.value}
+                          type="button"
+                          onClick={() => {
+                            if (partyType === pt.value) return;
+                            setPartyType(pt.value);
+                            setSelectedCustomer(null);
+                            setCustomerSearch("");
+                            setCustomerPhone("");
+                          }}
+                          className={clsx(
+                            "px-3 py-1.5 text-xs font-semibold transition-colors rounded-lg",
+                            partyType === pt.value
+                              ? "bg-[#f58220] text-white shadow-2xs"
+                              : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
+                          )}
+                        >
+                          {pt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Customer *</label>
+                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
+                    {partyType === "FRANCHISE" ? "Franchise *" : partyType === "DEALER" ? "Dealer *" : "Customer *"}
+                  </label>
                   <div className="relative" ref={customerDropRef}>
                     <div
                       className={clsx(
@@ -1099,7 +1259,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                       <User size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
                       <input
                         className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500"
-                        placeholder="Search by Name/Phone"
+                        placeholder={
+                          partyType === "FRANCHISE"
+                            ? "Search Franchise by Name/Phone"
+                            : partyType === "DEALER"
+                            ? "Search Dealer by Name/Phone"
+                            : "Search by Name/Phone"
+                        }
                         value={customerSearch}
                         onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
@@ -1115,25 +1281,29 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                     </div>
                     {showCustomerDrop && (
                       <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                        <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 font-semibold"
-                          onClick={() => {
-                            const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
-                            setNewParty(prev => ({
-                              ...prev,
-                              name: isPhone ? "" : customerSearch.trim(),
-                              phone: isPhone ? customerSearch.trim() : "",
-                            }));
-                            setShowAddParty(true);
-                            setShowCustomerDrop(false);
-                          }}
-                        >
-                          <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
-                          Add Party
-                        </button>
+                        {partyType !== "FRANCHISE" && (
+                          <button
+                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 font-semibold"
+                            onClick={() => {
+                              const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
+                              setNewParty(prev => ({
+                                ...prev,
+                                name: isPhone ? "" : customerSearch.trim(),
+                                phone: isPhone ? customerSearch.trim() : "",
+                              }));
+                              setShowAddParty(true);
+                              setShowCustomerDrop(false);
+                            }}
+                          >
+                            <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
+                            Add {partyType === "DEALER" ? "Dealer" : "Party"}
+                          </button>
+                        )}
                         <div className="max-h-48 overflow-y-auto custom-scrollbar">
                           {filteredCustomers.length === 0 ? (
-                            <div className="px-3 py-4 text-xs sm:text-sm text-gray-400 dark:text-slate-500 text-center">No customers found</div>
+                            <div className="px-3 py-4 text-xs sm:text-sm text-gray-400 dark:text-slate-500 text-center">
+                              No {partyType === "FRANCHISE" ? "franchises" : partyType === "DEALER" ? "dealers" : "customers"} found
+                            </div>
                           ) : (
                             filteredCustomers.map(c => (
                               <button
@@ -1143,7 +1313,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               >
                                 <div className="text-left">
                                   <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.contact || "—"}</div>
+                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.contact || c.contactNum || c.location || c.address || "—"}</div>
                                 </div>
                                 {(c.balance !== undefined && c.balance !== 0) && (
                                   <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded">
@@ -1784,16 +1954,30 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             setShowAddParty(false);
             setNewParty({ name: "", phone: "", email: "", gstin: "", gstType: "Unregistered/Consumer", state: "", city: "", pincode: "", billingAddress: "", shippingAddress: "", openingBalance: "", creditLimit: "" });
           }}
-          partyType="customer"
-          title="ADD PARTY"
+          partyType={partyType === "DEALER" ? "vendor" : "customer"}
+          title={partyType === "DEALER" ? "ADD DEALER" : "ADD CUSTOMER"}
           initialData={newParty.name || newParty.phone ? newParty : undefined}
           onSave={async (data) => {
             try {
-              const res = await customersApi.create({ ...data, phone: data.contact });
-              const createdParty = (res as any).data;
-              showToast("Party created successfully", "success");
-              setCustomers(prev => [...prev, createdParty].sort((a, b) => a.name.localeCompare(b.name)));
-              selectCustomer(createdParty);
+              if (partyType === "DEALER") {
+                const res = await dealersApi.create({
+                  name: data.name,
+                  phone: data.contact || data.phone,
+                  email: data.email,
+                  address: data.billingAddress || data.shippingAddress || data.state,
+                  franchiseId: selectedFranchiseId || user?.franchiseId,
+                });
+                const createdParty = (res as any).data?.dealer || (res as any).data;
+                showToast("Dealer created successfully", "success");
+                setDealers(prev => [...prev, createdParty].sort((a, b) => a.name.localeCompare(b.name)));
+                selectCustomer(createdParty);
+              } else {
+                const res = await customersApi.create({ ...data, phone: data.contact });
+                const createdParty = (res as any).data;
+                showToast("Customer created successfully", "success");
+                setCustomers(prev => [...prev, createdParty].sort((a, b) => a.name.localeCompare(b.name)));
+                selectCustomer(createdParty);
+              }
               setShowAddParty(false);
               setNewParty({ name: "", phone: "", email: "", gstin: "", gstType: "Unregistered/Consumer", state: "", city: "", pincode: "", billingAddress: "", shippingAddress: "", openingBalance: "", creditLimit: "" });
             } catch (e: any) {
@@ -2394,7 +2578,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 hsnCode: it.product?.hsnCode || '—'
               }))
             }}
-            vendor={printingInvoice.order?.customer || { name: 'Walk-In Customer' }}
+            vendor={
+              printingInvoice.order?.partyType === "FRANCHISE"
+                ? (printingInvoice.order?.franchise || { name: printingInvoice.order?.customerName || 'Franchise', contactNum: printingInvoice.order?.franchise?.contactNum, gstin: printingInvoice.order?.franchise?.gstin, location: printingInvoice.order?.franchise?.location })
+                : printingInvoice.order?.partyType === "DEALER"
+                ? (printingInvoice.order?.dealer || { name: printingInvoice.order?.customerName || 'Dealer', phone: printingInvoice.order?.dealer?.phone, address: printingInvoice.order?.dealer?.address })
+                : (printingInvoice.order?.customer || { name: printingInvoice.order?.customerName || 'Walk-In Customer' })
+            }
             companyDetails={companyProfile || FALLBACK_COMPANY}
             documentType="TAX_INVOICE"
             onClose={() => setPrintingInvoice(null)}

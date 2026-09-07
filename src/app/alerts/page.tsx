@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { inventoryApi } from "@/lib/api";
+import { inventoryApi, franchiseOrdersApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import {
   Bell,
   AlertTriangle,
@@ -11,7 +12,6 @@ import {
   ShoppingCart,
   Package,
   X,
-  Filter,
   Eye,
   EyeOff,
   RefreshCw,
@@ -51,43 +51,81 @@ const SEVERITY_BADGE: Record<AlertSeverity, string> = {
   success:  "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-500/20",
 };
 
-function mapApiAlerts(apiItems: any[]): Alert[] {
-  return apiItems.map((item: any, i: number) => ({
-    id: item.id ?? String(i),
-    type: "inventory" as AlertType,
-    severity: item.currentStock === 0 ? "critical" : "warning",
-    title: item.currentStock === 0
-      ? `Critical: ${item.name} Out of Stock`
-      : `Low Stock: ${item.name}`,
-    message: `${item.name} has ${item.currentStock} ${item.unit ?? "units"} remaining. Minimum threshold: ${item.minStockLevel ?? item.reorderPoint ?? "N/A"}.`,
-    time: "Just now",
-    read: false,
-    actionLabel: "Reorder",
-    actionHref: "/purchases/new",
-  }));
-}
-
 export default function AlertsPage() {
+  const { user } = useAuth();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [filterType, setFilterType] = useState<"all" | AlertType>("all");
   const [filterSeverity, setFilterSeverity] = useState<"all" | AlertSeverity>("all");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAlerts = () => {
+  const fetchAlerts = useCallback(async () => {
     setIsRefreshing(true);
-    inventoryApi.getAlerts()
-      .then((res) => {
-        const mapped = mapApiAlerts(res.data ?? []);
-        setAlerts(mapped);
-      })
-      .catch(() => {})
-      .finally(() => setIsRefreshing(false));
-  };
+    try {
+      const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+      const parsedUser = userStr ? JSON.parse(userStr) : null;
+      const effectiveBranchId = user?.franchiseId || parsedUser?.franchiseId;
+      const isFranchise = Boolean(effectiveBranchId || (parsedUser?.role && parsedUser.role !== "SUPER_ADMIN"));
+
+      const [invRes, ordRes] = await Promise.all([
+        inventoryApi.getAlerts(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined),
+        isFranchise
+          ? franchiseOrdersApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined).catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+      ]);
+
+      const rawInv: any[] = Array.isArray(invRes?.data) ? invRes.data : Array.isArray(invRes?.data?.data) ? invRes.data.data : [];
+      const rawOrders: any[] = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
+
+      const invAlerts: Alert[] = rawInv.map((item: any, i: number) => {
+        const isOutOfStock = item.currentStock <= 0;
+        const minVal = item.minStockLevel ?? item.minimumStock ?? item.reorderPoint ?? 10;
+        return {
+          id: item.id ?? `inv-${i}`,
+          type: "inventory" as AlertType,
+          severity: isOutOfStock ? ("critical" as AlertSeverity) : ("warning" as AlertSeverity),
+          title: isOutOfStock
+            ? `Critical: ${item.name} Out of Stock`
+            : `Low Stock: ${item.name}`,
+          message: `${item.name} has ${item.currentStock} ${item.unit ?? "units"} remaining. Minimum threshold: ${minVal}.`,
+          time: "Just now",
+          read: false,
+          actionLabel: isFranchise ? "Order from HQ" : "Reorder",
+          actionHref: isFranchise ? "/franchise-orders" : "/purchases/new",
+        };
+      });
+
+      const orderAlerts: Alert[] = rawOrders
+        .filter((o: any) => o.status === "DISPATCHED" || o.status === "PENDING" || o.status === "APPROVED")
+        .map((o: any) => ({
+          id: `ord-${o.id}`,
+          type: "order" as AlertType,
+          severity: o.status === "DISPATCHED" ? ("info" as AlertSeverity) : ("warning" as AlertSeverity),
+          title: o.status === "DISPATCHED"
+            ? `Incoming Shipment: Order #${o.orderNumber}`
+            : o.status === "APPROVED"
+            ? `Order #${o.orderNumber} Approved by HQ`
+            : `Order #${o.orderNumber} Pending Approval`,
+          message: o.status === "DISPATCHED"
+            ? `Shipment is in transit from Central HQ (Total: ₹${o.totalAmount}). Click to view and inward.`
+            : `Order is being processed by HQ (Total: ₹${o.totalAmount}).`,
+          time: "Recent",
+          read: false,
+          actionLabel: o.status === "DISPATCHED" ? "Inward Stock" : "View Order",
+          actionHref: "/franchise-orders",
+        }));
+
+      setAlerts([...invAlerts, ...orderAlerts]);
+    } catch (e) {
+      console.error("Failed to load alerts:", e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchAlerts();
-  }, []);
+  }, [fetchAlerts]);
 
   const filtered = alerts.filter((a) => {
     if (filterType !== "all" && a.type !== filterType) return false;
@@ -143,7 +181,7 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {/* ── 2. STATS CARDS (Matching Dashboard KPI Design) ── */}
+      {/* ── 2. STATS CARDS ── */}
       <div className="space-y-2">
         <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
           ALERT SUMMARY
@@ -168,7 +206,7 @@ export default function AlertsPage() {
             <div className="min-h-[18px] min-w-0">
               {unreadCount > 0 && (
                 <p className="text-[11px] sm:text-xs font-medium text-[#F58220] truncate">
-                  Requires owner attention
+                  Requires attention
                 </p>
               )}
             </div>
@@ -240,7 +278,7 @@ export default function AlertsPage() {
             <div className="min-h-[18px] min-w-0">
               {orderCount > 0 && (
                 <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
-                  Pending dispatch approvals
+                  Shipment & approval updates
                 </p>
               )}
             </div>
@@ -248,10 +286,10 @@ export default function AlertsPage() {
         </div>
       </div>
 
-      {/* ── 3. FILTER BAR (Dashboard Segmented Style) ── */}
+      {/* ── 3. FILTER BAR ── */}
       <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-3 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full min-w-0">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-2 w-full lg:w-auto min-w-0">
-          {/* Type filters with isolated horizontal scroll */}
+          {/* Type filters */}
           <div className="overflow-x-auto custom-scrollbar w-full sm:w-auto max-w-full pb-1 sm:pb-0">
             <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5 gap-0.5 shrink-0 min-w-full sm:min-w-0">
               {(["all", "inventory", "order", "payment", "dispatch", "system"] as const).map((t) => (
@@ -274,7 +312,7 @@ export default function AlertsPage() {
 
           <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-white/10 shrink-0" />
 
-          {/* Severity filters with isolated horizontal scroll */}
+          {/* Severity filters */}
           <div className="overflow-x-auto custom-scrollbar w-full sm:w-auto max-w-full pb-1 sm:pb-0">
             <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5 gap-0.5 shrink-0 min-w-full sm:min-w-0">
               {(["all", "critical", "warning", "info", "success"] as const).map((s) => (
@@ -312,7 +350,7 @@ export default function AlertsPage() {
         </button>
       </div>
 
-      {/* ── 4. ALERT LIST (Clean Invoice/Dashboard Style Cards) ── */}
+      {/* ── 4. ALERT LIST ── */}
       <div className="space-y-3 w-full min-w-0">
         {filtered.map((alert) => {
           const typeConf = TYPE_CONFIG[alert.type] || TYPE_CONFIG.system;
@@ -425,7 +463,7 @@ export default function AlertsPage() {
             </div>
             <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">All Clear — No Active Alerts</p>
             <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed px-2">
-              All inventory thresholds, purchase orders, and system checks are operating within normal parameters.
+              All inventory levels and incoming shipments are operating within normal parameters.
             </p>
           </div>
         )}
