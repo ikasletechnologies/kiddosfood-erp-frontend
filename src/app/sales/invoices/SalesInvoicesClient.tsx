@@ -223,6 +223,25 @@ function MiniCalendar({ value, onChange, onClose }: {
   );
 }
 
+export function getPartyDisplayName(order: any, invoice?: any): string {
+  if (!order && !invoice) return "Walk-In Customer";
+  const o = order || invoice?.order || {};
+  
+  if (o.customerName && typeof o.customerName === "string" && o.customerName.trim() && o.customerName !== "Unknown") {
+    return o.customerName.trim();
+  }
+  if (invoice?.customerName && typeof invoice.customerName === "string" && invoice.customerName.trim() && invoice.customerName !== "Unknown") {
+    return invoice.customerName.trim();
+  }
+  if (o.customer?.name && typeof o.customer.name === "string" && o.customer.name.trim()) {
+    return o.customer.name.trim();
+  }
+  if (o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
+    return o.franchise.name.trim();
+  }
+  return "Walk-In Customer";
+}
+
 // ── Main Page Component ───────────────────────────────────────────────────────
 
 export default function SalesInvoicesClient({ initialView = "list" }: { initialView?: "list" | "create" }) {
@@ -288,6 +307,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
+  const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
+  const [sourceFranchiseOrderId, setSourceFranchiseOrderId] = useState<string | null>(null);
 
   // Action Menu State
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
@@ -324,12 +345,109 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const shareDropRef    = useRef<HTMLDivElement>(null);
   const priceDropRef    = useRef<HTMLDivElement>(null);
 
-  // Deep-link handling (?id=...) & Query param view handling
+  // Deep-link handling (?id=...) & Query param view handling & (?franchiseOrderId=...)
   useEffect(() => {
     const action = searchParams.get("action");
     const viewParam = searchParams.get("view");
-    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create") {
+    const franchiseOrderId = searchParams.get("franchiseOrderId") || searchParams.get("sourceOrderId");
+
+    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create" || franchiseOrderId) {
       setView("create");
+    }
+
+    if (franchiseOrderId) {
+      setSourceFranchiseOrderId(franchiseOrderId);
+      Promise.all([
+        api.get(`/api/franchise-orders/${franchiseOrderId}`),
+        productsFullApi.getAll({ stockSource: "HQ" }).catch(() => ({ data: [] })),
+      ])
+        .then(([foRes, prodRes]) => {
+          const order = foRes.data;
+          if (!order) return;
+
+          const hqProducts = Array.isArray(prodRes?.data?.data)
+            ? prodRes.data.data
+            : Array.isArray(prodRes?.data)
+            ? prodRes.data
+            : [];
+
+          if (order.franchiseId) {
+            setSelectedFranchiseId(order.franchiseId);
+          }
+
+          // Auto-fetch Customer/Franchise details
+          const fr = order.franchise || {};
+          const partyObj = {
+            id: fr.id || order.franchiseId,
+            name: fr.name || "Franchise Customer",
+            contact: fr.contactNum || "",
+            phone: fr.contactNum || "",
+            state: fr.state || fr.location || "Tamil Nadu",
+            gstin: fr.gstin || "",
+            gstNumber: fr.gstin || "",
+            isFranchise: true,
+          };
+          setSelectedCustomer(partyObj);
+          setCustomerSearch(partyObj.name);
+          setCustomerPhone(partyObj.phone);
+          if (partyObj.state) {
+            setStateOfSupply(partyObj.state);
+          }
+
+          // Order reference in notes / description
+          if (order.orderNumber) {
+            setDescription(`Franchise Order Ref: ${order.orderNumber}`);
+            setShowDesc(true);
+          }
+
+          // Default delivery charge from order if any
+          if (order.deliveryCharges !== undefined) {
+            setDeliveryCharge(order.deliveryCharges);
+          }
+
+          // Auto-populate ordered products with real HQ stock
+          if (Array.isArray(order.items) && order.items.length > 0) {
+            const mappedItems: LineItem[] = order.items.map((it: any) => {
+              const itProduct = it.product || {};
+              const matchedHq =
+                hqProducts.find(
+                  (p: any) =>
+                    p.id === it.productId ||
+                    (p.sku && itProduct.sku && p.sku.trim().toUpperCase() === itProduct.sku.trim().toUpperCase())
+                ) || itProduct;
+
+              const taxPct = matchedHq.taxPercent ?? matchedHq.gstRate ?? itProduct.taxPercent ?? 5;
+              const unitPrice = Number(it.unitPrice ?? matchedHq.basePrice ?? itProduct.basePrice ?? 0);
+              const availableStock =
+                matchedHq.currentStock !== undefined
+                  ? matchedHq.currentStock
+                  : (matchedHq.stock || 0);
+
+              return {
+                id: it.id || Math.random().toString(36).slice(2),
+                productId: it.productId,
+                itemSearch: matchedHq.name || itProduct.name || "Product",
+                qty: Number(it.quantity) || 1,
+                unit: matchedHq.unit?.code || matchedHq.unit || itProduct.unit?.code || itProduct.unit || "NONE",
+                baseUnit: matchedHq.baseUnit || itProduct.baseUnit || matchedHq.unit || itProduct.unit,
+                conversions: matchedHq.conversions || itProduct.conversions || [],
+                rate: unitPrice,
+                basePrice: unitPrice,
+                discountPct: 0,
+                taxPct: taxPct,
+                taxLabel: TAX_OPTIONS.find((o) => o.value === taxPct)?.label || (taxPct > 0 ? `GST@${taxPct}%` : "NONE"),
+                availableStock: availableStock,
+                batchNumber: "",
+                batches: [],
+              };
+            });
+            setItems(mappedItems);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load franchise order for invoice:", err);
+          showToast("Failed to load franchise order details", "error");
+        });
     }
 
     const id = searchParams.get("id");
@@ -356,7 +474,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       const [invRes, custRes, prodRes, franRes] = await Promise.allSettled([
         api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}`).catch(() => ({ data: [] })),
         customersApi.getAll(),
-        productsFullApi.getAll(),
+        productsFullApi.getAll({ stockSource: "HQ" }),
         franchiseApi.getAll(),
       ]);
 
@@ -509,13 +627,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     .reduce((s, i) => s + i.qty, 0);
   const totalDisc = rowData.reduce((s, r) => s + r.discAmt, 0);
   const totalTax = rowData.reduce((s, r) => s + r.taxAmt, 0);
-  const totalAmount = rowData.reduce((s, r) => s + r.amount, 0);
+  const itemsAmount = rowData.reduce((s, r) => s + r.amount, 0);
+  const deliveryChargeNum = Number(deliveryCharge) || 0;
+  const totalAmount = itemsAmount + deliveryChargeNum;
   const roundOff = roundOffEnabled ? (Math.round(totalAmount) - totalAmount) : 0;
   const finalTotal = totalAmount + roundOff;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const openCreate = () => {
     setDraftId(null);
+    setDeliveryCharge(0);
+    setSourceFranchiseOrderId(null);
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -595,13 +717,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     try {
       const payload: any = {
         franchiseId: selectedFranchiseId || undefined,
-        customerId: selectedCustomer?.id,
+        partyType: sourceFranchiseOrderId ? "FRANCHISE" : (selectedCustomer?.isFranchise ? "FRANCHISE" : undefined),
+        partyId: (sourceFranchiseOrderId || selectedCustomer?.isFranchise) ? selectedCustomer?.id : undefined,
+        customerId: (!sourceFranchiseOrderId && !selectedCustomer?.isFranchise) ? selectedCustomer?.id : undefined,
         customerName: selectedCustomer ? selectedCustomer.name : (customerSearch || undefined),
         customerPhone,
         invoiceNum: invoiceNumber.trim() || undefined,
         invoiceDate,
         stateOfSupply: stateOfSupply || undefined,
         paymentType,
+        deliveryCharge: deliveryChargeNum,
+        sourceFranchiseOrderId: sourceFranchiseOrderId || undefined,
         isDraft,
         items: itemsToSave.map(i => ({
           productId: i.productId || undefined,
@@ -623,7 +749,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           id: draftId || undefined,
           type: "SALES_INVOICE",
           name: selectedCustomer?.name || customerSearch || "Draft Invoice",
-          state: { ...payload, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled }
+          state: { ...payload, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
         });
         if (dRes?.data?.id) setDraftId(dRes.data.id);
         showToast("Draft saved successfully", "success");
@@ -636,7 +762,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       }
 
       fetchData();
-      if (initialView === "create") {
+      if (sourceFranchiseOrderId) {
+        router.push("/franchise-orders");
+      } else if (initialView === "create") {
         router.push("/sales/invoices");
       } else {
         setView("list");
@@ -716,9 +844,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   };
 
   const filtered = invoices.filter(inv => {
+    const partyName = getPartyDisplayName(inv.order, inv);
     const matchSearch = !search ||
       (inv.order?.invoiceNum || "").toLowerCase().includes(search.toLowerCase()) ||
-      (inv.order?.customer?.name || inv.customerName || "").toLowerCase().includes(search.toLowerCase());
+      partyName.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === "ALL" || inv.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -819,12 +948,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
               <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Party Details</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{order.partyType || "CUSTOMER"}</span></p>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{customer.name || order.customerName || "—"}</p>
-                {customer.contact && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.contact}</p>}
-                {customer.phone && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.phone}</p>}
-                {customer.email && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{customer.email}</p>}
-                {customer.gstNumber && <p className="text-xs text-gray-500 dark:text-slate-400 font-mono">GSTIN: {customer.gstNumber}</p>}
+                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{order.partyType || (order.franchiseId ? "FRANCHISE" : "CUSTOMER")}</span></p>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{getPartyDisplayName(order, inv)}</p>
+                {(customer.contact || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.contact || order.franchise?.contactNum}</p>}
+                {(customer.phone || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.phone || order.franchise?.contactNum}</p>}
+                {(customer.email || order.franchise?.email) && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{customer.email || order.franchise?.email}</p>}
+                {(customer.gstNumber || order.franchise?.gstin) && <p className="text-xs text-gray-500 dark:text-slate-400 font-mono">GSTIN: {customer.gstNumber || order.franchise?.gstin}</p>}
               </div>
               <div className="space-y-2 min-w-0">
                 <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Invoice Information</p>
@@ -1455,11 +1584,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <div className="w-full lg:w-80 space-y-2.5 p-4 bg-gray-50/50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5">
               <div className="flex items-center justify-between text-xs sm:text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
-                <span className="font-mono font-semibold text-gray-800 dark:text-white">₹{totalAmount.toFixed(2)}</span>
+                <span className="font-mono font-semibold text-gray-800 dark:text-white">₹{itemsAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs sm:text-sm">
+                <span className="text-gray-500 dark:text-slate-400">Delivery Charge</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-gray-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={deliveryCharge === 0 ? "" : deliveryCharge}
+                    placeholder="0"
+                    onChange={e => setDeliveryCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-24 text-right font-mono font-semibold text-xs border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
+                  />
+                </div>
               </div>
               {totalTax > 0 && (
                 <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-gray-500 dark:text-slate-400">Tax</span>
+                  <span className="text-gray-500 dark:text-slate-400">Tax (GST)</span>
                   <span className="font-mono text-gray-700 dark:text-slate-300">₹{totalTax.toFixed(2)}</span>
                 </div>
               )}
@@ -1854,12 +1998,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col items-start gap-1 max-w-[200px] sm:max-w-[260px]">
-                            <span className="font-semibold text-gray-900 dark:text-white text-xs sm:text-sm truncate w-full" title={inv.order?.customer?.name || inv.customerName || "Walk-In Customer"}>
-                              {inv.order?.customer?.name || inv.customerName || "Walk-In Customer"}
+                            <span className="font-semibold text-gray-900 dark:text-white text-xs sm:text-sm truncate w-full" title={getPartyDisplayName(inv.order, inv)}>
+                              {getPartyDisplayName(inv.order, inv)}
                             </span>
-                            {!isDraft && inv.order?.customer && (
+                            {!isDraft && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10">
-                                {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : "UNKNOWN")}
+                                {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : (inv.order?.franchiseId ? "FRANCHISE" : "CUSTOMER"))}
                               </span>
                             )}
                           </div>

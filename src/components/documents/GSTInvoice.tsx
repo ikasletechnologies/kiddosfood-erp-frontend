@@ -355,22 +355,22 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           
           <div className="flex-1 bg-[#f8f9fa] p-6 rounded-xl">
             <h3 className="text-[#F97316] font-semibold text-lg mb-2">Billed to</h3>
-            <p className="font-bold text-gray-900 text-sm mb-1">{vendor?.name || 'Customer'}</p>
+            <p className="font-bold text-gray-900 text-sm mb-1">{vendor?.name || order.customerName || order.customer?.name || order.franchise?.name || 'Customer'}</p>
             <p className="text-xs text-gray-600 mb-4 leading-relaxed max-w-[200px]">
-              {vendor?.address || 'No address provided'}
+              {vendor?.address || vendor?.location || order.franchise?.location || order.customer?.address || 'No address provided'}
             </p>
             <div className="flex items-center gap-2 text-xs">
               <span className="font-bold text-gray-900">GSTIN</span>
-              <span className="text-gray-600 font-mono">{vendor?.gstin || '-'}</span>
+              <span className="text-gray-600 font-mono">{vendor?.gstin || vendor?.gstNumber || order.franchise?.gstin || order.customer?.gstNumber || '-'}</span>
             </div>
             <div className="flex items-center gap-2 text-xs mt-1">
               <span className="font-bold text-gray-900">PAN</span>
-              <span className="text-gray-600 font-mono">{vendor?.pan || '-'}</span>
+              <span className="text-gray-600 font-mono">{vendor?.pan || order.customer?.pan || '-'}</span>
             </div>
-            {vendor?.phone && (
+            {(vendor?.phone || vendor?.contact || order.customer?.phone || order.customer?.contact || order.franchise?.contactNum) && (
               <div className="flex items-center gap-2 text-xs mt-1">
                 <span className="font-bold text-gray-900">Phone</span>
-                <span className="text-gray-600 font-mono">{vendor.phone}</span>
+                <span className="text-gray-600 font-mono">{vendor?.phone || vendor?.contact || order.customer?.phone || order.customer?.contact || order.franchise?.contactNum}</span>
               </div>
             )}
           </div>

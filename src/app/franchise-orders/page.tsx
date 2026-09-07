@@ -13,6 +13,7 @@ import api, { franchiseOrdersApi, franchiseProductRequestsApi } from "@/lib/api"
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { formatDate } from "@/lib/utils";
 
@@ -91,6 +92,7 @@ function getNextStatus(order: any): string | undefined {
 }
 
 export default function FranchiseOrdersPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const isFranchiseAdmin = user?.role === "FRANCHISE_ADMIN";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
@@ -112,7 +114,7 @@ export default function FranchiseOrdersPage() {
   // Create form
   const [orderType, setOrderType] = useState<"STOCK" | "REQUEST">("STOCK");
   const [selectedFranchise, setSelectedFranchise] = useState(user?.franchiseId ?? "");
-  const [paymentType, setPaymentType] = useState("CREDIT");
+  const [paymentType] = useState("CREDIT");
   const [preferredDelivery, setPreferredDelivery] = useState("");
   const [priority, setPriority] = useState("NORMAL");
   const [notes, setNotes] = useState("");
@@ -169,12 +171,23 @@ export default function FranchiseOrdersPage() {
     setError("");
     const validItems = orderItems.filter(i => i.productId && i.quantity > 0);
     if (!selectedFranchise || validItems.length === 0) {
-      setError("Select a franchise and at least one product.");
+      setError("Please select a franchise and at least one product with quantity.");
       return;
     }
+
+    // Ensure distinct product selection
+    const seenProductIds = new Set<string>();
+    for (const item of validItems) {
+      if (seenProductIds.has(item.productId)) {
+        setError("Duplicate product lines detected. Please adjust quantities on a single row or select distinct products.");
+        return;
+      }
+      seenProductIds.add(item.productId);
+    }
+
     const unpriced = validItems
       .map(i => products.find(p => p.id === i.productId))
-      .filter((p): p is any => !!p && !(p.basePrice > 0));
+      .filter((p): p is any => !p || !(p.basePrice > 0));
     if (unpriced.length > 0) {
       setError(`HQ hasn't set a price yet for: ${Array.from(new Set(unpriced.map(p => p.name))).join(", ")}. Ask HQ to update pricing before this can be ordered or requested.`);
       return;
@@ -695,9 +708,17 @@ export default function FranchiseOrdersPage() {
                   </div>
                   
                   <div className="text-left md:text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {order.status === "PENDING" ? "Order Price" : "Approved Price"}
+                    </p>
                     <p className="text-2xl font-black text-slate-900 dark:text-white tabular-nums tracking-tight">
                       ₹{order.totalAmount.toLocaleString("en-IN")}
                     </p>
+                    {order.status !== "PENDING" && order.subtotal > 0 && order.subtotal !== order.totalAmount && (
+                      <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                        Base Order: ₹{order.subtotal.toLocaleString("en-IN")}
+                      </p>
+                    )}
                     {order.expectedDispatchDate && (
                       <p className="text-xs font-semibold text-slate-500">
                         Needed by: {formatDate(order.expectedDispatchDate)}
@@ -822,7 +843,14 @@ export default function FranchiseOrdersPage() {
                     ) : (
                       <>
                         {isSuperAdmin && nextStatus && (
-                          needsProduction && !order.materialsReady ? (
+                          order.status === "PENDING" ? (
+                            <button
+                              onClick={() => router.push(`/sales/invoices/new?franchiseOrderId=${order.id}`)}
+                              className="w-full px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
+                            >
+                              Mark Approved <ArrowRight size={14} />
+                            </button>
+                          ) : needsProduction && !order.materialsReady ? (
                             <div className="space-y-1 w-full">
                               <button disabled className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 cursor-not-allowed">
                                 Mark In Production
@@ -946,81 +974,145 @@ export default function FranchiseOrdersPage() {
 
               {/* Products List */}
               <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-400">Products *</label>
-                {orderItems.map((item, idx) => {
-                  const selectedProduct = products.find(p => p.id === item.productId);
-                  return (
-                    <div key={idx} className="flex gap-2 items-start">
-                      <div className="flex-1 space-y-1">
-                        <select
-                          value={item.productId}
-                          onChange={e => {
-                            const updated = [...orderItems];
-                            updated[idx].productId = e.target.value;
-                            setOrderItems(updated);
-                          }}
-                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none"
-                        >
-                          <option value="">Select product...</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.id} disabled={!(p.basePrice > 0)}>
-                              {p.name} {p.productType === "MADE_TO_ORDER" ? "(MTO)" : ""} — {p.basePrice > 0 ? `₹${p.basePrice}` : "PRICE PENDING"} — (Avail: {p.currentStock ?? 0})
-                            </option>
-                          ))}
-                        </select>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Products * {orderItems.length > 1 && `(${orderItems.length} lines)`}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setOrderItems(prev => [...prev, { productId: "", quantity: 1 }])}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700 dark:text-orange-400 hover:underline transition-all"
+                  >
+                    <Plus size={14} /> Add Product
+                  </button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {orderItems.map((item, idx) => {
+                    const selectedProduct = products.find(p => p.id === item.productId);
+                    const isSelectedInOtherRow = (prodId: string) =>
+                      orderItems.some((otherItem, oIdx) => oIdx !== idx && otherItem.productId === prodId);
+
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2 transition-all"
+                      >
+                        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                          {/* Product Dropdown */}
+                          <div className="flex-1 min-w-0">
+                            <select
+                              value={item.productId}
+                              onChange={e => {
+                                const updated = [...orderItems];
+                                updated[idx].productId = e.target.value;
+                                setOrderItems(updated);
+                              }}
+                              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none truncate"
+                            >
+                              <option value="">Select product...</option>
+                              {products.map(p => {
+                                const isDuplicate = isSelectedInOtherRow(p.id);
+                                const isPriced = p.basePrice > 0;
+                                return (
+                                  <option
+                                    key={p.id}
+                                    value={p.id}
+                                    disabled={!isPriced || isDuplicate}
+                                  >
+                                    {p.name} {p.productType === "MADE_TO_ORDER" ? "(MTO)" : ""} — {isPriced ? `₹${p.basePrice}` : "PRICE PENDING"} — (Avail: {p.currentStock ?? 0}){isDuplicate ? " · [Already selected]" : ""}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+
+                          {/* Quantity, Subtotal & Remove */}
+                          <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0">
+                            <div className="w-24">
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={item.quantity || ""}
+                                onChange={e => {
+                                  const val = e.target.value === "" ? 0 : Math.max(1, parseInt(e.target.value, 10) || 1);
+                                  const updated = [...orderItems];
+                                  updated[idx].quantity = val;
+                                  setOrderItems(updated);
+                                }}
+                                onBlur={() => {
+                                  if (!item.quantity || item.quantity < 1) {
+                                    const updated = [...orderItems];
+                                    updated[idx].quantity = 1;
+                                    setOrderItems(updated);
+                                  }
+                                }}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none text-center"
+                                placeholder="Qty"
+                              />
+                            </div>
+
+                            <div className="w-24 text-right">
+                              <span className="text-sm font-bold text-slate-700 dark:text-slate-300 tabular-nums">
+                                {selectedProduct && item.quantity > 0
+                                  ? `₹${(selectedProduct.basePrice * item.quantity).toLocaleString("en-IN")}`
+                                  : "—"}
+                              </span>
+                            </div>
+
+                            {orderItems.length > 1 ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOrderItems(prev => prev.filter((_, i) => i !== idx));
+                                }}
+                                title="Remove line"
+                                className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            ) : (
+                              <div className="w-8" />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stock status indicator per product line */}
                         {selectedProduct && (
-                          <p className={clsx(
-                            "text-[10px] font-bold px-1",
-                            orderType === "REQUEST" ? "text-indigo-500" :
-                            (selectedProduct.currentStock ?? 0) <= 0 ? "text-red-500" :
-                            (selectedProduct.currentStock ?? 0) < item.quantity ? "text-orange-500" : "text-emerald-500"
-                          )}>
-                            {orderType === "REQUEST" ? "Requested" : 
-                            (selectedProduct.currentStock ?? 0) <= 0 ? "OUT OF STOCK" : `${selectedProduct.currentStock ?? 0} Available`}
-                          </p>
+                          <div className="flex items-center justify-between text-[11px] font-bold px-1 pt-0.5 border-t border-slate-100 dark:border-slate-800">
+                            <span className={clsx(
+                              orderType === "REQUEST" ? "text-indigo-500" :
+                              (selectedProduct.currentStock ?? 0) <= 0 ? "text-rose-500" :
+                              (selectedProduct.currentStock ?? 0) < item.quantity ? "text-amber-500" : "text-emerald-600 dark:text-emerald-400"
+                            )}>
+                              {orderType === "REQUEST" ? "Requested (Make to Order)" :
+                              (selectedProduct.currentStock ?? 0) <= 0 ? "⚠️ OUT OF STOCK at HQ" :
+                              (selectedProduct.currentStock ?? 0) < item.quantity ? `⚠️ Insufficient stock (${selectedProduct.currentStock ?? 0} available)` :
+                              `✓ ${selectedProduct.currentStock ?? 0} ${selectedProduct.unit || "units"} Available at HQ`}
+                            </span>
+                            {selectedProduct.sku && (
+                              <span className="text-slate-400 font-medium">SKU: {selectedProduct.sku}</span>
+                            )}
+                          </div>
                         )}
                       </div>
-                      
-                      <div className="w-24">
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={e => {
-                            const updated = [...orderItems];
-                            updated[idx].quantity = Number(e.target.value);
-                            setOrderItems(updated);
-                          }}
-                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none text-center"
-                          placeholder="Qty"
-                        />
-                      </div>
-                      
-                      <div className="w-24 pt-2 text-right">
-                        {selectedProduct && (
-                          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                            ₹{(selectedProduct.basePrice * item.quantity).toLocaleString("en-IN")}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                {/* Add More Button */}
+                <button
+                  type="button"
+                  onClick={() => setOrderItems(prev => [...prev, { productId: "", quantity: 1 }])}
+                  className="w-full py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50/50 dark:hover:bg-orange-500/10 text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                >
+                  <Plus size={15} /> Add More
+                </button>
               </div>
 
               {/* Delivery info */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-400">Payment Type</label>
-                  <select
-                    value={paymentType}
-                    onChange={e => setPaymentType(e.target.value)}
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white outline-none"
-                  >
-                    <option value="CREDIT">Pay Later (Credit)</option>
-                    <option value="ADVANCE">Advance Paid</option>
-                  </select>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">Required Before</label>
                   <input
@@ -1056,41 +1148,31 @@ export default function FranchiseOrdersPage() {
               </div>
 
               {/* Summary */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
-                <div className="flex justify-between text-sm font-semibold text-slate-500">
-                  <span>Product Total</span>
-                  <span className="text-slate-700 dark:text-slate-300">
-                    ₹{orderItems.reduce((sum, item) => {
-                      const p = products.find(p => p.id === item.productId);
-                      return sum + (p ? p.basePrice * item.quantity : 0);
-                    }, 0).toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold text-slate-500">
-                  <span>GST (5%)</span>
-                  <span className="text-slate-700 dark:text-slate-300">
-                    ₹{Math.round(orderItems.reduce((sum, item) => {
-                      const p = products.find(p => p.id === item.productId);
-                      return sum + (p ? p.basePrice * item.quantity * 0.05 : 0);
-                    }, 0)).toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm font-semibold text-slate-500">
-                  <span>Delivery Charges</span>
-                  <span className="text-slate-700 dark:text-slate-300">₹50</span>
-                </div>
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">Estimated Grand Total</span>
-                  <span className="text-xl font-black text-slate-900 dark:text-white">
-                    ₹{(
-                      orderItems.reduce((sum, item) => {
-                        const p = products.find(p => p.id === item.productId);
-                        return sum + (p ? p.basePrice * item.quantity : 0);
-                      }, 0) * 1.05 + 50
-                    ).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const productTotal = orderItems.reduce((sum, item) => {
+                  const p = products.find(prod => prod.id === item.productId);
+                  return sum + (p && item.quantity > 0 ? p.basePrice * item.quantity : 0);
+                }, 0);
+
+                return (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
+                    <div className="flex justify-between text-sm font-semibold text-slate-500">
+                      <span>Product Total</span>
+                      <span className="text-slate-700 dark:text-slate-300 tabular-nums font-bold">
+                        ₹{productTotal.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">Order Price</span>
+                      <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                        ₹{productTotal.toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+
 
               {error && (
                 <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-bold text-center">
