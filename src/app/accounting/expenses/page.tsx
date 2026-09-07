@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { accountingApi, accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, shareText } from "@/lib/utils";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -168,6 +168,27 @@ export default function ExpensesPage() {
   };
 
   const openCreate = () => { resetForm(); setView("create"); };
+
+  const buildExpenseShareSummary = () =>
+    [
+      "Expense",
+      `Category: ${category}`,
+      `Date: ${fmtDate(expenseDate)}`,
+      grandTotal > 0 ? `Amount: ₹${grandTotal.toFixed(2)}` : null
+    ].filter(Boolean).join("\n");
+
+  const handleShareWhatsApp = () => {
+    setShowShareDrop(false);
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildExpenseShareSummary())}`, "_blank");
+  };
+  const handleShareEmail = () => {
+    setShowShareDrop(false);
+    window.location.href = `mailto:?subject=${encodeURIComponent("Expense")}&body=${encodeURIComponent(buildExpenseShareSummary())}`;
+  };
+  const handleSharePdf = () => {
+    setShowShareDrop(false);
+    window.print();
+  };
 
   const handleSave = async () => {
     const valid = items.filter(it => it.item.trim() || it.rate > 0);
@@ -479,8 +500,12 @@ export default function ExpensesPage() {
               </button>
               {showShareDrop && (
                 <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 py-1 min-w-[140px]">
-                  {["WhatsApp", "Email", "PDF"].map(opt => (
-                    <button key={opt} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-white/5 transition-colors">{opt}</button>
+                  {[
+                    { label: "WhatsApp", onClick: handleShareWhatsApp },
+                    { label: "Email", onClick: handleShareEmail },
+                    { label: "PDF", onClick: handleSharePdf }
+                  ].map(opt => (
+                    <button key={opt.label} onClick={opt.onClick} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-300 hover:bg-orange-50 dark:hover:bg-white/5 transition-colors">{opt.label}</button>
                   ))}
                 </div>
               )}

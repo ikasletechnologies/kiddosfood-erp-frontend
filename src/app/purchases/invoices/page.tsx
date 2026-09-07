@@ -10,7 +10,7 @@ import {
 import { clsx } from "clsx";
 import { vendorsApi, vendorInvoicesApi, grnApi, purchaseOrdersApi, accountsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, shareText } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import AccountFormModal from "@/components/modals/AccountFormModal";
 import GSTInvoice from "@/components/documents/GSTInvoice";
@@ -313,6 +313,11 @@ export default function PurchaseBillsPage() {
   // GSTInvoice preview/print modal — holds either a saved bill (from the
   // list) or a synthetic draft object built from the in-progress form.
   const [previewBill, setPreviewBill] = useState<any>(null);
+  // Which action GSTInvoice should fire automatically once mounted — without
+  // this, "Print"/"Download" from the Share dropdown only opened the
+  // preview modal and left the user to find the right button inside it,
+  // which looked like the dropdown item did nothing.
+  const [previewAutoAction, setPreviewAutoAction] = useState<"print" | "download" | undefined>(undefined);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
 
   const fmtD = (d: string) => formatDate(d);
@@ -557,15 +562,86 @@ export default function PurchaseBillsPage() {
     totalTax: totalTax
   });
 
+  // A saved VendorInvoice never stores its own line items (only aggregate
+  // subtotal/taxAmount/amount) — the "real" line items live on whatever it
+  // was actually billed from. Preferring the GRN keeps this consistent with
+  // everything else this session: acceptedQty/price there is the actual
+  // received transaction, not the PO's ordered commitment. Without either
+  // relation (a bill entered with no PO/GRN link) or for the in-progress
+  // create-form draft, fall back progressively so the preview never shows
+  // an empty item table with a real, nonzero bill silently rendering ₹0.
+  const mapBillToInvoiceItems = (bill: any) => {
+    if (bill.grn?.items?.length) {
+      const poItemByMaterial = new Map<string, any>((bill.procurementOrder?.poItems || []).map((pi: any) => [pi.inventoryItemId, pi] as [string, any]));
+      const mapped = bill.grn.items
+        .filter((gi: any) => (gi.acceptedQty || 0) > 0)
+        .map((gi: any) => ({
+          itemName: gi.inventoryItem?.name || "Item",
+          quantity: Number(gi.acceptedQty) || 0,
+          price: Number(gi.price) || 0,
+          gstRate: Number(poItemByMaterial.get(gi.materialId)?.gstRate ?? gi.inventoryItem?.gstRate ?? 0),
+          hsnCode: gi.inventoryItem?.hsnCode || undefined,
+        }));
+      if (mapped.length) return mapped;
+    }
+    if (bill.procurementOrder?.poItems?.length) {
+      return bill.procurementOrder.poItems.map((pi: any) => ({
+        itemName: pi.inventoryItem?.name || pi.itemName || "Item",
+        quantity: Number(pi.quantity) || 0,
+        price: Number(pi.price) || 0,
+        gstRate: Number(pi.gstRate) || 0,
+        hsnCode: pi.hsnCode || undefined,
+      }));
+    }
+    if (bill.items?.length) {
+      return bill.items.map((it: any, idx: number) => ({
+        itemName: it.item || it.name || `Item #${idx + 1}`,
+        quantity: Number(it.qty ?? it.quantity) || 0,
+        price: Number(it.price ?? it.pricePerUnit ?? it.rate) || 0,
+        gstRate: Number(it.taxRate ?? it.tax ?? it.taxPct ?? 0),
+        hsnCode: it.hsnCode || it.hsn || undefined,
+      }));
+    }
+    // No itemized source at all, but a real recognized amount exists —
+    // show one synthetic line rather than silently rendering ₹0.
+    if (Number(bill.amount) > 0) {
+      const sub = Number(bill.subtotal) || Number(bill.amount);
+      const tax = Number(bill.taxAmount) || 0;
+      const gstRate = sub > 0 ? Math.round((tax / sub) * 100) : 0;
+      return [{
+        itemName: bill.invoiceNumber ? `Purchase Bill ${bill.invoiceNumber}` : "Purchase Bill",
+        quantity: 1,
+        price: sub,
+        gstRate,
+        hsnCode: undefined,
+      }];
+    }
+    return [];
+  };
+
   const handleDownloadPdf = (bill?: any) => {
+    setPreviewAutoAction("download");
     setPreviewBill(bill || buildDraftBillPreview());
   };
 
-  const handleShare = (bill?: any) => {
-    toast.success("Share link copied to clipboard!");
+  const handleShare = async (bill?: any) => {
+    const b = bill || buildDraftBillPreview();
+    const summary = [
+      `Purchase Bill: ${b.invoiceNumber || "Draft"}`,
+      `Vendor: ${b.vendor?.name || selectedVendor?.name || "—"}`,
+      `Amount: ₹${Number(b.amount || 0).toLocaleString("en-IN")}`,
+      `Date: ${formatDate(b.billDate)}`,
+      b.status ? `Status: ${b.status}` : null
+    ].filter(Boolean).join("\n");
+
+    const result = await shareText(summary, `Purchase Bill ${b.invoiceNumber || ""}`);
+    if (result === "copied") toast.success("Bill details copied to clipboard!");
+    else if (result === "unsupported") toast.error("Sharing is not supported in this browser");
+    // "shared" and "cancelled" need no toast — the OS share sheet already gave feedback.
   };
 
   const handlePrint = () => {
+    setPreviewAutoAction("print");
     setPreviewBill(buildDraftBillPreview());
   };
 
@@ -1154,9 +1230,9 @@ export default function PurchaseBillsPage() {
                 >
                   <Printer size={13} /> Print
                 </button>
-                <button 
+                <button
                   type="button"
-                  onClick={() => { setShowShareDrop(false); handleDownloadPdf(); }} 
+                  onClick={() => { setShowShareDrop(false); handleDownloadPdf(); }}
                   className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"
                 >
                   <Download size={13} /> Download
@@ -1170,6 +1246,29 @@ export default function PurchaseBillsPage() {
             {saving ? "Saving..." : "Save"}
           </button>
         </div>
+
+        {/* Print/Download from the Share dropdown above only set state —
+            this create view has its own separate `return`, so without its
+            own copy of this block that state had nothing to render into and
+            the dropdown looked like it did nothing. */}
+        {previewBill && (
+          <GSTInvoice
+            order={{
+              poNumber: previewBill.invoiceNumber || previewBill.billNumber,
+              createdAt: previewBill.billDate || previewBill.invoiceDate,
+              discount: previewBill.discount || previewBill.discountAmount || 0,
+              discountAmount: previewBill.discountAmount || previewBill.discount || 0,
+              freight: previewBill.freight || previewBill.freightCost || 0,
+              freightCost: previewBill.freightCost || previewBill.freight || 0,
+              items: mapBillToInvoiceItems(previewBill),
+            }}
+            vendor={previewBill.vendor || selectedVendor || { name: previewBill.vendorSearch || "Vendor" }}
+            companyDetails={companyProfile || FALLBACK_COMPANY}
+            documentType="PURCHASE_INVOICE"
+            autoAction={previewAutoAction}
+            onClose={() => { setPreviewBill(null); setPreviewAutoAction(undefined); }}
+          />
+        )}
       </div>
     );
   }
@@ -1412,18 +1511,13 @@ export default function PurchaseBillsPage() {
             discountAmount: previewBill.discountAmount || previewBill.discount || 0,
             freight: previewBill.freight || previewBill.freightCost || 0,
             freightCost: previewBill.freightCost || previewBill.freight || 0,
-            items: (previewBill.items || []).map((it: any, idx: number) => ({
-              itemName: it.item || it.name || `Item #${idx + 1}`,
-              quantity: Number(it.qty ?? it.quantity) || 0,
-              price: Number(it.price ?? it.pricePerUnit ?? it.rate) || 0,
-              gstRate: Number(it.taxRate ?? it.tax ?? it.taxPct ?? 0),
-              hsnCode: it.hsnCode || it.hsn || undefined,
-            })),
+            items: mapBillToInvoiceItems(previewBill),
           }}
           vendor={previewBill.vendor || selectedVendor || { name: previewBill.vendorSearch || "Vendor" }}
           companyDetails={companyProfile || FALLBACK_COMPANY}
           documentType="PURCHASE_INVOICE"
-          onClose={() => setPreviewBill(null)}
+          autoAction={previewAutoAction}
+          onClose={() => { setPreviewBill(null); setPreviewAutoAction(undefined); }}
         />
       )}
 

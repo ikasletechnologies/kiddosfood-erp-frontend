@@ -1,8 +1,21 @@
 "use client";
 
 import { Camera, User, Share2, Mail, Users, Pencil } from "lucide-react";
+import { shareText } from "@/lib/utils";
+import { useToast } from "@/context/ToastContext";
 
 export default function ProfileHero() {
+  const { showToast } = useToast();
+
+  const handleShare = async () => {
+    const result = await shareText(
+      typeof window !== "undefined" ? window.location.href : "",
+      "Business Profile"
+    );
+    if (result === "copied") showToast("Profile link copied to clipboard!", "success");
+    else if (result === "unsupported") showToast("Sharing is not supported in this browser", "error");
+  };
+
   return (
     <div className="w-full bg-white dark:bg-slate-900 border-b border-[#F0EAF0] dark:border-slate-800">
 
@@ -39,7 +52,7 @@ export default function ProfileHero() {
             <button className="flex items-center gap-2 px-6 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-[#1A1A1A] dark:text-white hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
               <Users size={16} /> Follow
             </button>
-            <button className="flex items-center gap-2 px-6 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-[#1A1A1A] dark:text-white hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
+            <button onClick={handleShare} className="flex items-center gap-2 px-6 py-2.5 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-bold text-[#1A1A1A] dark:text-white hover:bg-slate-50 transition-all active:scale-95 shadow-sm">
               <Share2 size={16} /> Share
             </button>
             <button className="flex items-center gap-2 px-6 py-2.5 bg-[#7C3AED] text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition-all active:scale-95 shadow-xl shadow-purple-200/50">

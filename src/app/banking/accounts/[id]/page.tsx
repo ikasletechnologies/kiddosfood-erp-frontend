@@ -70,25 +70,13 @@ function toRows(account: any): LedgerRow[] {
     });
   }
 
-  for (const v of account.vendorLedgers || []) {
-    rows.push({
-      id: `vendor-${v.id}`,
-      date: v.createdAt,
-      particulars: v.note || 'Vendor Ledger Entry',
-      type: v.type === 'CREDIT' ? 'OUTFLOW' : 'INFLOW',
-      amount: v.amount,
-    });
-  }
-
-  for (const c of account.customerLedgers || []) {
-    rows.push({
-      id: `customer-${c.id}`,
-      date: c.createdAt,
-      particulars: c.note || 'Customer Ledger Entry',
-      type: c.type === 'DEBIT' ? 'INFLOW' : 'OUTFLOW',
-      amount: c.amount,
-    });
-  }
+  // VendorLedger/CustomerLedger entries are deliberately NOT merged in here.
+  // Every payment already appears once via `account.payments` above;
+  // FinanceService.createPayment additionally writes a vendor/customer
+  // ledger row carrying this same accountId for the SAME event (the
+  // vendor/customer-side mirror, not a second real transaction) — merging
+  // both doubled every payment as a +/- pair with the same amount. See
+  // AccountService.getAccountById for the backend side of this fix.
 
   return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 }

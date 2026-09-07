@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { vendorsApi, accountsApi, accountingApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, shareText } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
@@ -182,6 +182,22 @@ export default function PaymentOutPage() {
     setSelectedVendor(null); setVendorSearch(""); setPaymentMode("Cash");
     setDate(new Date().toISOString().split("T")[0]); setAmount(""); setNote(""); setShowNote(false);
     setView("create");
+  };
+
+  const handleShare = async () => {
+    setShowShareDrop(false);
+    const summary = [
+      "Payment Out",
+      `Vendor: ${selectedVendor?.name || "—"}`,
+      `Amount: ₹${(parseFloat(amount) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+      `Payment Mode: ${paymentMode}`,
+      `Date: ${formatDate(date)}`,
+      note ? `Note: ${note}` : null
+    ].filter(Boolean).join("\n");
+
+    const result = await shareText(summary, "Payment Out");
+    if (result === "copied") toast.success("Payment details copied to clipboard!");
+    else if (result === "unsupported") toast.error("Sharing is not supported in this browser");
   };
 
   const handleSave = async () => {
@@ -376,15 +392,15 @@ export default function PaymentOutPage() {
           <button onClick={() => setView("list")} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
           <div className="relative" ref={shareDropRef}>
             <div className="flex rounded-lg overflow-hidden">
-              <button onClick={() => toast.success("Share feature coming soon")}
+              <button onClick={handleShare}
                 className="px-4 py-2 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-r border-orange-400"
               >Share</button>
               <button onClick={() => setShowShareDrop(v => !v)} className="px-2 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600"><ChevronDown size={14} /></button>
             </div>
             {showShareDrop && (
               <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-sm min-w-[160px] z-50 overflow-hidden">
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"><Share2 size={13} /> Share</button>
-                <button className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"><Printer size={13} /> Print</button>
+                <button onClick={handleShare} className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"><Share2 size={13} /> Share</button>
+                <button onClick={() => { setShowShareDrop(false); window.print(); }} className="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 flex items-center gap-2"><Printer size={13} /> Print</button>
               </div>
             )}
           </div>

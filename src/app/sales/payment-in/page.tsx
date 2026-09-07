@@ -10,7 +10,7 @@ import { clsx } from "clsx";
 import { useSearchParams } from "next/navigation";
 import { customersApi, dealersApi, franchiseApi, draftsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber, formatDate } from "@/lib/utils";
+import { formatERPNumber, formatDate, shareText } from "@/lib/utils";
 import api from "@/lib/api/base";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -650,6 +650,20 @@ export default function PaymentInPage() {
     }
   };
 
+  const handleShareRow = async (p: any) => {
+    const summary = [
+      `Payment Receipt: ${p.paymentNumber ? formatERPNumber("RCPT", p.paymentNumber, p.createdAt) : "—"}`,
+      `Party: ${(typeof p.entity === "string" ? p.entity : p.entity?.name) || p.entityId || "—"}`,
+      `Amount: ₹${(p.paidAmount || 0).toLocaleString("en-IN")}`,
+      `Payment Mode: ${p.paymentMode || "—"}`,
+      `Date: ${formatDate(p.createdAt)}`
+    ].join("\n");
+
+    const result = await shareText(summary, "Payment Receipt");
+    if (result === "copied") showToast("Payment receipt details copied to clipboard!", "success");
+    else if (result === "unsupported") showToast("Sharing is not supported in this browser", "error");
+  };
+
   const loadDraft = (p: any) => {
     setDraftId(p.id);
     const raw = p._rawState || {};
@@ -1287,6 +1301,7 @@ export default function PaymentInPage() {
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
+                                onClick={(e) => { e.stopPropagation(); handleShareRow(p); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Share"
                               >

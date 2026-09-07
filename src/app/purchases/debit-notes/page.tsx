@@ -9,7 +9,7 @@ import {
 import { clsx } from "clsx";
 import { vendorsApi, purchaseReturnsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, shareText } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
@@ -253,6 +253,26 @@ export default function DebitNotesPage() {
     setDate(todayStr()); setNoteType("Debit Note"); setPaymentType("Cash");
     setRoundOff(true); setNoteText(""); setShowNote(false);
     setItems([newItem(), newItem()]);
+  };
+
+  const buildDebitNoteShareSummary = () =>
+    [
+      "Debit Note",
+      `Vendor: ${selectedVendor?.name || "—"}`,
+      grandTotal > 0 ? `Amount: ₹${grandTotal.toFixed(2)}` : null
+    ].filter(Boolean).join("\n");
+
+  const handleShareWhatsApp = () => {
+    setShowShareDrop(false);
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildDebitNoteShareSummary())}`, "_blank");
+  };
+  const handleShareEmail = () => {
+    setShowShareDrop(false);
+    window.location.href = `mailto:?subject=${encodeURIComponent("Debit Note")}&body=${encodeURIComponent(buildDebitNoteShareSummary())}`;
+  };
+  const handleSharePdf = () => {
+    setShowShareDrop(false);
+    window.print();
   };
 
   const handleSave = async () => {
@@ -660,8 +680,12 @@ export default function DebitNotesPage() {
               </button>
               {showShareDrop && (
                 <div className="absolute bottom-full right-0 mb-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 py-1 min-w-[140px] overflow-hidden">
-                  {["WhatsApp", "Email", "PDF"].map(opt => (
-                    <button key={opt} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 transition-colors">{opt}</button>
+                  {[
+                    { label: "WhatsApp", onClick: handleShareWhatsApp },
+                    { label: "Email", onClick: handleShareEmail },
+                    { label: "PDF", onClick: handleSharePdf }
+                  ].map(opt => (
+                    <button key={opt.label} onClick={opt.onClick} className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-slate-200 hover:bg-orange-50 dark:hover:bg-white/5 transition-colors">{opt.label}</button>
                   ))}
                 </div>
               )}

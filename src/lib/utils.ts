@@ -5,6 +5,35 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Shares a plain-text summary via the native Web Share API when available,
+ * otherwise copies it to the clipboard. Returns what actually happened so
+ * the caller shows a toast that matches reality — never claim "copied" or
+ * "shared" without having actually done it. A cancelled share sheet isn't
+ * an error and is reported as such (no toast needed).
+ */
+export async function shareText(text: string, title?: string): Promise<"shared" | "copied" | "unsupported" | "cancelled"> {
+  if (typeof navigator !== "undefined" && (navigator as any).share) {
+    try {
+      await (navigator as any).share({ title, text });
+      return "shared";
+    } catch (err: any) {
+      if (err?.name === "AbortError") return "cancelled";
+      // Fall through to clipboard if the native share sheet itself errored
+      // for a reason other than the user cancelling it.
+    }
+  }
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return "copied";
+    } catch {
+      return "unsupported";
+    }
+  }
+  return "unsupported";
+}
+
 export function formatCurrency(amount: number, currency: string = "₹") {
   const isNegative = amount < 0;
   const absVal = Math.abs(amount);
