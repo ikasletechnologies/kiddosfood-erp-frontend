@@ -43,10 +43,10 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   },
   INACTIVE: {
     label: "Inactive",
-    color: "text-slate-600 dark:text-slate-400",
-    bg: "bg-slate-50 dark:bg-slate-500/10",
-    border: "border-slate-200 dark:border-slate-500/20",
-    dot: "bg-slate-400",
+    color: "text-red-700 dark:text-red-400",
+    bg: "bg-red-50 dark:bg-red-500/10",
+    border: "border-red-200 dark:border-red-500/20",
+    dot: "bg-red-500",
   },
   PENDING: {
     label: "Pending Setup",
@@ -98,6 +98,7 @@ export default function FranchisePage() {
   } | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
+  const [confirmToggle, setConfirmToggle] = useState<any>(null);
   const [resettingPassword, setResettingPassword] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
 
@@ -236,20 +237,7 @@ export default function FranchisePage() {
 
   const handleVerifyAndRedirect = async (f: any) => {
     if (currentUser?.role === "SUPER_ADMIN") {
-      const pass = prompt(`Enter Dashboard Access Password for ${f.name}:`);
-      if (pass === null) return;
-
-      try {
-        const res = await franchiseApi.verifyPassword(f.id, pass);
-        if (res.data.isValid) {
-          window.location.href = `/franchise/dashboard?id=${f.id}`;
-        } else {
-          toast.error("Incorrect Dashboard Password");
-        }
-      } catch (e) {
-        console.error(e);
-        toast.error("Verification failed. Please try again.");
-      }
+      window.location.href = `/franchise/dashboard?id=${f.id}`;
     } else {
       window.location.href = `/franchise/dashboard`;
     }
@@ -309,22 +297,17 @@ export default function FranchisePage() {
     }
   };
 
-  const handleToggleStatus = async (f: any) => {
+  const executeToggleStatus = async () => {
+    if (!confirmToggle) return;
+    const f = confirmToggle;
     const newStatus = f.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     try {
       await franchiseApi.update(f.id, { status: newStatus });
+      setConfirmToggle(null);
       fetchFranchises();
-      setNotification({
-        type: "success",
-        title: "Status Updated",
-        message: `${f.name} is now ${newStatus.toLowerCase()}.`,
-      });
+      toast.success(`${f.name} is now ${newStatus.toLowerCase()}.`);
     } catch (e: any) {
-      setNotification({
-        type: "error",
-        title: "Toggle Failed",
-        message: e.response?.data?.error || "Failed to update status",
-      });
+      toast.error(e.response?.data?.error || "Failed to update status");
     }
   };
 
@@ -422,7 +405,7 @@ export default function FranchisePage() {
         <div className="flex items-center gap-3 flex-1 flex-wrap">
           {[
             {
-              label: "Total Outlets",
+              label: "Total Franchise",
               value: franchises.length,
               icon: Building2,
               color: "text-indigo-600",
@@ -430,7 +413,7 @@ export default function FranchisePage() {
               borderColor: "border-indigo-200 dark:border-indigo-900/30",
             },
             {
-              label: "Active Branches",
+              label: "Active Franchise",
               value: franchises.filter((f) => f.status === "ACTIVE").length,
               icon: Activity,
               color: "text-emerald-600",
@@ -438,8 +421,8 @@ export default function FranchisePage() {
               borderColor: "border-emerald-200 dark:border-emerald-900/30",
             },
             {
-              label: "Planned Setup",
-              value: franchises.filter((f) => f.status === "PENDING").length,
+              label: "Inactive Franchise",
+              value: franchises.filter((f) => f.status === "INACTIVE").length,
               icon: AlertTriangle,
               color: "text-amber-600",
               bg: "bg-amber-50 dark:bg-amber-950/20",
@@ -524,7 +507,7 @@ export default function FranchisePage() {
                   </div>
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => handleToggleStatus(f)}
+                      onClick={() => setConfirmToggle(f)}
                       className={clsx(
                         "p-1.5 rounded-lg transition-colors",
                         isActive
@@ -544,19 +527,15 @@ export default function FranchisePage() {
                         >
                           <Edit2 size={14} />
                         </button>
-                        <button
-                          onClick={() => setConfirmDelete(f)}
-                          disabled={isActive}
-                          className={clsx(
-                            "p-1.5 rounded-lg transition-colors",
-                            isActive
-                              ? "text-slate-300 dark:text-slate-600 cursor-not-allowed"
-                              : "text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
-                          )}
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {!isActive && (
+                          <button
+                            onClick={() => setConfirmDelete(f)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -600,16 +579,11 @@ export default function FranchisePage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleVerifyAndRedirect(f)}
-                      className="px-2 py-1 text-[11px] font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 rounded transition-colors uppercase tracking-wider"
+                      className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 rounded transition-colors uppercase tracking-wider"
                     >
+                      <Eye size={12} />
                       Dashboard
                     </button>
-                    <div className="flex items-center gap-1.5 ml-2 text-slate-500">
-                      <Users size={14} />
-                      <span className="text-xs font-bold tabular-nums">
-                        {f._count?.users || 0}
-                      </span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1043,6 +1017,51 @@ export default function FranchisePage() {
                 className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold shadow-sm transition-all"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toggle Confirmation Modal */}
+      {confirmToggle && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 p-6 text-center">
+            <div className={clsx(
+              "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4",
+              confirmToggle.status === "ACTIVE" 
+                ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
+                : "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
+            )}>
+              <Power size={28} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+              {confirmToggle.status === "ACTIVE" ? "Deactivate Branch" : "Activate Branch"}
+            </h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+              Are you sure you want to {confirmToggle.status === "ACTIVE" ? "deactivate" : "activate"}{" "}
+              <span className="font-bold text-slate-700 dark:text-slate-300">
+                "{confirmToggle.name}"
+              </span>
+              ?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmToggle(null)}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeToggleStatus}
+                className={clsx(
+                  "flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-bold shadow-sm transition-all",
+                  confirmToggle.status === "ACTIVE"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                )}
+              >
+                Confirm
               </button>
             </div>
           </div>

@@ -68,123 +68,6 @@ function HBtn({
   );
 }
 
-function SearchModal({ onClose }: { onClose: () => void }) {
-  const [q, setQ] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
-
-  const filtered = q
-    ? menuItems.filter((s) => s.label.toLowerCase().includes(q.toLowerCase()))
-    : menuItems;
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [q]);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev < filtered.length - 1 ? prev + 1 : prev));
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
-      }
-      if (e.key === "Enter" && filtered[selectedIndex]) {
-        e.preventDefault();
-        router.push(filtered[selectedIndex].href);
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose, filtered, selectedIndex, router]);
-
-  return (
-    <div
-      className="fixed inset-0 z-[200] flex items-start justify-center pt-20 px-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xl bg-white dark:bg-[#12141c] rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-white/5">
-          <Search size={18} className="text-[#F58220] shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search modules, purchase orders, recipes, inventory..."
-            className="flex-1 text-sm font-semibold text-slate-900 dark:text-white bg-transparent outline-none placeholder:text-slate-400"
-          />
-          {q && (
-            <button
-              onClick={() => setQ("")}
-              className="text-slate-400 hover:text-slate-600 transition-colors"
-            >
-              <X size={16} />
-            </button>
-          )}
-          <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 border border-slate-200 dark:border-white/10 rounded-lg px-2 py-0.5">
-            ESC
-          </kbd>
-        </div>
-
-        <div className="max-h-80 overflow-y-auto custom-scrollbar py-2 px-2">
-          {filtered.length > 0 ? (
-            filtered.map((item, index) => {
-              const Icon = item.icon || Search;
-              const isSelected = index === selectedIndex;
-              return (
-                <button
-                  key={item.label + item.href}
-                  onClick={() => {
-                    router.push(item.href);
-                    onClose();
-                  }}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  className={clsx(
-                    "w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all text-left",
-                    isSelected
-                      ? "bg-orange-50 dark:bg-orange-950/30 text-[#F58220] dark:text-orange-400"
-                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5"
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon
-                      size={15}
-                      className={clsx(
-                        "shrink-0",
-                        isSelected ? "text-[#F58220]" : "text-slate-400"
-                      )}
-                    />
-                    <span>{item.label}</span>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 opacity-60">
-                    Jump →
-                  </span>
-                </button>
-              );
-            })
-          ) : (
-            <div className="px-4 py-8 text-center text-xs text-slate-400">
-              No matching modules for &quot;{q}&quot;
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function RefrensHeader() {
   const pathname = usePathname();
@@ -193,7 +76,7 @@ export default function RefrensHeader() {
   const { toggleCollapsed, toggleMobileOpen } = useSidebar();
   const { theme, toggleTheme } = useTheme();
 
-  const [showSearch, setShowSearch] = useState(false);
+
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
@@ -250,22 +133,10 @@ export default function RefrensHeader() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        e.preventDefault();
-        setShowSearch(true);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
   if (pathname === "/login") return null;
 
   return (
     <>
-      {showSearch && <SearchModal onClose={() => setShowSearch(false)} />}
 
       <header className="w-full h-16 bg-white/95 dark:bg-[#0b0c10]/95 backdrop-blur-md border-b border-slate-200/70 dark:border-white/5 flex items-center px-3 sm:px-6 gap-1.5 sm:gap-3 sticky top-0 z-40">
         {/* ── Left: Hamburger toggles ──────────────────── */}
@@ -300,19 +171,6 @@ export default function RefrensHeader() {
 
         {/* ── Right Navigation & User Controls ──────────── */}
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {/* Spotlight Search Trigger */}
-          <button
-            type="button"
-            onClick={() => setShowSearch(true)}
-            className="flex items-center gap-2 p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100/80 dark:bg-white/5 border border-slate-200/50 dark:border-white/5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-white hover:border-slate-300 transition-all group"
-            title="Quick search (Ctrl+K)"
-          >
-            <Search size={14} className="text-slate-400 group-hover:text-[#F58220] transition-colors shrink-0" />
-            <span className="hidden sm:inline font-medium">Quick search...</span>
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-400 bg-white dark:bg-slate-800 border border-slate-200 dark:border-white/10 rounded px-1.5 py-0.5 shadow-sm">
-              <Command size={10} /> K
-            </kbd>
-          </button>
 
           {/* Theme Switcher */}
           <button
