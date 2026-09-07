@@ -1081,7 +1081,7 @@ export default function PurchaseBillsPage() {
             </div>
 
             {/* Summary Panel */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4.5 w-full lg:w-72 shrink-0 space-y-2.5 shadow-sm">
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2.5 shadow-sm">
               <div className="flex justify-between items-center text-sm text-gray-600 dark:text-slate-300">
                 <span className="font-medium">Subtotal</span>
                 <span className="font-semibold text-gray-900 dark:text-white">₹ {subtotal.toFixed(2)}</span>

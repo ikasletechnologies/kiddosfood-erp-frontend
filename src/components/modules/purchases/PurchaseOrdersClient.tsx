@@ -880,38 +880,73 @@ export default function PurchaseOrdersClient() {
                       </div>
 
                       <div className="w-full md:w-72 space-y-3">
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">Subtotal</span>
-                          <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.subtotal || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">Discount</span>
-                          <span className="font-bold text-emerald-600 dark:text-emerald-400">-{formatCurrency(viewingDetailsPO.discountAmount || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">GST (All)</span>
-                          <span className="font-bold text-slate-800 dark:text-white">{formatCurrency((viewingDetailsPO.cgst || 0) + (viewingDetailsPO.sgst || 0) + (viewingDetailsPO.igst || 0))}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">Freight</span>
-                          <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.freightCost || 0)}</span>
-                        </div>
-                        
-                        <div className="pt-3 border-t border-slate-200 dark:border-white/10">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Grand Total</span>
-                            <span className="text-lg font-black text-orange-600 dark:text-orange-400">{formatCurrency(viewingDetailsPO.totalAmount)}</span>
-                          </div>
-                        </div>
+                        {(() => {
+                          // Once a completed GRN has produced a Purchase Bill,
+                          // that bill's commercials (VendorInvoice — itself
+                          // derived from GoodsReceiptItem's actual price via
+                          // computeCommercialsFromPO) are the real financial
+                          // position of this PO, not the PO's own ordered
+                          // subtotal/GST/total. The PO's own fields are never
+                          // mutated — `hasActualInvoice` just picks which set
+                          // to display, and the original value is still shown
+                          // as a reference line below Grand Total whenever it
+                          // differs.
+                          const hasActual = viewingDetailsPO.hasActualInvoice;
+                          const subtotal = hasActual ? viewingDetailsPO.actualSubtotal : (viewingDetailsPO.subtotal || 0);
+                          const discount = hasActual ? viewingDetailsPO.actualDiscountAmount : (viewingDetailsPO.discountAmount || 0);
+                          const gst = hasActual
+                            ? viewingDetailsPO.actualCgst + viewingDetailsPO.actualSgst + viewingDetailsPO.actualIgst
+                            : (viewingDetailsPO.cgst || 0) + (viewingDetailsPO.sgst || 0) + (viewingDetailsPO.igst || 0);
+                          const freight = hasActual ? viewingDetailsPO.actualFreightCost : (viewingDetailsPO.freightCost || 0);
+                          const grandTotal = hasActual ? viewingDetailsPO.actualTotalAmount : viewingDetailsPO.totalAmount;
+                          const balanceDue = hasActual ? viewingDetailsPO.actualBalanceDue : (viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0);
+                          const originalDiffers = hasActual && Math.abs(grandTotal - viewingDetailsPO.totalAmount) > 0.01;
 
-                        <div className="flex justify-between items-center text-sm pt-2">
-                          <span className="text-slate-500 dark:text-slate-400 font-medium">Advance Applied</span>
-                          <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.advanceApplied || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg mt-1 border border-rose-200 dark:border-rose-900/40">
-                          <span className="text-rose-600 dark:text-rose-400 font-bold">Balance Due</span>
-                          <span className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0)}</span>
-                        </div>
+                          return (
+                            <>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">Subtotal</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(subtotal)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">Discount</span>
+                                <span className="font-bold text-emerald-600 dark:text-emerald-400">-{formatCurrency(discount)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">GST (All)</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(gst)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">Freight</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(freight)}</span>
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-200 dark:border-white/10">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                                    {hasActual ? "Actual Received Value" : "Grand Total"}
+                                  </span>
+                                  <span className="text-lg font-black text-orange-600 dark:text-orange-400">{formatCurrency(grandTotal)}</span>
+                                </div>
+                                {originalDiffers && (
+                                  <div className="flex justify-between items-center mt-1">
+                                    <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Original PO Value</span>
+                                    <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">{formatCurrency(viewingDetailsPO.totalAmount)}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex justify-between items-center text-sm pt-2">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">Advance Applied</span>
+                                <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(viewingDetailsPO.advanceApplied || 0)}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-sm bg-rose-50 dark:bg-rose-950/30 p-2 rounded-lg mt-1 border border-rose-200 dark:border-rose-900/40">
+                                <span className="text-rose-600 dark:text-rose-400 font-bold">Balance Due</span>
+                                <span className="font-black text-rose-600 dark:text-rose-400">{formatCurrency(balanceDue)}</span>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
