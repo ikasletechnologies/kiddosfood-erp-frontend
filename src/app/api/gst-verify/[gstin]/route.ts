@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";//
 
 // Standard Indian State Codes for GSTIN prefix
 const STATE_CODES: Record<string, { state: string; city: string; pin: string; sampleAddress: string }> = {
