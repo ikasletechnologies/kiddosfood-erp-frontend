@@ -55,11 +55,72 @@ interface LinkedFranchiseOrder {
   items: LinkedFranchiseOrderItem[];
 }
 
+function findMatchingRecipe(
+  recipeList: Recipe[],
+  criteria: {
+    recipeId?: string | null;
+    productId?: string | null;
+    recipeCode?: string | null;
+    productName?: string | null;
+  }
+): Recipe | undefined {
+  if (!recipeList || recipeList.length === 0) return undefined;
+
+  // 1. Direct Recipe ID match
+  if (criteria.recipeId) {
+    const byId = recipeList.find((r) => r.id === criteria.recipeId);
+    if (byId) return byId;
+  }
+
+  // 2. Direct Recipe Code match
+  if (criteria.recipeCode) {
+    const code = criteria.recipeCode.trim().toLowerCase();
+    const byCode = recipeList.find(
+      (r) => (r as any).recipeCode && (r as any).recipeCode.trim().toLowerCase() === code
+    );
+    if (byCode) return byCode;
+  }
+
+  // 3. Product ID match (r.productId or r.product?.id)
+  if (criteria.productId) {
+    const byProductId = recipeList.find(
+      (r) => r.productId === criteria.productId || r.product?.id === criteria.productId
+    );
+    if (byProductId) return byProductId;
+  }
+
+  // 4. Product Name or Recipe Name exact match
+  const searchName = (criteria.productName || criteria.recipeId || criteria.productId || "").trim().toLowerCase();
+  if (searchName) {
+    const byExactName = recipeList.find(
+      (r) =>
+        r.name?.trim().toLowerCase() === searchName ||
+        r.product?.name?.trim().toLowerCase() === searchName
+    );
+    if (byExactName) return byExactName;
+
+    // 5. Case-insensitive / partial match as fallback
+    const byPartialName = recipeList.find(
+      (r) =>
+        r.name?.toLowerCase().includes(searchName) ||
+        r.product?.name?.toLowerCase().includes(searchName)
+    );
+    if (byPartialName) return byPartialName;
+  }
+
+  return undefined;
+}
+
 function ProductionPlanningContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const franchiseOrderIdParam = searchParams.get("franchiseOrderId");
-  const targetProductIdParam = searchParams.get("productId");
+  const targetProductIdParam = searchParams.get("productId") || searchParams.get("product");
+  const recipeIdParam = searchParams.get("recipeId") || searchParams.get("recipe");
+  const recipeCodeParam = searchParams.get("recipeCode") || searchParams.get("code");
+  const productNameParam = searchParams.get("productName");
+  const targetYieldParam = searchParams.get("targetYield") || searchParams.get("quantity") || searchParams.get("qty") || searchParams.get("yield");
+  const targetUnitParam = searchParams.get("targetUnit") || searchParams.get("unit");
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
@@ -93,13 +154,9 @@ function ProductionPlanningContent() {
   // Helper to select a specific franchise order item and match its recipe
   const applyOrderItemSelection = useCallback(
     (orderItem: LinkedFranchiseOrderItem, recipeList: Recipe[]) => {
-      // Find matching recipe by productId or product name
-      const matched = recipeList.find((r) => {
-        const matchId = r.productId === orderItem.productId || r.product?.id === orderItem.productId;
-        const matchName =
-          r.name?.trim().toLowerCase() === orderItem.productName?.trim().toLowerCase() ||
-          r.product?.name?.trim().toLowerCase() === orderItem.productName?.trim().toLowerCase();
-        return matchId || matchName;
+      const matched = findMatchingRecipe(recipeList, {
+        productId: orderItem.productId,
+        productName: orderItem.productName,
       });
 
       if (matched) {
@@ -147,7 +204,7 @@ function ProductionPlanningContent() {
           setFranchiseId((hq || fallback).id);
         }
 
-        // Check if opened with a Franchise Order reference
+        // 1. Check if opened with a Franchise Order reference
         if (franchiseOrderIdParam) {
           try {
             const foRes = await franchiseOrdersApi.getById(franchiseOrderIdParam);
@@ -187,12 +244,44 @@ function ProductionPlanningContent() {
             console.error("Failed to load originating franchise order:", foErr);
             toast.error("Could not load details for the requested Franchise Order.");
           }
-        } else {
-          // Standard manual planning flow
+        } 
+        // 2. Check if a specific recipe or product was requested via query params
+        else if (recipeIdParam || targetProductIdParam || recipeCodeParam || productNameParam) {
+          const matched = findMatchingRecipe(recipeList, {
+            recipeId: recipeIdParam,
+            productId: targetProductIdParam,
+            recipeCode: recipeCodeParam,
+            productName: productNameParam,
+          });
+
+          if (matched) {
+            setSelectedRecipeId(matched.id);
+            setTargetYield(targetYieldParam ? Number(targetYieldParam) : (matched.yieldQty || 100));
+            setTargetUnit(targetUnitParam || matched.yieldUnit || "KG");
+            setMissingRecipeForProduct(null);
+          } else {
+            // Explicitly requested product/recipe has no formulation configured
+            setSelectedRecipeId("");
+            const requestedLabel = productNameParam || targetProductIdParam || recipeCodeParam || recipeIdParam || "Selected Product";
+            setTargetYield(targetYieldParam ? Number(targetYieldParam) : 1);
+            setTargetUnit(targetUnitParam || "KG");
+            setMissingRecipeForProduct({
+              name: requestedLabel,
+              quantity: targetYieldParam ? Number(targetYieldParam) : 1,
+              productId: targetProductIdParam || "",
+            });
+          }
+        } 
+        // 3. Standard direct manual planning flow (no route params)
+        else {
           if (recipeList.length > 0) {
             setSelectedRecipeId(recipeList[0].id);
             setTargetYield(recipeList[0].yieldQty || 100);
             setTargetUnit(recipeList[0].yieldUnit || "KG");
+            setMissingRecipeForProduct(null);
+          } else {
+            setSelectedRecipeId("");
+            setMissingRecipeForProduct(null);
           }
         }
       } catch (e) {
@@ -203,7 +292,7 @@ function ProductionPlanningContent() {
       }
     }
     initData();
-  }, [franchiseOrderIdParam, targetProductIdParam, applyOrderItemSelection]);
+  }, [franchiseOrderIdParam, targetProductIdParam, recipeIdParam, recipeCodeParam, productNameParam, targetYieldParam, targetUnitParam, applyOrderItemSelection]);
 
   useEffect(() => {
     if (!selectedWarehouseId) return;
@@ -357,7 +446,200 @@ function ProductionPlanningContent() {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (!recipe) {
+      toast.error("Please select a formulation recipe before printing.");
+      return;
+    }
+    if (targetYield <= 0) {
+      toast.error("Please enter a valid target batch yield before printing.");
+      return;
+    }
+
+    const selectedWh = warehouses.find((w) => w.id === selectedWarehouseId);
+    const whName = selectedWh ? `${selectedWh.name}${selectedWh.location ? ` (${selectedWh.location})` : ""}` : "Default Warehouse";
+
+    const cleanInstructions = (recipe.instructions || "")
+      .replace(/\[unitWeight:[\d.]+\]/g, "")
+      .replace(/\[weightUnit:\w+\]/g, "")
+      .trim();
+
+    const formattedMultiplier = multiplier >= 0.01 
+      ? multiplier.toFixed(2) 
+      : multiplier.toFixed(4).replace(/\.?0+$/, "");
+
+    const formatNum = (n: number) => {
+      if (Number.isInteger(n)) return n.toString();
+      return n.toFixed(2).replace(/\.?0+$/, "");
+    };
+
+    const tableRows = recipe.recipeItems.map((item, idx) => {
+      const scaledQty = item.quantityRequired * multiplier;
+      const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
+      const isShort = stock + 0.000001 < scaledQty;
+      const shortageQty = scaledQty - stock;
+
+      return `
+        <tr style="${isShort ? 'background-color: #fff1f2;' : (idx % 2 === 0 ? 'background-color: #ffffff;' : 'background-color: #f8fafc;')}">
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #64748b; font-weight: 600;">${idx + 1}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a;">
+            ${item.inventoryItem?.name || (item as any).name || "Raw Material"}
+            ${item.inventoryItem?.sku ? `<div style="font-size: 10px; color: #64748b; font-weight: 500; font-family: monospace;">SKU: ${item.inventoryItem.sku}</div>` : ""}
+          </td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #64748b; font-family: monospace;">${formatNum(item.quantityRequired)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #ea580c; font-size: 12px; font-family: monospace;">${formatNum(scaledQty)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569; font-weight: 600;">${item.unit || "KG"}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 600; color: #334155;">${formatNum(stock)} ${item.unit || "KG"}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+            ${isShort 
+              ? `<span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca;">Short: -${formatNum(shortageQty)}</span>` 
+              : `<span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">✓ In Stock</span>`
+            }
+          </td>
+        </tr>
+      `;
+    }).join("");
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Please allow pop-ups in your browser to print the formulation recipe.");
+      return;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Production Planning - ${recipe.name} (${targetYield} ${effectiveTargetUnit})</title>
+          <style>
+            @page { size: A4; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; color: #0f172a; line-height: 1.4; margin: 0; background: #fff; font-size: 12px; }
+            .no-print { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+            .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; border: none; cursor: pointer; }
+            .btn-primary { background: #f97316; color: white; }
+            .btn-secondary { background: #f1f5f9; color: #475569; }
+            .header-bar { border-bottom: 3px solid #f97316; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .brand-title h1 { font-size: 18px; font-weight: 900; margin: 0; color: #0f172a; text-transform: uppercase; letter-spacing: -0.02em; }
+            .brand-subtitle { font-size: 11px; font-weight: 700; color: #ea580c; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+            .header-meta { font-size: 10px; color: #64748b; text-align: right; line-height: 1.5; font-weight: 600; }
+            .order-banner { background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; font-size: 11px; color: #3730a3; font-weight: 600; }
+            .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+            .stat-card { background: #f8fafc; padding: 10px 12px; border-radius: 10px; border: 1px solid #e2e8f0; }
+            .stat-label { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 3px; letter-spacing: 0.05em; }
+            .stat-value { font-size: 14px; font-weight: 900; color: #0f172a; }
+            .stat-value.highlight { color: #ea580c; }
+            .section-header { font-size: 11px; font-weight: 800; text-transform: uppercase; color: #ea580c; margin: 16px 0 8px 0; letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
+            .section-header::after { content: ""; flex: 1; height: 1px; background: #fed7aa; }
+            table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-size: 11px; }
+            th { background: #f8fafc; padding: 8px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; }
+            .instructions-box { background: #fffaf5; padding: 12px 14px; border-radius: 8px; border: 1px solid #fed7aa; margin-bottom: 16px; }
+            .instructions-text { white-space: pre-line; line-height: 1.5; font-size: 11px; color: #431407; font-weight: 500; }
+            .signoff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px dashed #cbd5e1; }
+            .signoff-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #fafafa; }
+            .signoff-title { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 24px; }
+            .signoff-line { border-top: 1px solid #94a3b8; font-size: 10px; color: #334155; font-weight: 600; padding-top: 4px; text-align: center; }
+            @media print {
+              .no-print { display: none !important; }
+              body { padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="no-print">
+            <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
+            <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save PDF</button>
+          </div>
+
+          <div class="header-bar">
+            <div class="brand-title">
+              <h1>Kiddos Food ERP</h1>
+              <div class="brand-subtitle">Production Planning & Formulation Work Order</div>
+            </div>
+            <div class="header-meta">
+              <div><strong>Formulation:</strong> ${recipe.name}</div>
+              <div><strong>Generated:</strong> ${new Date().toLocaleString('en-IN')}</div>
+              <div><strong>Warehouse:</strong> ${whName}</div>
+            </div>
+          </div>
+
+          ${linkedOrder ? `
+            <div class="order-banner">
+              📋 Producing for Franchise Order: <strong>${linkedOrder.orderNumber}</strong> (${linkedOrder.franchiseName})
+            </div>
+          ` : ''}
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-label">Formulation Recipe</div>
+              <div class="stat-value">${recipe.name}</div>
+              ${recipe.product?.name ? `<div style="font-size: 9px; color: #64748b; margin-top: 2px;">Product: ${recipe.product.name}</div>` : ''}
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Base Recipe Yield</div>
+              <div class="stat-value">${recipe.yieldQty} ${recipe.yieldUnit || "Units"}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Target Batch Yield</div>
+              <div class="stat-value highlight">${targetYield} ${effectiveTargetUnit}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Batch Multiplier</div>
+              <div class="stat-value">${formattedMultiplier}×</div>
+            </div>
+          </div>
+
+          <div class="section-header">Scaled Raw Material Requirements (${recipe.recipeItems.length} Materials)</div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32px; text-align: center;">#</th>
+                <th style="text-align: left;">Raw Material / Ingredient</th>
+                <th style="text-align: right; width: 90px;">Base Formula</th>
+                <th style="text-align: right; width: 110px;">Required Qty</th>
+                <th style="text-align: center; width: 60px;">Unit</th>
+                <th style="text-align: right; width: 100px;">Available Stock</th>
+                <th style="text-align: center; width: 110px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows || '<tr><td colspan="7" style="text-align: center; padding: 12px; color: #94a3b8;">No ingredients listed in formula</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="section-header">Production Methodology &amp; Instructions</div>
+          <div class="instructions-box">
+            <div class="instructions-text">${cleanInstructions || "Standard formulation procedures apply. Ensure QC parameters are recorded during all production stages."}</div>
+          </div>
+
+          <div class="signoff-grid">
+            <div class="signoff-box">
+              <div class="signoff-title">Production Operator</div>
+              <div class="signoff-line">Name &amp; Signature</div>
+            </div>
+            <div class="signoff-box">
+              <div class="signoff-title">Batch / Lot Code</div>
+              <div class="signoff-line">Lot # Assigned</div>
+            </div>
+            <div class="signoff-box">
+              <div class="signoff-title">QA / QC Supervisor</div>
+              <div class="signoff-line">Inspection Approval</div>
+            </div>
+          </div>
+
+          <script>
+            setTimeout(() => {
+              window.focus();
+              window.print();
+            }, 300);
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   if (loading) {
@@ -581,15 +863,19 @@ function ProductionPlanningContent() {
               No Recipe Configured for &ldquo;{missingRecipeForProduct.name}&rdquo;
             </h3>
             <p className="text-xs text-amber-700 dark:text-amber-400 max-w-lg mx-auto font-medium">
-              The Franchise Order requested <strong>{missingRecipeForProduct.quantity} units</strong> of {missingRecipeForProduct.name}, but no formulation recipe exists for this product in the system yet.
+              {linkedOrder ? (
+                <>The Franchise Order requested <strong>{missingRecipeForProduct.quantity} units</strong> of &ldquo;{missingRecipeForProduct.name}&rdquo;, but no formulation recipe exists for this product in the system yet.</>
+              ) : (
+                <>No formulation recipe exists for <strong>{missingRecipeForProduct.name}</strong> in the system yet. Please configure a formulation recipe in Recipe Master or select an existing recipe from the dropdown above.</>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <Link
-              href={`/recipes`}
+              href={`/production/recipes`}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
             >
-              <Plus size={14} /> Configure Recipe in Recipe Manager <ExternalLink size={12} />
+              <Plus size={14} /> Configure Recipe in Recipe Master <ExternalLink size={12} />
             </Link>
           </div>
         </div>

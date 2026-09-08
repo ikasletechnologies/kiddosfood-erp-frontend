@@ -14,6 +14,14 @@ export default function DocumentSummary() {
     freightCost, setFreightCost
   } = usePurchaseOrder();
 
+  const parsedDiscount = Number(discountAmount);
+  const isDiscountInvalid = !Number.isFinite(parsedDiscount) || parsedDiscount < 0 || (parsedDiscount > totals.subtotal && totals.subtotal >= 0);
+  const discountErrorMessage = !Number.isFinite(parsedDiscount) || parsedDiscount < 0
+    ? "Discount must be a non-negative number."
+    : parsedDiscount > totals.subtotal
+    ? "Discount cannot exceed subtotal."
+    : null;
+
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-hidden">
       {/* Financial Header */}
@@ -42,23 +50,44 @@ export default function DocumentSummary() {
           </div>
 
           {/* Dynamic Adjustments */}
-          <div className="flex justify-between items-center text-xs group pt-1">
-            <div className="flex items-center gap-1.5 text-slate-500 font-medium">
-              <Tag size={13} className="text-slate-400 group-hover:text-[#f58220] transition-colors" />
-              <span>Discount</span>
+          <div className="pt-1">
+            <div className="flex justify-between items-center text-xs group">
+              <div className="flex items-center gap-1.5 text-slate-500 font-medium">
+                <Tag size={13} className={clsx("transition-colors", isDiscountInvalid ? "text-rose-500" : "text-slate-400 group-hover:text-[#f58220]")} />
+                <span className={clsx(isDiscountInvalid && "text-rose-600 dark:text-rose-400 font-semibold")}>Discount</span>
+              </div>
+              <div className="relative flex items-center w-28">
+                <span className={clsx("absolute left-2.5 text-xs font-bold pointer-events-none", isDiscountInvalid ? "text-rose-400" : "text-slate-400")}>₹</span>
+                <input 
+                  type="number"
+                  step="any"
+                  min="0"
+                  max={totals.subtotal > 0 ? totals.subtotal : undefined}
+                  value={discountAmount || ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "") {
+                      setDiscountAmount(0);
+                    } else {
+                      const num = parseFloat(val);
+                      setDiscountAmount(isNaN(num) ? 0 : num);
+                    }
+                  }}
+                  placeholder="0.00"
+                  className={clsx(
+                    "w-full pl-6 pr-2 py-1 text-right rounded-lg text-xs font-bold font-mono outline-none transition-all shadow-2xs",
+                    isDiscountInvalid
+                      ? "bg-rose-50/50 dark:bg-rose-950/20 border border-rose-400 dark:border-rose-600 text-rose-700 dark:text-rose-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-100 dark:focus:ring-rose-900/30"
+                      : "bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-white focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100"
+                  )}
+                />
+              </div>
             </div>
-            <div className="relative flex items-center w-28">
-              <span className="absolute left-2.5 text-xs text-slate-400 font-bold pointer-events-none">₹</span>
-              <input 
-                type="number"
-                step="any"
-                min="0"
-                value={discountAmount || ""}
-                onChange={(e) => setDiscountAmount(parseFloat(e.target.value) || 0)}
-                placeholder="0.00"
-                className="w-full pl-6 pr-2 py-1 text-right bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-bold font-mono text-slate-800 dark:text-white outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all shadow-2xs"
-              />
-            </div>
+            {discountErrorMessage && (
+              <span className="text-[10px] text-rose-500 font-semibold block text-right mt-1">
+                {discountErrorMessage}
+              </span>
+            )}
           </div>
 
           <div className="flex justify-between items-center text-xs group">
@@ -92,14 +121,23 @@ export default function DocumentSummary() {
             <span>GST Split</span>
             <Info size={11} className="text-slate-400" />
           </div>
-          <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
-            <span>CGST (Central Tax)</span>
-            <span className="font-mono font-bold">₹{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
-            <span>SGST (State Tax)</span>
-            <span className="font-mono font-bold">₹{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
+          {totals.igst > 0 ? (
+            <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
+              <span>IGST (Integrated Tax)</span>
+              <span className="font-mono font-bold">₹{totals.igst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
+                <span>CGST (Central Tax)</span>
+                <span className="font-mono font-bold">₹{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
+                <span>SGST (State Tax)</span>
+                <span className="font-mono font-bold">₹{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Settlement Selection */}

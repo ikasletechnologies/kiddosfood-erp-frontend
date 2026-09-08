@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X,
   Printer, ChevronDown, Trash2, Share2, Calendar,
-  AlignLeft, FileText, ArrowLeft, Upload, Download,
-  Tag, Truck,
+  AlignLeft, FileText, ArrowLeft, Download,
+  Tag, Truck, Eye,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { vendorsApi, vendorInvoicesApi, grnApi, purchaseOrdersApi, accountsApi, settingsApi } from "@/lib/api";
@@ -420,9 +420,20 @@ export default function PurchaseBillsPage() {
             setDiscount(poDiscount);
             setFreight(poFreight);
 
-           setDescription(`Auto-generated from GRN: ${grnId} / PO: ${grn.procurementOrder?.poNumber || ''}`);
-           setShowDesc(true);
-           toast.success("Bill auto-filled from GRN!");
+            const poTerms = grn.procurementOrder?.vendorNotes || grn.procurementOrder?.deliveryInstructions;
+            if (poTerms) {
+              setTermsText(poTerms);
+              setShowTerms(true);
+            }
+            const poRemarks = grn.procurementOrder?.internalNotes || grn.procurementOrder?.notes;
+            if (poRemarks) {
+              setDescription(poRemarks);
+              setShowDesc(true);
+            } else {
+              setDescription(`Auto-generated from GRN: ${grnId} / PO: ${grn.procurementOrder?.poNumber || ''}`);
+              setShowDesc(true);
+            }
+            toast.success("Bill auto-filled from GRN!");
         }
       }).catch(err => {
          console.error("Failed to load GRN for auto-fill", err);
@@ -459,8 +470,20 @@ export default function PurchaseBillsPage() {
           const frt = Number(po.freightCost) || 0;
           setDiscount(disc);
           setFreight(frt);
-          setDescription(`Auto-generated from PO: ${po.poNumber || po.id}`);
-          setShowDesc(true);
+
+          const poTerms = po.vendorNotes || po.deliveryInstructions;
+          if (poTerms) {
+            setTermsText(poTerms);
+            setShowTerms(true);
+          }
+          const poRemarks = po.internalNotes || po.notes;
+          if (poRemarks) {
+            setDescription(poRemarks);
+            setShowDesc(true);
+          } else {
+            setDescription(`Auto-generated from PO: ${po.poNumber || po.id}`);
+            setShowDesc(true);
+          }
           toast.success("Bill auto-filled from PO!");
         }
       }).catch(err => {
@@ -490,9 +513,9 @@ export default function PurchaseBillsPage() {
   const rowData = items.map(item => ({ item, ...computeRow(item, priceMode) }));
   const subtotal = parseFloat(rowData.reduce((s, r) => s + r.base, 0).toFixed(2));
   const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
-  const safeDiscount = Math.max(0, Number(discount) || 0);
+  const safeDiscount = Math.min(Math.max(0, Number(discount) || 0), subtotal);
   const safeFreight = Math.max(0, Number(freight) || 0);
-  const netAmount = parseFloat((subtotal + totalTax - safeDiscount + safeFreight).toFixed(2));
+  const netAmount = Math.max(0, parseFloat((subtotal + totalTax - safeDiscount + safeFreight).toFixed(2)));
   const roundOff = roundOffEnabled ? parseFloat((Math.round(netAmount) - netAmount).toFixed(2)) : 0;
   const finalTotal = parseFloat((netAmount + roundOff).toFixed(2));
 
@@ -817,18 +840,16 @@ export default function PurchaseBillsPage() {
                         onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowVendorDrop(true); }}
                       />
-            {vendorSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setVendorSearch("")} 
-              />
-            )}
-                      {vendorSearch && (
+                      {(vendorSearch || selectedVendor) && (
                         <X 
                           size={14} 
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                          onClick={(e) => { e.stopPropagation(); setVendorSearch(""); setSelectedVendor(null); }} 
+                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setVendorSearch(""); 
+                            setSelectedVendor(null); 
+                            setVendorPhone("");
+                          }} 
                         />
                       )}
                       <ChevronDown size={13} className="text-gray-400 shrink-0" />
@@ -1096,13 +1117,6 @@ export default function PurchaseBillsPage() {
                     <FileText size={13} /> Add Description
                   </button>
                 )}
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 rounded-lg px-3 py-2 transition-colors cursor-pointer"
-                >
-                  <Upload size={13} /> Upload Bill
-                </button>
               </div>
 
               {showTerms && (
@@ -1262,6 +1276,24 @@ export default function PurchaseBillsPage() {
               freightCost: previewBill.freightCost || previewBill.freight || 0,
               items: mapBillToInvoiceItems(previewBill),
             }}
+            terms={
+              previewBill.procurementOrder?.vendorNotes
+                ? [previewBill.procurementOrder.vendorNotes]
+                : previewBill.procurementOrder?.deliveryInstructions
+                ? [previewBill.procurementOrder.deliveryInstructions]
+                : previewBill.termsAndConditions
+                ? [previewBill.termsAndConditions]
+                : termsText
+                ? [termsText]
+                : undefined
+            }
+            notes={
+              previewBill.procurementOrder?.internalNotes ||
+              previewBill.procurementOrder?.notes ||
+              previewBill.description ||
+              description ||
+              undefined
+            }
             vendor={previewBill.vendor || selectedVendor || { name: previewBill.vendorSearch || "Vendor" }}
             companyDetails={companyProfile || FALLBACK_COMPANY}
             documentType="PURCHASE_INVOICE"
@@ -1450,7 +1482,10 @@ export default function PurchaseBillsPage() {
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
                         {formatDate(b.billDate)}
                       </td>
-                      <td className="px-4 py-3 text-xs font-bold text-gray-800 dark:text-white">
+                      <td 
+                        onClick={() => { setPreviewAutoAction(undefined); setPreviewBill(b); }}
+                        className="px-4 py-3 text-xs font-bold text-gray-800 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 cursor-pointer"
+                      >
                         {b.invoiceNumber || "—"}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-slate-200">
@@ -1474,6 +1509,14 @@ export default function PurchaseBillsPage() {
                               Make Payment
                             </button>
                           )}
+                          <button 
+                            type="button"
+                            onClick={() => { setPreviewAutoAction(undefined); setPreviewBill(b); }} 
+                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors" 
+                            title="View Purchase Bill"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
                           <button 
                             type="button"
                             onClick={() => handleDownloadPdf(b)} 
@@ -1513,6 +1556,21 @@ export default function PurchaseBillsPage() {
             freightCost: previewBill.freightCost || previewBill.freight || 0,
             items: mapBillToInvoiceItems(previewBill),
           }}
+          terms={
+            previewBill.procurementOrder?.vendorNotes
+              ? [previewBill.procurementOrder.vendorNotes]
+              : previewBill.procurementOrder?.deliveryInstructions
+              ? [previewBill.procurementOrder.deliveryInstructions]
+              : previewBill.termsAndConditions
+              ? [previewBill.termsAndConditions]
+              : undefined
+          }
+          notes={
+            previewBill.procurementOrder?.internalNotes ||
+            previewBill.procurementOrder?.notes ||
+            previewBill.description ||
+            undefined
+          }
           vendor={previewBill.vendor || selectedVendor || { name: previewBill.vendorSearch || "Vendor" }}
           companyDetails={companyProfile || FALLBACK_COMPANY}
           documentType="PURCHASE_INVOICE"
