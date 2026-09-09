@@ -234,7 +234,7 @@ export async function GET(
       city: pradr?.addr?.loc || pradr?.addr?.dst || "",
       pinCode: pradr?.addr?.pncd || "",
       taxpayerType: gstData.dty || "Regular"
-    });
+    });//
 
   } catch (error: any) {
     console.error("GST verification endpoint error:", error);
