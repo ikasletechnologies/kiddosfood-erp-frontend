@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 // Standard Indian State Codes for GSTIN prefix
 const STATE_CODES: Record<string, { state: string; city: string; pin: string; sampleAddress: string }> = {
   "01": { state: "Jammu & Kashmir", city: "Srinagar", pin: "190001", sampleAddress: "12, Residency Road, Lal Chowk, Srinagar, Jammu & Kashmir" },

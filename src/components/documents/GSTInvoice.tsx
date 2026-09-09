@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, X, QrCode, Download, Share2, Loader2 } from 'lucide-react';
-import { formatDate, calculateSalesDocumentTotals } from '@/lib/utils';
+import { formatDate, calculateSalesDocumentTotals, formatQuantity } from '@/lib/utils';
 
 // The one shared visual template for every billing/order document in the
 // app — a document TYPE only changes its heading, "#" field label, and
@@ -430,7 +430,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                     {item.hsnCode || '—'}
                   </td>
                   <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
-                    {qty}
+                    {formatQuantity(qty, item.unit)}
                   </td>
                   {hasUnitData && (
                     <td className="py-3 px-2 text-center text-gray-600 whitespace-nowrap">
@@ -500,53 +500,53 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
           <div className="w-[300px] shrink-0 pt-1">
             <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
               <span className="text-gray-600">Sub Total</span>
-              <span className="font-semibold text-gray-900">₹{fmt(discount > 0 ? grossSubtotal : taxableSubtotal)}</span>
+              <span className="font-semibold text-gray-900">₹ {fmt(discount > 0 ? grossSubtotal : taxableSubtotal)}</span>
             </div>
             {discount > 0 && (
               <>
                 <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                   <span className="text-emerald-500">Discount</span>
-                  <span className="font-semibold text-emerald-500">- ₹{fmt(discount)}</span>
+                  <span className="font-semibold text-emerald-500">- ₹ {fmt(discount)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                   <span className="text-gray-600">Taxable Amount</span>
-                  <span className="font-semibold text-gray-900">₹{fmt(taxableSubtotal)}</span>
+                  <span className="font-semibold text-gray-900">₹ {fmt(taxableSubtotal)}</span>
                 </div>
               </>
             )}
             {freightCost > 0 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">Freight / Shipment</span>
-                <span className="font-semibold text-gray-900">+ ₹{fmt(freightCost)}</span>
+                <span className="font-semibold text-gray-900">+ ₹ {fmt(freightCost)}</span>
               </div>
             )}
             {isSameState ? (
               <>
                 <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                   <span className="text-gray-600">CGST</span>
-                  <span className="font-semibold text-gray-900">₹{fmt(finalCgst)}</span>
+                  <span className="font-semibold text-gray-900">₹ {fmt(finalCgst)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                   <span className="text-gray-600">SGST</span>
-                  <span className="font-semibold text-gray-900">₹{fmt(finalSgst)}</span>
+                  <span className="font-semibold text-gray-900">₹ {fmt(finalSgst)}</span>
                 </div>
               </>
             ) : (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">IGST</span>
-                <span className="font-semibold text-gray-900">₹{fmt(finalIgst)}</span>
+                <span className="font-semibold text-gray-900">₹ {fmt(finalIgst)}</span>
               </div>
             )}
-            {roundOff !== 0 && (
+            {Math.abs(roundOff) >= 0.005 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">Round Off</span>
-                <span className="font-semibold text-gray-900">{roundOff >= 0 ? "+" : "-"} ₹{fmt(Math.abs(roundOff))}</span>
+                <span className="font-semibold text-gray-900">{roundOff >= 0 ? "+" : "-"} ₹ {fmt(Math.abs(roundOff))}</span>
               </div>
             )}
             
             <div className="flex justify-between py-4 border-b-2 border-gray-100 mt-2">
               <span className="text-xl font-medium text-gray-600">Total</span>
-              <span className="text-2xl font-bold text-gray-900">₹{fmt(grandTotal)}</span>
+              <span className="text-2xl font-bold text-gray-900">₹ {fmt(grandTotal)}</span>
             </div>
 
             <div className="py-4 border-b border-gray-100">

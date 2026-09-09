@@ -23,7 +23,7 @@ const COLORS = ["#f58220", "#1E4D2B", "#8B5CF6", "#3B82F6", "#EC4899"];
 export default function FranchiseAnalyticsPage() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
-  const monitorId = searchParams.get("id");
+  const monitorId = searchParams?.get("id");
 
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);

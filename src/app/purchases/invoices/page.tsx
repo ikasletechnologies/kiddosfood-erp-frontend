@@ -1525,14 +1525,6 @@ export default function PurchaseBillsPage() {
                           >
                             <Printer className="h-4 w-4" />
                           </button>
-                          <button 
-                            type="button"
-                            onClick={() => handleShare(b)} 
-                            className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors" 
-                            title="Share Purchase Bill"
-                          >
-                            <Share2 className="h-4 w-4" />
-                          </button>
                         </div>
                       </td>
                     </tr>

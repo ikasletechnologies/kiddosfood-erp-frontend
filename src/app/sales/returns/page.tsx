@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2,
   ChevronRight, Printer, FileSpreadsheet, Check,
-  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X } from "lucide-react";
+  CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X,
+  Store, AlertCircle, Calendar, Hash, Tag, DollarSign } from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
@@ -26,9 +28,14 @@ const FALLBACK_COMPANY = {
 interface ReturnItem {
   productId: string;
   productName: string;
-  orderQuantity: number;
+  sku?: string;
+  originalSoldQty: number;
+  alreadyReturnedQty: number;
+  returnableQuantity: number;
   returnQuantity: number;
   rate: number;
+  taxPercent: number;
+  originalLineAmount: number;
   condition: string;
 }
 
@@ -46,13 +53,20 @@ interface ReturnOrder {
   refundMethod: string;
   status: 'PENDING' | 'APPROVED' | 'COMPLETED' | 'REJECTED';
   createdAt: string;
-  items: ReturnItem[];
+  items: Array<{
+    productId: string;
+    productName: string;
+    orderQuantity: number;
+    returnQuantity: number;
+    rate: number;
+    condition: string;
+  }>;
 }
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PENDING:   { label: "Pending Approval", color: "text-[#f58220]",  bg: "bg-orange-50 dark:bg-orange-500/10",  border: "border-orange-200 dark:border-orange-500/20" },
   APPROVED:  { label: "Approved",         color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
-  COMPLETED: { label: "Refund Processed font-bold", color: "text-emerald-600 dark:text-emerald-400 font-bold", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
+  COMPLETED: { label: "Refund Processed", color: "text-emerald-600 dark:text-emerald-400 font-bold", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   REJECTED:  { label: "Rejected",         color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
   DRAFT:     { label: "Draft Request",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
 };
@@ -61,6 +75,8 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
 
 export default function SalesReturnsPage() {
   const { showToast } = useToast();
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   // Navigation
   const [view, setView] = useState<"list" | "create">("list");
@@ -86,16 +102,9 @@ export default function SalesReturnsPage() {
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const currentCompany = companyProfile || FALLBACK_COMPANY;
 
-  // One idempotency key per "in-progress form" — stable across re-renders
-  // and across a Save-as-Draft→Submit retry of the SAME form, but replaced
-  // whenever a fresh create form is opened (resetForm). A double-click or
-  // network retry that fires handleSave twice sends the identical key both
-  // times, so the backend collapses it to the one return it already
-  // created instead of posting a second row. `submittingRef` is a second,
-  // synchronous guard: `submitting` state only blocks the button after a
-  // re-render, which a same-tick double click can slip past.
   const submitKeyRef = useRef<string>(crypto.randomUUID());
   const submittingRef = useRef(false);
+  const autoInvoiceLoadedRef = useRef<string | null>(null);
 
   // ── Data Syncing ─────────────────────────────────────────────────────────────
 
@@ -105,14 +114,6 @@ export default function SalesReturnsPage() {
       .catch(() => {});
   }, []);
 
-  // The backend (POST/GET /api/sales/returns) is the single source of
-  // truth — there used to be a parallel localStorage "fallback" that wrote
-  // its own fake copy of every submitted return alongside the real backend
-  // row, which is exactly what produced two rows (a fully-populated local
-  // one and a real-but-unmapped backend one) from a single submit. Backend
-  // rows come back with relations (customer/salesOrder/franchiseOrder/
-  // posOrder), not the flat display fields this UI wants, so normalize them
-  // here instead of resurrecting a client-side shadow copy.
   const normalizeReturn = (r: any): ReturnOrder => {
     const orderRef = r.posOrder || r.salesOrder || r.franchiseOrder;
     return {
@@ -151,7 +152,7 @@ export default function SalesReturnsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     fetchReturns();
@@ -171,7 +172,6 @@ export default function SalesReturnsPage() {
         const customers = (custRes.data?.data || custRes.data || []).map((c: any) => ({ ...c, _kind: 'CUSTOMER' }));
         const dealers = (dealerRes.data?.data || dealerRes.data || []).map((d: any) => ({ ...d, _kind: 'DEALER' }));
 
-        // Merge and deduplicate by ID just in case
         const merged = [...customers, ...dealers];
         const unique = Array.from(new Map(merged.map(item => [item.id, item])).values());
 
@@ -183,10 +183,219 @@ export default function SalesReturnsPage() {
   };
 
   useEffect(() => {
-    if (view === "create") {
+    if (view === "create" && !searchParams.get('invoiceNum') && !searchParams.get('orderId')) {
       loadFormSelections(returnSource);
     }
-  }, [view, returnSource]);
+  }, [view, returnSource, searchParams]);
+
+  // ── Auto-load invoice from Query Parameters (e.g. from POS) ───────────────
+  useEffect(() => {
+    const rawInvoiceNum = searchParams.get('invoiceNum') || '';
+    const orderIdParam = searchParams.get('orderId') || '';
+    const sourceParam = searchParams.get('source') || '';
+
+    const cleanInvoiceNum = rawInvoiceNum.replace(/^#+/, '').trim().toLowerCase();
+    const rawInvoiceLower = rawInvoiceNum.trim().toLowerCase();
+    const cleanOrderId = orderIdParam.trim();
+
+    const lookupKey = `${cleanInvoiceNum}-${cleanOrderId}-${sourceParam}`;
+    if ((!cleanInvoiceNum && !cleanOrderId) || autoInvoiceLoadedRef.current === lookupKey) return;
+
+    autoInvoiceLoadedRef.current = lookupKey;
+    setView("create");
+
+    const loadTargetedInvoice = async () => {
+      setLoadingOrders(true);
+      try {
+        const [custRes, dealerRes, franRes, posRes, soRes, foRes, returnsRes] = await Promise.all([
+          customersApi.getAll().catch(() => ({ data: [] })),
+          api.get("/api/dealers").catch(() => ({ data: [] })),
+          franchiseApi.getAll().catch(() => ({ data: [] })),
+          posApi.getOrders({ search: cleanInvoiceNum || undefined }).catch(() => ({ data: [] })),
+          salesApi.getSalesOrders({ search: cleanInvoiceNum || undefined }).catch(() => ({ data: [] })),
+          franchiseOrdersApi.getAll().catch(() => ({ data: [] })),
+          salesApi.getReturns().catch(() => ({ data: [] })),
+        ]);
+
+        const customers = (custRes.data?.data || custRes.data || []).map((c: any) => ({ ...c, _kind: 'CUSTOMER' }));
+        const dealers = (dealerRes.data?.data || dealerRes.data || []).map((d: any) => ({ ...d, _kind: 'DEALER' }));
+        const franchises = franRes.data || [];
+        const allReturns = (returnsRes.data?.data || returnsRes.data || []);
+
+        const allPos = (posRes.data?.data || posRes.data || []).filter((o: any) => o.status !== 'CANCELLED');
+        const allSo = (soRes.data?.data || soRes.data || []).filter((o: any) => o.status !== 'CANCELLED');
+        const allFo = (foRes.data || []).filter((o: any) => o.status !== 'CANCELLED');
+
+        let matchedOrder: any = null;
+        let matchedSource: 'FRANCHISE' | 'PARTNER' = 'PARTNER';
+        let matchedEntity: any = null;
+
+        if (sourceParam === 'FRANCHISE') {
+          matchedOrder = allFo.find((o: any) =>
+            (cleanOrderId && o.id === cleanOrderId) ||
+            (cleanInvoiceNum && (
+              (o.orderNumber && o.orderNumber.toLowerCase() === cleanInvoiceNum) ||
+              ('#' + (o.orderNumber || '')).toLowerCase() === rawInvoiceLower ||
+              o.id === cleanInvoiceNum
+            ))
+          );
+          if (matchedOrder) {
+            matchedSource = 'FRANCHISE';
+            matchedEntity = franchises.find((f: any) => f.id === matchedOrder.franchiseId) || {
+              id: matchedOrder.franchiseId,
+              name: matchedOrder.franchise?.name || 'Franchise Branch',
+              _kind: 'FRANCHISE'
+            };
+          }
+        }
+
+        if (!matchedOrder && (sourceParam === 'POS' || !sourceParam)) {
+          matchedOrder = allPos.find((o: any) =>
+            (cleanOrderId && o.id === cleanOrderId) ||
+            (cleanInvoiceNum && (
+              (o.invoiceNum && o.invoiceNum.toLowerCase() === cleanInvoiceNum) ||
+              ('#' + (o.invoiceNum || '')).toLowerCase() === rawInvoiceLower ||
+              o.id === cleanInvoiceNum
+            ))
+          );
+          if (matchedOrder) {
+            matchedSource = 'PARTNER';
+            if (matchedOrder.partyType === 'DEALER' || matchedOrder.partyId) {
+              matchedEntity = dealers.find((d: any) => d.id === (matchedOrder.partyId || matchedOrder.customerId)) || {
+                id: matchedOrder.partyId || matchedOrder.customerId,
+                name: matchedOrder.customerName || 'Dealer',
+                _kind: 'DEALER'
+              };
+            } else {
+              matchedEntity = customers.find((c: any) => c.id === (matchedOrder.customerId || matchedOrder.customer?.id)) || {
+                id: matchedOrder.customerId || 'walk-in',
+                name: matchedOrder.customer?.name || matchedOrder.customerName || 'Walk-in Customer',
+                _kind: 'CUSTOMER'
+              };
+            }
+          }
+        }
+
+        if (!matchedOrder && (sourceParam === 'SALES_ORDER' || !sourceParam)) {
+          matchedOrder = allSo.find((o: any) =>
+            (cleanOrderId && o.id === cleanOrderId) ||
+            (cleanInvoiceNum && (
+              (o.orderNumber && o.orderNumber.toLowerCase() === cleanInvoiceNum) ||
+              ('#' + (o.orderNumber || '')).toLowerCase() === rawInvoiceLower ||
+              o.id === cleanInvoiceNum
+            ))
+          );
+          if (matchedOrder) {
+            matchedSource = 'PARTNER';
+            matchedEntity = customers.find((c: any) => c.id === matchedOrder.customerId) || {
+              id: matchedOrder.customerId,
+              name: matchedOrder.customer?.name || 'Customer',
+              _kind: 'CUSTOMER'
+            };
+          }
+        }
+
+        if (matchedSource === 'FRANCHISE') {
+          setEntities(franchises);
+        } else {
+          const merged = [...customers, ...dealers];
+          if (matchedEntity && !merged.some(e => e.id === matchedEntity.id)) {
+            merged.unshift(matchedEntity);
+          }
+          setEntities(Array.from(new Map(merged.map(item => [item.id, item])).values()));
+        }
+
+        setReturnSource(matchedSource);
+        setSelectedEntity(matchedEntity);
+        setExistingReturns(allReturns);
+
+        if (matchedOrder) {
+          const normalizedOrder = {
+            id: matchedOrder.id,
+            _source: sourceParam === 'FRANCHISE' ? 'FRANCHISE' : (matchedOrder.orderItems ? 'POS' : 'SALES_ORDER'),
+            orderNumber: matchedOrder.invoiceNum || matchedOrder.orderNumber,
+            totalAmount: matchedOrder.totalAmount,
+            taxAmount: matchedOrder.taxAmount || 0,
+            subTotal: matchedOrder.subTotal || matchedOrder.subtotal,
+            createdAt: matchedOrder.createdAt,
+            partyType: matchedOrder.partyType || (matchedEntity?._kind || 'CUSTOMER'),
+            items: matchedOrder.orderItems
+              ? matchedOrder.orderItems.map((i: any) => ({
+                  productId: i.productId,
+                  productName: i.product?.name || i.productName || "Item",
+                  sku: i.product?.sku || i.sku,
+                  quantity: i.quantity,
+                  unitPrice: i.price ?? i.unitPrice,
+                  taxPercent: i.taxPercent ?? 0,
+                  totalPrice: i.totalPrice ?? ((i.price ?? 0) * (i.quantity ?? 1)),
+                }))
+              : (matchedOrder.items || []).map((i: any) => ({
+                  productId: i.productId,
+                  productName: i.productName || i.product?.name || i.description || "Item",
+                  sku: i.product?.sku || i.sku,
+                  quantity: i.quantity || i.qty,
+                  unitPrice: i.unitPrice ?? i.rate ?? 0,
+                  taxPercent: i.taxPercent ?? i.gstRate ?? 0,
+                  totalPrice: (i.unitPrice ?? i.rate ?? 0) * (i.quantity || i.qty || 1),
+                })),
+            raw: matchedOrder,
+          };
+
+          setSelectedOrder(normalizedOrder);
+          setOrdersList([normalizedOrder]);
+
+          // Compute already returned per product
+          const alreadyReturned: Record<string, number> = {};
+          allReturns.forEach((r: any) => {
+            const matches = normalizedOrder._source === 'POS'
+              ? r.posOrderId === normalizedOrder.id
+              : normalizedOrder._source === 'FRANCHISE'
+              ? r.franchiseOrderId === normalizedOrder.id
+              : r.salesOrderId === normalizedOrder.id;
+            if (!matches || r.status === 'REJECTED') return;
+            (r.items || []).forEach((it: any) => {
+              const key = it.productId || it.productName;
+              alreadyReturned[key] = (alreadyReturned[key] || 0) + Number(it.quantity || 0);
+            });
+          });
+
+          // Populate Return Items
+          const populated: ReturnItem[] = (normalizedOrder.items || []).map((i: any) => {
+            const productId = i.productId || `prod_${Math.random().toString(36).substring(2,6)}`;
+            const productName = i.productName || "Item";
+            const soldQty = Number(i.quantity) || 1;
+            const prevReturned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
+            const returnable = Math.max(0, soldQty - prevReturned);
+            const rate = Number(i.unitPrice) || 0;
+            const taxPct = Number(i.taxPercent) || 0;
+            const originalLineAmount = soldQty * rate;
+
+            return {
+              productId,
+              productName,
+              sku: i.sku || (productId ? productId.substring(0, 8) : undefined),
+              originalSoldQty: soldQty,
+              alreadyReturnedQty: prevReturned,
+              returnableQuantity: returnable,
+              returnQuantity: 0,
+              rate,
+              taxPercent: taxPct,
+              originalLineAmount,
+              condition: "Good",
+            };
+          });
+
+          setReturnItems(populated);
+        }
+      } catch (err) {
+        showToast("Could not pre-load selected invoice details", "error");
+      } finally {
+        setLoadingOrders(false);
+      }
+    };
+
+    loadTargetedInvoice();
+  }, [searchParams, showToast]);
 
   // ── Form Selection Triggers ──────────────────────────────────────────────────
 
@@ -206,18 +415,11 @@ export default function SalesReturnsPage() {
         const res = await franchiseOrdersApi.getAll({ franchiseId: entityId });
         setOrdersList(res.data || []);
       } else {
-        // Dealer/Retailer party: eligible invoices can come from either the
-        // formal Sales Order pipeline (SalesOrder) or a direct POS/Tax
-        // Invoice (Order) — a POS cash sale never creates a SalesOrder row,
-        // so both sources must be queried or POS-originated invoices never
-        // show up here.
         const isDealer = entity._kind === 'DEALER';
 
         const [soRes, posRes, returnsRes] = await Promise.all([
           isDealer ? Promise.resolve({ data: [] }) : salesApi.getSalesOrders({ customerId: entityId }).catch(() => ({ data: [] })),
           posApi.getOrders().catch(() => ({ data: [] })),
-          // ReturnOrder has no dealerId column yet — prior-return tracking
-          // (for the over-return guard below) only works for Customer parties.
           isDealer ? Promise.resolve({ data: [] }) : salesApi.getReturns({ customerId: entityId }).catch(() => ({ data: [] })),
         ]);
 
@@ -227,11 +429,14 @@ export default function SalesReturnsPage() {
           orderNumber: o.orderNumber,
           totalAmount: o.totalAmount,
           createdAt: o.createdAt,
+          partyType: 'CUSTOMER',
           items: (o.items || []).map((i: any) => ({
             productId: i.productId,
             productName: i.productName || i.description,
+            sku: i.product?.sku || i.sku,
             quantity: i.quantity || i.qty,
             unitPrice: i.unitPrice ?? i.rate,
+            taxPercent: i.taxPercent ?? i.gstRate ?? 0,
           })),
         }));
 
@@ -247,16 +452,18 @@ export default function SalesReturnsPage() {
             orderNumber: o.invoiceNum,
             totalAmount: o.totalAmount,
             createdAt: o.createdAt,
+            partyType: isDealer ? 'DEALER' : 'CUSTOMER',
             items: (o.orderItems || []).map((i: any) => ({
               productId: i.productId,
               productName: i.product?.name,
+              sku: i.product?.sku || i.sku,
               quantity: i.quantity,
               unitPrice: i.price,
+              taxPercent: i.taxPercent ?? 0,
             })),
           }));
 
         setOrdersList([...posOrders, ...salesOrders]);
-
         setExistingReturns(returnsRes.data?.data || returnsRes.data || []);
       }
     } catch (err) {
@@ -275,8 +482,6 @@ export default function SalesReturnsPage() {
       return;
     }
 
-    // Already-returned quantities for this specific invoice, so a partially
-    // or fully returned line can't be over-returned by a second request.
     const alreadyReturned: Record<string, number> = {};
     existingReturns.forEach((r: any) => {
       const matchesOrder = order._source === 'POS' ? r.posOrderId === order.id : r.salesOrderId === order.id;
@@ -287,37 +492,54 @@ export default function SalesReturnsPage() {
       });
     });
 
-    // Populate order items
-    const populated = (order.items || []).map((i: any) => {
+    const populated: ReturnItem[] = (order.items || []).map((i: any) => {
       const productId = i.productId || `prod_${Math.random().toString(36).substr(2,4)}`;
-      const productName = i.productName || i.description || "Custom Item";
-      const boughtQuantity = i.quantity || i.qty || 1;
+      const productName = i.productName || i.description || "Item";
+      const boughtQuantity = Number(i.quantity || i.qty) || 1;
       const returned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
+      const returnable = Math.max(0, boughtQuantity - returned);
+      const rate = Number(i.unitPrice || i.rate || 0);
+      const taxPercent = Number(i.taxPercent || i.gstRate || 0);
+      const originalLineAmount = boughtQuantity * rate;
+
       return {
         productId,
         productName,
-        orderQuantity: Math.max(0, boughtQuantity - returned),
+        sku: i.sku || (productId ? productId.substring(0, 8) : undefined),
+        originalSoldQty: boughtQuantity,
+        alreadyReturnedQty: returned,
+        returnableQuantity: returnable,
         returnQuantity: 0,
-        rate: i.unitPrice || i.rate || 0,
+        rate,
+        taxPercent,
+        originalLineAmount,
         condition: "Good",
       };
     });
+
     setReturnItems(populated);
   };
 
-  const estimatedRefund = returnItems.reduce((acc, it) => acc + (it.returnQuantity * it.rate), 0);
+  // Calculations
+  const returnSubtotal = returnItems.reduce((acc, it) => acc + (it.returnQuantity * it.rate), 0);
+  const returnTax = returnItems.reduce((acc, it) => acc + (it.returnQuantity * it.rate * ((it.taxPercent || 0) / 100)), 0);
+  const estimatedRefund = returnSubtotal + returnTax;
+  const isInvoiceFullyReturned = returnItems.length > 0 && returnItems.every(it => it.returnableQuantity === 0);
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
   const resetForm = () => {
-    // Fresh idempotency key per form session — see submitKeyRef declaration.
     submitKeyRef.current = crypto.randomUUID();
+    autoInvoiceLoadedRef.current = null;
     setReturnSource("PARTNER");
     setSelectedEntity(null);
     setSelectedOrder(null);
     setReturnItems([]);
     setReason("");
     setRefundMethod("Original Method");
+    if (searchParams.get('invoiceNum') || searchParams.get('orderId')) {
+      router.replace('/sales/returns');
+    }
   };
 
   const handleSave = async (status: "DRAFT" | "PENDING") => {
@@ -341,15 +563,13 @@ export default function SalesReturnsPage() {
       return;
     }
 
-    // Synchronous guard: `submitting` only disables the button after a
-    // re-render, which a same-tick double click can slip past. This ref
-    // blocks re-entrancy immediately; the idempotencyKey below is the
-    // server-side backstop for a genuine network retry.
     if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
 
     try {
+      const hasRealCustomer = selectedEntity?.id && selectedEntity.id !== 'walk-in' && !/walk[-_ ]?in/i.test(selectedEntity.id) && selectedEntity._kind === 'CUSTOMER';
+
       await salesApi.createReturn({
         reason,
         idempotencyKey: submitKeyRef.current,
@@ -363,9 +583,7 @@ export default function SalesReturnsPage() {
         ...(returnSource === 'FRANCHISE'
           ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
           : {
-              // ReturnOrder.customerId is a Customer FK — a Dealer party
-              // has no matching column yet, so only attach it for customers.
-              ...(selectedEntity._kind !== 'DEALER' ? { customerId: selectedEntity.id } : {}),
+              ...(hasRealCustomer ? { customerId: selectedEntity.id } : {}),
               ...(selectedOrder._source === 'POS'
                 ? { posOrderId: selectedOrder.id }
                 : { salesOrderId: selectedOrder.id }),
@@ -374,32 +592,34 @@ export default function SalesReturnsPage() {
       });
 
       showToast(status === "DRAFT" ? "Return draft request saved" : "Sales Return logged successfully!", "success");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("erp:refresh-inventory"));
+      }
       fetchReturns();
       setView("list");
       resetForm();
     } catch (e: any) {
-      showToast(e?.response?.data?.error || "Failed to record return request", "error");
+      const rawError = e?.response?.data?.error || e?.message || "";
+      if (rawError.includes("Foreign key constraint") || rawError.includes("ReturnOrder_customerId_fkey")) {
+        showToast("Unable to submit this return because the customer information could not be resolved. Please verify the original sale and try again.", "error");
+      } else {
+        showToast(rawError || "Failed to record return request", "error");
+      }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
   };
 
-  // Edit and Delete were previously local-only actions (they mutated the
-  // localStorage shadow copy and never touched the real backend row at
-  // all) — "Edit" in particular would resubmit through handleSave, which
-  // only ever POSTs a new return, so "editing" a real return actually
-  // created a second backend row for it. The backend has no update-items
-  // or delete endpoint for ReturnOrder (only create + status PATCH), so
-  // both actions are removed rather than left as fake/misleading no-ops.
-  // Rejecting (processStatusChange) is the supported way to invalidate one.
-
   const processStatusChange = async (id: string, nextStatus: 'APPROVED' | 'COMPLETED' | 'REJECTED') => {
     try {
-      const userStr = localStorage.getItem("user");
+      const userStr = typeof window !== 'undefined' ? localStorage.getItem("user") : null;
       const user = userStr ? JSON.parse(userStr) : null;
       await salesApi.updateReturnStatus(id, nextStatus, user?.fullName || 'Admin');
       showToast(`Return status successfully set to: ${nextStatus}!`, "success");
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("erp:refresh-inventory"));
+      }
       fetchReturns();
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Status transition failed", "error");
@@ -432,58 +652,79 @@ export default function SalesReturnsPage() {
   };
 
   // ════════════════════════════════════════════════════════════════════════════
-  // 1. CREATE VIEW (Locked viewport height calc(100vh - 56px))
+  // 1. CREATE VIEW
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create") {
+    const partyTypeLabel = selectedOrder?.partyType || (selectedEntity?._kind === 'DEALER' ? 'Dealer' : selectedEntity?._kind === 'FRANCHISE' || returnSource === 'FRANCHISE' ? 'Franchise' : 'Customer');
+
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background" style={{ height: "calc(100vh - 104px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background min-h-[calc(100vh-56px)]">
 
         {/* Top Header */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => {
-              const hasInput = selectedEntity || reason;
-              if (hasInput) {
-                handleSave("DRAFT");
-              } else {
-                setView("list");
-                resetForm();
-              }
-            }}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-            <Undo2 className="h-5 w-5 text-[#f58220]" />
-            Sales Return / Credit Note
-          </h2>
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                const hasInput = selectedEntity || reason;
+                if (hasInput) {
+                  handleSave("DRAFT");
+                } else {
+                  setView("list");
+                  resetForm();
+                }
+              }}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Undo2 className="h-5 w-5 text-[#f58220]" />
+                Sales Return / Credit Note
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Process item return against verified sale invoice and credit party ledger.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-gray-400 dark:text-slate-500 hidden sm:inline">
+              Session: {submitKeyRef.current.substring(0, 8)}
+            </span>
+          </div>
         </div>
 
         {/* Scrollable Form Workspace */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar max-w-6xl mx-auto w-full">
 
-          {/* Return Source + Entity + Order */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-5 space-y-5">
+          {/* Return Source Selection */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 space-y-4 shadow-2xs">
             <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Return Source</label>
+              <label className="block text-xs font-bold text-gray-500 dark:text-slate-400 mb-2">
+                Return Source
+              </label>
               <div className="flex gap-3 max-w-sm">
                 <button
                   type="button"
                   onClick={() => { setReturnSource('PARTNER'); resetForm(); }}
                   className={clsx(
-                    "flex-1 py-2.5 rounded-lg border-2 transition-all flex items-center gap-2 justify-center text-xs font-semibold",
-                    returnSource === 'PARTNER' ? "border-[#f58220] bg-orange-50 dark:bg-orange-500/10 text-[#f58220]" : "border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
+                    "flex-1 py-2 rounded-xl border-2 transition-all flex items-center gap-2 justify-center text-xs font-bold cursor-pointer",
+                    returnSource === 'PARTNER'
+                      ? "border-[#f58220] bg-orange-50/80 dark:bg-orange-500/10 text-[#f58220]"
+                      : "border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
                   )}
                 >
-                  <User className="h-4 w-4" /> Dealer / Retailer
+                  <User className="h-4 w-4" /> Customer / Dealer
                 </button>
                 <button
                   type="button"
                   onClick={() => { setReturnSource('FRANCHISE'); resetForm(); }}
                   className={clsx(
-                    "flex-1 py-2.5 rounded-lg border-2 transition-all flex items-center gap-2 justify-center text-xs font-semibold",
-                    returnSource === 'FRANCHISE' ? "border-[#f58220] bg-orange-50 dark:bg-orange-500/10 text-[#f58220]" : "border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
+                    "flex-1 py-2 rounded-xl border-2 transition-all flex items-center gap-2 justify-center text-xs font-bold cursor-pointer",
+                    returnSource === 'FRANCHISE'
+                      ? "border-[#f58220] bg-orange-50/80 dark:bg-orange-500/10 text-[#f58220]"
+                      : "border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400 hover:border-gray-300 dark:hover:border-white/20"
                   )}
                 >
                   <Building2 className="h-4 w-4" /> Franchise Branch
@@ -491,33 +732,38 @@ export default function SalesReturnsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-white/5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-gray-100 dark:border-white/5">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
-                  Select {returnSource === 'FRANCHISE' ? 'Franchise' : 'Customer'} *
+                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Select {returnSource === 'FRANCHISE' ? 'Franchise' : 'Customer / Dealer'} *
                 </label>
                 <select
                   value={selectedEntity?.id || ""}
                   onChange={e => handleEntityChange(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-gray-50 dark:bg-white/5 cursor-pointer"
                 >
                   <option value="">Choose partner...</option>
                   {entities.map(e => (
-                    <option key={e.id} value={e.id}>{e.name} {e.phone ? `(${e.phone})` : ""}</option>
+                    <option key={e.id} value={e.id}>
+                      {e.name} {e._kind ? `[${e._kind}]` : ''} {e.phone ? `(${e.phone})` : ""}
+                    </option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Original Invoice Reference *</label>
+                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Original Invoice Reference *
+                </label>
                 <select
                   disabled={!selectedEntity || loadingOrders}
                   value={selectedOrder?.id || ""}
                   onChange={e => handleOrderChange(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] disabled:opacity-50"
+                  className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-gray-50 dark:bg-white/5 cursor-pointer disabled:opacity-50"
                 >
                   <option value="">
                     {!selectedEntity
-                      ? "Select entity first"
+                      ? "Select partner first"
                       : loadingOrders
                       ? "Loading invoices..."
                       : ordersList.length === 0
@@ -526,7 +772,8 @@ export default function SalesReturnsPage() {
                   </option>
                   {ordersList.map(o => (
                     <option key={o.id} value={o.id}>
-                      {o._source === 'POS' ? '[POS] ' : ''}#{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
+                      {o._source === 'POS' ? '[POS] ' : o._source === 'FRANCHISE' ? '[FRANCHISE] ' : '[SO] '}
+                      #{o.orderNumber || o.orderNo} (₹{Number(o.totalAmount || o.finalAmount || 0).toLocaleString()}) — {formatDate(o.createdAt)}
                     </option>
                   ))}
                 </select>
@@ -534,127 +781,318 @@ export default function SalesReturnsPage() {
             </div>
           </div>
 
-          {/* Return Items Table */}
+          {/* ── RETURN DETAILS CARD ── */}
           {selectedOrder && (
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
-              <div className="px-4 py-2.5 bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Return Quantities / Conditions</span>
-                <span className="text-xs font-semibold text-[#f58220] bg-orange-50 dark:bg-orange-500/10 px-2.5 py-1 rounded-md">Order: #{selectedOrder.orderNumber || selectedOrder.orderNo}</span>
+            <div className="space-y-4">
+              {/* Invoice Summary Header Card */}
+              <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-gray-100 dark:border-white/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-500/10 text-[#f58220] flex items-center justify-center font-bold">
+                      <Receipt size={18} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm sm:text-base font-bold text-gray-900 dark:text-white">
+                          #{selectedOrder.orderNumber}
+                        </span>
+                        <span className={clsx(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                          partyTypeLabel.toUpperCase().includes('DEALER')
+                            ? "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"
+                            : partyTypeLabel.toUpperCase().includes('FRANCHISE')
+                            ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                            : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                        )}>
+                          {partyTypeLabel}
+                        </span>
+                      </div>
+                      <p className="text-xs font-semibold text-gray-600 dark:text-slate-300 mt-0.5">
+                        {selectedEntity?.name || selectedOrder.raw?.customerName || 'Walk-in Partner'}
+                        {selectedEntity?.phone && <span className="text-gray-400 font-normal"> · {selectedEntity.phone}</span>}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase">
+                      Sale Date
+                    </p>
+                    <p className="text-xs font-bold text-gray-800 dark:text-slate-200 mt-0.5">
+                      {formatDate(selectedOrder.createdAt)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
+                  <div>
+                    <span className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase block">Invoice Total</span>
+                    <span className="font-mono text-sm font-bold text-gray-900 dark:text-white">
+                      ₹{Number(selectedOrder.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase block">Total Line Items</span>
+                    <span className="text-sm font-bold text-gray-800 dark:text-slate-200">
+                      {returnItems.length} Products
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase block">Returnable Items</span>
+                    <span className={clsx(
+                      "text-sm font-bold",
+                      isInvoiceFullyReturned ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400"
+                    )}>
+                      {returnItems.filter(i => i.returnableQuantity > 0).length} Available
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase block">Selected Return</span>
+                    <span className="font-mono text-sm font-bold text-[#f58220]">
+                      {returnItems.filter(i => i.returnQuantity > 0).reduce((s, i) => s + i.returnQuantity, 0)} Units
+                    </span>
+                  </div>
+                </div>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5">
-                    <th className="text-left px-4 py-2.5 font-medium">Product</th>
-                    <th className="text-center px-4 py-2.5 w-28 font-medium">Qty Bought</th>
-                    <th className="text-center px-4 py-2.5 w-40 font-medium">Return Qty</th>
-                    <th className="text-left px-4 py-2.5 w-44 font-medium">Condition</th>
-                    <th className="text-right px-4 py-2.5 w-32 font-medium">Rate</th>
-                    <th className="text-right px-4 py-2.5 w-36 font-medium">Credit Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {returnItems.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]">
-                      <td className="px-4 py-3">
-                        <strong className="text-gray-800 dark:text-white font-semibold block">{item.productName}</strong>
-                        <span className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">SKU: {item.productId.substring(0, 8)}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center font-semibold text-gray-500 dark:text-slate-400">{item.orderQuantity}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const next = [...returnItems];
-                              next[idx].returnQuantity = Math.max(0, item.returnQuantity - 1);
-                              setReturnItems(next);
-                            }}
-                            className="w-7 h-7 rounded-md border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 font-bold text-sm"
-                          >-</button>
-                          <span className="w-8 text-center font-bold font-mono text-sm text-gray-800 dark:text-white">{item.returnQuantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const next = [...returnItems];
-                              next[idx].returnQuantity = Math.min(item.orderQuantity, item.returnQuantity + 1);
-                              setReturnItems(next);
-                            }}
-                            className="w-7 h-7 rounded-md border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-500 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5 font-bold text-sm"
-                          >+</button>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={item.condition}
-                          onChange={e => {
-                            const next = [...returnItems];
-                            next[idx].condition = e.target.value;
-                            setReturnItems(next);
-                          }}
-                          className="w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-md px-2 py-1.5 text-xs text-gray-800 dark:text-white outline-none focus:border-orange-400"
-                        >
-                          <option value="Good">Good Condition</option>
-                          <option value="Damaged">Damaged / Broken</option>
-                          <option value="Expired">Expired</option>
-                          <option value="Incorrect">Incorrect Item</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-sm text-gray-600 dark:text-slate-400">₹{Number(item.rate).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-mono font-semibold text-gray-800 dark:text-white">₹{Number(item.rate * item.returnQuantity).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+              {/* Fully Returned Notice */}
+              {isInvoiceFullyReturned && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-2xl flex items-center gap-3 text-xs text-rose-700 dark:text-rose-400">
+                  <AlertCircle size={20} className="shrink-0 text-rose-500" />
+                  <div>
+                    <p className="font-bold">Fully Returned Invoice</p>
+                    <p className="text-[11px] mt-0.5 opacity-90">All products and quantities on this sale invoice have already been returned in full. No returnable items remain.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Items Breakdown Table */}
+              <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs">
+                <div className="px-5 py-3.5 bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                  <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wide">
+                    Invoice Products &amp; Return Quantity
+                  </span>
+                  <span className="text-xs text-gray-400 dark:text-slate-500">
+                    Specify return quantity and condition per item
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left min-w-[760px]">
+                    <thead>
+                      <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs border-b border-gray-100 dark:border-white/5 font-bold uppercase">
+                        <th className="px-4 py-3 min-w-[180px]">Product / SKU</th>
+                        <th className="px-3 py-3 text-center min-w-[90px]">Sold</th>
+                        <th className="px-3 py-3 text-center min-w-[90px]">Returned</th>
+                        <th className="px-3 py-3 text-center min-w-[100px]">Returnable</th>
+                        <th className="px-4 py-3 text-center min-w-[130px]">Return Qty</th>
+                        <th className="px-3 py-3 min-w-[140px]">Condition</th>
+                        <th className="px-3 py-3 text-right min-w-[100px]">Unit Price</th>
+                        <th className="px-4 py-3 text-right min-w-[110px]">Return Amt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs">
+                      {returnItems.map((item, idx) => {
+                        const lineReturnAmt = item.returnQuantity * item.rate * (1 + (item.taxPercent || 0) / 100);
+                        const isExhausted = item.returnableQuantity === 0;
+
+                        return (
+                          <tr key={idx} className={clsx(
+                            "transition-colors",
+                            isExhausted ? "opacity-60 bg-gray-50/40 dark:bg-white/[0.01]" : "hover:bg-gray-50/50 dark:hover:bg-white/[0.02]"
+                          )}>
+                            {/* Product Name & SKU */}
+                            <td className="px-4 py-3.5">
+                              <p className="font-bold text-gray-900 dark:text-white">{item.productName}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {item.sku && (
+                                  <span className="font-mono text-[10px] text-gray-400 dark:text-slate-500">
+                                    SKU: {item.sku}
+                                  </span>
+                                )}
+                                {item.taxPercent > 0 && (
+                                  <span className="text-[10px] text-gray-400 dark:text-slate-500">
+                                    GST: {item.taxPercent}%
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Original Sold */}
+                            <td className="px-3 py-3.5 text-center font-semibold text-gray-600 dark:text-slate-400">
+                              {item.originalSoldQty}
+                            </td>
+
+                            {/* Already Returned */}
+                            <td className="px-3 py-3.5 text-center font-semibold text-gray-400 dark:text-slate-500">
+                              {item.alreadyReturnedQty}
+                            </td>
+
+                            {/* Remaining Returnable */}
+                            <td className="px-3 py-3.5 text-center font-bold">
+                              <span className={clsx(
+                                "px-2 py-0.5 rounded-md text-[11px]",
+                                isExhausted
+                                  ? "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                                  : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                              )}>
+                                {item.returnableQuantity}
+                              </span>
+                            </td>
+
+                            {/* Return Quantity Controls */}
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={isExhausted || item.returnQuantity <= 0}
+                                  onClick={() => {
+                                    const next = [...returnItems];
+                                    next[idx].returnQuantity = Math.max(0, item.returnQuantity - 1);
+                                    setReturnItems(next);
+                                  }}
+                                  className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 font-bold disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                >-</button>
+
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={item.returnableQuantity}
+                                  disabled={isExhausted}
+                                  value={item.returnQuantity}
+                                  onChange={(e) => {
+                                    const val = Math.max(0, Math.min(Number(e.target.value) || 0, item.returnableQuantity));
+                                    const next = [...returnItems];
+                                    next[idx].returnQuantity = val;
+                                    setReturnItems(next);
+                                  }}
+                                  className="w-12 text-center font-bold font-mono py-1 px-1 border border-gray-200 dark:border-white/10 rounded-lg text-xs bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white outline-none focus:border-[#f58220] disabled:opacity-40"
+                                />
+
+                                <button
+                                  type="button"
+                                  disabled={isExhausted || item.returnQuantity >= item.returnableQuantity}
+                                  onClick={() => {
+                                    const next = [...returnItems];
+                                    next[idx].returnQuantity = Math.min(item.returnableQuantity, item.returnQuantity + 1);
+                                    setReturnItems(next);
+                                  }}
+                                  className="w-7 h-7 rounded-lg border border-gray-200 dark:border-white/10 flex items-center justify-center text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 font-bold disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                >+</button>
+                              </div>
+                            </td>
+
+                            {/* Condition */}
+                            <td className="px-3 py-3.5">
+                              <select
+                                disabled={isExhausted}
+                                value={item.condition}
+                                onChange={e => {
+                                  const next = [...returnItems];
+                                  next[idx].condition = e.target.value;
+                                  setReturnItems(next);
+                                }}
+                                className="w-full bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer disabled:opacity-40"
+                              >
+                                <option value="Good">Good Condition</option>
+                                <option value="Damaged">Damaged / Broken</option>
+                                <option value="Expired">Expired</option>
+                                <option value="Incorrect">Incorrect Item</option>
+                              </select>
+                            </td>
+
+                            {/* Unit Price */}
+                            <td className="px-3 py-3.5 text-right font-mono font-semibold text-gray-700 dark:text-slate-300">
+                              ₹{Number(item.rate).toFixed(2)}
+                            </td>
+
+                            {/* Return Amount */}
+                            <td className="px-4 py-3.5 text-right font-mono font-bold text-[#f58220]">
+                              ₹{lineReturnAmt.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Reason + Refund Method + Return Calculation Card */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 space-y-4 shadow-2xs">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                      Reason for Return <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={reason}
+                      onChange={e => setReason(e.target.value)}
+                      placeholder="State the reason for return (e.g. Customer returned sealed unit, packaging damaged, defective batch)..."
+                      className="w-full px-3.5 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none resize-none focus:border-[#f58220] bg-gray-50 dark:bg-white/5 text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
+                      Refund Method
+                    </label>
+                    <select
+                      value={refundMethod}
+                      onChange={e => setRefundMethod(e.target.value)}
+                      className="w-full sm:w-64 border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2 text-xs font-semibold bg-gray-50 dark:bg-white/5 text-gray-800 dark:text-white outline-none focus:border-[#f58220] cursor-pointer"
+                    >
+                      <option value="Original Method">Original Payment Method</option>
+                      <option value="Credit Ledger">Adjust in Customer/Dealer Ledger</option>
+                      <option value="Cash Voucher">Cash / Direct refund</option>
+                      <option value="Cheque / UPI">Bank Cheque / UPI</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Credit Summary Card */}
+                <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 space-y-3.5 shadow-2xs flex flex-col justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wide">
+                      Total Credit Amount
+                    </p>
+                    <div className="text-2xl sm:text-3xl font-black font-mono text-[#f58220] mt-1">
+                      ₹{estimatedRefund.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+
+                    <div className="space-y-1.5 pt-3 border-t border-gray-100 dark:border-white/5 mt-3 text-xs">
+                      <div className="flex justify-between text-gray-500 dark:text-slate-400">
+                        <span>Items Subtotal:</span>
+                        <span className="font-mono font-semibold text-gray-800 dark:text-slate-200">
+                          ₹{returnSubtotal.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-gray-500 dark:text-slate-400">
+                        <span>Tax / GST:</span>
+                        <span className="font-mono font-semibold text-gray-800 dark:text-slate-200">
+                          ₹{returnTax.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-start text-[11px] text-gray-400 dark:text-slate-500 pt-2 border-t border-gray-100 dark:border-white/5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-400 shrink-0 mt-0.5" />
+                    <p className="leading-snug">Stock hub and party ledger are updated upon approval.</p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-
-          {/* Reason + Refund Method + Summary */}
-          <div className="flex gap-4 items-start">
-            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Reason for Return *</label>
-                <textarea
-                  rows={4}
-                  value={reason}
-                  onChange={e => setReason(e.target.value)}
-                  placeholder="State the reason for this return (e.g. Broken in transit, expired, wrong item...)"
-                  className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none resize-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Refund Method</label>
-                <select
-                  value={refundMethod}
-                  onChange={e => setRefundMethod(e.target.value)}
-                  className="w-64 border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white outline-none focus:border-orange-400"
-                >
-                  <option value="Original Method">Original Payment Method</option>
-                  <option value="Credit Ledger">Adjust in Customer Ledger</option>
-                  <option value="Cash Voucher">Cash / Direct refund</option>
-                  <option value="Cheque / UPI">Bank Cheque / UPI</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-64 shrink-0 space-y-3">
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Estimated Credit Note</p>
-              <div className="text-3xl font-black font-mono text-[#f58220]">
-                ₹{estimatedRefund.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
-              <div className="flex gap-2 items-start pt-2 border-t border-gray-100 dark:border-white/5 text-xs text-gray-400 dark:text-slate-500">
-                <AlertTriangle className="h-4 w-4 text-orange-400 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">Credits are estimated. Ledger will be updated after physical check approval.</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={() => { setView("list"); resetForm(); }}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-600 dark:text-slate-300 transition-colors"
+            className="px-4 py-2 text-xs font-bold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-600 dark:text-slate-300 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -662,15 +1100,15 @@ export default function SalesReturnsPage() {
             type="button"
             onClick={() => handleSave("DRAFT")}
             disabled={submitting}
-            className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-gray-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-xs font-bold border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-xl text-gray-700 dark:text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
           >
             Save as Draft
           </button>
           <button
             type="button"
             onClick={() => handleSave("PENDING")}
-            disabled={submitting || !selectedEntity || !selectedOrder || !reason}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-bold bg-[#f58220] hover:bg-[#e8740e] disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 text-white rounded-lg transition-colors shadow-sm"
+            disabled={submitting || !selectedEntity || !selectedOrder || !reason.trim() || estimatedRefund <= 0}
+            className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold bg-[#f58220] hover:bg-[#e8740e] disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 text-white rounded-xl transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed"
           >
             <Check className="h-4 w-4" /> {submitting ? "Processing..." : "Submit Return Request"}
           </button>

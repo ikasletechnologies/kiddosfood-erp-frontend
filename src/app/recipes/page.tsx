@@ -71,7 +71,13 @@ export default function RecipesPage() {
         rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD'),
         recipesApi.getCategories()
       ]);
-      setRecipes(rRes.data ?? []);
+      const rawList = rRes.data ?? [];
+      const sortedRecipes = [...rawList].sort((a: any, b: any) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+      setRecipes(sortedRecipes);
       setProducts(pRes.data ?? []);
       setMaterials(mRes.data ?? []);
       setCategories(cRes.data ?? []);
@@ -185,7 +191,7 @@ export default function RecipesPage() {
       await recipesApi.upsert(payload);
       showToast(editingRecipe ? "Recipe updated" : "Recipe created", "success");
       setShowModal(false);
-      fetchAll();
+      await fetchAll();
     } catch (e) {
       console.error(e);
       showToast("Failed to save recipe", "error");

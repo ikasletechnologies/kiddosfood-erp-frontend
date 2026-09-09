@@ -3,6 +3,7 @@
 import { usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { Info, Tag, Truck, ArrowRight, ShieldCheck, Banknote } from "lucide-react";
 import { clsx } from "clsx";
+import { formatCurrency } from "@/lib/utils";
 
 export default function DocumentSummary() {
   const { 
@@ -38,14 +39,14 @@ export default function DocumentSummary() {
           <div className="flex justify-between items-center text-xs">
             <span className="text-slate-500 font-medium">Subtotal</span>
             <span className="text-slate-800 dark:text-slate-200 font-bold font-mono text-sm">
-              ₹{totals.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totals.subtotal)}
             </span>
           </div>
           
           <div className="flex justify-between items-center text-xs">
             <span className="text-slate-500 font-medium">Tax Amount (GST)</span>
             <span className="text-slate-800 dark:text-slate-200 font-bold font-mono text-sm">
-              ₹{totals.totalGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totals.totalGst)}
             </span>
           </div>
 
@@ -109,10 +110,12 @@ export default function DocumentSummary() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center text-[11px] text-slate-400 italic pt-0.5">
-            <span>Roundoff</span>
-            <span className="font-mono">{totals.roundoff >= 0 ? "+" : ""}{totals.roundoff.toFixed(2)}</span>
-          </div>
+          {Math.abs(totals.roundoff) >= 0.005 && (
+            <div className="flex justify-between items-center text-[11px] text-slate-400 italic pt-0.5">
+              <span>Roundoff</span>
+              <span className="font-mono">{totals.roundoff >= 0 ? "+" : "-"}{formatCurrency(Math.abs(totals.roundoff))}</span>
+            </div>
+          )}
         </div>
 
         {/* Tax Breakdown Box */}
@@ -124,17 +127,17 @@ export default function DocumentSummary() {
           {totals.igst > 0 ? (
             <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
               <span>IGST (Integrated Tax)</span>
-              <span className="font-mono font-bold">₹{totals.igst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="font-mono font-bold">{formatCurrency(totals.igst)}</span>
             </div>
           ) : (
             <>
               <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
                 <span>CGST (Central Tax)</span>
-                <span className="font-mono font-bold">₹{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="font-mono font-bold">{formatCurrency(totals.cgst)}</span>
               </div>
               <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
                 <span>SGST (State Tax)</span>
-                <span className="font-mono font-bold">₹{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="font-mono font-bold">{formatCurrency(totals.sgst)}</span>
               </div>
             </>
           )}
@@ -148,7 +151,7 @@ export default function DocumentSummary() {
             </h4>
             {selectedVendor && selectedVendor.advanceBalance > 0 && (
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded border border-emerald-200">
-                ₹{selectedVendor.advanceBalance.toLocaleString()} Available
+                {formatCurrency(selectedVendor.advanceBalance)} Available
               </span>
             )}
           </div>
@@ -174,7 +177,7 @@ export default function DocumentSummary() {
               </div>
             </div>
             {useAdvance && (
-              <span className="text-xs font-bold font-mono text-[#f58220]">-₹{totals.appliedAdvance.toLocaleString()}</span>
+              <span className="text-xs font-bold font-mono text-[#f58220]">-{formatCurrency(totals.appliedAdvance)}</span>
             )}
           </label>
         </div>
@@ -184,14 +187,14 @@ export default function DocumentSummary() {
           <div className="flex justify-between items-baseline">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Grand Total</span>
             <span className="text-xl font-black text-slate-900 dark:text-white font-mono tracking-tight">
-              ₹{totals.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatCurrency(totals.total)}
             </span>
           </div>
           {useAdvance && (
             <div className="flex justify-between items-center text-xs font-bold text-[#f58220] pt-2 border-t border-dashed border-orange-200 mt-2">
               <span>Balance Due</span>
               <span className="flex items-center gap-1 font-mono font-bold text-sm">
-                ₹{totals.balanceDue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <ArrowRight size={13} />
+                {formatCurrency(totals.balanceDue)} <ArrowRight size={13} />
               </span>
             </div>
           )}

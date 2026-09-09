@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlayCircle, StopCircle, CheckCircle2, PackageCheck, FileText, CalendarClock, RefreshCw } from "lucide-react";
+import { PlayCircle, StopCircle, CheckCircle2, PackageCheck, FileText, CalendarClock, RefreshCw, AlertTriangle, XCircle } from "lucide-react";
 import { productionApi, inventoryApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
@@ -26,6 +26,11 @@ export default function ActiveProductionRunsClient() {
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [warehouseStockByWarehouse, setWarehouseStockByWarehouse] = useState<Record<string, any[]>>({});
+
+  // Cancel Run Modal State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [runToCancel, setRunToCancel] = useState<any | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -100,14 +105,30 @@ export default function ActiveProductionRunsClient() {
     }
   };
 
-  const handleCancel = async (id: string) => {
-    if (!window.confirm("Are you sure you want to cancel this production run?")) return;
+  const handleCancelClick = (run: any) => {
+    setRunToCancel(run);
+    setShowCancelModal(true);
+  };
+
+  const handleCloseCancelModal = () => {
+    if (cancelling) return;
+    setShowCancelModal(false);
+    setRunToCancel(null);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!runToCancel || cancelling) return;
+    setCancelling(true);
     try {
-      await productionApi.updateStatus(id, "CANCELLED");
+      await productionApi.updateStatus(runToCancel.id, "CANCELLED");
       toast.success("Production run cancelled");
+      setShowCancelModal(false);
+      setRunToCancel(null);
       fetchHistory();
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Failed to cancel production");
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -258,7 +279,7 @@ export default function ActiveProductionRunsClient() {
                 </button>
 
                 <button
-                  onClick={() => handleCancel(run.id)}
+                  onClick={() => handleCancelClick(run)}
                   className="w-full sm:flex-1 py-2 px-3.5 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 text-rose-700 dark:text-rose-400 border border-rose-200 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   Cancel Run
@@ -268,6 +289,93 @@ export default function ActiveProductionRunsClient() {
           );
         })
       )}
+
+      {/* Cancel Production Run Confirmation Modal */}
+      <Modal
+        isOpen={showCancelModal}
+        onClose={handleCloseCancelModal}
+        title="Cancel Production Run?"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3.5 p-3.5 bg-rose-50/80 dark:bg-rose-950/20 border border-rose-200/80 dark:border-rose-900/30 rounded-xl">
+            <div className="p-2.5 bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 rounded-xl shrink-0">
+              <AlertTriangle size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-xs font-bold text-rose-900 dark:text-rose-300 uppercase tracking-tight">
+                Destructive Action
+              </h4>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-0.5 leading-relaxed">
+                Are you sure you want to cancel this production run? This action cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          {runToCancel && (
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Product / Recipe</span>
+                <span className="font-bold text-slate-900 dark:text-white uppercase truncate text-right">
+                  {runToCancel.recipe?.name || "Formulation Batch"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Batch Code</span>
+                <span className="font-mono font-bold text-[#f58220]">
+                  {runToCancel.productionBatchCode || "Batch In-Flight"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/60 pt-2">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Stage &amp; Status</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {STAGE_LABELS[runToCancel.currentStage] || runToCancel.currentStage || "Queued"}
+                  </span>
+                  <span className="text-slate-300 dark:text-slate-600">•</span>
+                  <span className={clsx(
+                    "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border",
+                    runToCancel.status === "IN_PROGRESS"
+                      ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/30 dark:text-indigo-400 dark:border-indigo-800"
+                      : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800"
+                  )}>
+                    {runToCancel.status === "IN_PROGRESS" ? "In Progress" : runToCancel.status?.replace("_", " ")}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleCloseCancelModal}
+              disabled={cancelling}
+              className="w-full sm:flex-1 py-2.5 px-4 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Keep Run
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmCancel}
+              disabled={cancelling}
+              className="w-full sm:flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {cancelling ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span>Cancelling...</span>
+                </>
+              ) : (
+                <>
+                  <XCircle size={14} />
+                  <span>Cancel Production Run</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Production Summary — Complete Production Modal */}
       <Modal

@@ -146,7 +146,7 @@ function ProductBatchesRegistry() {
     if (activeTab === "REGISTRY") {
       fetchBatches(productFilter || undefined, selectedFranchiseId || undefined); 
     }
-  }, [fetchBatches, activeTab, productFilter, selectedFranchiseId]);
+  }, [fetchBatches, activeTab, productFilter, selectedFranchiseId, searchParams]);
 
   const handleProductFilter = (pid: string) => {
     setProductFilter(pid);
@@ -404,15 +404,11 @@ function ProductBatchesRegistry() {
                               { label: "View", always: true },
                               { label: "QC", disabled: !!batch.qcStatus && batch.qcStatus !== "PENDING" },
                               { label: "Pack", disabled: !["APPROVED", "PARTIALLY_APPROVED"].includes(batch.qcStatus) || batch.packagingStatus === "PACKAGED" },
-                              { label: "Dispatch", always: true },
-                              { label: "Recall", always: true },
                             ].map(({ label, disabled }) => {
                               const actionStyles: Record<string, string> = {
                                 View: "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/10 hover:border-gray-300 hover:text-gray-900 dark:hover:text-white",
                                 QC: "border-blue-200 dark:border-blue-500/20 bg-blue-50/80 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 hover:border-blue-300 hover:text-blue-800 dark:hover:text-blue-300",
                                 Pack: "border-orange-200 dark:border-orange-500/20 bg-orange-50/80 dark:bg-orange-500/10 text-[#f58220] hover:bg-orange-100 dark:hover:bg-orange-500/20 hover:border-orange-300 hover:text-[#e8740e]",
-                                Dispatch: "border-emerald-200 dark:border-emerald-500/20 bg-emerald-50/80 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 hover:border-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-300",
-                                Recall: "border-rose-200 dark:border-rose-500/20 bg-rose-50/80 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 hover:border-rose-300 hover:text-rose-800 dark:hover:text-rose-300",
                               };
 
                               return (
@@ -422,9 +418,7 @@ function ProductBatchesRegistry() {
                                   onClick={() => {
                                     if (label === "Pack") { router.push("/packaging/queue"); }
                                     else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
-                                    else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}`); }
-                                    else if (label === "Dispatch") { router.push("/delivery"); }
-                                    else if (label === "Recall") { router.push("/production/batch-recall"); }
+                                    else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}&returnTo=/production/batches?tab=REGISTRY`); }
                                   }}
                                   className={clsx(
                                     "px-2 py-0.5 text-[11px] font-semibold rounded border shadow-2xs transition-all active:scale-95",
@@ -478,10 +472,6 @@ function ProductBatchesRegistry() {
                   <div>
                     <p className="text-xs text-gray-500 dark:text-slate-400">Product</p>
                     <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">{selectedBatch.product?.name ?? selectedBatch.production?.recipe?.name ?? "—"}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-slate-400">Recipe Version</p>
-                    <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">v1.2 (Standard)</p>
                   </div>
                 </div>
                 

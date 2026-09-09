@@ -4,26 +4,15 @@ import DocumentHeader from "@/components/documents/DocumentHeader";
 import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
-import DocumentOptions from "@/components/documents/DocumentOptions";
 import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X, ArrowLeft } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
-import { inventoryApi, purchaseOrdersApi, settingsApi } from "@/lib/api";
-import GSTInvoice from "@/components/documents/GSTInvoice";
+import { inventoryApi, purchaseOrdersApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-
-const FALLBACK_COMPANY = {
-  name: "My Restaurant",
-  gstin: "",
-  address: "",
-  phone: "",
-  email: "",
-  state: "Tamil Nadu"
-};
 
 const formatDateToDMY = (dateStr: string) => {
   if (!dateStr) return "";
@@ -59,8 +48,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   const [activeTab, setActiveTab] = useState<"items" | "notes">("items");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [warehouses, setWarehouses] = useState<{id: string, name: string}[]>([]);
-  const [companyProfile, setCompanyProfile] = useState<any>(null);
-  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     const fetchWarehouses = async () => {
@@ -71,19 +58,18 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         console.error("Failed to fetch warehouses", error);
       }
     };
-    const fetchCompanyProfile = async () => {
-      try {
-        const response = await settingsApi.getCompanyProfile();
-        setCompanyProfile(response.data);
-      } catch (error) {
-        console.error("Failed to fetch company profile", error);
-      }
-    };
     fetchWarehouses();
-    fetchCompanyProfile();
   }, []);
 
   const handleCreatePO = async () => {
+    if (!selectedVendor) {
+      toast.error("Please select a vendor.");
+      return;
+    }
+    if (selectedVendor.status && selectedVendor.status !== 'ACTIVE') {
+      toast.error("This vendor is blocked and cannot be used for Purchase Orders.");
+      return;
+    }
     if (!expectedDeliveryDate) {
       toast.error("Expected Delivery date is mandatory.");
       return;
@@ -152,6 +138,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("Please select a vendor to save as draft.");
       return;
     }
+    if (selectedVendor.status && selectedVendor.status !== 'ACTIVE') {
+      toast.error("This vendor is blocked and cannot be used for Purchase Orders.");
+      return;
+    }
     const parsedDiscount = Number(discountAmount);
     if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
       toast.error("Discount must be a valid non-negative number.");
@@ -194,9 +184,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       localStorage.removeItem('draftPurchaseOrder');
       toast.success("Draft Purchase Order saved successfully!");
       router.push("/purchases/orders");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save draft", error);
-      toast.error("Failed to save draft. Please check your inputs.");
+      const msg = error?.response?.data?.error || error?.message || "Failed to save draft. Please check your inputs.";
+      toast.error(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -232,26 +223,11 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
               <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
                 {editId ? "Edit Purchase Order" : "New Purchase Order"}
               </h1>
-              <span className={clsx(
-                "px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shrink-0",
-                poStatus === "DRAFT" 
-                  ? "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700" 
-                  : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800/40"
-              )}>
-                {poStatus}
-              </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono">#{poNumber}</p>
+            <p className="text-xs text-slate-400 font-mono">{poNumber ? `#${poNumber}` : "Generating..."}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowPreview(true)}
-            className="px-3 sm:px-3.5 py-2 text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs uppercase tracking-wider"
-          >
-            <FileText size={14} /> <span className="hidden xs:inline">Preview</span>
-          </button>
           <button
             type="button"
             onClick={handleCreatePO}
@@ -405,7 +381,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Purchase Order No.</label>
                   <div className="text-xs font-bold text-slate-900 dark:text-white font-mono bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg inline-block border border-slate-200 dark:border-slate-700">
-                    {poNumber}
+                    {poNumber || "Generating..."}
                   </div>
                 </div>
                 <div>
@@ -532,39 +508,6 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           </div>
         </div>
       </div>
-
-      {showPreview && (
-        <GSTInvoice
-          order={{
-            poNumber: poNumber || "DRAFT-00001",
-            createdAt: purchaseDate ? new Date(purchaseDate).toISOString() : new Date().toISOString(),
-            poItems: items.map((item, idx) => ({
-              itemName: item.name || `Material #${idx + 1}`,
-              quantity: item.quantity || 0,
-              price: item.price || 0,
-              gstRate: item.gstRate || 0,
-              unit: item.unit || "unit"
-            })),
-            discount: totals.discountAmount || 0,
-            discountAmount: totals.discountAmount || 0,
-            freightCost: totals.freightCost || 0,
-            shippingAmount: totals.freightCost || 0,
-            advancePaid: totals.appliedAdvance || 0,
-            paid: totals.appliedAdvance || 0
-          }}
-          vendor={selectedVendor || {
-            name: "NO VENDOR SELECTED",
-            address: "Please select a vendor in the form",
-            gstin: "",
-            phone: ""
-          }}
-          terms={vendorNotes ? [vendorNotes] : undefined}
-          notes={internalNotes || notes || undefined}
-          companyDetails={companyProfile || FALLBACK_COMPANY}
-          documentType="PURCHASE_ORDER"
-          onClose={() => setShowPreview(false)}
-        />
-      )}
     </div>
   );
 }

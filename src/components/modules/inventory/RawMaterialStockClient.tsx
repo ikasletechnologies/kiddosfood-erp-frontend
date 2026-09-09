@@ -142,6 +142,16 @@ export default function RawMaterialStockClient() {
 
   useEffect(() => { fetchItems(); }, [fetchItems, showInactive]);
 
+  useEffect(() => {
+    const handleRefresh = () => fetchItems();
+    window.addEventListener("erp:refresh-inventory", handleRefresh);
+    window.addEventListener("focus", handleRefresh);
+    return () => {
+      window.removeEventListener("erp:refresh-inventory", handleRefresh);
+      window.removeEventListener("focus", handleRefresh);
+    };
+  }, [fetchItems]);
+
   // -- Excel Import --
 
   const IMPORT_TEMPLATE_HEADERS = ["Name", "Unit"];

@@ -14,10 +14,9 @@ import { clsx } from "clsx";
 import { Modal } from "@/components/ui/Modal";
 import GSTInvoice from "../../documents/GSTInvoice";
 import api from "../../../lib/api";
-import AddMaterialDrawer from "../inventory/AddMaterialDrawer";
 import RecordPaymentModal from "./RecordPaymentModal";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency, formatQuantity, formatERPNumber } from "@/lib/utils";
 
 interface POItem {
   inventoryItemId: string;
@@ -59,9 +58,6 @@ const FALLBACK_COMPANY = {
   email: "",
   state: "Tamil Nadu"
 };
-
-import { formatCurrency, formatERPNumber } from "@/lib/utils";
-
 
 export default function PurchaseOrdersClient() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -490,7 +486,7 @@ export default function PurchaseOrdersClient() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="font-semibold text-gray-800 dark:text-white text-sm">{formatCurrency(po.totalAmount)}</div>
                         <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                          {po.receivedItemsCount || 0} / {po.totalItemsCount || 0} units
+                          {formatQuantity(po.receivedItemsCount || 0)} / {formatQuantity(po.totalItemsCount || 0)} units
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
@@ -1097,9 +1093,9 @@ export default function PurchaseOrdersClient() {
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
                             <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-white">{item.inventoryItem?.name}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{rQty}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{pQty}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatQuantity(item.quantity, item.inventoryItem?.unit)}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{formatQuantity(rQty, item.inventoryItem?.unit)}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{formatQuantity(pQty, item.inventoryItem?.unit)}</td>
                             <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.price)}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold">
@@ -1123,11 +1119,11 @@ export default function PurchaseOrdersClient() {
                             <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">
                               {isSameState ? (
                                 <div>
-                                  <div>CGST: {(gRate / 2)}%</div>
-                                  <div>SGST: {(gRate / 2)}%</div>
+                                  <div>CGST: {Number((gRate / 2).toFixed(2))}%</div>
+                                  <div>SGST: {Number((gRate / 2).toFixed(2))}%</div>
                                 </div>
                               ) : (
-                                <div>IGST: {gRate}%</div>
+                                <div>IGST: {Number(gRate.toFixed(2))}%</div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
@@ -1169,9 +1165,9 @@ export default function PurchaseOrdersClient() {
                             <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                               <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
                               <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{formatDate(grn.createdAt)}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{totalAccepted}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{totalRejected}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatQuantity(totalReceived)}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{formatQuantity(totalAccepted)}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{formatQuantity(totalRejected)}</td>
                               <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
                                 <span className="text-rose-500 italic font-medium">Update Warehouse</span>
                               )}</td>

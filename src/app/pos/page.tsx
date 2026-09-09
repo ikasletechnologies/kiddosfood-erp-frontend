@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import {
   Plus, Minus, Trash2, Search, CreditCard, Banknote, QrCode,
   User, X, Percent, ShoppingBag, ArrowRight, Tag,
-  Building2, Store, Printer, RefreshCw, Scan, Barcode, RotateCcw
+  Building2, Store, Printer, RefreshCw, Scan, Barcode, RotateCcw,
+  CheckCircle2, AlertCircle, FileText, Loader2, ArrowUpRight
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, franchiseApi, accountsApi, posApi } from "@/lib/api";
+import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi } from "@/lib/api";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
@@ -67,6 +69,8 @@ const formatPackSize = (p?: { qty: number; unit: string } | null) =>
   p ? `${p.qty % 1 === 0 ? p.qty : p.qty.toFixed(2)}${UNIT_LABEL[p.unit] || p.unit.toLowerCase()}` : null;
 
 export default function POSPage() {
+  const router = useRouter();
+
   // Party
   const [partyType, setPartyType]         = useState<PartyType>("CUSTOMER");
   const [partySearch, setPartySearch]     = useState("");
@@ -95,6 +99,15 @@ export default function POSPage() {
   const [newAccType, setNewAccType]       = useState<"CASH" | "BANK" | "UPI">("CASH");
   const [newAccBalance, setNewAccBalance] = useState("");
   const [creatingAccount, setCreatingAccount] = useState(false);
+
+  // Return Product Modal state
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnSearchQuery, setReturnSearchQuery] = useState("");
+  const [returnSearching, setReturnSearching] = useState(false);
+  const [returnSearchResults, setReturnSearchResults] = useState<any[]>([]);
+  const [selectedReturnInvoice, setSelectedReturnInvoice] = useState<any>(null);
+  const [returnSearchError, setReturnSearchError] = useState("");
+  const returnSearchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,11 +147,157 @@ export default function POSPage() {
   const [isScanProcessing, setIsScanProcessing] = useState(false);
   const [scannedProduct, setScannedProduct] = useState<any>(null);
 
-  const handleReturnProduct = () => {
-    const invNum = prompt("Enter Sale Invoice Number to Return:");
-    if (invNum) {
-      toast.success(`Invoice ${invNum} verified. Items restocked and credit note created.`);
+  // Return Search
+  const searchReturnInvoices = useCallback(async (query: string) => {
+    const rawQuery = query.trim();
+    if (!rawQuery) {
+      setReturnSearchResults([]);
+      setReturnSearchError("");
+      return;
     }
+
+    setReturnSearching(true);
+    setReturnSearchError("");
+
+    const cleanQuery = rawQuery.replace(/^#+/, "").trim().toLowerCase();
+    const rawQueryLower = rawQuery.toLowerCase();
+
+    try {
+      const [posRes, soRes, foRes] = await Promise.all([
+        posApi.getOrders({ search: cleanQuery }).catch(() => ({ data: [] })),
+        salesApi.getSalesOrders({ search: cleanQuery }).catch(() => ({ data: [] })),
+        franchiseOrdersApi.getAll().catch(() => ({ data: [] })),
+      ]);
+
+      const allPos = posRes.data?.data || posRes.data || [];
+      const allSo = soRes.data?.data || soRes.data || [];
+      const allFo = foRes.data?.data || foRes.data || [];
+
+      const matchedPos = allPos
+        .filter((o: any) => {
+          if (o.status === 'CANCELLED') return false;
+          const inv = (o.invoiceNum || '').toLowerCase();
+          const id = (o.id || '').toLowerCase();
+          const custName = (o.customer?.name || o.customerName || '').toLowerCase();
+          return inv.includes(cleanQuery) ||
+            ('#' + inv).includes(rawQueryLower) ||
+            id === cleanQuery ||
+            custName.includes(cleanQuery);
+        })
+        .map((o: any) => ({
+          id: o.id,
+          orderNumber: o.invoiceNum || o.id,
+          _source: 'POS',
+          partyName: o.customer?.name || o.customerName || (o.partyType === 'DEALER' ? 'Dealer' : 'Walk-in Customer'),
+          partyType: o.partyType || (o.customerId ? 'CUSTOMER' : 'CUSTOMER'),
+          totalAmount: Number(o.totalAmount || 0),
+          createdAt: o.createdAt,
+          itemsCount: (o.orderItems || []).length,
+          raw: o,
+        }));
+
+      const matchedSo = allSo
+        .filter((o: any) => {
+          if (o.status === 'CANCELLED') return false;
+          const num = (o.orderNumber || '').toLowerCase();
+          const id = (o.id || '').toLowerCase();
+          const custName = (o.customer?.name || '').toLowerCase();
+          return num.includes(cleanQuery) ||
+            ('#' + num).includes(rawQueryLower) ||
+            id === cleanQuery ||
+            custName.includes(cleanQuery);
+        })
+        .map((o: any) => ({
+          id: o.id,
+          orderNumber: o.orderNumber || o.id,
+          _source: 'SALES_ORDER',
+          partyName: o.customer?.name || 'Customer',
+          partyType: 'CUSTOMER',
+          totalAmount: Number(o.totalAmount || 0),
+          createdAt: o.createdAt,
+          itemsCount: (o.items || []).length,
+          raw: o,
+        }));
+
+      const matchedFo = allFo
+        .filter((o: any) => {
+          if (o.status === 'CANCELLED') return false;
+          const num = (o.orderNumber || '').toLowerCase();
+          const id = (o.id || '').toLowerCase();
+          const fName = (o.franchise?.name || '').toLowerCase();
+          return num.includes(cleanQuery) ||
+            ('#' + num).includes(rawQueryLower) ||
+            id === cleanQuery ||
+            fName.includes(cleanQuery);
+        })
+        .map((o: any) => ({
+          id: o.id,
+          orderNumber: o.orderNumber || o.id,
+          _source: 'FRANCHISE',
+          partyName: o.franchise?.name || 'Franchise',
+          partyType: 'FRANCHISE',
+          totalAmount: Number(o.totalAmount || 0),
+          createdAt: o.createdAt,
+          itemsCount: (o.items || []).length,
+          raw: o,
+        }));
+
+      const combined = [...matchedPos, ...matchedSo, ...matchedFo];
+      setReturnSearchResults(combined);
+
+      if (combined.length === 0) {
+        setReturnSearchError(`No active sale invoices found matching "${rawQuery}".`);
+      } else {
+        // Auto-select exact match if present
+        const exact = combined.find(c =>
+          c.orderNumber.toLowerCase() === cleanQuery ||
+          ('#' + c.orderNumber).toLowerCase() === rawQueryLower ||
+          c.id.toLowerCase() === cleanQuery
+        );
+        if (exact) {
+          setSelectedReturnInvoice(exact);
+        }
+      }
+    } catch (err) {
+      setReturnSearchError("Failed to search invoices. Please try again.");
+    } finally {
+      setReturnSearching(false);
+    }
+  }, []);
+
+  const handleReturnProduct = () => {
+    setShowReturnModal(true);
+    setReturnSearchQuery("");
+    setReturnSearchResults([]);
+    setSelectedReturnInvoice(null);
+    setReturnSearchError("");
+  };
+
+  const handleReturnSearchChange = (val: string) => {
+    setReturnSearchQuery(val);
+    setSelectedReturnInvoice(null);
+    if (returnSearchDebounceRef.current) {
+      clearTimeout(returnSearchDebounceRef.current);
+    }
+    if (val.trim().length >= 2) {
+      returnSearchDebounceRef.current = setTimeout(() => {
+        searchReturnInvoices(val);
+      }, 300);
+    } else {
+      setReturnSearchResults([]);
+      setReturnSearchError("");
+    }
+  };
+
+  const handleProceedToReturn = () => {
+    if (!selectedReturnInvoice) {
+      toast.error("Please select a valid sale invoice");
+      return;
+    }
+    setShowReturnModal(false);
+    router.push(
+      `/sales/returns?invoiceNum=${encodeURIComponent(selectedReturnInvoice.orderNumber)}&orderId=${encodeURIComponent(selectedReturnInvoice.id)}&source=${encodeURIComponent(selectedReturnInvoice._source)}`
+    );
   };
 
   const searchRef    = useRef<HTMLInputElement>(null);
@@ -376,6 +535,9 @@ export default function POSPage() {
       // re-validation already prevents overselling — this is purely
       // cosmetic) — refresh so the grid reflects the just-sold quantities.
       fetchProducts();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("erp:refresh-inventory"));
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Checkout failed");
     } finally {
@@ -1120,6 +1282,201 @@ export default function POSPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ── Return Product / Sale Modal ── */}
+      {showReturnModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg bg-white dark:bg-card rounded-2xl shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-100 dark:border-white/5 flex items-start justify-between bg-gray-50/50 dark:bg-white/[0.02]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center text-[#f58220] shrink-0 border border-orange-200/50 dark:border-orange-500/20">
+                  <RotateCcw size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                    Return Sale
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
+                    Enter or search the Sale Invoice Number to process a return.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowReturnModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 sm:p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+              {/* Search input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
+                  Sale Invoice / Bill Number
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Search by Invoice # (e.g. POS-2026-00001, SO-001) or Party Name..."
+                    value={returnSearchQuery}
+                    onChange={(e) => handleReturnSearchChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (selectedReturnInvoice) {
+                          handleProceedToReturn();
+                        } else {
+                          searchReturnInvoices(returnSearchQuery);
+                        }
+                      }
+                    }}
+                    className="w-full pl-10 pr-9 py-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-medium text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 outline-none focus:border-[#f58220] transition-colors"
+                  />
+                  {returnSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReturnSearchQuery("");
+                        setReturnSearchResults([]);
+                        setSelectedReturnInvoice(null);
+                        setReturnSearchError("");
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 p-0.5"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Status / Loading / Error indicator */}
+              {returnSearching && (
+                <div className="flex items-center justify-center gap-2 py-6 text-xs text-gray-500 dark:text-slate-400">
+                  <RefreshCw className="animate-spin text-[#f58220]" size={16} />
+                  <span>Searching active sales records...</span>
+                </div>
+              )}
+
+              {returnSearchError && !returnSearching && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-xl flex items-center gap-2.5 text-xs text-rose-600 dark:text-rose-400">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{returnSearchError}</span>
+                </div>
+              )}
+
+              {/* Search Results List */}
+              {returnSearchResults.length > 0 && !returnSearching && (
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                    Matching Invoices ({returnSearchResults.length})
+                  </p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-1">
+                    {returnSearchResults.map((inv) => {
+                      const isSelected = selectedReturnInvoice?.id === inv.id;
+                      return (
+                        <div
+                          key={inv.id}
+                          onClick={() => setSelectedReturnInvoice(inv)}
+                          className={clsx(
+                            "p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3",
+                            isSelected
+                              ? "bg-orange-50/80 dark:bg-orange-500/10 border-[#f58220] shadow-2xs"
+                              : "bg-white dark:bg-card border-gray-200 dark:border-white/10 hover:border-orange-300 dark:hover:border-white/20 hover:bg-gray-50/60 dark:hover:bg-white/[0.02]"
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-mono text-xs font-bold text-[#f58220]">
+                                #{inv.orderNumber}
+                              </span>
+                              <span className={clsx(
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                                inv.partyType === "DEALER"
+                                  ? "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"
+                                  : inv.partyType === "FRANCHISE"
+                                  ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                                  : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                              )}>
+                                {inv.partyType}
+                              </span>
+                              <span className="text-[11px] text-gray-400 dark:text-slate-500">
+                                {formatDate(inv.createdAt)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2 mt-1 text-xs">
+                              <span className="font-semibold text-gray-800 dark:text-slate-200 truncate">
+                                {inv.partyName}
+                              </span>
+                              <span className="font-mono font-bold text-gray-900 dark:text-white shrink-0">
+                                ₹{inv.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className={clsx(
+                            "w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                            isSelected
+                              ? "border-[#f58220] bg-[#f58220] text-white"
+                              : "border-gray-300 dark:border-white/20 text-transparent"
+                          )}>
+                            <CheckCircle2 size={14} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Invoice Details Callout */}
+              {selectedReturnInvoice && (
+                <div className="p-3.5 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 dark:text-slate-400">Selected Invoice:</span>
+                    <span className="font-mono font-bold text-gray-900 dark:text-white">#{selectedReturnInvoice.orderNumber}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500 dark:text-slate-400">Billed Party:</span>
+                    <span className="font-semibold text-gray-800 dark:text-slate-200">{selectedReturnInvoice.partyName} ({selectedReturnInvoice.partyType})</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-gray-200/60 dark:border-white/5">
+                    <span className="text-gray-500 dark:text-slate-400">Bill Amount:</span>
+                    <span className="font-mono font-bold text-[#f58220]">₹{selectedReturnInvoice.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 sm:px-6 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02] flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowReturnModal(false)}
+                className="px-4 py-2.5 text-xs font-bold text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleProceedToReturn}
+                disabled={!selectedReturnInvoice}
+                className="px-5 py-2.5 bg-[#f58220] hover:bg-[#e8740e] disabled:bg-gray-200 dark:disabled:bg-white/10 disabled:text-gray-400 text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <span>Continue to Return</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+
           </div>
         </div>,
         document.body
