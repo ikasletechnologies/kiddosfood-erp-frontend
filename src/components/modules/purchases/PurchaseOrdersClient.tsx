@@ -64,6 +64,7 @@ export default function PurchaseOrdersClient() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -122,9 +123,14 @@ export default function PurchaseOrdersClient() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setOrdersError(null);
     try {
+      // The PO list itself is reported on its own — swallowing its failure into
+      // an empty array (as the other, secondary lookups below do) made a real
+      // fetch failure indistinguishable from "you have no purchase orders yet",
+      // hiding backend errors behind a misleading empty state.
       const [poRes, vRes, rmRes, cpRes, aRes] = await Promise.all([
-        purchaseOrdersApi.getAll().catch(() => ({ data: [] })),
+        purchaseOrdersApi.getAll(),
         vendorsApi.getAll().catch(() => ({ data: [] })),
         rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD').catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
@@ -142,8 +148,10 @@ export default function PurchaseOrdersClient() {
       } else {
         setEditingProfile({ name: "", gstin: "", address: "", phone: "", email: "", state: "" });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setOrders([]);
+      setOrdersError(e?.response?.data?.error || e?.message || "Failed to load purchase orders.");
     } finally {
       setLoading(false);
     }
@@ -454,7 +462,22 @@ export default function PurchaseOrdersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {filtered.length === 0 ? (
+                {ordersError ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/30 flex items-center justify-center text-rose-600">
+                          <XCircle className="h-6 w-6" />
+                        </div>
+                        <p className="text-gray-800 dark:text-white font-semibold text-sm">Couldn&apos;t load purchase orders</p>
+                        <p className="text-gray-500 dark:text-slate-400 text-xs max-w-sm">{ordersError}</p>
+                        <button onClick={() => fetchAll()} className="mt-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold rounded-lg transition-colors">
+                          Retry
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2">
