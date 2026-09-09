@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X, ArrowLeft } from "lucide-react";
-import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
+import { PurchaseOrderProvider, usePurchaseOrder, commitClientPoNumber } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 
@@ -124,6 +124,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         // (see PurchaseOrderContext) — sending it here means what's on screen
         // is exactly what gets persisted.
         const { data: created } = await purchaseOrdersApi.create({ ...payload, poNumber });
+        if (created?.poNumber) commitClientPoNumber(created.poNumber);
         localStorage.removeItem('draftPurchaseOrder');
         toast.success(created?.poNumber ? `Purchase Order ${created.poNumber} created successfully!` : "Purchase Order created successfully!");
       }
@@ -183,7 +184,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           }))
       };
       
-      await purchaseOrdersApi.create({ ...payload, poNumber });
+      const { data: created } = await purchaseOrdersApi.create({ ...payload, poNumber });
+      if (created?.poNumber) commitClientPoNumber(created.poNumber);
       localStorage.removeItem('draftPurchaseOrder');
       toast.success("Draft Purchase Order saved successfully!");
       router.push("/purchases/orders");

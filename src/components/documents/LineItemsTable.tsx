@@ -161,7 +161,14 @@ export default function LineItemsTable() {
     }
   };
 
-  // When a vendor is selected, restrict dropdown to materials supplied by that vendor
+  // When a vendor is selected, materials they've supplied before are shown
+  // first (with their negotiated rate) — but any material in inventory can
+  // still be picked for a brand-new vendor, or one supplying something for
+  // the first time. The vendor↔material link itself is created automatically
+  // on the backend the moment the PO is saved (see ProcurementService
+  // .createPurchaseOrder's vendorMaterial.upsert), so restricting this list to
+  // only already-linked materials made it impossible to ever place a vendor's
+  // very first order for anything.
   const vendorMaterialIds = useMemo(() => {
     if (!selectedVendor || !selectedVendor.suppliedMaterials) return null;
     return new Set(selectedVendor.suppliedMaterials.map(sm => sm.materialId));
@@ -172,18 +179,20 @@ export default function LineItemsTable() {
     items.filter(item => item.id !== activeSearchId).map(item => item.materialId).filter(Boolean)
   );
 
-  const filteredMaterials = materials.filter(m => {
-    // Exclude materials already added to OTHER rows
-    if (otherSelectedMaterialIds.has(m.id)) return false;
+  const filteredMaterials = materials
+    .filter(m => {
+      // Exclude materials already added to OTHER rows
+      if (otherSelectedMaterialIds.has(m.id)) return false;
 
-    // If vendor is selected, only show materials linked to this vendor
-    if (vendorMaterialIds !== null && !vendorMaterialIds.has(m.id)) {
-      return false;
-    }
-    
-    if (!searchQuery.trim()) return true;
-    return m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.sku?.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+      if (!searchQuery.trim()) return true;
+      return m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+    })
+    .sort((a, b) => {
+      if (!vendorMaterialIds) return 0;
+      const aLinked = vendorMaterialIds.has(a.id) ? 0 : 1;
+      const bLinked = vendorMaterialIds.has(b.id) ? 0 : 1;
+      return aLinked - bLinked;
+    });
 
   return (
     <div className="w-full min-w-0">
@@ -408,11 +417,9 @@ export default function LineItemsTable() {
                                 <div className="p-8 text-center space-y-3">
                                    <Package size={28} className="mx-auto text-slate-300" />
                                    <p className="text-xs text-slate-500 font-medium">
-                                      {searchQuery 
-                                        ? `No materials found for "${searchQuery}"` 
-                                        : selectedVendor 
-                                          ? `No available materials found for ${selectedVendor.name}` 
-                                          : "No materials found in inventory"}
+                                      {searchQuery
+                                        ? `No materials found for "${searchQuery}"`
+                                        : "No materials found in inventory"}
                                    </p>
                                    <button 
                                      type="button"
@@ -734,11 +741,9 @@ export default function LineItemsTable() {
                           })
                         ) : (
                           <div className="p-4 text-center text-xs text-slate-500">
-                            {searchQuery 
-                              ? `No materials matched "${searchQuery}"` 
-                              : selectedVendor 
-                                ? `No available materials for ${selectedVendor.name}` 
-                                : "No materials matched"}
+                            {searchQuery
+                              ? `No materials matched "${searchQuery}"`
+                              : "No materials found in inventory"}
                           </div>
                         )}
                       </div>

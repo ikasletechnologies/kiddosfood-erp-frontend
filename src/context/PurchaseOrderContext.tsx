@@ -7,18 +7,40 @@ import { roundMoney } from "@/lib/utils";
 // backend round trip. Whatever this produces is what gets sent to and stored
 // by the backend on save (ProcurementService.createPurchaseOrder honors a
 // client-supplied poNumber), so what's shown on screen always matches what's
-// persisted. Date-based + a random suffix keeps it unique without needing to
-// know the server's running sequence.
+// persisted. The running count is tracked in this browser's localStorage so
+// numbers read as a normal PO-<year>-<seq> sequence instead of a timestamp.
+function poSeqStorageKey(year: number) {
+  return `poSequenceCounter_${year}`;
+}
+
 function generateClientPoNumber(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
-  const ss = String(now.getSeconds()).padStart(2, "0");
-  const rand = Math.floor(10 + Math.random() * 90); // 2-digit
-  return `PO-${y}${m}${d}-${hh}${mm}${ss}${rand}`;
+  const year = new Date().getFullYear();
+  let next = 1;
+  try {
+    const stored = parseInt(localStorage.getItem(poSeqStorageKey(year)) || "0", 10);
+    next = (Number.isFinite(stored) ? stored : 0) + 1;
+  } catch {
+    // localStorage unavailable (e.g. private mode) — fall back to 1
+  }
+  return `PO-${year}-${String(next).padStart(3, "0")}`;
+}
+
+// Called once a PO number has actually been used to create/save an order, so
+// the next generated number doesn't repeat it. Reads the sequence back out of
+// the number itself rather than assuming it was the one just previewed, since
+// a saved draft's poNumber could be older than the current counter.
+export function commitClientPoNumber(poNumber: string) {
+  const match = poNumber.match(/^PO-(\d{4})-(\d+)$/);
+  if (!match) return;
+  const [, yearStr, seqStr] = match;
+  try {
+    const key = poSeqStorageKey(parseInt(yearStr, 10));
+    const current = parseInt(localStorage.getItem(key) || "0", 10) || 0;
+    const used = parseInt(seqStr, 10);
+    if (used > current) localStorage.setItem(key, String(used));
+  } catch {
+    // ignore
+  }
 }
 
 export interface LineItem {
