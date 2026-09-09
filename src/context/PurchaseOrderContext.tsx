@@ -160,14 +160,12 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
-      let draftPoNumber = "";
       let draftVendorId: string | null = null;
       const saved = localStorage.getItem('draftPurchaseOrder');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.poNumber) {
-            draftPoNumber = parsed.poNumber;
             setPoNumber(parsed.poNumber);
           }
           if (parsed.selectedVendor) {
@@ -207,17 +205,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         }
       }
 
-      if (!draftPoNumber) {
-        import('@/lib/api').then(({ purchaseOrdersApi }) => {
-          purchaseOrdersApi.getNextNumber().then((res) => {
-            if (res.data?.nextPONumber) {
-              setPoNumber(res.data.nextPONumber);
-            }
-          }).catch(err => {
-            console.error("Failed to fetch next PO number", err);
-          });
-        });
-      }
+      // The real PO number is assigned server-side, transactionally, at the
+      // moment the order is actually created (ProcurementService.generatePONumber) —
+      // it isn't sent from here, so there is nothing to fetch or wait on before
+      // save. Leaving poNumber blank lets the UI show a static "auto-generated
+      // on save" label instead of depending on a network round trip.
 
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {

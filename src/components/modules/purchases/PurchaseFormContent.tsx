@@ -120,9 +120,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         localStorage.removeItem('draftPurchaseOrder');
         toast.success("Purchase Order updated successfully!");
       } else {
-        await purchaseOrdersApi.create(payload);
+        const { data: created } = await purchaseOrdersApi.create(payload);
         localStorage.removeItem('draftPurchaseOrder');
-        toast.success("Purchase Order created successfully!");
+        toast.success(created?.poNumber ? `Purchase Order ${created.poNumber} created successfully!` : "Purchase Order created successfully!");
       }
       router.push("/purchases/orders");
     } catch (error: any) {
@@ -224,7 +224,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 {editId ? "Edit Purchase Order" : "New Purchase Order"}
               </h1>
             </div>
-            <p className="text-xs text-slate-400 font-mono">{poNumber ? `#${poNumber}` : "Generating..."}</p>
+            <p className="text-xs text-slate-400 font-mono">{poNumber ? `#${poNumber}` : "Auto-generated on save"}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -381,7 +381,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Purchase Order No.</label>
                   <div className="text-xs font-bold text-slate-900 dark:text-white font-mono bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg inline-block border border-slate-200 dark:border-slate-700">
-                    {poNumber || "Generating..."}
+                    {poNumber || "Auto-generated on save"}
                   </div>
                 </div>
                 <div>
