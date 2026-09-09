@@ -591,9 +591,13 @@ export default function FinishedGoodsStockClient() {
     const handleRefresh = () => fetchDemandData();
     window.addEventListener("erp:refresh-product-requests", handleRefresh);
     window.addEventListener("erp:refresh-franchise-orders", handleRefresh);
+    window.addEventListener("erp:refresh-inventory", handleRefresh);
+    window.addEventListener("focus", handleRefresh);
     return () => {
       window.removeEventListener("erp:refresh-product-requests", handleRefresh);
       window.removeEventListener("erp:refresh-franchise-orders", handleRefresh);
+      window.removeEventListener("erp:refresh-inventory", handleRefresh);
+      window.removeEventListener("focus", handleRefresh);
     };
   }, [fetchDemandData]);
 

@@ -106,6 +106,8 @@ export const productionApi = {
     api.put(`/api/production/packagings/${packagingId}/verify`, data),
   confirmPackaging: (packagingId: string, data: { goodQty: number; damagedQty: number; spoiledQty: number; productId?: string }) =>
     api.post(`/api/production/packagings/${packagingId}/confirm`, data),
+  cancelPackaging: (packagingId: string, data?: { reason?: string }) =>
+    api.post(`/api/production/packagings/${packagingId}/cancel`, data || {}),
   getPackagings: (franchiseId?: string) => api.get('/api/production/packagings', { params: { franchiseId } }),
   getAllBatches: (params?: any) => {
     const p = typeof params === 'string' ? { franchiseId: params } : params;

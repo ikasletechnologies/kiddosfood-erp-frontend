@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { X, Plus, Trash2, Search, Package, IndianRupee, Zap, Info, AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
 import { usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { rawMaterialsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import Link from "next/link";
 import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer";
+import { formatCurrency, formatQuantity, roundMoney } from "@/lib/utils";
 
 import { convertMeasurement, ValidUnit } from "@businessgroupikasle/erp-units";
 
@@ -39,7 +40,7 @@ function roundForDisplay(n: number): number {
 }
 
 export default function LineItemsTable() {
-  const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, autoFilledIds, setAutoFilledIds } = usePurchaseOrder();
+  const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, setSelectedVendor, autoFilledIds, setAutoFilledIds } = usePurchaseOrder();
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
   // Per-line "which unit is the operator currently entering/reading the
   // quantity in" — defaults to the material's base unit (item.unit) and is
@@ -114,6 +115,15 @@ export default function LineItemsTable() {
         gstRate: createdMaterial.gstRate || 5
       });
       setEntryUnits(prev => ({ ...prev, [targetDrawerItemId]: createdMaterial.unit || "KG" }));
+      if (selectedVendor) {
+        setSelectedVendor(prev => prev ? {
+          ...prev,
+          suppliedMaterials: [
+            ...(prev.suppliedMaterials || []),
+            { materialId: createdMaterial.id, name: createdMaterial.name, price: createdMaterial.price || 0 }
+          ]
+        } : prev);
+      }
       setActiveSearchId(null);
     }
   };
@@ -151,6 +161,12 @@ export default function LineItemsTable() {
     }
   };
 
+  // When a vendor is selected, restrict dropdown to materials supplied by that vendor
+  const vendorMaterialIds = useMemo(() => {
+    if (!selectedVendor || !selectedVendor.suppliedMaterials) return null;
+    return new Set(selectedVendor.suppliedMaterials.map(sm => sm.materialId));
+  }, [selectedVendor]);
+
   // Get all material IDs selected in OTHER rows in the table to prevent duplicate selection
   const otherSelectedMaterialIds = new Set(
     items.filter(item => item.id !== activeSearchId).map(item => item.materialId).filter(Boolean)
@@ -159,6 +175,11 @@ export default function LineItemsTable() {
   const filteredMaterials = materials.filter(m => {
     // Exclude materials already added to OTHER rows
     if (otherSelectedMaterialIds.has(m.id)) return false;
+
+    // If vendor is selected, only show materials linked to this vendor
+    if (vendorMaterialIds !== null && !vendorMaterialIds.has(m.id)) {
+      return false;
+    }
     
     if (!searchQuery.trim()) return true;
     return m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.sku?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -187,8 +208,9 @@ export default function LineItemsTable() {
             </thead>
             <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
               {items.map((item, index) => {
-                const amount = item.quantity * item.price;
-                const totalWithGst = amount + (amount * (item.gstRate / 100));
+                const amount = roundMoney((item.quantity || 0) * (item.price || 0));
+                const taxAmount = roundMoney(amount * ((item.gstRate || 0) / 100));
+                const totalWithGst = roundMoney(amount + taxAmount);
                 const material = materials.find(m => m.id === item.materialId);
                 const resolvedName = item.name && item.name !== "Material" && item.name !== "Unknown Material"
                   ? item.name
@@ -260,7 +282,7 @@ export default function LineItemsTable() {
                                    : "bg-emerald-50 text-emerald-600 border-emerald-200"
                                )}>
                                  {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
-                                 Stock: {material.currentStock} {item.unit || "KG"}
+                                 Stock: {formatQuantity(material.currentStock, item.unit || "KG")} {item.unit || "KG"}
                                </div>
                               <span className="text-[9px] font-medium text-slate-400 whitespace-nowrap">HSN: {material.hsnCode || "N/A"}</span>
                             </div>
@@ -287,7 +309,9 @@ export default function LineItemsTable() {
                           <div className="absolute top-[calc(100%+8px)] left-0 w-full max-w-[calc(100vw-2.5rem)] sm:w-[440px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
                             {/* Dropdown Header */}
                             <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                {selectedVendor ? `${selectedVendor.name} Materials` : "Inventory Materials"}
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -371,10 +395,10 @@ export default function LineItemsTable() {
                                               </span>
                                             )}
                                             <span className={`text-xs font-bold ${vendorPrice !== null ? "text-[#f58220]" : "text-slate-900 dark:text-white"}`}>
-                                              ₹{displayPrice}
+                                              {formatCurrency(displayPrice)}
                                             </span>
                                           </div>
-                                          <span className="text-[10px] text-slate-400">Stock: {m.currentStock} {m.unit}</span>
+                                          <span className="text-[10px] text-slate-400">Stock: {formatQuantity(m.currentStock, m.unit)} {m.unit}</span>
                                        </div>
                                     </div>
                                   );
@@ -384,7 +408,11 @@ export default function LineItemsTable() {
                                 <div className="p-8 text-center space-y-3">
                                    <Package size={28} className="mx-auto text-slate-300" />
                                    <p className="text-xs text-slate-500 font-medium">
-                                      {searchQuery ? `No materials found for "${searchQuery}"` : "No materials found in inventory"}
+                                      {searchQuery 
+                                        ? `No materials found for "${searchQuery}"` 
+                                        : selectedVendor 
+                                          ? `No available materials found for ${selectedVendor.name}` 
+                                          : "No materials found in inventory"}
                                    </p>
                                    <button 
                                      type="button"
@@ -506,10 +534,10 @@ export default function LineItemsTable() {
                   <td className="px-3 py-3.5 align-middle text-right whitespace-nowrap">
                     <div className="flex flex-col items-end">
                        <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                         ₹{totalWithGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         {formatCurrency(totalWithGst)}
                        </span>
                        <span className="text-[9px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-tight">
-                         Tax: ₹{(totalWithGst - amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         Tax: {formatCurrency(taxAmount)}
                        </span>
                     </div>
                   </td>
@@ -533,8 +561,9 @@ export default function LineItemsTable() {
       {/* Mobile Item Cards View (< 768px) */}
       <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-3 space-y-3">
         {items.map((item, index) => {
-          const amount = item.quantity * item.price;
-          const totalWithGst = amount + (amount * (item.gstRate / 100));
+          const amount = roundMoney((item.quantity || 0) * (item.price || 0));
+          const taxAmount = roundMoney(amount * ((item.gstRate || 0) / 100));
+          const totalWithGst = roundMoney(amount + taxAmount);
           const material = materials.find(m => m.id === item.materialId);
           const resolvedName = item.name && item.name !== "Material" && item.name !== "Unknown Material"
             ? item.name
@@ -625,7 +654,9 @@ export default function LineItemsTable() {
                   {activeSearchId === item.id && (
                     <div className="absolute top-[calc(100%+6px)] left-0 w-full max-w-[calc(100vw-3rem)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-[999] overflow-hidden" ref={searchRef}>
                       <div className="px-3.5 py-2.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Inventory Materials</span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                          {selectedVendor ? `${selectedVendor.name} Materials` : "Inventory Materials"}
+                        </span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -695,14 +726,20 @@ export default function LineItemsTable() {
                                     </div>
                                  </div>
                                  <div className="flex flex-col items-end gap-0.5 shrink-0">
-                                    <span className="text-xs font-bold text-orange-500 font-mono">₹{displayPrice}</span>
-                                    <span className="text-[10px] text-slate-400">Stock: {m.currentStock} {m.unit}</span>
+                                    <span className="text-xs font-bold text-orange-500 font-mono">{formatCurrency(displayPrice)}</span>
+                                    <span className="text-[10px] text-slate-400">Stock: {formatQuantity(m.currentStock, m.unit)} {m.unit}</span>
                                  </div>
                               </div>
                             );
                           })
                         ) : (
-                          <div className="p-4 text-center text-xs text-slate-500">No materials matched</div>
+                          <div className="p-4 text-center text-xs text-slate-500">
+                            {searchQuery 
+                              ? `No materials matched "${searchQuery}"` 
+                              : selectedVendor 
+                                ? `No available materials for ${selectedVendor.name}` 
+                                : "No materials matched"}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -718,7 +755,7 @@ export default function LineItemsTable() {
                          : "bg-emerald-50 text-emerald-600 border-emerald-200"
                      )}>
                        {material.currentStock <= (material.minimumStock || 10) ? <AlertTriangle size={9} /> : <CheckCircle2 size={9} />}
-                       Stock: {material.currentStock} {item.unit || "KG"}
+                       Stock: {formatQuantity(material.currentStock, item.unit || "KG")} {item.unit || "KG"}
                      </div>
                     <span className="text-[9px] font-medium text-slate-400">HSN: {material.hsnCode || "N/A"}</span>
                   </div>
@@ -807,10 +844,10 @@ export default function LineItemsTable() {
                 <span className="text-xs text-slate-500 font-medium">Line Total (incl. Tax):</span>
                 <div className="text-right">
                   <span className="text-sm font-black text-slate-900 dark:text-white font-mono">
-                    ₹{totalWithGst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatCurrency(totalWithGst)}
                   </span>
                   <div className="text-[9px] text-slate-400 font-medium">
-                    Tax: ₹{(totalWithGst - amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    Tax: {formatCurrency(taxAmount)}
                   </div>
                 </div>
               </div>

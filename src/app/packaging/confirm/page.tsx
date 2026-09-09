@@ -3,10 +3,10 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
-  ClipboardCheck, Search, RefreshCw, CheckCircle2, AlertTriangle, Package, Plus, Sparkles, Link2
+  ClipboardCheck, Search, RefreshCw, CheckCircle2, AlertTriangle, Package
 } from "lucide-react";
 import { clsx } from "clsx";
-import { productionApi, franchiseApi, productsApi, productsFullApi } from "@/lib/api";
+import { productionApi, franchiseApi, productsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
 import { generateSKU } from "@/lib/utils/erp";
@@ -48,10 +48,6 @@ export default function ConfirmPackagingPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
   const [selectedProductId, setSelectedProductId] = useState<string>("");
-  const [productMode, setProductMode] = useState<"existing" | "create_new">("existing");
-  const [newProductName, setNewProductName] = useState("");
-  const [newProductSku, setNewProductSku] = useState("");
-  const [newProductPrice, setNewProductPrice] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<PackagingTicket | null>(null);
@@ -132,25 +128,40 @@ export default function ConfirmPackagingPage() {
     const suggestedName = `${batchProdName} (${packetSize})`;
     const generatedSku = generateSKU("FINISHED_GOOD", batchProdName, packetSize);
 
-    setNewProductName(suggestedName);
-    setNewProductSku(generatedSku);
-    setNewProductPrice(batchProd?.basePrice || 0);
-
-    // Look for exact existing product ID match
-    const existingById = prodList.find((p) => p.id === batchProd?.id);
-    // Look for existing finished good matching suggested name
-    const existingByName = prodList.find((p) => p.name?.toLowerCase() === suggestedName.toLowerCase());
+    // Look for exact existing product ID match or matching name/sku
+    const existingById = batchProd?.id ? prodList.find((p) => p.id === batchProd.id) : null;
+    const existingByName = prodList.find((p) => p.name?.toLowerCase() === suggestedName.toLowerCase() || p.name?.toLowerCase() === batchProdName.toLowerCase());
+    const existingBySku = prodList.find((p) => p.sku?.toLowerCase() === generatedSku.toLowerCase() || (batchProd?.sku && p.sku?.toLowerCase() === batchProd.sku.toLowerCase()));
 
     if (existingById) {
       setSelectedProductId(existingById.id);
-      setProductMode("existing");
     } else if (existingByName) {
       setSelectedProductId(existingByName.id);
-      setProductMode("existing");
+    } else if (existingBySku) {
+      setSelectedProductId(existingBySku.id);
+    } else if (batchProd?.id && prodList.some(p => p.id === batchProd.id)) {
+      setSelectedProductId(batchProd.id);
     } else {
       setSelectedProductId("");
-      // If no existing match, default to existing with empty select or allow easy create
-      setProductMode(prodList.length > 0 ? "existing" : "create_new");
+    }
+  };
+
+  const handleCancelRun = async (ticket: PackagingTicket) => {
+    if (!window.confirm(`Cancel packaging run for batch ${ticket.batch?.batchCode || 'this batch'}? Reserved bulk stock (${ticket.totalWeight} ${ticket.batch?.production?.recipe?.yieldUnit || 'KG'}) will be released.`)) {
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await productionApi.cancelPackaging(ticket.id);
+      toast.success("Packaging run cancelled and reserved bulk stock released.");
+      if (selectedTicket?.id === ticket.id) {
+        setSelectedTicket(null);
+      }
+      await loadTickets();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || "Failed to cancel packaging run.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -183,47 +194,12 @@ export default function ConfirmPackagingPage() {
 
     setSubmitting(true);
     try {
-      let finalProductId = selectedProductId;
-
-      // If user chooses to create a new finished good on the fly
-      if (productMode === "create_new") {
-        if (!newProductName.trim()) {
-          toast.error("Please enter a name for the new finished good product");
-          setSubmitting(false);
-          return;
-        }
-
-        const createRes = await productsFullApi.create({
-          name: newProductName.trim(),
-          sku: newProductSku.trim() || undefined,
-          basePrice: Number(newProductPrice) || 0,
-          category: selectedTicket.batch?.product?.category || "FINISHED_GOOD",
-          productType: "FINISHED_GOOD",
-          is_menu_item: true,
-          isVeg: true,
-          isActive: true,
-        });
-
-        const createdProduct = createRes.data?.data || createRes.data;
-        if (!createdProduct?.id) {
-          throw new Error("Failed to obtain created product ID");
-        }
-        finalProductId = createdProduct.id;
-        toast.success(`Created new finished good: ${newProductName}`);
-        await refreshProducts();
-      }
-
-      if (!finalProductId) {
-        toast.error("Please select an existing finished good or create a new one.");
-        setSubmitting(false);
-        return;
-      }
-
+      const validProductId = selectedProductId || (selectedTicket.batch?.product?.id && products.some(p => p.id === selectedTicket.batch?.product?.id) ? selectedTicket.batch.product.id : undefined);
       await productionApi.confirmPackaging(selectedTicket.id, {
         goodQty,
         damagedQty,
         spoiledQty,
-        productId: finalProductId,
+        productId: validProductId || undefined,
       });
 
       toast.success(`Packaging confirmed — ${goodQty} packets added to Finished Goods.`);
@@ -293,7 +269,6 @@ export default function ConfirmPackagingPage() {
                         <th className="text-center px-4 py-3">Pack Size</th>
                         <th className="text-right px-4 py-3">Packets Planned</th>
                         <th className="text-center px-4 py-3">Created</th>
-                        <th className="text-center px-4 py-3">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -304,14 +279,20 @@ export default function ConfirmPackagingPage() {
                         return (
                           <tr
                             key={ticket.id}
+                            onClick={() => selectTicket(ticket)}
                             className={clsx(
-                              "transition-colors",
+                              "transition-colors cursor-pointer",
                               isSelected ? "bg-orange-50/70 dark:bg-orange-500/10" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
                             )}
                           >
                             <td className="px-4 py-3">
-                              <div className="font-semibold text-gray-900 dark:text-white">
+                              <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
                                 {ticket.batch?.product?.name}
+                                {recalled && (
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-500/20">
+                                    Recalled
+                                  </span>
+                                )}
                               </div>
                               <div className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 font-mono">
                                 Batch: {ticket.batch?.batchCode}
@@ -327,20 +308,6 @@ export default function ConfirmPackagingPage() {
                             </td>
                             <td className="px-4 py-3 text-center text-xs text-gray-500 dark:text-slate-400">
                               {format(new Date(ticket.createdAt), "dd MMM, HH:mm")}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {recalled ? (
-                                <span className="inline-block px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 dark:bg-red-500/10 text-red-500 dark:text-red-400 border border-red-200 dark:border-red-500/20">
-                                  Recalled
-                                </span>
-                              ) : (
-                                <button
-                                  onClick={() => selectTicket(ticket)}
-                                  className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-                                >
-                                  Confirm
-                                </button>
-                              )}
                             </td>
                           </tr>
                         );
@@ -479,109 +446,6 @@ export default function ConfirmPackagingPage() {
                       </div>
                     )}
 
-                    {/* Product Mapping Option Selector */}
-                    <div className="space-y-2 pt-1">
-                      <label className="block text-xs font-bold text-gray-800 dark:text-white">
-                        Finished Good / Sellable Product
-                      </label>
-                      <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 dark:bg-white/5 rounded-lg text-xs font-semibold">
-                        <button
-                          type="button"
-                          onClick={() => setProductMode("existing")}
-                          className={clsx(
-                            "py-1.5 px-2 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer",
-                            productMode === "existing"
-                              ? "bg-white dark:bg-card text-[#f58220] shadow-xs"
-                              : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
-                          )}
-                        >
-                          <Link2 className="h-3.5 w-3.5" />
-                          <span>Link Existing</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setProductMode("create_new")}
-                          className={clsx(
-                            "py-1.5 px-2 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer",
-                            productMode === "create_new"
-                              ? "bg-white dark:bg-card text-[#f58220] shadow-xs"
-                              : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
-                          )}
-                        >
-                          <Sparkles className="h-3.5 w-3.5 text-[#f58220]" />
-                          <span>Create New Good</span>
-                        </button>
-                      </div>
-
-                      {productMode === "existing" ? (
-                        <div>
-                          <select
-                            value={selectedProductId}
-                            onChange={(e) => setSelectedProductId(e.target.value)}
-                            className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
-                          >
-                            <option value="" className="dark:bg-card">-- Select Finished Good / SKU --</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id} className="dark:bg-card">
-                                {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          {products.length === 0 && (
-                            <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                              No products found in catalogue. Switch to &quot;Create New Good&quot; above to create one automatically.
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="space-y-2 p-3 bg-orange-50/40 dark:bg-orange-500/5 rounded-lg border border-orange-200 dark:border-orange-500/20">
-                          <div>
-                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
-                              New Product Name *
-                            </label>
-                            <input
-                              type="text"
-                              value={newProductName}
-                              onChange={(e) => setNewProductName(e.target.value)}
-                              placeholder="e.g. Dosa Batter (1KG)"
-                              className="w-full border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
-                                SKU Code
-                              </label>
-                              <input
-                                type="text"
-                                value={newProductSku}
-                                onChange={(e) => setNewProductSku(e.target.value)}
-                                placeholder="Auto-generated"
-                                className="w-full font-mono border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
-                                Selling Price (₹)
-                              </label>
-                              <input
-                                type="number"
-                                min="0"
-                                value={newProductPrice || ""}
-                                onChange={(e) => setNewProductPrice(Number(e.target.value) || 0)}
-                                placeholder="0.00"
-                                className="w-full font-mono border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
-                              />
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                            ✨ Will automatically create this sellable finished good in your catalog and stock the {goodQty} good packets into Finished Goods inventory.
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
                     <div className="space-y-3 pt-2">
                       <div>
                         <label className="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1.5">Good (→ Finished Goods)</label>
@@ -645,7 +509,7 @@ export default function ConfirmPackagingPage() {
                       className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                      <span>{productMode === "create_new" ? "Create Good & Confirm Packaging" : "Confirm Packaging"}</span>
+                      <span>Confirm Packaging</span>
                     </button>
                   </>
                 )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Edit3, X, Plus, Search, User, Phone, MapPin, Building2 } from "lucide-react";
+import { Edit3, X, Plus, Search, User, Phone, Building2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { usePurchaseOrder, Vendor } from "@/context/PurchaseOrderContext";
 import { useState, useEffect, useRef } from "react";
@@ -51,6 +51,7 @@ export default function BillingSection({
           const mappedVendors = response.data.map((v: any) => ({
             id: v.id,
             name: v.name,
+            status: v.status || 'ACTIVE',
             phone: v.phone || v.mobile || v.contact,
             email: v.email,
             gstNumber: v.gstNumber,
@@ -76,8 +77,10 @@ export default function BillingSection({
   }, [showSearch]);
 
   const filteredVendors = vendors.filter(v => 
-    v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    v.vendorCode?.toLowerCase().includes(searchQuery.toLowerCase())
+    (v.status === 'ACTIVE' || !v.status) && (
+      v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      v.vendorCode?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
   );
 
   return (
@@ -106,11 +109,6 @@ export default function BillingSection({
               <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 flex-wrap">
                 <span className="font-semibold text-slate-700 dark:text-slate-300 uppercase text-[11px]">
                   {user?.role?.replace('_', ' ') || "SUPER ADMIN"}
-                </span>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <span className="flex items-center gap-1 text-[11px] text-slate-500">
-                  <MapPin size={11} className="text-slate-400 shrink-0" />
-                  HQ - Main Facility
                 </span>
               </div>
             </div>
@@ -152,20 +150,34 @@ export default function BillingSection({
         </div>
 
         {selectedVendor ? (
-          <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs hover:border-orange-200 dark:hover:border-slate-700 transition-all flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 min-h-[96px] relative">
-            <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase">
-                {selectedVendor.name.charAt(0)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">
-                    {selectedVendor.name}
-                  </h4>
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
-                    {selectedVendor.vendorCode || "V-0001"}
-                  </span>
+          <div className={clsx(
+            "p-3.5 sm:p-4 bg-white dark:bg-slate-900 border rounded-xl shadow-2xs transition-all flex flex-col justify-between gap-2.5 min-h-[96px] relative",
+            selectedVendor.status && selectedVendor.status !== 'ACTIVE'
+              ? "border-rose-300 dark:border-rose-800/60 bg-rose-50/20"
+              : "border-slate-200 dark:border-slate-800 hover:border-orange-200 dark:hover:border-slate-700"
+          )}>
+            <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3 w-full">
+              <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 flex-1">
+                <div className={clsx(
+                  "w-10 h-10 sm:w-11 sm:h-11 rounded-xl text-white flex items-center justify-center font-bold text-base shadow-sm shrink-0 uppercase",
+                  selectedVendor.status && selectedVendor.status !== 'ACTIVE' ? "bg-rose-600" : "bg-purple-600"
+                )}>
+                  {selectedVendor.name.charAt(0)}
                 </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">
+                      {selectedVendor.name}
+                    </h4>
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700">
+                      {selectedVendor.vendorCode || "V-0001"}
+                    </span>
+                    {selectedVendor.status && selectedVendor.status !== 'ACTIVE' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-400 rounded-full border border-rose-200 dark:border-rose-800">
+                        {selectedVendor.status}
+                      </span>
+                    )}
+                  </div>
                 
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 mt-1">
                   <span className="text-[11px] font-mono text-slate-500">
@@ -180,20 +192,24 @@ export default function BillingSection({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 px-2 py-1 rounded-md border border-purple-200 dark:border-purple-800/40 whitespace-nowrap">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" />
-                {selectedVendor.suppliedMaterials?.length || 1} Available
-              </span>
-              <button 
-                type="button"
-                onClick={() => setSelectedVendor(null)}
-                className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-colors cursor-pointer"
-                title="Remove Vendor"
-              >
-                <X size={14} />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button 
+                  type="button"
+                  onClick={() => setSelectedVendor(null)}
+                  className="p-1 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-lg transition-colors cursor-pointer"
+                  title="Remove Vendor"
+                >
+                  <X size={14} />
+                </button>
+              </div>
             </div>
+
+            {selectedVendor.status && selectedVendor.status !== 'ACTIVE' && (
+              <div className="w-full pt-2 border-t border-rose-200 dark:border-rose-900/40 flex items-center gap-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>This vendor is blocked and cannot be used for Purchase Orders.</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl shadow-2xs flex flex-col justify-center min-h-[96px] relative group">

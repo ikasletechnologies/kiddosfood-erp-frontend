@@ -56,9 +56,12 @@ export default function QCClient() {
       // still show up here as QC history instead of vanishing from the
       // page the moment they're inspected.
       const res = await productionApi.getAllBatches();
-      setProdBatches(res.data || []);
+      const batches = res.data || [];
+      setProdBatches(batches);
+      return batches;
     } catch (err) {
       toast.error('Failed to load pending quality checks');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -92,14 +95,39 @@ export default function QCClient() {
 
     try {
       setIsSubmitting(true);
-      await productionApi.inspectBatch(qcModalBatch.id, {
+      const targetBatchId = qcModalBatch.id;
+      await productionApi.inspectBatch(targetBatchId, {
         rejectionQty: qcDecision === 'REJECT' ? Number(qcRejectedQty) : 0,
         qcRemarks: qcRemarks.trim() || undefined,
       });
 
       toast.success('QC recorded successfully');
       setQcModalBatch(null);
-      fetchPending();
+
+      const returnTo = searchParams.get('returnTo');
+      if (returnTo) {
+        router.push(returnTo);
+        return;
+      } else if (searchParams.get('batchId')) {
+        router.push('/production/batches?tab=REGISTRY');
+        return;
+      }
+
+      // Clean up URL searchParams (?batchId=...) while remaining on the QC page
+      if (searchParams.get('batchId')) {
+        router.replace('/purchases/qc');
+      }
+
+      // Immediately refresh batch records so updated status is visible
+      const freshBatches = await fetchPending();
+
+      // If details drawer was open for this batch, update its details state
+      if (selectedBatchDetails && selectedBatchDetails.id === targetBatchId) {
+        const freshBatch = freshBatches.find((b: any) => b.id === targetBatchId);
+        if (freshBatch) {
+          setSelectedBatchDetails(freshBatch);
+        }
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to submit QC');
     } finally {
@@ -310,12 +338,6 @@ export default function QCClient() {
                   <div>
                     <p className="text-xs text-gray-500 dark:text-slate-400">Product</p>
                     <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">{prodBatchName(selectedBatchDetails)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-slate-400">Recipe Version</p>
-                    <p className="text-sm font-bold text-gray-800 dark:text-white mt-0.5">
-                      {selectedBatchDetails.production?.recipe?.version ? `v${selectedBatchDetails.production.recipe.version}` : "v1.2 (Standard)"}
-                    </p>
                   </div>
                 </div>
                 

@@ -38,9 +38,15 @@ export default function RecipeCostingTab() {
     async function loadRecipes() {
       try {
         const res = await recipesApi.getAll();
-        setRecipes(res.data || []);
-        if (res.data?.length > 0) {
-          setSelectedRecipeId(res.data[0].id);
+        const rawList = res.data || [];
+        const sortedRecipes = [...rawList].sort((a: any, b: any) => {
+          const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return timeB - timeA;
+        });
+        setRecipes(sortedRecipes);
+        if (sortedRecipes.length > 0) {
+          setSelectedRecipeId(sortedRecipes[0].id);
         }
       } catch (err) {
         toast.error("Failed to load recipes");

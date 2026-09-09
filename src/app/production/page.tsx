@@ -535,10 +535,6 @@ function ProductionPlanningContent() {
             th { background: #f8fafc; padding: 8px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; border-bottom: 2px solid #e2e8f0; }
             .instructions-box { background: #fffaf5; padding: 12px 14px; border-radius: 8px; border: 1px solid #fed7aa; margin-bottom: 16px; }
             .instructions-text { white-space: pre-line; line-height: 1.5; font-size: 11px; color: #431407; font-weight: 500; }
-            .signoff-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px dashed #cbd5e1; }
-            .signoff-box { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; background: #fafafa; }
-            .signoff-title { font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 24px; }
-            .signoff-line { border-top: 1px solid #94a3b8; font-size: 10px; color: #334155; font-weight: 600; padding-top: 4px; text-align: center; }
             @media print {
               .no-print { display: none !important; }
               body { padding: 0; }
@@ -612,20 +608,6 @@ function ProductionPlanningContent() {
             <div class="instructions-text">${cleanInstructions || "Standard formulation procedures apply. Ensure QC parameters are recorded during all production stages."}</div>
           </div>
 
-          <div class="signoff-grid">
-            <div class="signoff-box">
-              <div class="signoff-title">Production Operator</div>
-              <div class="signoff-line">Name &amp; Signature</div>
-            </div>
-            <div class="signoff-box">
-              <div class="signoff-title">Batch / Lot Code</div>
-              <div class="signoff-line">Lot # Assigned</div>
-            </div>
-            <div class="signoff-box">
-              <div class="signoff-title">QA / QC Supervisor</div>
-              <div class="signoff-line">Inspection Approval</div>
-            </div>
-          </div>
 
           <script>
             setTimeout(() => {
