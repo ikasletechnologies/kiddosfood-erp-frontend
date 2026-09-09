@@ -389,11 +389,15 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               {hasUnitData && <th className="py-3 px-2 text-center font-medium">UOM</th>}
               <th className="py-3 px-2 text-right font-medium">Price/Unit</th>
               {hasDiscountColumn && <th className="py-3 px-2 text-right font-medium">Discount</th>}
-              <th className="py-3 px-2 text-right font-medium">GST</th>
               <th className="py-3 px-3 text-right font-medium">Taxable Amount</th>
-              <th className="py-3 px-3 text-right font-medium">
-                {isSameState ? 'CGST+SGST' : 'IGST'}
-              </th>
+              {isSameState ? (
+                <>
+                  <th className="py-3 px-3 text-right font-medium">CGST</th>
+                  <th className="py-3 px-3 text-right font-medium">SGST</th>
+                </>
+              ) : (
+                <th className="py-3 px-3 text-right font-medium">IGST</th>
+              )}
               <th className="py-3 px-3 text-right font-medium rounded-tr-lg">Amount</th>
             </tr>
           </thead>
@@ -408,6 +412,11 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               const gstRate = safe(item.gstRate ?? item.taxPct ?? item.taxPercent);
               const tax = comp.taxAmount ?? 0;
               const rowTotal = comp.lineTotal ?? 0;
+
+              const cgstRate = round(gstRate / 2);
+              const sgstRate = round(gstRate / 2);
+              const cgstAmt = round(tax / 2);
+              const sgstAmt = round(tax - cgstAmt);
 
               return (
                 <tr key={idx} className="bg-gray-50/50 border-b-4 border-white">
@@ -436,15 +445,26 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                       {discAmt > 0 ? `₹ ${fmt(discAmt)}` : '—'}
                     </td>
                   )}
-                  <td className="py-3 px-2 text-right text-gray-600 whitespace-nowrap">
-                    {gstRate}%
-                  </td>
                   <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
                     ₹ {fmt(taxable)}
                   </td>
-                  <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
-                    ₹ {fmt(tax)}
-                  </td>
+                  {isSameState ? (
+                    <>
+                      <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
+                        <div className="font-semibold text-gray-900">₹ {fmt(cgstAmt)}</div>
+                        <div className="text-[10px] text-gray-500 font-mono">({cgstRate}%)</div>
+                      </td>
+                      <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
+                        <div className="font-semibold text-gray-900">₹ {fmt(sgstAmt)}</div>
+                        <div className="text-[10px] text-gray-500 font-mono">({sgstRate}%)</div>
+                      </td>
+                    </>
+                  ) : (
+                    <td className="py-3 px-3 text-right text-gray-600 whitespace-nowrap">
+                      <div className="font-semibold text-gray-900">₹ {fmt(tax)}</div>
+                      <div className="text-[10px] text-gray-500 font-mono">({gstRate}%)</div>
+                    </td>
+                  )}
                   <td className="py-3 px-3 text-right text-gray-900 font-medium whitespace-nowrap">
                     ₹ {fmt(rowTotal)}
                   </td>

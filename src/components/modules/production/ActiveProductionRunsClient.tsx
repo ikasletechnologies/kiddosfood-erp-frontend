@@ -1,14 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlayCircle, StopCircle, CheckCircle2, ChevronRight, PackageCheck, AlertTriangle, FileText, CalendarClock, RefreshCw } from "lucide-react";
+import { PlayCircle, StopCircle, CheckCircle2, PackageCheck, FileText, CalendarClock, RefreshCw } from "lucide-react";
 import { productionApi, inventoryApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
 import { convertUnit } from "@/lib/unitConversion";
-
-const STAGES = ["QUEUED", "MIXING", "COOKING", "COOLING", "READY_FOR_QC"] as const;
 
 const STAGE_LABELS: Record<string, string> = {
   QUEUED: "Queued",
@@ -80,16 +78,6 @@ export default function ActiveProductionRunsClient() {
       }
     }
     return convertUnit(raw, rawUnit, item.unit);
-  };
-
-  const handleAdvanceStage = async (id: string, stage: string) => {
-    try {
-      await productionApi.advanceStage(id, stage);
-      toast.success(`Stage updated to ${STAGE_LABELS[stage] || stage}`);
-      fetchHistory();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || "Failed to update stage");
-    }
   };
 
   const handleStop = async (id: string) => {
@@ -235,38 +223,6 @@ export default function ActiveProductionRunsClient() {
                   <p className="font-bold text-gray-800 dark:text-white mt-0.5">
                     {run.recipe?.recipeItems?.length || 0} formulation items
                   </p>
-                </div>
-              </div>
-
-              {/* Stage Progression Stepper */}
-              <div className="space-y-1.5 pt-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Production Stage Progression</span>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-                  {STAGES.map((stg) => {
-                    const isCurrent = run.currentStage === stg;
-                    const stageIdx = STAGES.indexOf(run.currentStage as any);
-                    const thisIdx = STAGES.indexOf(stg);
-                    const isPassed = stageIdx > thisIdx;
-
-                    return (
-                      <button
-                        key={stg}
-                        type="button"
-                        onClick={() => handleAdvanceStage(run.id, stg)}
-                        className={clsx(
-                          "py-2 px-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer truncate flex items-center justify-center gap-1",
-                          isCurrent
-                            ? "bg-[#f58220] text-white border-[#f58220] shadow-2xs"
-                            : isPassed
-                            ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400"
-                            : "bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-400 hover:text-gray-900"
-                        )}
-                      >
-                        {isPassed && <CheckCircle2 size={12} />}
-                        <span>{STAGE_LABELS[stg] || stg}</span>
-                      </button>
-                    );
-                  })}
                 </div>
               </div>
 

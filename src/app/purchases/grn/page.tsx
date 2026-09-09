@@ -376,10 +376,34 @@ export default function GRNPage() {
       return;
     }
 
+    // Validate Batch Number, MFG Date, and EXP Date for all items with acceptedQty > 0
+    for (let i = 0; i < itemsToSubmit.length; i++) {
+      const item = itemsToSubmit[i];
+      const itemName = item.inventoryItem?.name || selectedPO.poItems[i]?.inventoryItem?.name || `Item #${i + 1}`;
+      if (item.acceptedQty > 0) {
+        if (!item.lotNumber || !item.lotNumber.trim()) {
+          toast.error(`Please provide a Batch/Lot Number for "${itemName}".`);
+          return;
+        }
+        if (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime())) {
+          toast.error(`Please select a valid Manufacturing (MFG) Date for "${itemName}".`);
+          return;
+        }
+        if (!item.expDate || isNaN(new Date(item.expDate).getTime())) {
+          toast.error(`Please select a valid Expiry (EXP) Date for "${itemName}".`);
+          return;
+        }
+        if (new Date(item.expDate).getTime() < new Date(item.mfgDate).getTime()) {
+          toast.error(`Expiry (EXP) Date cannot be earlier than Manufacturing (MFG) Date for "${itemName}".`);
+          return;
+        }
+      }
+    }
+
     setSubmitting(true);
     try {
       // 1. Create and Approve GRN (Impacts Inventory)
-      const res = await grnApi.createFromPO(selectedPO.id, { items: grnItems });
+      const res = await grnApi.createFromPO(selectedPO.id, { items: itemsToSubmit });
       const grnId = res.data.id;
       await grnApi.approve(grnId);
       setApprovedId(grnId);
@@ -713,6 +737,12 @@ export default function GRNPage() {
                       const variance = item.price - item.poPrice;
                       const isOverridden = Math.abs(variance) > 0.001;
                       const actualLineAmount = item.acceptedQty * item.price;
+
+                      const isLotMissing = item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim());
+                      const isMfgMissing = item.acceptedQty > 0 && (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime()));
+                      const isExpMissing = item.acceptedQty > 0 && (!item.expDate || isNaN(new Date(item.expDate).getTime()));
+                      const isExpBeforeMfg = item.acceptedQty > 0 && !isMfgMissing && !isExpMissing && (new Date(item.expDate!).getTime() < new Date(item.mfgDate!).getTime());
+
                       return (
                         <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
                           <td className="px-4 py-3">
@@ -721,7 +751,6 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="space-y-1.5 min-w-[280px]">
-                              {/* Row 1: Lot / Batch Number */}
                               <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
@@ -738,17 +767,21 @@ export default function GRNPage() {
                                   value={item.lotNumber || ""}
                                   onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
                                   className={clsx(
-                                    "w-36 px-2.5 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800 dark:text-white",
-                                    item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim())
-                                      ? "border-amber-300 dark:border-amber-500/40 bg-amber-50/20 dark:bg-amber-500/10"
+                                    "w-36 px-2.5 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800 dark:text-white transition-colors",
+                                    isLotMissing
+                                      ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
                                       : "border-gray-200 dark:border-white/10"
                                   )}
                                 />
                               </div>
 
-                              {/* Row 2: Starting & Ending Dates with clear labels */}
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <div className="relative flex items-center gap-1 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
+                                <div className={clsx(
+                                  "relative flex items-center gap-1 border px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors",
+                                  isMfgMissing
+                                    ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
+                                    : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
+                                )}>
                                   <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
                                   <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between">
                                     {formatDisplayDate(item.mfgDate)}
@@ -762,7 +795,12 @@ export default function GRNPage() {
                                     className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                                   />
                                 </div>
-                                <div className="relative flex items-center gap-1 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors">
+                                <div className={clsx(
+                                  "relative flex items-center gap-1 border px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors",
+                                  isExpMissing || isExpBeforeMfg
+                                    ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
+                                    : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
+                                )}>
                                   <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
                                   <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between">
                                     {formatDisplayDate(item.expDate)}
@@ -777,6 +815,15 @@ export default function GRNPage() {
                                   />
                                 </div>
                               </div>
+
+                              {(isLotMissing || isMfgMissing || isExpMissing || isExpBeforeMfg) && (
+                                <div className="space-y-0.5 pt-0.5 text-[10px] text-rose-500 dark:text-rose-400 font-medium">
+                                  {isLotMissing && <div>• Batch/Lot number is required</div>}
+                                  {isMfgMissing && <div>• Manufacturing (MFG) date is required</div>}
+                                  {isExpMissing && <div>• Expiry (EXP) date is required</div>}
+                                  {isExpBeforeMfg && <div>• EXP date cannot be earlier than MFG date</div>}
+                                </div>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3">
@@ -859,16 +906,12 @@ export default function GRNPage() {
                                       <span className="font-semibold text-gray-700 dark:text-slate-300">₹{lineGoodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                     <div className="flex justify-between text-gray-500 dark:text-slate-400">
-                                      <span>GST Rate:</span>
-                                      <span className="font-semibold text-gray-700 dark:text-slate-300">{lineGstRate}%</span>
+                                      <span>GST ({lineGstRate}%):</span>
+                                      <span className="font-semibold text-gray-700 dark:text-slate-300">₹{lineGstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
-                                    <div className="flex justify-between text-gray-500 dark:text-slate-400">
-                                      <span>GST:</span>
-                                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">₹{lineGstAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    </div>
-                                    <div className="flex justify-between font-bold text-gray-800 dark:text-white pt-0.5">
+                                    <div className="flex justify-between font-bold text-gray-900 dark:text-white pt-0.5">
                                       <span>Line Total:</span>
-                                      <span className="text-gray-900 dark:text-white">₹{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                      <span>₹{lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                   </div>
                                 </div>
@@ -876,45 +919,49 @@ export default function GRNPage() {
                             })()}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 rounded text-xs font-semibold text-gray-700 dark:text-slate-300">{item.quantity}</span>
+                            <span className="font-mono text-xs font-bold text-gray-600 dark:text-slate-300">{item.quantity}</span>
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3">
                             <input
                               type="number"
                               min={0}
                               value={item.receivedQty}
                               onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
-                              className="w-20 text-center px-2.5 py-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg font-semibold text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
+                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
                             />
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3">
                             <input
                               type="number"
                               min={0}
                               max={item.receivedQty}
                               value={item.rejectedQty}
                               onChange={e => updateItem(idx, "rejectedQty", Number(e.target.value))}
-                              className="w-20 text-center px-2.5 py-1.5 bg-red-50/50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg text-red-600 dark:text-red-400 font-semibold text-xs outline-none focus:border-red-400"
+                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
                             />
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="inline-block w-20 text-center px-2.5 py-1.5 bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400 rounded-lg font-bold text-xs border border-green-200 dark:border-green-500/20">
+                            <span className="font-mono text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-md">
                               {item.acceptedQty}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {item.rejectedQty > 0 ? (
-                              <div className="w-6 h-6 rounded-full bg-red-50 dark:bg-red-500/20 flex items-center justify-center text-red-500 dark:text-red-400 mx-auto" title="Some rejected">
-                                <XCircleIcon size={14} />
-                              </div>
-                            ) : item.acceptedQty < item.quantity ? (
-                              <div className="w-6 h-6 rounded-full bg-amber-50 dark:bg-amber-500/20 flex items-center justify-center text-amber-500 dark:text-amber-400 mx-auto" title="Partial quantity">
-                                <AlertTriangleIcon size={14} />
-                              </div>
+                            {item.receivedQty > 0 ? (
+                              item.rejectedQty === 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded-full">
+                                  <CheckCircle2Icon size={10} /> Full
+                                </span>
+                              ) : item.acceptedQty > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-full">
+                                  <AlertTriangleIcon size={10} /> Partial
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full">
+                                  <XCircleIcon size={10} /> Reject
+                                </span>
+                              )
                             ) : (
-                              <div className="w-6 h-6 rounded-full bg-green-50 dark:bg-green-500/20 flex items-center justify-center text-green-600 dark:text-green-400 mx-auto" title="Fully accepted">
-                                <CheckCircle2Icon size={14} />
-                              </div>
+                              <span className="text-[10px] text-gray-400 dark:text-slate-500 font-medium">Pending</span>
                             )}
                           </td>
                         </tr>
@@ -925,7 +972,6 @@ export default function GRNPage() {
               </div>
             </div>
 
-            {/* ── Receiving Summary & Commercial Calculation Preview ── */}
             {(() => {
               const poValue = grnItems.reduce((s, i) => s + i.quantity * i.poPrice, 0);
               const actualGoodsValue = grnItems.reduce((s, i) => s + i.acceptedQty * i.price, 0);
@@ -934,88 +980,95 @@ export default function GRNPage() {
               const hasOverride = grnItems.some(i => Math.abs(i.price - i.poPrice) > 0.001);
 
               const commercials = computeCommercialsFromPO(selectedPO, grnItems);
-              const rates = Object.keys(commercials.taxRateMap).map(Number);
-              let gstLabel = "GST";
-              if (rates.length === 1) {
-                gstLabel = `GST (${rates[0]}%)`;
-              } else if (rates.length > 1) {
-                gstLabel = `GST (${rates.sort((a, b) => a - b).map(r => r + "%").join(", ")})`;
-              } else {
-                gstLabel = "GST (0%)";
-              }
 
               return (
-                <div className="space-y-4">
-                  {/* RECEIVING SUMMARY */}
-                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
-                    <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-tight mb-3">Receiving Summary</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div>
-                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">PO Value</p>
-                        <p className="text-base font-bold text-gray-800 dark:text-white mt-0.5">₹{poValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-card p-5 rounded-lg border border-gray-200 dark:border-white/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Goods Value Comparison</span>
+                      {hasOverride && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                          <AlertTriangleIcon size={10} /> Price Overridden
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="p-3 bg-gray-50 dark:bg-white/5 rounded-lg">
+                        <div className="text-[10px] uppercase font-bold text-gray-500 dark:text-slate-400">PO Baseline (Ordered)</div>
+                        <div className="text-base font-bold font-mono text-gray-800 dark:text-white mt-0.5">
+                          ₹{poValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">Actual Goods Value</p>
-                        <p className="text-base font-bold text-gray-800 dark:text-white mt-0.5">₹{actualGoodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">Price Variance</p>
-                        <p className={clsx("text-base font-bold mt-0.5", variance === 0 ? "text-gray-800 dark:text-white" : variance > 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400")}>
-                          {variance > 0 ? "+" : ""}₹{variance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          {variance !== 0 && <span className="text-xs font-semibold ml-1">({variancePct > 0 ? "+" : ""}{variancePct.toFixed(2)}%)</span>}
-                        </p>
+                      <div className="p-3 bg-orange-50/50 dark:bg-orange-500/5 rounded-lg border border-orange-100 dark:border-orange-500/10">
+                        <div className="text-[10px] uppercase font-bold text-[#f58220]">Actual Accepted Value</div>
+                        <div className="text-base font-bold font-mono text-[#f58220] mt-0.5">
+                          ₹{actualGoodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
                       </div>
                     </div>
+
+                    {hasOverride && (
+                      <div className="text-xs text-gray-500 dark:text-slate-400 pt-1 flex items-center justify-between">
+                        <span>Variance vs PO Baseline:</span>
+                        <span className={clsx("font-bold font-mono", variance >= 0 ? "text-amber-600 dark:text-amber-400" : "text-green-600 dark:text-green-400")}>
+                          {variance >= 0 ? "+" : ""}₹{variance.toFixed(2)} ({variancePct >= 0 ? "+" : ""}{variancePct.toFixed(2)}%)
+                        </span>
+                      </div>
+                    )}
                   </div>
 
-                  {/* COMMERCIAL CALCULATION */}
-                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-tight">Commercial Calculation</h3>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                        Purchase Bill Payable Preview
+                  <div className="bg-white dark:bg-card p-5 rounded-lg border border-gray-200 dark:border-white/5 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Purchase Bill Preview</span>
+                      <span className="text-[10px] font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 px-2 py-0.5 rounded">
+                        Posts on Approval
                       </span>
                     </div>
 
-                    <div className="max-w-md space-y-2 text-xs">
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-gray-600 dark:text-slate-400">Goods Value</span>
-                        <span className="font-mono font-semibold text-gray-800 dark:text-white">₹{commercials.goodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <div className="space-y-1.5 text-xs text-gray-600 dark:text-slate-300 pt-1">
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-slate-400">Accepted Goods Value</span>
+                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">₹{commercials.goodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
-
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-gray-600 dark:text-slate-400">{gstLabel}</span>
-                        <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{commercials.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <div className="flex justify-between">
+                        <span className="text-gray-500 dark:text-slate-400">GST (Total)</span>
+                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">+₹{commercials.taxAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
-
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-gray-600 dark:text-slate-400">Discount</span>
-                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">-₹{commercials.discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
-
-                      <div className="flex justify-between items-center py-0.5">
-                        <span className="text-gray-600 dark:text-slate-400">Freight</span>
-                        <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">+₹{commercials.freightCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                      </div>
+                      {commercials.discountAmount > 0 && (
+                        <div className="flex justify-between text-green-600 dark:text-green-400">
+                          <span className="text-gray-600 dark:text-slate-400">Discount</span>
+                          <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">-₹{commercials.discountAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
+                      {commercials.freightCost > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500 dark:text-slate-400">Freight Cost</span>
+                          <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">+₹{commercials.freightCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
 
                       <div className="pt-2 border-t border-gray-200 dark:border-white/10 flex justify-between items-center font-bold">
                         <span className="text-xs uppercase text-gray-900 dark:text-white tracking-wider">Final Vendor Payable</span>
                         <span className="text-base font-mono text-[#f58220]">₹{commercials.finalPayable.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </div>
                     </div>
-
-                    <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-3">
-                      Calculated using PO tax rates, pro-rata discount, and freight. Previews the exact commercial calculation that the Purchase Bill will post to the Vendor Ledger upon approval.
-                    </p>
                   </div>
                 </div>
               );
             })()}
 
-            {/* ── Bottom Actions Footer Bar ── */}
             {(() => {
               const totalAccepted = grnItems.reduce((s, i) => s + (Number(i.acceptedQty) || 0), 0);
-              const isApproveDisabled = submitting || grnItems.length === 0 || totalAccepted === 0;
+              const hasIncompleteBatchInfo = grnItems.some(item => {
+                if (item.acceptedQty <= 0) return false;
+                if (!item.lotNumber || !item.lotNumber.trim()) return true;
+                if (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime())) return true;
+                if (!item.expDate || isNaN(new Date(item.expDate).getTime())) return true;
+                if (new Date(item.expDate).getTime() < new Date(item.mfgDate).getTime()) return true;
+                return false;
+              });
+              const isApproveDisabled = submitting || grnItems.length === 0 || totalAccepted === 0 || hasIncompleteBatchInfo;
 
               return (
                 <div className="bg-white dark:bg-card px-6 py-4 rounded-lg border border-gray-200 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1023,9 +1076,13 @@ export default function GRNPage() {
                     <span>
                       <span className="font-semibold text-gray-800 dark:text-white">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600 dark:text-green-400">{totalAccepted}</span> units
                     </span>
+                    {hasIncompleteBatchInfo && totalAccepted > 0 && (
+                      <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/40">
+                        Batch No, MFG &amp; EXP dates required
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
-
                     <button
                       type="button"
                       onClick={handlePrintGRN}
@@ -1037,12 +1094,12 @@ export default function GRNPage() {
                       type="button"
                       onClick={handleCreateAndApprove}
                       disabled={isApproveDisabled}
-                      title="Approve GRN and synchronize stock"
+                      title={hasIncompleteBatchInfo ? "Please fill Batch No, MFG Date & EXP Date for all items" : "Approve GRN and synchronize stock"}
                       className={clsx(
-                        "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer",
+                        "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
                         isApproveDisabled
                           ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed shadow-none"
-                          : "bg-[#f58220] hover:bg-[#e8740e] text-white active:scale-95"
+                          : "bg-[#f58220] hover:bg-[#e8740e] text-white active:scale-95 cursor-pointer"
                       )}
                     >
                       {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}

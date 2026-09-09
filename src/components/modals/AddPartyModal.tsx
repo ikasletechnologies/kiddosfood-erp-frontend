@@ -212,17 +212,38 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
            mappedBalanceType = bal < 0 ? "pay" : "receive";
         }
 
+        const hasCustomCredit = initialData.creditLimit !== null && initialData.creditLimit !== undefined && Number(initialData.creditLimit) > 0;
+
+        let asOfDateStr = new Date().toISOString().split("T")[0];
+        if (initialData.asOfDate) {
+          try {
+            asOfDateStr = new Date(initialData.asOfDate).toISOString().split("T")[0];
+          } catch {}
+        } else if (initialData.createdAt) {
+          try {
+            asOfDateStr = new Date(initialData.createdAt).toISOString().split("T")[0];
+          } catch {}
+        }
+
         setForm({ 
           ...getEmptyForm(partyType), 
           ...initialData,
           name: initialData.name || "",
           contact: initialData.contact || initialData.phone || "",
+          email: initialData.email || "",
           billingAddress: initialData.address || initialData.billingAddress || "",
           shippingAddress: initialData.shippingAddress || initialData.address || initialData.billingAddress || "",
+          state: initialData.state || "",
+          district: initialData.district || "",
+          city: initialData.city || "",
           pincode: initialData.pinCode || initialData.pincode || "",
           gstNumber: initialData.gstNumber || initialData.gstin || "",
-          openingBalance: Math.abs(bal) || "",
+          gstType: initialData.gstType || "Unregistered/Consumer",
+          openingBalance: Math.abs(bal) > 0 ? String(Math.abs(bal)) : "",
           openingBalanceType: mappedBalanceType,
+          asOfDate: asOfDateStr,
+          noCreditLimit: !hasCustomCredit,
+          customCreditLimit: hasCustomCredit ? String(initialData.creditLimit) : "",
           category: initialData.category || "",
           paymentTerms: initialData.paymentTerms || "IMMEDIATE",
           status: initialData.status || "ACTIVE",
@@ -356,24 +377,24 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
       const payload = {
         name: trimmedName,
-        contact: form.contact,
-        email: form.email,
+        contact: form.contact.trim(),
+        email: form.email && form.email.trim() ? form.email.trim() : null,
         address: form.billingAddress.trim(),
         billingAddress: form.billingAddress.trim(),
-        shippingAddress: form.shippingAddress.trim(),
-        state: form.state,
-        district: form.district,
-        city: form.city,
+        shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : form.billingAddress.trim(),
+        state: form.state && form.state.trim() ? form.state.trim() : null,
+        district: form.district && form.district.trim() ? form.district.trim() : null,
+        city: form.city && form.city.trim() ? form.city.trim() : null,
         pincode: cleanPincode,
-        gstNumber: form.gstNumber,
-        gstType: form.gstType,
+        gstNumber: form.gstNumber && form.gstNumber.trim() ? form.gstNumber.trim().toUpperCase() : null,
+        gstType: form.gstType || "Unregistered/Consumer",
         openingBalance: finalOpeningBalance,
         openingBalanceType: form.openingBalanceType,
-        asOfDate: form.asOfDate,
+        asOfDate: form.asOfDate || null,
         creditLimit: form.noCreditLimit ? null : (Number(form.customCreditLimit) || 0),
-        category: form.category,
-        paymentTerms: form.paymentTerms,
-        status: form.status,
+        category: form.category && form.category.trim() ? form.category.trim() : null,
+        paymentTerms: form.paymentTerms || "IMMEDIATE",
+        status: form.status || "ACTIVE",
       };
       
       await onSave(payload);

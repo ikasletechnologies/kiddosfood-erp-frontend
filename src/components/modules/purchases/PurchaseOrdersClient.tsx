@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import {
   ShoppingCart, Plus, Search, Filter, Calendar as CalendarIcon,
   ChevronDown, Store, Clock, CheckCircle2, XCircle, AlertCircle,
-  Trash2, Wallet, RefreshCw, ChevronLeft, ChevronRight, Download, X, Settings, Pencil
+  Trash2, Wallet, RefreshCw, ChevronLeft, ChevronRight, Download, X, Settings
 } from "lucide-react";
 import Link from "next/link";
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday, startOfDay, isBefore } from "date-fns";
@@ -563,15 +563,6 @@ export default function PurchaseOrdersClient() {
 
                           <button
                             type="button"
-                            onClick={() => window.location.href = `/purchases/edit/${po.id}`}
-                            className="p-1.5 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                            title="Edit PO"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-
-                          <button
-                            type="button"
                             onClick={() => setViewingPO(po)}
                             className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                             title="Download PDF"
@@ -599,7 +590,17 @@ export default function PurchaseOrdersClient() {
         defaultAccountId={selectedAccountId}
       />
 
-      {viewingPO && <GSTInvoice order={viewingPO} vendor={viewingPO.vendor} companyDetails={currentCompany} documentType="PURCHASE_ORDER" onClose={() => setViewingPO(null)} />}
+      {viewingPO && (
+        <GSTInvoice
+          order={viewingPO}
+          vendor={viewingPO.vendor}
+          companyDetails={currentCompany}
+          documentType="PURCHASE_ORDER"
+          terms={viewingPO.vendorNotes ? [viewingPO.vendorNotes] : (viewingPO.deliveryInstructions ? [viewingPO.deliveryInstructions] : undefined)}
+          notes={viewingPO.internalNotes || viewingPO.notes || undefined}
+          onClose={() => setViewingPO(null)}
+        />
+      )}
 
       {showSettings && mounted && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-black/60 backdrop-blur-md overflow-y-auto">
@@ -829,14 +830,44 @@ export default function PurchaseOrdersClient() {
                   <div className="p-8 border-b border-slate-200 dark:border-white/5 grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Vendor Details</h3>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white mb-1">
-                        {viewingDetailsPO.vendor?.name} 
-                        {viewingDetailsPO.vendor?.vendorCode && <span className="text-slate-400 ml-1">({viewingDetailsPO.vendor.vendorCode})</span>}
+                      <p className="text-sm font-bold text-slate-800 dark:text-white mb-2.5">
+                        {viewingDetailsPO.vendor?.name || "Not provided"} 
+                        {viewingDetailsPO.vendor?.vendorCode && (
+                          <span className="text-slate-400 font-mono font-medium ml-1.5">({viewingDetailsPO.vendor.vendorCode})</span>
+                        )}
                       </p>
-                      {viewingDetailsPO.vendor?.contactPerson && <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{viewingDetailsPO.vendor.contactPerson}</p>}
-                      {viewingDetailsPO.vendor?.email && <p className="text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.vendor.email}</p>}
-                      {viewingDetailsPO.vendor?.phone && <p className="text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.vendor.phone}</p>}
-                      {viewingDetailsPO.vendor?.address && <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs leading-relaxed">{viewingDetailsPO.vendor.address}</p>}
+                      
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium w-16 shrink-0">Phone:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-200 font-mono">
+                            {viewingDetailsPO.vendor?.contact || viewingDetailsPO.vendor?.phone || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium w-16 shrink-0">Email:</span>
+                          <span className="font-medium text-slate-700 dark:text-slate-200">
+                            {viewingDetailsPO.vendor?.email || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium w-16 shrink-0">GSTIN:</span>
+                          <span className="font-mono font-semibold text-slate-700 dark:text-slate-200 uppercase">
+                            {viewingDetailsPO.vendor?.gstNumber || viewingDetailsPO.vendor?.gstin || "Not provided"}
+                          </span>
+                        </div>
+                        <div className="flex items-start gap-2 pt-0.5">
+                          <span className="text-slate-400 dark:text-slate-500 font-medium w-16 shrink-0">Address:</span>
+                          <span className="text-slate-600 dark:text-slate-400 max-w-xs leading-relaxed">
+                            {[
+                              viewingDetailsPO.vendor?.address,
+                              viewingDetailsPO.vendor?.city,
+                              viewingDetailsPO.vendor?.state,
+                              viewingDetailsPO.vendor?.pincode
+                            ].filter(Boolean).join(", ") || viewingDetailsPO.vendor?.address || "Not provided"}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                     
                     <div>
@@ -860,19 +891,29 @@ export default function PurchaseOrdersClient() {
                     
                     <div className="flex flex-col md:flex-row justify-end items-start gap-12">
                       <div className="flex-1 w-full max-w-md">
-                        {/* Notes */}
-                        {(viewingDetailsPO.internalNotes || viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions) && (
+                        {/* Notes & Terms */}
+                        {Boolean(
+                          viewingDetailsPO.internalNotes ||
+                          viewingDetailsPO.notes ||
+                          viewingDetailsPO.vendorNotes ||
+                          viewingDetailsPO.deliveryInstructions
+                        ) && (
                           <div className="space-y-4">
-                            {viewingDetailsPO.vendorNotes && (
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes &amp; Terms</h3>
+                            {(viewingDetailsPO.internalNotes || viewingDetailsPO.notes) && (
                               <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Notes</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg">{viewingDetailsPO.vendorNotes}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Internal Remarks</p>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
+                                  {viewingDetailsPO.internalNotes || viewingDetailsPO.notes}
+                                </p>
                               </div>
                             )}
-                            {viewingDetailsPO.deliveryInstructions && (
+                            {(viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions) && (
                               <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Delivery Instructions</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg">{viewingDetailsPO.deliveryInstructions}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Supplier Instructions</p>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
+                                  {viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions}
+                                </p>
                               </div>
                             )}
                           </div>
@@ -894,13 +935,42 @@ export default function PurchaseOrdersClient() {
                           const hasActual = viewingDetailsPO.hasActualInvoice;
                           const subtotal = hasActual ? viewingDetailsPO.actualSubtotal : (viewingDetailsPO.subtotal || 0);
                           const discount = hasActual ? viewingDetailsPO.actualDiscountAmount : (viewingDetailsPO.discountAmount || 0);
-                          const gst = hasActual
-                            ? viewingDetailsPO.actualCgst + viewingDetailsPO.actualSgst + viewingDetailsPO.actualIgst
-                            : (viewingDetailsPO.cgst || 0) + (viewingDetailsPO.sgst || 0) + (viewingDetailsPO.igst || 0);
                           const freight = hasActual ? viewingDetailsPO.actualFreightCost : (viewingDetailsPO.freightCost || 0);
                           const grandTotal = hasActual ? viewingDetailsPO.actualTotalAmount : viewingDetailsPO.totalAmount;
                           const balanceDue = hasActual ? viewingDetailsPO.actualBalanceDue : (viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0);
                           const originalDiffers = hasActual && Math.abs(grandTotal - viewingDetailsPO.totalAmount) > 0.01;
+
+                          const companyState = (currentCompany?.state || "").toLowerCase().trim();
+                          const vendorState = (viewingDetailsPO.vendor?.state || "").toLowerCase().trim();
+                          const stateOfSupply = (viewingDetailsPO.stateOfSupply || "").toLowerCase().trim();
+                          const isSameState = stateOfSupply && companyState
+                            ? companyState === stateOfSupply
+                            : !companyState || !vendorState
+                              ? true
+                              : vendorState.includes(companyState) || companyState.includes(vendorState);
+
+                          let rawCgst = hasActual ? viewingDetailsPO.actualCgst : (viewingDetailsPO.cgst || 0);
+                          let rawSgst = hasActual ? viewingDetailsPO.actualSgst : (viewingDetailsPO.sgst || 0);
+                          let rawIgst = hasActual ? viewingDetailsPO.actualIgst : (viewingDetailsPO.igst || 0);
+
+                          if (rawCgst === 0 && rawSgst === 0 && rawIgst === 0) {
+                            const totalTax = (viewingDetailsPO.poItems || []).reduce((acc: number, it: any) => {
+                              const itPrice = Number(it.price) || 0;
+                              const itQty = Number(it.quantity) || 0;
+                              const itGst = Number(it.gstRate) || 0;
+                              return acc + (itPrice * itQty * (itGst / 100));
+                            }, 0);
+                            const roundedTax = Math.round(totalTax * 100) / 100;
+                            if (isSameState) {
+                              rawCgst = Math.round((roundedTax / 2) * 100) / 100;
+                              rawSgst = Math.round((roundedTax - rawCgst) * 100) / 100;
+                              rawIgst = 0;
+                            } else {
+                              rawIgst = roundedTax;
+                              rawCgst = 0;
+                              rawSgst = 0;
+                            }
+                          }
 
                           return (
                             <>
@@ -912,10 +982,23 @@ export default function PurchaseOrdersClient() {
                                 <span className="text-slate-500 dark:text-slate-400 font-medium">Discount</span>
                                 <span className="font-bold text-emerald-600 dark:text-emerald-400">-{formatCurrency(discount)}</span>
                               </div>
-                              <div className="flex justify-between items-center text-sm">
-                                <span className="text-slate-500 dark:text-slate-400 font-medium">GST (All)</span>
-                                <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(gst)}</span>
-                              </div>
+                              {isSameState ? (
+                                <>
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-500 dark:text-slate-400 font-medium">CGST</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(rawCgst)}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-500 dark:text-slate-400 font-medium">SGST</span>
+                                    <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(rawSgst)}</span>
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex justify-between items-center text-sm">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium">IGST</span>
+                                  <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(rawIgst)}</span>
+                                </div>
+                              )}
                               <div className="flex justify-between items-center text-sm">
                                 <span className="text-slate-500 dark:text-slate-400 font-medium">Freight</span>
                                 <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(freight)}</span>
@@ -979,7 +1062,19 @@ export default function PurchaseOrdersClient() {
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">PO Price</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Actual Price</th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Variance</th>
-                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">GST</th>
+                        <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">
+                          {(() => {
+                            const companyState = (currentCompany?.state || "").toLowerCase().trim();
+                            const vendorState = (viewingDetailsPO.vendor?.state || "").toLowerCase().trim();
+                            const stateOfSupply = (viewingDetailsPO.stateOfSupply || "").toLowerCase().trim();
+                            const isSameState = stateOfSupply && companyState
+                              ? companyState === stateOfSupply
+                              : !companyState || !vendorState
+                                ? true
+                                : vendorState.includes(companyState) || companyState.includes(vendorState);
+                            return isSameState ? "GST (CGST+SGST)" : "IGST";
+                          })()}
+                        </th>
                         <th className="px-4 py-3 font-semibold text-[10px] text-slate-500 uppercase tracking-widest text-right">Total</th>
                       </tr>
                     </thead>
@@ -989,6 +1084,15 @@ export default function PurchaseOrdersClient() {
                         const pQty = Math.max(0, item.quantity - rQty);
                         const actualInfo = getActualPriceInfo(item.inventoryItemId);
                         const variance = actualInfo ? Number((actualInfo.actualPrice - item.price).toFixed(2)) : 0;
+                        const companyState = (currentCompany?.state || "").toLowerCase().trim();
+                        const vendorState = (viewingDetailsPO.vendor?.state || "").toLowerCase().trim();
+                        const stateOfSupply = (viewingDetailsPO.stateOfSupply || "").toLowerCase().trim();
+                        const isSameState = stateOfSupply && companyState
+                          ? companyState === stateOfSupply
+                          : !companyState || !vendorState
+                            ? true
+                            : vendorState.includes(companyState) || companyState.includes(vendorState);
+                        const gRate = Number(item.gstRate) || 0;
                         return (
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
@@ -1016,7 +1120,16 @@ export default function PurchaseOrdersClient() {
                                 <span className="text-slate-400 dark:text-slate-500">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">{item.gstRate || 0}%</td>
+                            <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">
+                              {isSameState ? (
+                                <div>
+                                  <div>CGST: {(gRate / 2)}%</div>
+                                  <div>SGST: {(gRate / 2)}%</div>
+                                </div>
+                              ) : (
+                                <div>IGST: {gRate}%</div>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
                           </tr>
                         );

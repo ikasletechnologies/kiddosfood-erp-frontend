@@ -60,7 +60,7 @@ function ProductBatchesRegistry() {
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<string>("ALL");
   const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">(
-    requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" ? requestedTab : "ACTIVE_RUNS"
+    requestedTab === "ACTIVE_RUNS" || requestedTab === "CONSUMPTION" ? requestedTab : "REGISTRY"
   );
 
   // Batch Details SlideOver State
@@ -69,10 +69,24 @@ function ProductBatchesRegistry() {
 
   // Sync activeTab when URL requestedTab changes
   useEffect(() => {
-    if (requestedTab === "REGISTRY" || requestedTab === "CONSUMPTION" || requestedTab === "ACTIVE_RUNS") {
+    if (requestedTab === "ACTIVE_RUNS" || requestedTab === "CONSUMPTION") {
       setActiveTab(requestedTab);
+    } else {
+      setActiveTab("REGISTRY");
     }
   }, [requestedTab]);
+
+  const handleTabChange = (newTab: "REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS") => {
+    setActiveTab(newTab);
+    const params = new URLSearchParams(searchParams.toString());
+    if (newTab === "REGISTRY") {
+      params.delete("tab");
+    } else {
+      params.set("tab", newTab);
+    }
+    const qs = params.toString();
+    router.push(qs ? `/production/batches?${qs}` : "/production/batches", { scroll: false });
+  };
 
   // Deep-link support: a batch opened from Expiry Tracking (or elsewhere)
   // via ?batchId= auto-opens straight to that same batch's detail drawer.
@@ -176,12 +190,7 @@ function ProductBatchesRegistry() {
           ] as const).map(tab => (
             <button
               key={tab.key}
-              onClick={() => {
-                setActiveTab(tab.key);
-                if (tab.key === "REGISTRY") {
-                  fetchBatches(productFilter || undefined, selectedFranchiseId || undefined);
-                }
-              }}
+              onClick={() => handleTabChange(tab.key)}
               className={clsx(
                 "px-3.5 sm:px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap cursor-pointer shrink-0",
                 activeTab === tab.key ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"

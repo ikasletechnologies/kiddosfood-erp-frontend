@@ -120,7 +120,9 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
           if (po.expectedDeliveryDate) setExpectedDeliveryDate(po.expectedDeliveryDate.split('T')[0]);
           if (po.paymentTerms) setPaymentTerms(po.paymentTerms);
           if (po.internalNotes) setInternalNotes(po.internalNotes);
+          else if (po.notes) setInternalNotes(po.notes);
           if (po.vendorNotes) setVendorNotes(po.vendorNotes);
+          else if (po.deliveryInstructions) setVendorNotes(po.deliveryInstructions);
           if (po.discountAmount !== undefined) setDiscountAmount(Number(po.discountAmount) || 0);
           if (po.freightCost !== undefined) setFreightCost(Number(po.freightCost) || 0);
           if (po.status) setPoStatus(po.status);
@@ -328,27 +330,47 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   };
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
-    const taxableAfterDiscount = Math.max(0, subtotal - discountAmount);
+    const rawSubtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
+    const subtotal = Number.isFinite(rawSubtotal) && rawSubtotal >= 0 ? rawSubtotal : 0;
+
+    const parsedDiscount = Number(discountAmount);
+    const validDiscount = (Number.isFinite(parsedDiscount) && parsedDiscount >= 0) 
+      ? Math.min(parsedDiscount, subtotal) 
+      : 0;
+
+    const parsedFreight = Number(freightCost);
+    const validFreight = (Number.isFinite(parsedFreight) && parsedFreight >= 0)
+      ? parsedFreight
+      : 0;
+
+    const taxableAfterDiscount = Math.max(0, subtotal - validDiscount);
     const ratio = subtotal > 0 ? taxableAfterDiscount / subtotal : 1;
 
     const baseGst = items.reduce((acc, item) => acc + (item.quantity * item.price * (item.gstRate / 100)), 0);
-    const totalGst = discountAmount > 0 ? Math.round(baseGst * ratio * 100) / 100 : Math.round(baseGst * 100) / 100;
+    const totalGst = validDiscount > 0 ? Math.round(baseGst * ratio * 100) / 100 : Math.round(baseGst * 100) / 100;
     
     // CGST/SGST vs IGST split
-    const cgst = Math.round((totalGst / 2) * 100) / 100;
-    const sgst = Math.round((totalGst / 2) * 100) / 100;
+    const vendorState = (selectedVendor?.state || "").toLowerCase().trim();
+    const isInterstate = Boolean(
+      vendorState && 
+      !vendorState.includes("tamil nadu") && 
+      vendorState !== "tamil nadu"
+    );
     
-    const grandTotal = taxableAfterDiscount + totalGst + freightCost;
+    const cgst = !isInterstate ? Math.round((totalGst / 2) * 100) / 100 : 0;
+    const sgst = !isInterstate ? Math.round((totalGst - cgst) * 100) / 100 : 0;
+    const igst = isInterstate ? totalGst : 0;
+    
+    const grandTotal = Math.max(0, taxableAfterDiscount + totalGst + validFreight);
     const roundoff = Math.round(grandTotal) - grandTotal;
-    const finalTotal = grandTotal + roundoff;
+    const finalTotal = Math.max(0, grandTotal + roundoff);
 
     let appliedAdvance = 0;
     if (useAdvance && selectedVendor && selectedVendor.advanceBalance > 0) {
       appliedAdvance = Math.min(selectedVendor.advanceBalance, finalTotal);
     }
     
-    const balanceDue = finalTotal - appliedAdvance;
+    const balanceDue = Math.max(0, finalTotal - appliedAdvance);
     
     return {
       subtotal,
@@ -356,7 +378,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       totalGst,
       cgst,
       sgst,
-      igst: 0, // Placeholder
+      igst,
       discountAmount,
       freightCost,
       roundoff,
@@ -375,8 +397,21 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     }
     if (items.some(i => i.quantity <= 0)) errs.push("One or more items have invalid quantity");
     if (items.some(i => i.price <= 0)) errs.push("One or more items have invalid price");
+
+    const parsedDiscount = Number(discountAmount);
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
+      errs.push("Discount must be a valid non-negative number.");
+    } else if (parsedDiscount > totals.subtotal) {
+      errs.push("Discount cannot exceed subtotal.");
+    }
+
+    const parsedFreight = Number(freightCost);
+    if (!Number.isFinite(parsedFreight) || parsedFreight < 0) {
+      errs.push("Freight must be a valid non-negative number.");
+    }
+
     return errs;
-  }, [selectedVendor, expectedDeliveryDate, items]);
+  }, [selectedVendor, expectedDeliveryDate, items, discountAmount, freightCost, totals.subtotal]);
 
   const isValid = errors.length === 0;
 
