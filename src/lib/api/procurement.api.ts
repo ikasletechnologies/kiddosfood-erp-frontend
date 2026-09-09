@@ -30,9 +30,10 @@ export const purchaseOrdersApi = {
   getAll: () => api.get('/api/purchase-orders'),
   getNextNumber: () => api.get('/api/purchase-orders/next-number'),
   getById: (id: string) => api.get(`/api/purchase-orders/${id}`),
-  create: (data: { 
-    vendorId: string; 
-    advancePaid?: number; 
+  create: (data: {
+    vendorId: string;
+    poNumber?: string;
+    advancePaid?: number;
     expectedDeliveryDate?: string;
     notes?: string;
     internalNotes?: string;

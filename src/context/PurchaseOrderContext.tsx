@@ -3,6 +3,24 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
 import { roundMoney } from "@/lib/utils";
 
+// Generated purely on the client the instant a new PO screen is opened — no
+// backend round trip. Whatever this produces is what gets sent to and stored
+// by the backend on save (ProcurementService.createPurchaseOrder honors a
+// client-supplied poNumber), so what's shown on screen always matches what's
+// persisted. Date-based + a random suffix keeps it unique without needing to
+// know the server's running sequence.
+function generateClientPoNumber(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const ss = String(now.getSeconds()).padStart(2, "0");
+  const rand = Math.floor(10 + Math.random() * 90); // 2-digit
+  return `PO-${y}${m}${d}-${hh}${mm}${ss}${rand}`;
+}
+
 export interface LineItem {
   id: string;
   materialId: string;
@@ -160,12 +178,14 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
+      let draftPoNumber = "";
       let draftVendorId: string | null = null;
       const saved = localStorage.getItem('draftPurchaseOrder');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (parsed.poNumber) {
+            draftPoNumber = parsed.poNumber;
             setPoNumber(parsed.poNumber);
           }
           if (parsed.selectedVendor) {
@@ -205,11 +225,12 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         }
       }
 
-      // The real PO number is assigned server-side, transactionally, at the
-      // moment the order is actually created (ProcurementService.generatePONumber) —
-      // it isn't sent from here, so there is nothing to fetch or wait on before
-      // save. Leaving poNumber blank lets the UI show a static "auto-generated
-      // on save" label instead of depending on a network round trip.
+      // No backend round trip for this — generated right here so it's visible
+      // instantly, and sent back to the server as-is on save so the number on
+      // screen always matches what gets persisted.
+      if (!draftPoNumber) {
+        setPoNumber(generateClientPoNumber());
+      }
 
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {

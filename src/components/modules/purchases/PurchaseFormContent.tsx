@@ -120,7 +120,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         localStorage.removeItem('draftPurchaseOrder');
         toast.success("Purchase Order updated successfully!");
       } else {
-        const { data: created } = await purchaseOrdersApi.create(payload);
+        // poNumber was generated client-side the moment this screen opened
+        // (see PurchaseOrderContext) — sending it here means what's on screen
+        // is exactly what gets persisted.
+        const { data: created } = await purchaseOrdersApi.create({ ...payload, poNumber });
         localStorage.removeItem('draftPurchaseOrder');
         toast.success(created?.poNumber ? `Purchase Order ${created.poNumber} created successfully!` : "Purchase Order created successfully!");
       }
@@ -180,7 +183,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           }))
       };
       
-      await purchaseOrdersApi.create(payload);
+      await purchaseOrdersApi.create({ ...payload, poNumber });
       localStorage.removeItem('draftPurchaseOrder');
       toast.success("Draft Purchase Order saved successfully!");
       router.push("/purchases/orders");
