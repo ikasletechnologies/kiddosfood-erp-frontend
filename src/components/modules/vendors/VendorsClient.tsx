@@ -7,10 +7,10 @@ import {
   Plus, Search, Edit2, History,
   Wallet, CheckCircle2, FileText, Download,
   Phone, Mail, ShieldCheck, Zap,
-  Package, Store, Settings2,
+  Package, Store,
   Calendar, Loader2,
   Printer, MoreVertical, ChevronDown, ChevronLeft, X,
-  Upload, Eye, Copy, ExternalLink, RefreshCw, MapPin
+  Upload, Eye, Copy, ExternalLink, RefreshCw, MapPin, Truck
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -77,7 +77,6 @@ export default function VendorsClient() {
   const [isBalanceFilterOpen, setIsBalanceFilterOpen] = useState(false);
   const [balanceFilter, setBalanceFilter] = useState({ category: 'Equal To', value: '', endValue: '' });
 
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [openLedgerRowMenuId, setOpenLedgerRowMenuId] = useState<string | null>(null);
   const [ledgerDetailEntry, setLedgerDetailEntry] = useState<any>(null);
@@ -121,11 +120,6 @@ export default function VendorsClient() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const [settings, setSettings] = useState({
-    enablePaymentReminder: false,
-    reminderDays: "1"
-  });
-  const [savingSettings, setSavingSettings] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const formatReferenceType = (refType: string) => {
@@ -760,24 +754,6 @@ export default function VendorsClient() {
     fetchData();
   };
 
-  const handleSaveSettings = async () => {
-    if (!selectedVendorId) return;
-    setSavingSettings(true);
-    try {
-      await vendorsApi.update(selectedVendorId, {
-        paymentReminderEnabled: settings.enablePaymentReminder,
-        paymentReminderDays: Number(settings.reminderDays) || 1,
-      });
-      showToast("Settings saved successfully", "success");
-      setIsSettingsOpen(false);
-      fetchData();
-    } catch (e: any) {
-      showToast(e.response?.data?.error || "Failed to save settings", "error");
-    } finally {
-      setSavingSettings(false);
-    }
-  };
-
   // -- Payment Actions --
   const amountNum = Number(paymentForm.amount) || 0;
   const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
@@ -1140,20 +1116,6 @@ export default function VendorsClient() {
                       <span>Edit</span>
                     </button>
 
-                    <button
-                      onClick={() => {
-                        setSettings({
-                          enablePaymentReminder: !!selectedVendor?.paymentReminderEnabled,
-                          reminderDays: String(selectedVendor?.paymentReminderDays ?? 1),
-                        });
-                        setIsSettingsOpen(true);
-                      }}
-                      className="p-2 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-500 rounded-lg transition-colors"
-                      title="Vendor Settings"
-                    >
-                      <Settings2 size={16} />
-                    </button>
-
                     <div className="relative filter-popover-container">
                       <button
                         onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
@@ -1252,70 +1214,163 @@ export default function VendorsClient() {
                   </div>
 
                   {/* Profile Details Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
-                    {/* Business Identity */}
-                    <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <ShieldCheck size={16} className="text-orange-500" />
-                        <span>Business Identity</span>
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendor Code</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{selectedVendorDetail?.vendorCode || selectedVendor.vendorCode || "—"}</p>
+                  {(() => {
+                    const detail = selectedVendorDetail || selectedVendor;
+                    return (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+                        {/* 1. Business Identity */}
+                        <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <ShieldCheck size={16} className="text-orange-500" />
+                            <span>Business Identity</span>
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vendor Code</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{detail?.vendorCode || "—"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</p>
+                              <div className="mt-0.5">
+                                <span className={clsx(
+                                  "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border inline-block",
+                                  detail?.status === "ACTIVE"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-400/10 dark:text-emerald-400 dark:border-emerald-400/20"
+                                    : detail?.status === "BLOCKED"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-400/10 dark:text-amber-400 dark:border-amber-400/20"
+                                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-400/10 dark:text-rose-400 dark:border-rose-400/20"
+                                )}>
+                                  {detail?.status || "ACTIVE"}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Material Category</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.category || "Raw Material"}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credit Period</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                                {(() => {
+                                  const terms = detail?.paymentTerms;
+                                  if (terms === 'NET_7') return '7 Days (Net 7)';
+                                  if (terms === 'NET_30') return '30 Days (Net 30)';
+                                  if (terms === 'ADVANCE') return 'Advance Payment';
+                                  return 'Immediate (0 Days)';
+                                })()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credit Limit</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
+                                {detail?.creditLimit ? `₹ ${Number(detail.creditLimit).toLocaleString()}` : "No Limit"}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">GST Number</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{detail?.gstNumber || "—"}</p>
+                            </div>
+                            <div className="sm:col-span-2">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">GST Type</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.gstType || "Unregistered/Consumer"}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">GSTIN</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{selectedVendorDetail?.gstNumber || selectedVendor.gstNumber || "—"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Material Category</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedVendorDetail?.category || selectedVendor.category || "Raw Material"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credit Period</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                            {(() => {
-                              const terms = selectedVendorDetail?.paymentTerms || selectedVendor.paymentTerms;
-                              if (terms === 'NET_7') return '7 Days (Net 7)';
-                              if (terms === 'NET_30') return '30 Days (Net 30)';
-                              if (terms === 'ADVANCE') return 'Advance Payment';
-                              return 'Immediate';
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
 
-                    {/* Contact & Location */}
-                    <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
-                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <MapPin size={16} className="text-orange-500" />
-                        <span>Contact & Location</span>
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedVendorDetail?.contact || selectedVendor.contact || "—"}</p>
+                        {/* 2. Contact Information */}
+                        <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <Phone size={16} className="text-orange-500" />
+                            <span>Contact Information</span>
+                          </h4>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</p>
+                              {detail?.contact ? (
+                                <a href={`tel:${detail.contact}`} className="font-semibold text-slate-800 dark:text-slate-200 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1.5 mt-0.5 transition-colors">
+                                  <Phone size={13} className="text-slate-400 shrink-0" />
+                                  <span>{detail.contact}</span>
+                                </a>
+                              ) : (
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">—</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Address</p>
+                              {detail?.email ? (
+                                <a href={`mailto:${detail.email}`} className="font-semibold text-slate-800 dark:text-slate-200 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1.5 mt-0.5 transition-colors truncate">
+                                  <Mail size={13} className="text-slate-400 shrink-0" />
+                                  <span className="truncate">{detail.email}</span>
+                                </a>
+                              ) : (
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">—</p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Email Address</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{selectedVendorDetail?.email || selectedVendor.email || "—"}</p>
+
+                        {/* 3. Billing / Registered Address */}
+                        <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <MapPin size={16} className="text-orange-500" />
+                            <span>Billing / Registered Address</span>
+                          </h4>
+                          <div className="space-y-3.5 text-xs">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Full Billing Address</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 leading-relaxed">
+                                {detail?.address || "—"}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 pt-2 border-t border-slate-100 dark:border-white/5">
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.city || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">State</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.state || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pincode</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{detail?.pincode || "—"}</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <div className="sm:col-span-2">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Billing / Registered Address</p>
-                          <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                            {[
-                              selectedVendorDetail?.address || selectedVendor.address,
-                              selectedVendorDetail?.city || selectedVendor.city,
-                              selectedVendorDetail?.state || selectedVendor.state,
-                              selectedVendorDetail?.pincode || selectedVendor.pincode
-                            ].filter(Boolean).join(", ") || "—"}
-                          </p>
+
+                        {/* 4. Shipping Address */}
+                        <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-2xs">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <Truck size={16} className="text-orange-500" />
+                            <span>Shipping Address</span>
+                          </h4>
+                          <div className="space-y-3.5 text-xs">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Full Shipping Address</p>
+                              <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5 leading-relaxed">
+                                {detail?.shippingAddress || detail?.address || "—"}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 pt-2 border-t border-slate-100 dark:border-white/5">
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">City</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.city || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">State</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{detail?.state || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pincode</p>
+                                <p className="font-semibold text-slate-800 dark:text-slate-200 font-mono mt-0.5">{detail?.pincode || "—"}</p>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1559,6 +1614,7 @@ export default function VendorsClient() {
         partyType="vendor"
         onClose={() => {
           setShowForm(false);
+          setEditing(null);
           if (returnToParam && (actionParam === "new" || newParam === "true")) {
             router.push(returnToParam);
           }
@@ -1575,16 +1631,20 @@ export default function VendorsClient() {
             }
             showToast(editing ? "Vendor profile updated successfully" : "New vendor registered successfully", "success");
             setShowForm(false);
+            const targetVendorId = savedVendor?.id || savedVendor?.vendor?.id || editing?.id;
+            setEditing(null);
 
             if (returnToParam) {
-              const vendorId = savedVendor?.id || savedVendor?.vendor?.id;
-              const targetUrl = vendorId
-                ? `${returnToParam}${returnToParam.includes('?') ? '&' : '?'}vendorId=${vendorId}`
+              const targetUrl = targetVendorId
+                ? `${returnToParam}${returnToParam.includes('?') ? '&' : '?'}vendorId=${targetVendorId}`
                 : returnToParam;
               router.push(targetUrl);
             } else {
-              fetchData();
-              if (savedVendor?.id) setSelectedVendorId(savedVendor.id);
+              await fetchData();
+              if (targetVendorId) {
+                setSelectedVendorId(targetVendorId);
+                await fetchVendorDetails(targetVendorId);
+              }
             }
           } catch (e: any) {
             const err = e.response?.data?.error || e.response?.data?.message || "";
@@ -1835,55 +1895,6 @@ export default function VendorsClient() {
                 className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
               >
                 {saving ? "Processing…" : "Record Payment"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Party Settings Drawer */}
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] bg-black/40 flex justify-end backdrop-blur-xs">
-          <div className="w-full max-w-sm bg-white dark:bg-[#13151f] h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-white/10 animate-in slide-in-from-right">
-            <div className="px-5 py-4 flex items-center justify-between border-b border-slate-200 dark:border-white/10 shrink-0">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Vendor Settings</h3>
-              <button onClick={() => setIsSettingsOpen(false)} className="p-1 text-slate-400 hover:text-slate-600">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4 flex-1 overflow-y-auto">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={settings.enablePaymentReminder}
-                  onChange={(e) => setSettings({ ...settings, enablePaymentReminder: e.target.checked })}
-                  className="w-4 h-4 rounded text-orange-500 focus:ring-orange-500"
-                />
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">Enable payment reminders</span>
-              </label>
-
-              {settings.enablePaymentReminder && (
-                <div className="pl-7 space-y-1.5">
-                  <span className="text-[11px] text-slate-400">Remind X days before payment is due</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={settings.reminderDays}
-                    onChange={(e) => setSettings({ ...settings, reminderDays: e.target.value })}
-                    className="w-20 px-3 py-1.5 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-semibold"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 flex justify-end">
-              <button
-                onClick={handleSaveSettings}
-                disabled={savingSettings}
-                className="px-5 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition-all"
-              >
-                {savingSettings ? "Saving…" : "Save Settings"}
               </button>
             </div>
           </div>

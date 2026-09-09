@@ -11,7 +11,7 @@ interface DocumentOptionsProps {
 }
 
 export default function DocumentOptions({ type }: DocumentOptionsProps) {
-  const { isValid, errors, isSubmitting, setIsSubmitting, selectedVendor, items, totals, notes, editId, discountAmount, freightCost } = usePurchaseOrder();
+  const { isValid, errors, isSubmitting, setIsSubmitting, selectedVendor, items, totals, notes, internalNotes, vendorNotes, editId, discountAmount, freightCost } = usePurchaseOrder();
   const router = useRouter();
 
   const handleCreatePO = async () => {
@@ -22,7 +22,10 @@ export default function DocumentOptions({ type }: DocumentOptionsProps) {
       const payload = {
         vendorId: selectedVendor!.id,
         advancePaid: totals.appliedAdvance,
-        notes: notes,
+        notes: notes || internalNotes || undefined,
+        internalNotes: internalNotes || notes || undefined,
+        vendorNotes: vendorNotes || undefined,
+        deliveryInstructions: vendorNotes || undefined,
         discountAmount: discountAmount || 0,
         freightCost: freightCost || 0,
         items: items.map(item => ({

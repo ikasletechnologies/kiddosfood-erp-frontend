@@ -88,6 +88,15 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("Expected Delivery date is mandatory.");
       return;
     }
+    const parsedDiscount = Number(discountAmount);
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
+      toast.error("Discount must be a valid non-negative number.");
+      return;
+    }
+    if (parsedDiscount > totals.subtotal) {
+      toast.error("Discount cannot exceed subtotal.");
+      return;
+    }
     if (!isValid) {
       toast.error("Please fill in all required fields and resolve errors.");
       return;
@@ -98,7 +107,10 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       const payload = {
         vendorId: selectedVendor!.id,
         advancePaid: totals.appliedAdvance,
-        notes: notes || internalNotes,
+        notes: notes || internalNotes || undefined,
+        internalNotes: internalNotes || notes || undefined,
+        vendorNotes: vendorNotes || undefined,
+        deliveryInstructions: vendorNotes || undefined,
         warehouseId: warehouseId || undefined,
         franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
         paymentTerms: paymentTerms || undefined,
@@ -140,6 +152,15 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("Please select a vendor to save as draft.");
       return;
     }
+    const parsedDiscount = Number(discountAmount);
+    if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
+      toast.error("Discount must be a valid non-negative number.");
+      return;
+    }
+    if (parsedDiscount > totals.subtotal) {
+      toast.error("Discount cannot exceed subtotal.");
+      return;
+    }
     
     setIsSubmitting(true);
     try {
@@ -147,6 +168,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         vendorId: selectedVendor.id,
         advancePaid: totals.appliedAdvance || 0,
         notes: notes || internalNotes || "",
+        internalNotes: internalNotes || notes || undefined,
+        vendorNotes: vendorNotes || undefined,
+        deliveryInstructions: vendorNotes || undefined,
         warehouseId: warehouseId || undefined,
         franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
         paymentTerms: paymentTerms || undefined,
@@ -534,6 +558,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             gstin: "",
             phone: ""
           }}
+          terms={vendorNotes ? [vendorNotes] : undefined}
+          notes={internalNotes || notes || undefined}
           companyDetails={companyProfile || FALLBACK_COMPANY}
           documentType="PURCHASE_ORDER"
           onClose={() => setShowPreview(false)}

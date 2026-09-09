@@ -25,6 +25,7 @@ import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
 import { RECIPE_UNITS as UNITS } from "@/lib/recipe-units";
+import { exportRecipeToPdf } from "@/lib/recipe-export";
 
 interface RecipeItem {
   inventoryItemId: string;
@@ -56,7 +57,9 @@ export default function RecipeMasterTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [recipeToDelete, setRecipeToDelete] = useState<any | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ ...emptyForm });
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -227,133 +230,27 @@ export default function RecipeMasterTab() {
     }
   };
 
-  const downloadRecipePDF = (recipe: any) => {
+  const downloadRecipePDF = async (recipe: any) => {
+    if (downloadingId) return;
     try {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        toast.error("Please allow pop-ups in your browser to print/download the recipe.");
-        return;
+      setDownloadingId(recipe.id);
+      let fullRecipe = recipe;
+      if (recipe.id && (!recipe.recipeItems || recipe.recipeItems.length === 0)) {
+        try {
+          const res = await recipesApi.getById(recipe.id);
+          if (res.data) fullRecipe = res.data;
+        } catch (e) {
+          // fallback to recipe
+        }
       }
 
-      const instructions = (recipe.instructions || "")
-        .replace(/\[unitWeight:[\d.]+\]/, "")
-        .replace(/\[weightUnit:\w+\]/, "")
-        .trim();
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8" />
-            <title>Recipe - ${recipe.name}</title>
-            <style>
-              @page { size: A4; margin: 15mm; }
-              body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; padding: 24px; color: #1e293b; line-height: 1.5; margin: 0; background: #fff; }
-              .action-bar { display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-              .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; }
-              .btn-primary { background: #f97316; color: white; }
-              .btn-primary:hover { background: #ea580c; }
-              .btn-secondary { background: #f1f5f9; color: #475569; }
-              .btn-secondary:hover { background: #e2e8f0; }
-              .header { border-bottom: 3px solid #f97316; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
-              .title-section h1 { font-size: 24px; font-weight: 800; margin: 0; color: #0f172a; text-transform: uppercase; }
-              .product { color: #64748b; font-size: 13px; margin-top: 4px; font-weight: 600; }
-              .date { font-size: 12px; color: #94a3b8; font-weight: 600; }
-              .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
-              .stat-box { background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #e2e8f0; }
-              .stat-label { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.05em; }
-              .stat-value { font-size: 18px; font-weight: 800; color: #0f172a; }
-              .section-title { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #ea580c; margin-bottom: 12px; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
-              .section-title::after { content: ""; flex: 1; height: 1px; background: #fed7aa; }
-              table { width: 100%; border-collapse: separate; border-spacing: 0; margin-bottom: 28px; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-              th { text-align: left; background: #f8fafc; padding: 12px 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.05em; }
-              td { padding: 12px 16px; border-top: 1px solid #e2e8f0; font-size: 13px; font-weight: 600; color: #334155; }
-              .instructions-box { background: #fffaf5; padding: 20px; border-radius: 12px; border: 1px solid #fed7aa; }
-              .instructions-content { white-space: pre-wrap; line-height: 1.6; font-size: 13px; color: #431407; font-weight: 500; }
-              @media print {
-                .no-print { display: none !important; }
-                body { padding: 0; }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="action-bar no-print">
-              <button class="btn btn-secondary" onclick="window.close()">✕ Close</button>
-              <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF</button>
-            </div>
-            <div class="header">
-              <div class="title-section">
-                <h1>${recipe.name}</h1>
-                <div class="product">Finished Product: ${recipe.product?.name || 'N/A'} ${recipe.recipeCode ? `(${recipe.recipeCode})` : ''}</div>
-              </div>
-              <div class="date">Generated: ${formatDate(new Date())}</div>
-            </div>
-            
-            <div class="stats">
-              <div class="stat-box">
-                <div class="stat-label">Yield Output</div>
-                <div class="stat-value">${recipe.yieldQty} ${recipe.yieldUnit || 'Units'}</div>
-              </div>
-              <div class="stat-box">
-                <div class="stat-label">Batch Configuration</div>
-                <div class="stat-value">${recipe.batchSize || '1'} ${recipe.yieldUnit || recipe.recipeItems?.[0]?.unit || 'KG'}</div>
-              </div>
-              <div class="stat-box">
-                <div class="stat-label">Total Components</div>
-                <div class="stat-value">${recipe.recipeItems?.length || 0} Materials</div>
-              </div>
-            </div>
-
-            <div class="section-title">Bill of Materials (Formula)</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Ingredient / Raw Material</th>
-                  <th style="text-align: center;">Required Quantity</th>
-                  <th style="text-align: right;">Unit of Measure</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${recipe.recipeItems && recipe.recipeItems.length > 0
-                  ? recipe.recipeItems.map((item: any, idx: number) => `
-                    <tr>
-                      <td style="color: #94a3b8; font-weight: 600; width: 40px;">${idx + 1}</td>
-                      <td style="font-weight: 700; color: #1e293b;">${item.inventoryItem?.name || item.name || 'Material'}</td>
-                      <td style="text-align: center; font-weight: 700;">${item.quantityRequired}</td>
-                      <td style="text-align: right; color: #64748b; font-weight: 600;">${item.unit || 'KG'}</td>
-                    </tr>
-                  `).join('')
-                  : `<tr><td colspan="4" style="text-align: center; color: #94a3b8;">No ingredients added yet</td></tr>`
-                }
-              </tbody>
-            </table>
-
-            <div class="section-title">Production Methodology</div>
-            <div class="instructions-box">
-              <div class="instructions-content">${instructions || 'Standard production procedures apply.'}</div>
-            </div>
-          </body>
-        </html>
-      `;
-
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-
-      toast.success("Opening printable recipe document...");
-
-      setTimeout(() => {
-        try {
-          printWindow.focus();
-          printWindow.print();
-        } catch (e) {
-          console.error("Auto print error", e);
-        }
-      }, 400);
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to generate recipe document.");
+      await exportRecipeToPdf(fullRecipe);
+      toast.success(`Downloaded recipe: ${recipe.name}`);
+    } catch (err: any) {
+      console.error("Failed to export recipe PDF", err);
+      toast.error(err?.message || "Failed to download recipe PDF.");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -409,17 +306,30 @@ export default function RecipeMasterTab() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this recipe? This cannot be undone.")) return;
-    setDeleting(id);
+  const handleDeleteClick = (recipe: any) => {
+    setRecipeToDelete(recipe);
+  };
+
+  const confirmDeleteRecipe = async () => {
+    if (!recipeToDelete) return;
+    setIsDeleting(true);
     try {
-      await recipesApi.delete(id);
-      toast.success("Recipe deleted");
+      await recipesApi.delete(recipeToDelete.id);
+      toast.success("Recipe deleted successfully");
+      setRecipeToDelete(null);
       fetchAll();
     } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? "Failed to delete recipe.");
+      const errMsg = e?.response?.data?.error || "Failed to delete recipe.";
+      toast.error(errMsg);
+      if (errMsg.toLowerCase().includes("production") || errMsg.toLowerCase().includes("referenced")) {
+        setRecipeToDelete((prev: any) => prev ? {
+          ...prev,
+          isUsedInProduction: true,
+          productionCount: Math.max(1, prev.productionCount || 1)
+        } : null);
+      }
     } finally {
-      setDeleting(null);
+      setIsDeleting(false);
     }
   };
 
@@ -587,10 +497,11 @@ export default function RecipeMasterTab() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={e => { e.stopPropagation(); downloadRecipePDF(recipe); }}
-                        className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+                        disabled={downloadingId === recipe.id}
+                        className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
                         title="Download PDF"
                       >
-                        <Download size={14} />
+                        {downloadingId === recipe.id ? <RefreshCw size={14} className="animate-spin text-orange-500" /> : <Download size={14} />}
                       </button>
                       <button
                         onClick={e => { e.stopPropagation(); openEdit(recipe); }}
@@ -600,12 +511,11 @@ export default function RecipeMasterTab() {
                         <Pencil size={14} />
                       </button>
                       <button
-                        onClick={e => { e.stopPropagation(); handleDelete(recipe.id); }}
-                        disabled={deleting === recipe.id}
+                        onClick={e => { e.stopPropagation(); handleDeleteClick(recipe); }}
                         className="p-2 md:p-1.5 rounded-lg text-gray-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-red-50 dark:hover:bg-rose-500/10 transition-colors"
                         title="Delete"
                       >
-                        {deleting === recipe.id ? <RefreshCw size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
@@ -1085,6 +995,145 @@ export default function RecipeMasterTab() {
           </button>
         </div>
       </SlideOver>
+
+      {/* ── Delete Confirmation / Protection Modal ── */}
+      <Modal
+        isOpen={!!recipeToDelete}
+        onClose={() => {
+          if (!isDeleting) setRecipeToDelete(null);
+        }}
+        title="Delete Recipe"
+        size="sm"
+      >
+        {recipeToDelete && (
+          <div className="space-y-4">
+            {recipeToDelete.isUsedInProduction || (recipeToDelete.productionCount || 0) > 0 ? (
+              // PROTECTED: Recipe is used in production
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-3.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-amber-800 dark:text-amber-300 text-xs leading-relaxed">
+                  <AlertTriangle className="shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
+                  <div>
+                    <p className="font-bold text-sm text-amber-900 dark:text-amber-200 mb-1">
+                      Recipe Cannot Be Deleted
+                    </p>
+                    <p>
+                      This recipe cannot be deleted because it is already used in production ({recipeToDelete.productionCount || 1} production record{recipeToDelete.productionCount !== 1 ? "s" : ""}).
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Recipe Name</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{recipeToDelete.name}</span>
+                  </div>
+                  {recipeToDelete.product?.name && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Finished Product</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{recipeToDelete.product.name}</span>
+                    </div>
+                  )}
+                  {recipeToDelete.recipeCode && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Recipe Code</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{recipeToDelete.recipeCode}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Production Usage</span>
+                    <span className="font-bold text-amber-600 dark:text-amber-400">
+                      {recipeToDelete.productionCount || 1} Batch / Run Record(s)
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                  To preserve manufacturing audit trails, batch traceability, and inventory cost records, recipes linked to production history cannot be removed.
+                </p>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setRecipeToDelete(null)}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-white/15 transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              // DELETABLE: Recipe has not been used in production
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                    <Trash2 size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">Confirm Deletion</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Are you sure you want to delete this recipe? This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl p-3.5 space-y-2 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Recipe Name</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">{recipeToDelete.name}</span>
+                  </div>
+                  {recipeToDelete.product?.name && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Product</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{recipeToDelete.product.name}</span>
+                    </div>
+                  )}
+                  {recipeToDelete.recipeCode && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-100 dark:border-white/5">
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Recipe Code</span>
+                      <span className="font-mono text-slate-700 dark:text-slate-300">{recipeToDelete.recipeCode}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-500 dark:text-slate-400 font-medium">Formula Components</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {recipeToDelete.recipeItems?.length || 0} ingredient(s)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex flex-col-reverse sm:flex-row items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecipeToDelete(null)}
+                    disabled={isDeleting}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-white/15 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmDeleteRecipe}
+                    disabled={isDeleting}
+                    className="w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-semibold bg-rose-600 hover:bg-rose-700 text-white transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <RefreshCw size={13} className="animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 size={13} />
+                        <span>Delete Recipe</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
     </div>
   );
