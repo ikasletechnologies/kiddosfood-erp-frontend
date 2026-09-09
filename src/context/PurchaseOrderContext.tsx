@@ -134,6 +134,13 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   const prevVendorIdRef = useRef<string | null | undefined>(undefined);
+  // Snapshots read (not depended on) by the vendor-change effect below, so it
+  // can tell whether the operator has already typed real line items into the
+  // table without re-running itself every time items/autoFilledIds change.
+  const itemsRef = useRef(items);
+  const autoFilledIdsRef = useRef(autoFilledIds);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { autoFilledIdsRef.current = autoFilledIds; }, [autoFilledIds]);
   const [useAdvance, setUseAdvance] = useState(false);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -328,6 +335,17 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       return;
     }
     prevVendorIdRef.current = currentVendorId;
+
+    // Never clobber line items the operator actually chose/edited themselves.
+    // A row only counts as "safe to replace" if it's still blank or if it was
+    // populated by this same auto-fill (never touched since) — anything else
+    // means the operator picked or edited it manually and it must survive a
+    // vendor change/selection.
+    const currentItems = itemsRef.current;
+    const hasManualItems = currentItems.some(
+      item => item.materialId && !autoFilledIdsRef.current.has(item.id)
+    );
+    if (hasManualItems) return;
 
     if (selectedVendor) {
       if (selectedVendor.suppliedMaterials && selectedVendor.suppliedMaterials.length > 0) {
