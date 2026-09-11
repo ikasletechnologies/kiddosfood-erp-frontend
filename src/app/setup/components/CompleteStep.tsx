@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   PartyPopper,
@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   ArrowRight,
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import type { CreatedHq, CreatedWarehouse } from "../page";
 
 const CARD_CLASS =
@@ -36,6 +37,18 @@ export default function CompleteStep({
   onFinish: () => Promise<void>;
 }) {
   const [finishing, setFinishing] = useState(false);
+  const { refreshSetupStatus } = useAuth();
+
+  // HQ + warehouse already exist on the backend by the time this screen
+  // renders, but AuthContext's setupStatus is only refetched on "Continue
+  // to ERP" (handleFinish). Until then it's still stale/uninitialized, and
+  // AppShell force-redirects to /setup on any other route — which bounced
+  // the "Recommended next steps" links straight back here. Refresh as soon
+  // as we mount so those links (and any other navigation) work immediately.
+  useEffect(() => {
+    refreshSetupStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFinish = async () => {
     setFinishing(true);
