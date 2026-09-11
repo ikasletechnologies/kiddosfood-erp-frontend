@@ -1463,7 +1463,15 @@ export default function VendorsClient() {
                             filteredLedger.map(e => {
                               const balance = e.runningBalance || e.balanceAfterTransaction || 0;
                               const cleanRefType = formatReferenceType(e.referenceType);
-                              const refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
+                              let refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
+                              
+                              // Fix for existing data where referenceId is a UUID
+                              if (e.referenceType === 'PURCHASE' && refNo.length > 20 && e.note?.includes('#')) {
+                                const match = e.note.match(/#([^\s—]+)/);
+                                if (match && match[1]) {
+                                  refNo = match[1];
+                                }
+                              }
 
                               return (
                                 <tr key={e.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors">
