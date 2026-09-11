@@ -299,17 +299,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
     ],
   },
-  {
-    title: "WAREHOUSE",
-    items: [
-      {
-        icon: Building2,
-        label: "Warehouse",
-        href: "/warehouse",
-        roles: SUPER_ONLY,
-      },
-    ],
-  },
+
   {
     title: "INVENTORY",
     items: [
@@ -340,24 +330,24 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
-    title: "DISPATCH",
+    title: "POS",
     items: [
       {
-        icon: FileText,
-        label: "Delivery Challan",
-        href: "/sales/delivery-challan",
+        icon: Store,
+        label: "Counter Billing",
+        href: "/pos",
         roles: SUPER_ONLY,
       },
       {
-        icon: Truck,
-        label: "Transit Stock",
-        href: "/dispatch/transit-stock",
+        icon: Undo2,
+        label: "Returns",
+        href: "/sales/returns",
         roles: SUPER_ONLY,
       },
       {
-        icon: MapPin,
-        label: "Dispatch Tracking",
-        href: "/delivery",
+        icon: Clock,
+        label: "Day Closing",
+        href: "/pos/settlement",
         roles: SUPER_ONLY,
       },
     ],
@@ -398,24 +388,24 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
-    title: "POS",
+    title: "DISPATCH",
     items: [
       {
-        icon: Store,
-        label: "Counter Billing",
-        href: "/pos",
+        icon: FileText,
+        label: "Delivery Challan",
+        href: "/sales/delivery-challan",
         roles: SUPER_ONLY,
       },
       {
-        icon: Undo2,
-        label: "Returns",
-        href: "/sales/returns",
+        icon: Truck,
+        label: "Transit Stock",
+        href: "/dispatch/transit-stock",
         roles: SUPER_ONLY,
       },
       {
-        icon: Clock,
-        label: "Day Closing",
-        href: "/pos/settlement",
+        icon: MapPin,
+        label: "Dispatch Tracking",
+        href: "/delivery",
         roles: SUPER_ONLY,
       },
     ],
@@ -474,6 +464,17 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: Store,
         label: "Dealers",
         href: "/franchise/dealers",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
         roles: SUPER_ONLY,
       },
     ],

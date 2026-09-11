@@ -2050,8 +2050,17 @@ function ReturnGoodsModal({ challan, onClose, onReturned, showToast }: { challan
       });
       const ret = (res as any).data;
       const itemConditions = (ret.items || []).map((ri: any) => ({ returnItemId: ri.id, condition }));
-      await salesApi.receiveDeliveryChallanReturn(ret.id, itemConditions);
-      showToast(`Return ${ret.returnNumber} recorded`, "success");
+      const receiveRes = await salesApi.receiveDeliveryChallanReturn(ret.id, itemConditions);
+      const receivedItems = (receiveRes as any)?.data?.items || [];
+      const recallFlagged = receivedItems.some((ri: any) => !!ri.recallId);
+      if (recallFlagged) {
+        showToast(
+          `Return ${ret.returnNumber} recorded — one or more items traced back to a RECALLED batch and were kept in quarantine, not restocked as saleable, regardless of the condition selected.`,
+          "warning"
+        );
+      } else {
+        showToast(`Return ${ret.returnNumber} recorded`, "success");
+      }
       onReturned();
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Failed to record return", "error");

@@ -353,9 +353,13 @@ export default function POSPage() {
     const cur = accounts.find(a => a.id === accountId);
     if (!cur || cur.type !== target) {
       const match = accounts.find(a => a.type === target);
-      if (match) setAccountId(match.id);
+      if (match) {
+        setAccountId(match.id);
+      } else {
+        setAccountId("");
+      }
     }
-  }, [payMode, accounts]);
+  }, [payMode, accounts, accountId]);
 
   // ── Party search ──────────────────────────────────────────────────────────
 
@@ -1025,10 +1029,13 @@ export default function POSPage() {
                 }}
                 className="flex-1 min-w-0 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium text-gray-700 dark:text-slate-200 outline-none focus:border-blue-500 transition-colors"
               >
-                {accounts.length === 0
-                  ? <option>No accounts — set up in Finance</option>
-                  : accounts.map(a => <option key={a.id} value={a.id} className="dark:bg-card">{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>)
-                }
+                {(() => {
+                  const targetType = payMode === "CASH" ? "CASH" : payMode === "UPI" ? "UPI" : "BANK";
+                  const filteredAccounts = accounts.filter(a => a.type === targetType);
+                  if (accounts.length === 0) return <option value="">No accounts — set up in Finance</option>;
+                  if (filteredAccounts.length === 0) return <option value="">No {payMode} accounts available</option>;
+                  return filteredAccounts.map(a => <option key={a.id} value={a.id} className="dark:bg-card">{a.name} ({a.type}) · ₹{a.balance?.toLocaleString()}</option>);
+                })()}
               </select>
               <button
                 type="button"

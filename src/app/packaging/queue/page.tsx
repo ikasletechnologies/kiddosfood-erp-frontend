@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X,
+import {
+  X,
   Package, AlertTriangle,
   RefreshCw, Scale, Search, Layers, Box, Play,
   Link2, Sparkles, Plus, CheckCircle2
@@ -348,18 +349,18 @@ export default function PackagingQueuePage() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                   />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
                   {searchQuery && (
-                    <X 
-                      size={14} 
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                      onClick={() => setSearchQuery("")} 
+                    <X
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setSearchQuery("")}
+                    />
+                  )}
+                  {searchQuery && (
+                    <X
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setSearchQuery("")}
                     />
                   )}
                 </div>
@@ -393,7 +394,7 @@ export default function PackagingQueuePage() {
                         const approvedQty = batch.approvedQty ?? 0;
                         const packagedQty = batch.packagedQty ?? 0;
                         const balanceQty = Math.max(0, approvedQty - packagedQty);
-                        const isFullyPackaged = batch.packagingStatus === 'PACKAGED' || balanceQty <= 0.001;
+                        const isFullyPackaged = batch.packagingStatus === 'PACKAGED' || (isEligibleQcStatus && balanceQty <= 0.001);
                         const canPackage = isEligibleQcStatus && !isRecalled && !isFullyPackaged;
 
                         return (
@@ -401,7 +402,7 @@ export default function PackagingQueuePage() {
                             <td className="px-4 py-3">
                               <div className="font-medium text-gray-800 dark:text-white">{batch.product?.name}</div>
                               <div className="flex gap-2 text-xs text-gray-400 dark:text-slate-500 mt-0.5">
-                                <span>Code: {batch.batchCode}</span>
+                                <span>Batch: {batch.batchCode}</span>
                                 <span>•</span>
                                 <span>Exp: {batch.expiryDate ? format(new Date(batch.expiryDate), 'dd/MM/yyyy') : 'N/A'}</span>
                               </div>
@@ -506,7 +507,7 @@ export default function PackagingQueuePage() {
                             : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
                         )}
                       >
-                        <Link2 className="h-3.5 w-3.5" />
+
                         <span>Link Existing</span>
                       </button>
                       <button
@@ -519,7 +520,7 @@ export default function PackagingQueuePage() {
                             : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
                         )}
                       >
-                        <Sparkles className="h-3.5 w-3.5 text-[#f58220]" />
+
                         <span>Create New Good</span>
                       </button>
                     </div>
@@ -531,7 +532,7 @@ export default function PackagingQueuePage() {
                           onChange={(e) => setSelectedProductId(e.target.value)}
                           className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                         >
-                          <option value="" className="dark:bg-card">-- Select Finished Good / SKU --</option>
+                          <option value="" className="dark:bg-card"> Select Finished Good</option>
                           {products.map((p) => (
                             <option key={p.id} value={p.id} className="dark:bg-card">
                               {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
@@ -548,7 +549,7 @@ export default function PackagingQueuePage() {
                       <div className="space-y-2 p-3 bg-orange-50/40 dark:bg-orange-500/5 rounded-lg border border-orange-200 dark:border-orange-500/20">
                         <div>
                           <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
-                            New Product Name *
+                            New Product Name
                           </label>
                           <input
                             type="text"
@@ -587,7 +588,7 @@ export default function PackagingQueuePage() {
                           </div>
                         </div>
                         <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                          ✨ Will automatically create this sellable finished good in your catalog for downstream inventory &amp; POS sales.
+                          Will automatically create this sellable finished good in your catalog for downstream inventory &amp; POS sales.
                         </p>
                       </div>
                     )}
@@ -700,7 +701,7 @@ export default function PackagingQueuePage() {
                   <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3 space-y-2">
                     <div className="flex justify-between items-center text-xs font-semibold text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-white/5 pb-2">
                       <span>Packaging Plan (Pending Confirmation)</span>
-                      <Scale className="h-3.5 w-3.5 text-[#f58220]" />
+
                     </div>
 
                     <div className="space-y-1.5 text-sm">

@@ -452,17 +452,6 @@ function EditItemForm() {
 
   return (
     <div className="max-w-6xl mx-auto pb-24 px-4 sm:px-6">
-      {/* Hide native browser spinners for number inputs to prevent overlapping with custom overlays */}
-      <style>{`
-        input[type="number"]::-webkit-outer-spin-button,
-        input[type="number"]::-webkit-inner-spin-button {
-          -webkit-appearance: none;
-          margin: 0;
-        }
-        input[type="number"] {
-          -moz-appearance: textfield;
-        }
-      `}</style>
 
       {/* Strategic Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6 border-b border-slate-100 dark:border-white/5 pb-6 animate-in fade-in duration-300">

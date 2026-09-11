@@ -104,6 +104,16 @@ body {
 .hide-scrollbar                             { scrollbar-width: none; }
 .hide-scrollbar::-webkit-scrollbar          { display: none; }
 
+/* Hide native browser spinners for number inputs */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* ─── Utility Classes ───────────────────────────────────────── */
 .glass-card {
   @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-white/20 dark:border-white/5;

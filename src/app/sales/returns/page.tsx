@@ -6,7 +6,7 @@ import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2,
   ChevronRight, Printer, FileSpreadsheet, Check,
   CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X,
-  Store, AlertCircle, Calendar, Hash, Tag, IndianRupee } from "lucide-react";
+  Store, AlertCircle, Calendar, Hash, Tag, IndianRupee, ShieldAlert } from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
@@ -53,6 +53,7 @@ interface ReturnOrder {
   refundMethod: string;
   status: 'PENDING' | 'APPROVED' | 'COMPLETED' | 'REJECTED';
   createdAt: string;
+  hasRecallQuarantinedItem: boolean;
   items: Array<{
     productId: string;
     productName: string;
@@ -60,6 +61,7 @@ interface ReturnOrder {
     returnQuantity: number;
     rate: number;
     condition: string;
+    recallId?: string | null;
   }>;
 }
 
@@ -130,6 +132,7 @@ export default function SalesReturnsPage() {
       refundMethod: r.refundMethod || 'Original Method',
       status: r.status,
       createdAt: r.createdAt,
+      hasRecallQuarantinedItem: (r.items || []).some((it: any) => !!it.recallId),
       items: (r.items || []).map((it: any) => ({
         productId: it.productId || '',
         productName: it.productName,
@@ -137,6 +140,7 @@ export default function SalesReturnsPage() {
         returnQuantity: it.quantity,
         rate: it.rate,
         condition: it.condition || 'Good',
+        recallId: it.recallId || null,
       })),
     };
   };
@@ -1246,9 +1250,19 @@ export default function SalesReturnsPage() {
                         ₹{Number(r.refundAmount).toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                          {style.label}
-                        </span>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>
+                            {style.label}
+                          </span>
+                          {r.hasRecallQuarantinedItem && (
+                            <span
+                              title="One or more items on this return trace back to a recalled batch and were kept quarantined — never restocked as saleable, regardless of the condition selected."
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20"
+                            >
+                              <ShieldAlert className="h-3 w-3" /> Recall Quarantine
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400">
                         {formatDate(r.createdAt)}
