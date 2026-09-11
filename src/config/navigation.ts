@@ -305,23 +305,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
     ],
   },
-  {
-    title: "WAREHOUSE",
-    items: [
-      {
-        icon: Warehouse,
-        label: "Manage Warehouses",
-        href: "/warehouse/manage",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Building2,
-        label: "Warehouse",
-        href: "/warehouse",
-        roles: SUPER_ONLY,
-      },
-    ],
-  },
+
   {
     title: "INVENTORY",
     items: [
@@ -337,12 +321,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/franchise/transfers",
         roles: SUPER_ONLY,
       },
-      {
-        icon: ClipboardList,
-        label: "Stock Reconciliation",
-        href: "/inventory/reconciliation",
-        roles: SUPER_ONLY,
-      },
+
       {
         icon: Clock,
         label: "Expiry Tracking",
@@ -375,60 +354,55 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
-    title: "SALES",
+    title: "WHOLESALE & DISPATCH",
     items: [
       {
-        icon: Calculator,
-        label: "Estimate",
+        icon: Calculator, // Representing sales/wholesale
+        label: "Wholesale",
         href: "/sales/estimation",
         roles: SUPER_ONLY,
-      },
-      {
-        icon: ClipboardList,
-        label: "Sales Orders",
-        href: "/sales/orders",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: FilePlus2,
-        label: "Proforma Invoice",
-        href: "/sales/proforma-invoice",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Receipt,
-        label: "Sale Invoice",
-        href: "/sales/invoices",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Wallet,
-        label: "Payments",
-        href: "/sales/payment-in",
-        roles: SUPER_ONLY,
-      },
-    ],
-  },
-  {
-    title: "DISPATCH",
-    items: [
-      {
-        icon: FileText,
-        label: "Delivery Challan",
-        href: "/sales/delivery-challan",
-        roles: SUPER_ONLY,
+        children: [
+          {
+            label: "Estimate",
+            href: "/sales/estimation",
+          },
+          {
+            label: "Sales Orders",
+            href: "/sales/orders",
+          },
+          {
+            label: "Proforma Invoice",
+            href: "/sales/proforma-invoice",
+          },
+          {
+            label: "Sale Invoice",
+            href: "/sales/invoices",
+          },
+          {
+            label: "Payments",
+            href: "/sales/payment-in",
+          },
+        ],
       },
       {
         icon: Truck,
-        label: "Transit Stock",
-        href: "/dispatch/transit-stock",
+        label: "Dispatch",
+        href: "/sales/delivery-challan",
         roles: SUPER_ONLY,
-      },
-      {
-        icon: MapPin,
-        label: "Dispatch Tracking",
-        href: "/delivery",
-        roles: SUPER_ONLY,
+        children: [
+          {
+            label: "Delivery Challan",
+            href: "/sales/delivery-challan",
+          },
+          {
+            label: "Transit Stock",
+            href: "/dispatch/transit-stock",
+          },
+          {
+            label: "Dispatch Tracking",
+            href: "/delivery",
+          },
+        ],
       },
     ],
   },
@@ -493,6 +467,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
   {
     title: "WAREHOUSE",
     items: [
+      {
+        icon: Warehouse,
+        label: "Manage Warehouses",
+        href: "/warehouse/manage",
+        roles: SUPER_ONLY,
+      },
       {
         icon: Building2,
         label: "Warehouse",
@@ -591,9 +571,14 @@ export const franchiseMenuSections: MenuSection[] = [
         href: "/franchise/dashboard",
         roles: FRANCHISE_ONLY,
       },
+    ],
+  },
+  {
+    title: "WAREHOUSE",
+    items: [
       {
         icon: Warehouse,
-        label: "Manage Warehouse",
+        label: "Manage Warehouses",
         href: "/warehouse/manage",
         roles: FRANCHISE_ONLY,
       },
@@ -608,12 +593,6 @@ export const franchiseMenuSections: MenuSection[] = [
   {
     title: "INVENTORY",
     items: [
-      {
-        icon: Building2,
-        label: "Warehouse",
-        href: "/warehouse",
-        roles: FRANCHISE_ONLY,
-      },
       {
         icon: Package,
         label: "Product Inventory",
