@@ -37,6 +37,25 @@ export interface WarehouseListItem {
   franchiseName: string | null;
 }
 
+export interface WarehouseBinDetail {
+  id: string;
+  warehouseId: string;
+  code: string;
+  description: string | null;
+  itemCount: number;
+  totalQuantity: number;
+  hasStock: boolean;
+  status: string;
+  warehouse: {
+    id: string;
+    name: string;
+    code: string | null;
+    location: string | null;
+    status: string;
+    type: string | null;
+  } | null;
+}
+
 export const WarehouseApi = {
   getPrimaryWarehouse: async (franchiseId: string) => {
     return api.get<Warehouse>(`/api/warehouse/primary?franchiseId=${franchiseId}`).then(res => res.data);
@@ -52,12 +71,20 @@ export const WarehouseApi = {
     return api.get<WarehouseStockItem[]>(`/api/warehouse/${warehouseId}/stock`).then(res => res.data);
   },
 
+  getAllBins: async (params?: { warehouseId?: string }) => {
+    return api.get<WarehouseBinDetail[]>('/api/warehouse/bins', { params }).then(res => res.data);
+  },
+
+  createBinDirect: async (data: { warehouseId: string; code: string; description?: string }) => {
+    return api.post<WarehouseBinDetail>('/api/warehouse/bins', data).then(res => res.data);
+  },
+
   createBin: async (warehouseId: string, data: { code: string; description?: string }) => {
     return api.post<WarehouseBin>(`/api/warehouse/${warehouseId}/bins`, data).then(res => res.data);
   },
 
   updateBin: async (binId: string, data: { code: string; description?: string }) => {
-    return api.put<WarehouseBin>(`/api/warehouse/bins/${binId}`, data).then(res => res.data);
+    return api.put<WarehouseBinDetail>(`/api/warehouse/bins/${binId}`, data).then(res => res.data);
   },
 
   deleteBin: async (binId: string) => {
@@ -68,3 +95,4 @@ export const WarehouseApi = {
     return api.post(`/api/warehouse/${warehouseId}/assign-bin`, data).then(res => res.data);
   }
 };
+

@@ -15,10 +15,13 @@ interface WarehouseFormSidebarProps {
 
 export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, warehouseToEdit }: WarehouseFormSidebarProps) {
   const [loading, setLoading] = useState(false);
+  const [code, setCode] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     location: "",
-    type: "MAIN"
+    type: "MAIN",
+    status: "ACTIVE"
   });
 
   useEffect(() => {
@@ -26,10 +29,20 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
       setFormData({
         name: warehouseToEdit.name || "",
         location: warehouseToEdit.location || "",
-        type: warehouseToEdit.type || "MAIN"
+        type: warehouseToEdit.type || "MAIN",
+        status: (warehouseToEdit.status ? String(warehouseToEdit.status).toUpperCase() : "ACTIVE")
       });
-    } else {
-      setFormData({ name: "", location: "", type: "MAIN" });
+      setCode(warehouseToEdit.code || "");
+      setCodeLoading(false);
+    } else if (isOpen) {
+      setFormData({ name: "", location: "", type: "MAIN", status: "ACTIVE" });
+      setCodeLoading(true);
+      inventoryApi.getNextWarehouseCode()
+        .then(res => {
+          if (res.data?.code) setCode(res.data.code);
+        })
+        .catch(() => setCode("WH-001"))
+        .finally(() => setCodeLoading(false));
     }
   }, [warehouseToEdit, isOpen]);
 
@@ -56,7 +69,10 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
         toast.success("Warehouse updated successfully");
         onSuccess(response.data);
       } else {
-        const response = await inventoryApi.createWarehouse(formData);
+        const response = await inventoryApi.createWarehouse({
+          ...formData,
+          code: code || undefined
+        });
         toast.success("Warehouse created successfully");
         onSuccess(response.data);
       }
@@ -130,6 +146,26 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
               </div>
 
               <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Tag size={14} className="text-orange-500" /> Warehouse Code
+                  </label>
+                  {!warehouseToEdit && (
+                    <span className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-full border border-orange-200 dark:border-orange-900/50">
+                      Auto-generated
+                    </span>
+                  )}
+                </div>
+                <input 
+                  type="text"
+                  readOnly
+                  disabled
+                  value={codeLoading ? "Generating code..." : (code || "WH-001")}
+                  className="w-full text-xs sm:text-sm border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 font-mono rounded-lg px-3 py-2 cursor-not-allowed select-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <MapPin size={14} className="text-orange-500" /> Physical Location
                 </label>
@@ -139,6 +175,40 @@ export default function WarehouseFormSidebar({ isOpen, onClose, onSuccess, wareh
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <CheckCircle2 size={14} className="text-orange-500" /> Status
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, status: "ACTIVE" })}
+                    className={clsx(
+                      "py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                      formData.status === "ACTIVE"
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300"
+                        : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    Active
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, status: "INACTIVE" })}
+                    className={clsx(
+                      "py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                      formData.status === "INACTIVE"
+                        ? "border-slate-400 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200"
+                        : "border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                    )}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-slate-400" />
+                    Inactive
+                  </button>
+                </div>
               </div>
 
               <div className="p-3.5 sm:p-4 bg-amber-50/50 dark:bg-amber-950/10 rounded-xl border border-dashed border-amber-200 dark:border-amber-900/50">
