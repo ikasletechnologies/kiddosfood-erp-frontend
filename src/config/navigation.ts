@@ -9,6 +9,7 @@ import {
   Settings,
   ClipboardList,
   Building2,
+  Warehouse,
   Send,
   Factory,
   ChefHat,
@@ -299,7 +300,23 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
     ],
   },
-
+  {
+    title: "WAREHOUSE",
+    items: [
+      {
+        icon: Warehouse,
+        label: "Manage Warehouses",
+        href: "/warehouse/manage",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
   {
     title: "INVENTORY",
     items: [
