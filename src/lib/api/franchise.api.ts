@@ -28,6 +28,32 @@ export const franchiseApi = {
   completeTransfer: (id: string) => api.patch(`/api/logistics/transfers/${id}/complete`),
 };
 
+// --- Dedicated Franchise Warehouse Setup & Status Flow ---
+export interface FranchiseWarehouseStatus {
+  configured: boolean;
+  franchise: {
+    id: string;
+    name: string;
+    location?: string;
+  };
+  warehouse: {
+    id: string;
+    name: string;
+    code: string;
+    location?: string;
+    type: string;
+    status: string;
+    createdAt: string;
+  } | null;
+  nextCode?: string;
+}
+
+export const franchiseWarehouseApi = {
+  getStatus: () => api.get<FranchiseWarehouseStatus>('/api/franchise/warehouse/status'),
+  setup: (data: { name: string; location?: string; code?: string }) =>
+    api.post('/api/franchise/warehouse/setup', data),
+};
+
 // --- Franchise Supply Orders (FO-YYYY-XXXX: HQ → Franchise execution) ---
 export const franchiseOrdersApi = {
   getAll: (params?: { franchiseId?: string; status?: string; sourceRequestId?: string }) =>

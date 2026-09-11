@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SidebarProvider } from "@/context/SidebarContext";
 import Sidebar from "./Sidebar";
 import RefrensHeader from "./RefrensHeader";
+import { FranchiseWarehouseGuard } from "@/components/modules/franchise/FranchiseWarehouseGuard";
 
 const PUBLIC_PATHS = ["/login"];
 const SETUP_PATH = "/setup";
@@ -103,7 +104,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <RefrensHeader />
           <main className="flex-1 overflow-y-auto bg-background custom-scrollbar p-3 sm:p-4 md:p-6">
-            {children}
+            <FranchiseWarehouseGuard>
+              {children}
+            </FranchiseWarehouseGuard>
           </main>
         </div>
       </div>
