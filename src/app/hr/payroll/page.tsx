@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Play, FileText, DollarSign, Settings, X } from "lucide-react";
+import { Plus, Play, FileText, IndianRupee, Settings, X } from "lucide-react";
 import Link from "next/link";
 import api, { accountsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";

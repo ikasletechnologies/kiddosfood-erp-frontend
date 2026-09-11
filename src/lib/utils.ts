@@ -34,13 +34,39 @@ export async function shareText(text: string, title?: string): Promise<"shared" 
   return "unsupported";
 }
 
-export function formatCurrency(amount: number, currency: string = "₹") {
-  const isNegative = amount < 0;
-  const absVal = Math.abs(amount);
+export function formatCurrency(amount: number | string | null | undefined, currency: string = "₹"): string {
+  if (amount === null || amount === undefined || amount === "") return `${currency}0.00`;
+  const num = typeof amount === "string" ? parseFloat(amount) : Number(amount);
+  if (isNaN(num)) return `${currency}0.00`;
+  const rounded = Math.round((num + Number.EPSILON) * 100) / 100;
+  const isNegative = rounded < 0;
+  const absVal = Math.abs(rounded);
   return `${isNegative ? '-' : ''}${currency}${absVal.toLocaleString("en-IN", {
-    minimumFractionDigits: Number.isInteger(absVal) ? 0 : 2,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`;
+}
+
+export function formatQuantity(qty: number | string | null | undefined, unit?: string): string {
+  if (qty === null || qty === undefined || qty === "") return "0";
+  const num = typeof qty === "string" ? parseFloat(qty) : Number(qty);
+  if (isNaN(num)) return "0";
+  
+  const clean = Math.round((num + Number.EPSILON) * 10000) / 10000;
+  if (Number.isInteger(clean)) {
+    return clean.toLocaleString("en-IN");
+  }
+
+  const u = (unit || "").trim().toUpperCase();
+  const isDiscrete = ["PCS", "PC", "UNIT", "UNITS", "BOX", "BOXES", "NOS", "PACK", "PACKS", "CTN", "CARTON", "BAG", "BAGS"].includes(u);
+  
+  if (isDiscrete) {
+    const rounded = Math.round((clean + Number.EPSILON) * 100) / 100;
+    return rounded.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  }
+
+  const rounded = Math.round((clean + Number.EPSILON) * 1000) / 1000;
+  return rounded.toLocaleString("en-IN", { maximumFractionDigits: 3 });
 }
 
 // The single source of truth for how a date is displayed anywhere in the

@@ -314,12 +314,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     title: "INVENTORY",
     items: [
       {
-        icon: ClipboardList,
-        label: "Item Master",
-        href: "/inventory/raw-material-stock",
-        roles: SUPER_ONLY,
-      },
-      {
         icon: Layers,
         label: "Stock Hub",
         href: "/inventory/stock",

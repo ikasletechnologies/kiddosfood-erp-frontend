@@ -17,7 +17,6 @@ const TYPE_FILTERS = [
   { id: "PRODUCTION", label: "Production" },
   { id: "DAMAGE", label: "Damage" },
   { id: "EXPIRY", label: "Expiry" },
-  { id: "MANUAL_ADJUSTMENT", label: "Manual Adjustment" },
 ];
 
 const SOURCE_STYLES: Record<string, { color: string; bg: string; border: string }> = {

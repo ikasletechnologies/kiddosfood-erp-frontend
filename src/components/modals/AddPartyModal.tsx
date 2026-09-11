@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Loader2, Info } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
-import { vendorsApi, customersApi } from "@/lib/api";
+import { vendorsApi, customersApi, gstApi } from "@/lib/api";
 
 export interface AddPartyModalProps {
   isOpen: boolean;
@@ -162,7 +162,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
     return () => clearTimeout(timer);
   }, [form.gstNumber, isOpen]);
 
-  // Auto-fetch GST details from Next.js server-side route
+  // Auto-fetch GST details via our backend, which proxies GSTVerify and caches results
   const fetchGstDetails = async (gstin: string) => {
     const cleanGst = gstin.trim().toUpperCase();
     if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(cleanGst)) {
@@ -171,13 +171,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
     setFetchingGst(true);
     try {
-      const res = await fetch(`/api/gst-verify/${cleanGst}`);
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch GST details");
-      }
-      
-      const data = await res.json();
+      const { data } = await gstApi.verify(cleanGst);
       if (data.success) {
         setForm((prev) => ({
           ...prev,
@@ -185,16 +179,15 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           billingAddress: data.address || prev.billingAddress,
           shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
           state: data.state || prev.state,
-          district: data.district || prev.district,
           city: data.city || prev.city,
           pincode: data.pinCode || prev.pincode,
           gstType: "Registered Business"
         }));
-        toast.success(`Successfully auto-filled details for "${data.legalName}"${data.mocked ? " (Demo Mode)" : ""}`);
+        toast.success(`Successfully auto-filled details for "${data.legalName}"`);
       }
     } catch (err: any) {
       console.error("Auto-fetch GST details failed:", err);
-      toast.error(err.message || "Could not auto-fetch GST details. Please enter manually.");
+      toast.error(err.response?.data?.error || "Could not auto-fetch GST details. Please enter manually.");
     } finally {
       setFetchingGst(false);
     }

@@ -28,10 +28,12 @@ export const vendorLedgerApi = {
 // --- Procurement (Purchase Orders) ---
 export const purchaseOrdersApi = {
   getAll: () => api.get('/api/purchase-orders'),
+  getNextNumber: () => api.get('/api/purchase-orders/next-number'),
   getById: (id: string) => api.get(`/api/purchase-orders/${id}`),
-  create: (data: { 
-    vendorId: string; 
-    advancePaid?: number; 
+  create: (data: {
+    vendorId: string;
+    poNumber?: string;
+    advancePaid?: number;
     expectedDeliveryDate?: string;
     notes?: string;
     internalNotes?: string;
@@ -56,6 +58,7 @@ export const purchaseOrdersApi = {
 
 export const procurementApi = {
   getPOs: (params?: any) => api.get('/api/purchase-orders', { params }),
+  getNextNumber: () => api.get('/api/purchase-orders/next-number'),
   getById: (id: string) => api.get(`/api/purchase-orders/${id}`),
   createPO: (data: any) => api.post('/api/purchase-orders', data),
   approve: (id: string) => api.patch(`/api/purchase-orders/${id}/approve`),

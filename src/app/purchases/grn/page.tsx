@@ -86,6 +86,7 @@ function computeCommercialsFromPO(
   items: GRNItem[]
 ) {
   let acceptedSubtotal = 0;
+  let acceptedValueAtPoPrice = 0;
   let totalTax = 0;
   const taxRateMap: Record<number, number> = {};
 
@@ -98,6 +99,12 @@ function computeCommercialsFromPO(
 
     acceptedSubtotal += lineSubtotal;
     totalTax += lineTax;
+    // Fulfillment ratio (below) must reflect how much of the ORDER was
+    // received, not how much the price happened to change at receipt — using
+    // the actual (possibly overridden) price here would let a price increase
+    // alone inflate the ratio past 1 and scale the PO's discount up with it,
+    // silently clawing back part of a price override the operator just made.
+    acceptedValueAtPoPrice += acceptedQty * (Number(gi.poPrice) || price);
 
     if (rate > 0 && acceptedQty > 0) {
       taxRateMap[rate] = (taxRateMap[rate] || 0) + lineTax;
@@ -108,7 +115,7 @@ function computeCommercialsFromPO(
     ? Number(po?.subtotal)
     : (po?.poItems || []).reduce((acc, item) => acc + (Number(item.quantity) || 0) * (Number(item.price) || 0), 0) || 1;
 
-  const ratio = poSubtotal > 0 ? acceptedSubtotal / poSubtotal : 0;
+  const ratio = poSubtotal > 0 ? acceptedValueAtPoPrice / poSubtotal : 0;
   const poDiscount = Number(po?.discountAmount) || 0;
   const poFreight = Number(po?.freightCost) || 0;
 
@@ -817,11 +824,10 @@ export default function GRNPage() {
                               </div>
 
                               {(isLotMissing || isMfgMissing || isExpMissing || isExpBeforeMfg) && (
-                                <div className="space-y-0.5 pt-0.5 text-[10px] text-rose-500 dark:text-rose-400 font-medium">
-                                  {isLotMissing && <div>• Batch/Lot number is required</div>}
-                                  {isMfgMissing && <div>• Manufacturing (MFG) date is required</div>}
-                                  {isExpMissing && <div>• Expiry (EXP) date is required</div>}
-                                  {isExpBeforeMfg && <div>• EXP date cannot be earlier than MFG date</div>}
+                                <div className="pt-0.5">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 px-1.5 py-0.5 rounded">
+                                    {isExpBeforeMfg ? "EXP date is before MFG date" : "Batch details incomplete"}
+                                  </span>
                                 </div>
                               )}
                             </div>

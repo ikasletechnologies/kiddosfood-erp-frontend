@@ -3,13 +3,15 @@
 import { useState, useEffect } from "react";
 import { X,
   Package, AlertTriangle,
-  RefreshCw, Scale, Search, Layers, Box, Play
+  RefreshCw, Scale, Search, Layers, Box, Play,
+  Link2, Sparkles, Plus, CheckCircle2
 } from "lucide-react";
 import { clsx } from "clsx";
-import { productionApi, franchiseApi } from "@/lib/api";
+import { productionApi, franchiseApi, productsApi, productsFullApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
 import { convertUnit } from "@/lib/unitConversion";
+import { generateSKU } from "@/lib/utils/erp";
 
 interface ProductBatch {
   id: string;
@@ -21,6 +23,7 @@ interface ProductBatch {
   packagingStatus: string;
   expiryDate: string;
   recall?: { status: string } | null;
+  packagings?: Array<{ id: string; status: string; totalWeight: number }>;
   product: {
     name: string;
     sku: string;
@@ -69,6 +72,7 @@ function getPackagingBadge(batch: ProductBatch): { label: string; color: string;
 export default function PackagingQueuePage() {
   const [batches, setBatches] = useState<ProductBatch[]>([]);
   const [franchises, setFranchises] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [selectedFranchiseId, setSelectedFranchiseId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,10 +85,56 @@ export default function PackagingQueuePage() {
   const [quantityPackets, setQuantityPackets] = useState(10);
   const [submitting, setSubmitting] = useState(false);
 
+  // Finished Good / Sellable Product mapping states
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [productMode, setProductMode] = useState<"existing" | "create_new">("existing");
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductSku, setNewProductSku] = useState("");
+  const [newProductPrice, setNewProductPrice] = useState<number>(0);
+
+  const refreshProducts = async () => {
+    try {
+      const pRes = await productsApi.getAll();
+      const pList = pRes.data?.data || pRes.data || [];
+      setProducts(Array.isArray(pList) ? pList : []);
+      return Array.isArray(pList) ? pList : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const updateProductMapping = (batch: ProductBatch | null, sizeStr: string, prodList = products) => {
+    if (!batch) return;
+    const batchProdName = batch.product?.name || "Product";
+    const currentPackSize = sizeStr || "Pack";
+    const suggestedName = `${batchProdName} (${currentPackSize})`;
+    const generatedSku = generateSKU("FINISHED_GOOD", batchProdName, currentPackSize);
+
+    setNewProductName(suggestedName);
+    setNewProductSku(generatedSku);
+    setNewProductPrice(0);
+
+    const existingByName = prodList.find((p) => p.name?.toLowerCase() === suggestedName.toLowerCase());
+    const existingBySku = prodList.find((p) => p.sku?.toLowerCase() === generatedSku.toLowerCase());
+
+    if (existingByName) {
+      setSelectedProductId(existingByName.id);
+      setProductMode("existing");
+    } else if (existingBySku) {
+      setSelectedProductId(existingBySku.id);
+      setProductMode("existing");
+    } else {
+      setSelectedProductId("");
+      setProductMode(prodList.length > 0 ? "existing" : "create_new");
+    }
+  };
+
   const handleSizeValueChange = (val: string) => {
     setSizeValue(val);
     if (val && !isNaN(Number(val)) && Number(val) > 0) {
-      setPacketSize(`${val}${sizeUnit}`);
+      const newSize = `${val}${sizeUnit}`;
+      setPacketSize(newSize);
+      updateProductMapping(selectedBatch, newSize, products);
     } else {
       setPacketSize("");
     }
@@ -93,7 +143,9 @@ export default function PackagingQueuePage() {
   const handleSizeUnitChange = (unit: string) => {
     setSizeUnit(unit);
     if (sizeValue && !isNaN(Number(sizeValue)) && Number(sizeValue) > 0) {
-      setPacketSize(`${sizeValue}${unit}`);
+      const newSize = `${sizeValue}${unit}`;
+      setPacketSize(newSize);
+      updateProductMapping(selectedBatch, newSize, products);
     } else {
       setPacketSize("");
     }
@@ -102,15 +154,23 @@ export default function PackagingQueuePage() {
   const handleSelectPreset = (val: string, unit: string) => {
     setSizeValue(val);
     setSizeUnit(unit);
-    setPacketSize(`${val}${unit}`);
+    const newSize = `${val}${unit}`;
+    setPacketSize(newSize);
+    updateProductMapping(selectedBatch, newSize, products);
   };
 
   useEffect(() => {
     async function initData() {
       try {
-        const fRes = await franchiseApi.getAll();
+        const [fRes, pRes] = await Promise.all([
+          franchiseApi.getAll(),
+          productsApi.getAll()
+        ]);
         const list = fRes.data || [];
         setFranchises(list);
+        const pList = pRes.data?.data || pRes.data || [];
+        setProducts(Array.isArray(pList) ? pList : []);
+
         if (list.length > 0) {
           // Deterministic default: open at HQ if one is configured, rather
           // than whichever franchise the DB happened to return first.
@@ -119,7 +179,7 @@ export default function PackagingQueuePage() {
           setSelectedFranchiseId((hq || fallback).id);
         }
       } catch (err) {
-        toast.error("Failed to load franchises");
+        toast.error("Failed to load initial metadata");
       }
     }
     initData();
@@ -161,8 +221,11 @@ export default function PackagingQueuePage() {
   const totalWeightNeeded = quantityPackets * unitMultiplier;
   // IMPORTANT: approvedQty is the ceiling for packaging — never total produced quantity.
   // This ensures rejected QC quantities never become packagable.
+  const pendingWeight = (selectedBatch?.packagings || [])
+    .filter((p: any) => p.status === 'AWAITING_CONFIRMATION')
+    .reduce((sum: number, p: any) => sum + (p.totalWeight || 0), 0);
   const availableBulk = selectedBatch
-    ? Math.max(0, (selectedBatch.approvedQty ?? 0) - (selectedBatch.packagedQty || 0))
+    ? Math.max(0, (selectedBatch.approvedQty ?? 0) - (selectedBatch.packagedQty || 0) - pendingWeight)
     : 0;
   const maxPackets = unitMultiplier > 0 ? Math.floor(availableBulk / unitMultiplier) : 0;
   const bulkRemaining = availableBulk - totalWeightNeeded;
@@ -174,14 +237,60 @@ export default function PackagingQueuePage() {
       return;
     }
 
+    if (productMode === "create_new") {
+      if (!newProductName.trim()) {
+        toast.error("Please enter a name for the new finished good product");
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      // This only creates an AWAITING_CONFIRMATION ticket — bulk stock and
-      // Finished Goods are untouched until the operator completes physical
-      // packaging/labeling and submits Confirm Packaging.
+      if (productMode === "create_new") {
+        const createRes = await productsFullApi.create({
+          name: newProductName.trim(),
+          sku: newProductSku.trim() || undefined,
+          basePrice: Number(newProductPrice) || 0,
+          category: "FINISHED_GOOD",
+          productType: "FINISHED_GOOD",
+          is_menu_item: true,
+          isVeg: true,
+          isActive: true,
+        });
+
+        const createdProduct = createRes.data?.data || createRes.data;
+        if (createdProduct?.id) {
+          toast.success(`Created new finished good: ${newProductName}`);
+          await refreshProducts();
+        }
+      }
+
+      let targetProductId = selectedProductId;
+      if (productMode === "create_new") {
+        const createRes = await productsFullApi.create({
+          name: newProductName.trim(),
+          sku: newProductSku.trim() || undefined,
+          basePrice: Number(newProductPrice) || 0,
+          category: "FINISHED_GOOD",
+          productType: "FINISHED_GOOD",
+          is_menu_item: true,
+          isVeg: true,
+          isActive: true,
+        });
+
+        const createdProduct = createRes.data?.data || createRes.data;
+        if (createdProduct?.id) {
+          targetProductId = createdProduct.id;
+          toast.success(`Created new finished good: ${newProductName}`);
+          await refreshProducts();
+        }
+      }
+
+      // This creates an AWAITING_CONFIRMATION ticket and reserves bulk stock.
       await productionApi.packageBatch(selectedBatch.id, {
         packetSize,
-        quantityPackets
+        quantityPackets,
+        productId: targetProductId || undefined,
       });
       toast.success("Packaging started — print stickers, then confirm once packing is complete.");
       setSelectedBatch(null);
@@ -329,8 +438,10 @@ export default function PackagingQueuePage() {
                                     const defaultUnit = batchUnit.toUpperCase() === "L" || batchUnit.toUpperCase() === "ML" ? "ml" : "g";
                                     setSizeValue("500");
                                     setSizeUnit(defaultUnit);
-                                    setPacketSize(`500${defaultUnit}`);
+                                    const initialSize = `500${defaultUnit}`;
+                                    setPacketSize(initialSize);
                                     setQuantityPackets(10);
+                                    updateProductMapping(batch, initialSize, products);
                                   }}
                                   className="px-3 py-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-30 disabled:hover:bg-[#f58220]"
                                 >
@@ -379,103 +490,210 @@ export default function PackagingQueuePage() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 dark:text-slate-400">Available approved bulk</span>
-                    {/* approvedQty minus already packaged — never total produced quantity */}
-                    <span className="text-gray-800 dark:text-white font-semibold">{availableBulk} {selectedBatch.production?.recipe?.yieldUnit || 'KG'}</span>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Target Pack Size</label>
-                      {packetSize && (
-                        <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-500/20">
-                          {sizeValue} {sizeUnit.toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick Preset Buttons */}
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {[
-                        { label: "250g", val: "250", unit: "g" },
-                        { label: "500g", val: "500", unit: "g" },
-                        { label: "1kg", val: "1", unit: "kg" },
-                        { label: "2kg", val: "2", unit: "kg" },
-                        { label: "5kg", val: "5", unit: "kg" },
-                        { label: "200ml", val: "200", unit: "ml" },
-                        { label: "500ml", val: "500", unit: "ml" },
-                        { label: "1L", val: "1", unit: "l" },
-                        { label: "1 Unit", val: "1", unit: "unit" },
-                      ].map((preset) => {
-                        const isSelected = sizeValue === preset.val && sizeUnit.toLowerCase() === preset.unit.toLowerCase();
-                        return (
-                          <button
-                            key={`${preset.val}${preset.unit}`}
-                            type="button"
-                            onClick={() => handleSelectPreset(preset.val, preset.unit)}
-                            className={clsx(
-                              "px-2 py-1 text-[11px] font-semibold rounded border transition-all active:scale-95",
-                              isSelected
-                                ? "bg-[#f58220] text-white border-[#f58220] shadow-xs"
-                                : "bg-white dark:bg-[#13151f] text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/20"
-                            )}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Custom Number Input + Unit Selector */}
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0.001"
-                          placeholder="Enter size (e.g. 250)"
-                          value={sizeValue}
-                          onChange={(e) => handleSizeValueChange(e.target.value)}
-                          className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-medium"
-                        />
-                      </div>
-                      <select
-                        value={sizeUnit}
-                        onChange={(e) => handleSizeUnitChange(e.target.value)}
-                        className="w-32 border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-semibold cursor-pointer"
-                      >
-                        <option value="g" className="dark:bg-card">G (Grams)</option>
-                        <option value="kg" className="dark:bg-card">KG (Kilograms)</option>
-                        <option value="ml" className="dark:bg-card">ML (Milliliters)</option>
-                        <option value="l" className="dark:bg-card">L (Liters)</option>
-                        <option value="pcs" className="dark:bg-card">PCS (Pieces)</option>
-                        <option value="unit" className="dark:bg-card">Unit (Box/Pkt)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Quantity of Packets</label>
+                  {/* 1. Finished Good / Sellable Product Mapping Area */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-gray-800 dark:text-white">
+                      Finished Good / Sellable Product
+                    </label>
+                    <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 dark:bg-white/5 rounded-lg text-xs font-semibold">
                       <button
                         type="button"
-                        onClick={() => setQuantityPackets(Math.max(1, maxPackets))}
-                        className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e]"
+                        onClick={() => setProductMode("existing")}
+                        className={clsx(
+                          "py-1.5 px-2 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                          productMode === "existing"
+                            ? "bg-white dark:bg-card text-[#f58220] shadow-xs"
+                            : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
+                        )}
                       >
-                        Use All Bulk ({maxPackets})
+                        <Link2 className="h-3.5 w-3.5" />
+                        <span>Link Existing</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProductMode("create_new")}
+                        className={clsx(
+                          "py-1.5 px-2 rounded-md flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                          productMode === "create_new"
+                            ? "bg-white dark:bg-card text-[#f58220] shadow-xs"
+                            : "text-gray-600 dark:text-slate-400 hover:text-gray-900"
+                        )}
+                      >
+                        <Sparkles className="h-3.5 w-3.5 text-[#f58220]" />
+                        <span>Create New Good</span>
                       </button>
                     </div>
-                    <input
-                      type="number"
-                      min="1"
-                      value={quantityPackets || ""}
-                      onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
-                    />
-                    <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
-                      Maximum possible with available bulk: {maxPackets} packets
-                    </p>
+
+                    {productMode === "existing" ? (
+                      <div>
+                        <select
+                          value={selectedProductId}
+                          onChange={(e) => setSelectedProductId(e.target.value)}
+                          className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                        >
+                          <option value="" className="dark:bg-card">-- Select Finished Good / SKU --</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id} className="dark:bg-card">
+                              {p.name} {p.sku ? `(${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        {products.length === 0 && (
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                            No products found in catalogue. Switch to &quot;Create New Good&quot; above to create one automatically.
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 p-3 bg-orange-50/40 dark:bg-orange-500/5 rounded-lg border border-orange-200 dark:border-orange-500/20">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
+                            New Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={newProductName}
+                            onChange={(e) => setNewProductName(e.target.value)}
+                            placeholder="e.g. Dosa Batter (1KG)"
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
+                              SKU Code
+                            </label>
+                            <input
+                              type="text"
+                              value={newProductSku}
+                              onChange={(e) => setNewProductSku(e.target.value)}
+                              placeholder="Auto-generated"
+                              className="w-full font-mono border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300 mb-1">
+                              Selling Price (₹)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={newProductPrice || ""}
+                              onChange={(e) => setNewProductPrice(Number(e.target.value) || 0)}
+                              placeholder="0.00"
+                              className="w-full font-mono border border-gray-200 dark:border-white/10 rounded-md px-2.5 py-1.5 text-xs text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                          ✨ Will automatically create this sellable finished good in your catalog for downstream inventory &amp; POS sales.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Retail Conversion Section */}
+                  <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-gray-800 dark:text-white">Retail Conversion</span>
+                      <span className="text-xs text-gray-500 dark:text-slate-400">
+                        Available: <strong className="text-gray-800 dark:text-white">{availableBulk} {selectedBatch.production?.recipe?.yieldUnit || 'KG'}</strong>
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Target Pack Size</label>
+                        {packetSize && (
+                          <span className="text-[11px] font-semibold text-[#f58220] bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded border border-orange-200 dark:border-orange-500/20">
+                            {sizeValue} {sizeUnit.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick Preset Buttons */}
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {[
+                          { label: "250g", val: "250", unit: "g" },
+                          { label: "500g", val: "500", unit: "g" },
+                          { label: "1kg", val: "1", unit: "kg" },
+                          { label: "2kg", val: "2", unit: "kg" },
+                          { label: "5kg", val: "5", unit: "kg" },
+                          { label: "200ml", val: "200", unit: "ml" },
+                          { label: "500ml", val: "500", unit: "ml" },
+                          { label: "1L", val: "1", unit: "l" },
+                          { label: "1 Unit", val: "1", unit: "unit" },
+                        ].map((preset) => {
+                          const isSelected = sizeValue === preset.val && sizeUnit.toLowerCase() === preset.unit.toLowerCase();
+                          return (
+                            <button
+                              key={`${preset.val}${preset.unit}`}
+                              type="button"
+                              onClick={() => handleSelectPreset(preset.val, preset.unit)}
+                              className={clsx(
+                                "px-2 py-1 text-[11px] font-semibold rounded border transition-all active:scale-95",
+                                isSelected
+                                  ? "bg-[#f58220] text-white border-[#f58220] shadow-xs"
+                                  : "bg-white dark:bg-[#13151f] text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 hover:border-gray-300 dark:hover:border-white/20"
+                              )}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Custom Number Input + Unit Selector */}
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.001"
+                            placeholder="Enter size (e.g. 250)"
+                            value={sizeValue}
+                            onChange={(e) => handleSizeValueChange(e.target.value)}
+                            className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-medium"
+                          />
+                        </div>
+                        <select
+                          value={sizeUnit}
+                          onChange={(e) => handleSizeUnitChange(e.target.value)}
+                          className="w-32 border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-2 text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] font-semibold cursor-pointer"
+                        >
+                          <option value="g" className="dark:bg-card">G (Grams)</option>
+                          <option value="kg" className="dark:bg-card">KG (Kilograms)</option>
+                          <option value="ml" className="dark:bg-card">ML (Milliliters)</option>
+                          <option value="l" className="dark:bg-card">L (Liters)</option>
+                          <option value="pcs" className="dark:bg-card">PCS (Pieces)</option>
+                          <option value="unit" className="dark:bg-card">Unit (Box/Pkt)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Quantity of Packets</label>
+                        <button
+                          type="button"
+                          onClick={() => setQuantityPackets(Math.max(1, maxPackets))}
+                          className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e]"
+                        >
+                          Use All Bulk ({maxPackets})
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={quantityPackets || ""}
+                        onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
+                        className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
+                      />
+                      <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1">
+                        Maximum possible with available bulk: {maxPackets} packets
+                      </p>
+                    </div>
                   </div>
 
                   {/* Planned conversion */}
@@ -504,7 +722,7 @@ export default function PackagingQueuePage() {
                   <button
                     onClick={handlePackageRun}
                     disabled={submitting || !packetSize || totalWeightNeeded > availableBulk}
-                    className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="w-full py-2.5 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg font-semibold text-sm shadow-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
                     Start Packaging &amp; Print Stickers

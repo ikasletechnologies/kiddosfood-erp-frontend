@@ -14,10 +14,9 @@ import { clsx } from "clsx";
 import { Modal } from "@/components/ui/Modal";
 import GSTInvoice from "../../documents/GSTInvoice";
 import api from "../../../lib/api";
-import AddMaterialDrawer from "../inventory/AddMaterialDrawer";
 import RecordPaymentModal from "./RecordPaymentModal";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency, formatQuantity, formatERPNumber } from "@/lib/utils";
 
 interface POItem {
   inventoryItemId: string;
@@ -51,6 +50,22 @@ const STATUS_ICONS: Record<string, any> = {
   CANCELLED: XCircle,
 };
 
+const PAYMENT_TERMS_LABELS: Record<string, string> = {
+  IMMEDIATE: "Immediate",
+  ADVANCE_100: "Advance Payment (100%)",
+  ADVANCE_PARTIAL: "Advance Payment (Partial)",
+  NET_7: "Net 7 Days",
+  NET_15: "Net 15 Days",
+  NET_30: "Net 30 Days",
+  NET_45: "Net 45 Days",
+  NET_60: "Net 60 Days",
+};
+
+function formatPaymentTerms(paymentTerms?: string | null): string {
+  if (!paymentTerms) return "Immediate";
+  return PAYMENT_TERMS_LABELS[paymentTerms] || paymentTerms;
+}
+
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
   gstin: "",
@@ -60,14 +75,12 @@ const FALLBACK_COMPANY = {
   state: "Tamil Nadu"
 };
 
-import { formatCurrency, formatERPNumber } from "@/lib/utils";
-
-
 export default function PurchaseOrdersClient() {
   const [orders, setOrders] = useState<any[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -126,9 +139,14 @@ export default function PurchaseOrdersClient() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setOrdersError(null);
     try {
+      // The PO list itself is reported on its own — swallowing its failure into
+      // an empty array (as the other, secondary lookups below do) made a real
+      // fetch failure indistinguishable from "you have no purchase orders yet",
+      // hiding backend errors behind a misleading empty state.
       const [poRes, vRes, rmRes, cpRes, aRes] = await Promise.all([
-        purchaseOrdersApi.getAll().catch(() => ({ data: [] })),
+        purchaseOrdersApi.getAll(),
         vendorsApi.getAll().catch(() => ({ data: [] })),
         rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD').catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
@@ -146,8 +164,10 @@ export default function PurchaseOrdersClient() {
       } else {
         setEditingProfile({ name: "", gstin: "", address: "", phone: "", email: "", state: "" });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setOrders([]);
+      setOrdersError(e?.response?.data?.error || e?.message || "Failed to load purchase orders.");
     } finally {
       setLoading(false);
     }
@@ -458,7 +478,22 @@ export default function PurchaseOrdersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {filtered.length === 0 ? (
+                {ordersError ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-16 text-center">
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/30 flex items-center justify-center text-rose-600">
+                          <XCircle className="h-6 w-6" />
+                        </div>
+                        <p className="text-gray-800 dark:text-white font-semibold text-sm">Couldn&apos;t load purchase orders</p>
+                        <p className="text-gray-500 dark:text-slate-400 text-xs max-w-sm">{ordersError}</p>
+                        <button onClick={() => fetchAll()} className="mt-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold rounded-lg transition-colors">
+                          Retry
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2">
@@ -490,7 +525,7 @@ export default function PurchaseOrdersClient() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="font-semibold text-gray-800 dark:text-white text-sm">{formatCurrency(po.totalAmount)}</div>
                         <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                          {po.receivedItemsCount || 0} / {po.totalItemsCount || 0} units
+                          {formatQuantity(po.receivedItemsCount || 0)} / {formatQuantity(po.totalItemsCount || 0)} units
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
@@ -821,7 +856,7 @@ export default function PurchaseOrdersClient() {
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.expectedDeliveryDate)}</div>
                         
                         <div className="text-slate-500 dark:text-slate-400 font-medium">Payment Terms:</div>
-                        <div className="font-bold text-slate-800 dark:text-white">{viewingDetailsPO.vendor?.paymentTerms || "Immediate"}</div>
+                        <div className="font-bold text-slate-800 dark:text-white">{formatPaymentTerms(viewingDetailsPO.paymentTerms)}</div>
                       </div>
                     </div>
                   </div>
@@ -1097,9 +1132,9 @@ export default function PurchaseOrdersClient() {
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                             <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
                             <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-white">{item.inventoryItem?.name}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{item.quantity}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{rQty}</td>
-                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{pQty}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatQuantity(item.quantity, item.inventoryItem?.unit)}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{formatQuantity(rQty, item.inventoryItem?.unit)}</td>
+                            <td className="px-4 py-3 text-xs text-right font-semibold text-amber-600 dark:text-amber-400">{formatQuantity(pQty, item.inventoryItem?.unit)}</td>
                             <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{item.inventoryItem?.unit ? item.inventoryItem.unit.replace(/^1\s*/, "") : "unit"}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatCurrency(item.price)}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold">
@@ -1123,11 +1158,11 @@ export default function PurchaseOrdersClient() {
                             <td className="px-4 py-3 text-xs text-right text-slate-500 dark:text-slate-400">
                               {isSameState ? (
                                 <div>
-                                  <div>CGST: {(gRate / 2)}%</div>
-                                  <div>SGST: {(gRate / 2)}%</div>
+                                  <div>CGST: {Number((gRate / 2).toFixed(2))}%</div>
+                                  <div>SGST: {Number((gRate / 2).toFixed(2))}%</div>
                                 </div>
                               ) : (
-                                <div>IGST: {gRate}%</div>
+                                <div>IGST: {Number(gRate.toFixed(2))}%</div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-xs text-right font-bold text-slate-800 dark:text-white">{formatCurrency(item.total || (item.quantity * item.price))}</td>
@@ -1169,9 +1204,9 @@ export default function PurchaseOrdersClient() {
                             <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
                               <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{grn.grnNumber || grn.id?.slice(0, 8) || "—"}</td>
                               <td className="px-4 py-3 text-xs font-semibold text-slate-700 dark:text-slate-300">{formatDate(grn.createdAt)}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{totalReceived}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{totalAccepted}</td>
-                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{totalRejected}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatQuantity(totalReceived)}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{formatQuantity(totalAccepted)}</td>
+                              <td className="px-4 py-3 text-xs text-right font-semibold text-rose-600 dark:text-rose-400">{formatQuantity(totalRejected)}</td>
                               <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{viewingDetailsPO.warehouse?.name || viewingDetailsPO.franchise?.name || (
                                 <span className="text-rose-500 italic font-medium">Update Warehouse</span>
                               )}</td>

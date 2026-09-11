@@ -144,7 +144,13 @@ export default function RecipeMasterTab() {
         productsApi.getAll(),
         recipesApi.getCategories()
       ]);
-      setRecipes(rRes.data ?? []);
+      const rawList = rRes.data ?? [];
+      const sortedRecipes = [...rawList].sort((a: any, b: any) => {
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return timeB - timeA;
+      });
+      setRecipes(sortedRecipes);
       setMaterials(mRes.data ?? []);
       setProducts(pRes.data ?? []);
       setCategories(cRes.data ?? []);
@@ -222,7 +228,7 @@ export default function RecipeMasterTab() {
       }
       toast.success(editingId ? "Recipe updated" : "Recipe created");
       setShowForm(false);
-      fetchAll();
+      await fetchAll();
     } catch (e: any) {
       setError(e?.response?.data?.error ?? "Failed to save recipe.");
     } finally {

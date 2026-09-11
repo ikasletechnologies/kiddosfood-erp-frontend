@@ -1,6 +1,47 @@
 "use client";
 
-import React, { createContext, useContext, useState, useMemo, useEffect } from "react";
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
+import { roundMoney } from "@/lib/utils";
+
+// Generated purely on the client the instant a new PO screen is opened — no
+// backend round trip. Whatever this produces is what gets sent to and stored
+// by the backend on save (ProcurementService.createPurchaseOrder honors a
+// client-supplied poNumber), so what's shown on screen always matches what's
+// persisted. The running count is tracked in this browser's localStorage so
+// numbers read as a normal PO-<year>-<seq> sequence instead of a timestamp.
+function poSeqStorageKey(year: number) {
+  return `poSequenceCounter_${year}`;
+}
+
+function generateClientPoNumber(): string {
+  const year = new Date().getFullYear();
+  let next = 1;
+  try {
+    const stored = parseInt(localStorage.getItem(poSeqStorageKey(year)) || "0", 10);
+    next = (Number.isFinite(stored) ? stored : 0) + 1;
+  } catch {
+    // localStorage unavailable (e.g. private mode) — fall back to 1
+  }
+  return `PO-${year}-${String(next).padStart(3, "0")}`;
+}
+
+// Called once a PO number has actually been used to create/save an order, so
+// the next generated number doesn't repeat it. Reads the sequence back out of
+// the number itself rather than assuming it was the one just previewed, since
+// a saved draft's poNumber could be older than the current counter.
+export function commitClientPoNumber(poNumber: string) {
+  const match = poNumber.match(/^PO-(\d{4})-(\d+)$/);
+  if (!match) return;
+  const [, yearStr, seqStr] = match;
+  try {
+    const key = poSeqStorageKey(parseInt(yearStr, 10));
+    const current = parseInt(localStorage.getItem(key) || "0", 10) || 0;
+    const used = parseInt(seqStr, 10);
+    if (used > current) localStorage.setItem(key, String(used));
+  } catch {
+    // ignore
+  }
+}
 
 export interface LineItem {
   id: string;
@@ -16,6 +57,7 @@ export interface Vendor {
   [x: string]: any;
   id: string;
   name: string;
+  status?: string;
   phone?: string;
   advanceBalance: number;
   balanceDue: number;
@@ -24,7 +66,7 @@ export interface Vendor {
 
 interface PurchaseOrderContextType {
   selectedVendor: Vendor | null;
-  setSelectedVendor: (vendor: Vendor | null) => void;
+  setSelectedVendor: React.Dispatch<React.SetStateAction<Vendor | null>>;
   items: LineItem[];
   addItem: () => void;
   removeItem: (id: string) => void;
@@ -91,6 +133,31 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [contextMessage, setContextMessage] = useState<string | null>(null);
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
+  const prevVendorIdRef = useRef<string | null | undefined>(undefined);
+  // Snapshots read (not depended on) by the vendor-change effect below, so it
+  // can tell whether the operator has already typed real line items into the
+  // table without re-running itself every time items/autoFilledIds change.
+  const itemsRef = useRef(items);
+  const autoFilledIdsRef = useRef(autoFilledIds);
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { autoFilledIdsRef.current = autoFilledIds; }, [autoFilledIds]);
+  const [useAdvance, setUseAdvance] = useState(false);
+  const [notes, setNotes] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [poNumber, setPoNumber] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [quotationNo, setQuotationNo] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const [warehouseId, setWarehouseId] = useState("");
+  const [purchaseType, setPurchaseType] = useState("RAW_MATERIAL");
+  const [paymentTerms, setPaymentTerms] = useState("");
+  const [poStatus, setPoStatus] = useState("DRAFT");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [freightCost, setFreightCost] = useState(0);
+  const [internalNotes, setInternalNotes] = useState("");
+  const [vendorNotes, setVendorNotes] = useState("");
 
   // Load draft from localStorage or fetch existing PO on mount
   useEffect(() => {
@@ -99,7 +166,14 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       import('@/lib/api').then(({ purchaseOrdersApi }) => {
         purchaseOrdersApi.getById(editId).then((res) => {
           const po = res.data;
-          if (po.vendor) setSelectedVendor(po.vendor);
+          if (po.poNumber) setPoNumber(po.poNumber);
+          else if (po.id) setPoNumber(`PO-${po.id.slice(0, 8)}`);
+          if (po.vendor) {
+            setSelectedVendor(po.vendor);
+            prevVendorIdRef.current = po.vendor.id;
+          } else {
+            prevVendorIdRef.current = null;
+          }
           if (po.poItems && po.poItems.length > 0) {
             setItems(po.poItems.map((item: any) => ({
               id: item.id || Math.random().toString(36).substr(2, 9),
@@ -133,6 +207,60 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
+      let draftPoNumber = "";
+      let draftVendorId: string | null = null;
+      const saved = localStorage.getItem('draftPurchaseOrder');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.poNumber) {
+            draftPoNumber = parsed.poNumber;
+            setPoNumber(parsed.poNumber);
+          }
+          if (parsed.selectedVendor) {
+            setSelectedVendor(parsed.selectedVendor);
+            draftVendorId = parsed.selectedVendor.id || null;
+            if (draftVendorId) {
+              import('@/lib/api').then(({ vendorsApi }) => {
+                vendorsApi.getById(draftVendorId!).then((res) => {
+                  if (res.data) {
+                    const latestV = res.data;
+                    setSelectedVendor((prev: any) => ({
+                      ...(prev || {}),
+                      ...latestV,
+                      id: latestV.id,
+                      name: latestV.name,
+                      status: latestV.status,
+                      phone: latestV.phone || latestV.mobile || latestV.contact,
+                      advanceBalance: latestV.advanceBalance || (latestV.balance < 0 ? Math.abs(latestV.balance) : 0),
+                      balanceDue: latestV.balanceDue || (latestV.balance > 0 ? latestV.balance : 0)
+                    }));
+                  }
+                }).catch(err => {
+                  console.error("Failed to revalidate draft vendor status", err);
+                });
+              });
+            }
+          }
+          if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+          if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
+          if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
+          if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
+          if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
+          if (parsed.internalNotes) setInternalNotes(parsed.internalNotes);
+          if (parsed.vendorNotes) setVendorNotes(parsed.vendorNotes);
+        } catch (e) {
+          console.error("Failed to parse draft PO", e);
+        }
+      }
+
+      // No backend round trip for this — generated right here so it's visible
+      // instantly, and sent back to the server as-is on save so the number on
+      // screen always matches what gets persisted.
+      if (!draftPoNumber) {
+        setPoNumber(generateClientPoNumber());
+      }
+
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {
         try {
@@ -154,17 +282,6 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         } catch (e) {
           console.error("Failed to parse prefilled PO items", e);
         }
-      } else {
-        const saved = localStorage.getItem('draftPurchaseOrder');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed.selectedVendor) setSelectedVendor(parsed.selectedVendor);
-            if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
-          } catch (e) {
-            console.error("Failed to parse draft PO", e);
-          }
-        }
       }
 
       // Check if vendorId is in URL (e.g. redirected after creating vendor)
@@ -177,7 +294,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
               const list = res.data?.vendors || res.data || [];
               const found = list.find((v: any) => v.id === vendorIdParam);
               if (found) {
-                setSelectedVendor({
+                const mappedVendor = {
                   id: found.id,
                   name: found.name,
                   phone: found.phone || found.mobile || found.contact,
@@ -192,28 +309,79 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
                     price: sm.price,
                     name: sm.material?.name || "Material"
                   })) || []
-                });
+                };
+                setSelectedVendor(mappedVendor);
+                prevVendorIdRef.current = found.id;
               }
             }).catch(err => console.error("Failed to auto-select vendor from URL", err));
           });
+        } else {
+          prevVendorIdRef.current = draftVendorId;
         }
+      } else {
+        prevVendorIdRef.current = draftVendorId;
       }
 
       setIsLoaded(true);
     }
   }, [editId]);
 
-  // When vendor changes, automatically show materials under that vendor in the items table
+  // When vendor changes, automatically synchronize materials under that vendor in the items table
   useEffect(() => {
-    if (selectedVendor && isLoaded) {
-      // Don't wipe the table if the user has already added items manually!
-      const hasManualItems = items.some(item => item.materialId !== "");
-      if (hasManualItems) return;
+    if (!isLoaded) return;
 
+    const currentVendorId = selectedVendor?.id || null;
+    if (prevVendorIdRef.current !== undefined && prevVendorIdRef.current === currentVendorId) {
+      return;
+    }
+    prevVendorIdRef.current = currentVendorId;
+
+    // Never clobber line items the operator actually chose/edited themselves.
+    // A row only counts as "safe to replace" if it's still blank or if it was
+    // populated by this same auto-fill (never touched since) — anything else
+    // means the operator picked or edited it manually (or it arrived
+    // pre-filled from a recipe shortage) and it must survive a vendor
+    // change/selection.
+    const currentItems = itemsRef.current;
+    const hasManualItems = currentItems.some(
+      item => item.materialId && !autoFilledIdsRef.current.has(item.id)
+    );
+    if (hasManualItems) {
+      // The rows themselves stay untouched, but a vendor's negotiated rate
+      // for a material already on the order is still worth applying — this
+      // is what lets a shortage-prefilled PO (materials already chosen, no
+      // vendor yet) actually pick up real pricing the moment a vendor is
+      // selected, instead of selecting a vendor visibly doing nothing.
+      const rateByMaterial = new Map(
+        (selectedVendor?.suppliedMaterials || []).map(sm => [sm.materialId, sm.price])
+      );
+      let changed = false;
+      const updated = currentItems.map(item => {
+        const rate = item.materialId ? rateByMaterial.get(item.materialId) : undefined;
+        if (rate !== undefined && rate !== item.price) {
+          changed = true;
+          return { ...item, price: rate };
+        }
+        return item;
+      });
+      if (changed) {
+        setItems(updated);
+        setAutoFilledIds(prev => {
+          const next = new Set(prev);
+          updated.forEach(item => {
+            if (item.materialId && rateByMaterial.has(item.materialId)) next.add(item.id);
+          });
+          return next;
+        });
+      }
+      return;
+    }
+
+    if (selectedVendor) {
       if (selectedVendor.suppliedMaterials && selectedVendor.suppliedMaterials.length > 0) {
         // Deduplicate materials by materialId to prevent repeated rows
-        const uniqueMaterials = [];
-        const seen = new Set();
+        const uniqueMaterials: { materialId: string; name?: string; price: number }[] = [];
+        const seen = new Set<string>();
         for (const sm of selectedVendor.suppliedMaterials) {
           if (!seen.has(sm.materialId)) {
             seen.add(sm.materialId);
@@ -224,39 +392,25 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         const newItems = uniqueMaterials.map((sm, index) => ({
           id: (index + 1).toString(),
           materialId: sm.materialId,
-          name: sm.name || "Unknown Material",
+          name: sm.name || "Material",
           quantity: 0,
           unit: "KG",
           price: sm.price || 0,
           gstRate: 5
         }));
         setItems(newItems);
-        // Mark all as auto-filled since we got rates from vendor link
         setAutoFilledIds(new Set(newItems.map(i => i.id)));
       } else {
-        // Fallback to one empty row if no materials linked
+        // Vendor has no linked materials: reset to one blank line item
         setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }]);
         setAutoFilledIds(new Set());
       }
+    } else {
+      // Vendor was unselected/cleared: reset to one blank line item
+      setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }]);
+      setAutoFilledIds(new Set());
     }
-  }, [selectedVendor]);
-  const [useAdvance, setUseAdvance] = useState(false);
-  const [notes, setNotes] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [poNumber, setPoNumber] = useState("PO-2026-00001");
-  const [invoiceNo, setInvoiceNo] = useState("");
-  const [quotationNo, setQuotationNo] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
-  const [warehouseId, setWarehouseId] = useState("");
-  const [purchaseType, setPurchaseType] = useState("RAW_MATERIAL");
-  const [paymentTerms, setPaymentTerms] = useState("");
-  const [poStatus, setPoStatus] = useState("DRAFT");
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [freightCost, setFreightCost] = useState(0);
-  const [internalNotes, setInternalNotes] = useState("");
-  const [vendorNotes, setVendorNotes] = useState("");
+  }, [selectedVendor, isLoaded]);
 
   // Initialize dates on mount to avoid hydration mismatch
   useEffect(() => {
@@ -268,28 +422,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     setDueDate(due.toISOString().split('T')[0]);
   }, []);
 
-  // Load other draft fields from localStorage
+  // Save draft to localStorage whenever fields change (only when creating new PO)
   useEffect(() => {
-    if (isLoaded) {
-      const saved = localStorage.getItem('draftPurchaseOrder');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
-          if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
-          if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
-          if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
-          if (parsed.internalNotes) setInternalNotes(parsed.internalNotes);
-          if (parsed.vendorNotes) setVendorNotes(parsed.vendorNotes);
-        } catch (e) {}
-      }
-    }
-  }, [isLoaded]);
-
-  // Save draft to localStorage whenever fields change
-  useEffect(() => {
-    if (!isLoaded) return;
+    if (!isLoaded || editId) return;
     const draft = {
+      poNumber,
       selectedVendor,
       items,
       purchaseType,
@@ -300,7 +437,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       vendorNotes
     };
     localStorage.setItem('draftPurchaseOrder', JSON.stringify(draft));
-  }, [selectedVendor, items, purchaseType, warehouseId, expectedDeliveryDate, paymentTerms, internalNotes, vendorNotes, isLoaded]);
+  }, [poNumber, selectedVendor, items, purchaseType, warehouseId, expectedDeliveryDate, paymentTerms, internalNotes, vendorNotes, isLoaded, editId]);
 
   const addItem = () => {
     setItems(prev => [
@@ -330,24 +467,34 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   };
 
   const totals = useMemo(() => {
-    const rawSubtotal = items.reduce((acc, item) => acc + (item.quantity * item.price), 0);
-    const subtotal = Number.isFinite(rawSubtotal) && rawSubtotal >= 0 ? rawSubtotal : 0;
+    const rawSubtotal = items.reduce((acc, item) => {
+      const q = Number(item.quantity) || 0;
+      const p = Number(item.price) || 0;
+      return acc + roundMoney(q * p);
+    }, 0);
+    const subtotal = roundMoney(rawSubtotal);
 
     const parsedDiscount = Number(discountAmount);
     const validDiscount = (Number.isFinite(parsedDiscount) && parsedDiscount >= 0) 
-      ? Math.min(parsedDiscount, subtotal) 
+      ? roundMoney(Math.min(parsedDiscount, subtotal)) 
       : 0;
 
     const parsedFreight = Number(freightCost);
     const validFreight = (Number.isFinite(parsedFreight) && parsedFreight >= 0)
-      ? parsedFreight
+      ? roundMoney(parsedFreight)
       : 0;
 
-    const taxableAfterDiscount = Math.max(0, subtotal - validDiscount);
+    const taxableAfterDiscount = roundMoney(Math.max(0, subtotal - validDiscount));
     const ratio = subtotal > 0 ? taxableAfterDiscount / subtotal : 1;
 
-    const baseGst = items.reduce((acc, item) => acc + (item.quantity * item.price * (item.gstRate / 100)), 0);
-    const totalGst = validDiscount > 0 ? Math.round(baseGst * ratio * 100) / 100 : Math.round(baseGst * 100) / 100;
+    const baseGst = items.reduce((acc, item) => {
+      const q = Number(item.quantity) || 0;
+      const p = Number(item.price) || 0;
+      const g = Number(item.gstRate) || 0;
+      const lineGross = roundMoney(q * p);
+      return acc + roundMoney(lineGross * (g / 100));
+    }, 0);
+    const totalGst = roundMoney(validDiscount > 0 ? baseGst * ratio : baseGst);
     
     // CGST/SGST vs IGST split
     const vendorState = (selectedVendor?.state || "").toLowerCase().trim();
@@ -357,20 +504,20 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       vendorState !== "tamil nadu"
     );
     
-    const cgst = !isInterstate ? Math.round((totalGst / 2) * 100) / 100 : 0;
-    const sgst = !isInterstate ? Math.round((totalGst - cgst) * 100) / 100 : 0;
+    const cgst = !isInterstate ? roundMoney(totalGst / 2) : 0;
+    const sgst = !isInterstate ? roundMoney(totalGst - cgst) : 0;
     const igst = isInterstate ? totalGst : 0;
     
-    const grandTotal = Math.max(0, taxableAfterDiscount + totalGst + validFreight);
-    const roundoff = Math.round(grandTotal) - grandTotal;
-    const finalTotal = Math.max(0, grandTotal + roundoff);
+    const grandTotalBeforeRound = roundMoney(taxableAfterDiscount + totalGst + validFreight);
+    const roundoff = roundMoney(Math.round(grandTotalBeforeRound) - grandTotalBeforeRound);
+    const finalTotal = roundMoney(grandTotalBeforeRound + roundoff);
 
     let appliedAdvance = 0;
     if (useAdvance && selectedVendor && selectedVendor.advanceBalance > 0) {
-      appliedAdvance = Math.min(selectedVendor.advanceBalance, finalTotal);
+      appliedAdvance = roundMoney(Math.min(selectedVendor.advanceBalance, finalTotal));
     }
     
-    const balanceDue = Math.max(0, finalTotal - appliedAdvance);
+    const balanceDue = roundMoney(Math.max(0, finalTotal - appliedAdvance));
     
     return {
       subtotal,
@@ -379,8 +526,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       cgst,
       sgst,
       igst,
-      discountAmount,
-      freightCost,
+      discountAmount: validDiscount,
+      freightCost: validFreight,
       roundoff,
       total: finalTotal,
       appliedAdvance,
@@ -390,7 +537,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
 
   const errors = useMemo(() => {
     const errs: string[] = [];
-    if (!selectedVendor) errs.push("Please select a vendor");
+    if (!selectedVendor) {
+      errs.push("Please select a vendor");
+    } else if (selectedVendor.status && selectedVendor.status !== 'ACTIVE') {
+      errs.push("This vendor is blocked and cannot be used for Purchase Orders.");
+    }
     if (!expectedDeliveryDate) errs.push("Expected delivery date is mandatory");
     if (items.length === 0 || (items.length === 1 && !items[0].materialId && items[0].quantity === 0)) {
         errs.push("Please add at least one item");
