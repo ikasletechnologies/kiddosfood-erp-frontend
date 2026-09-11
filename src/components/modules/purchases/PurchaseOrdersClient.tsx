@@ -120,7 +120,7 @@ export default function PurchaseOrdersClient() {
     confirmText: "Confirm",
     confirmStyle: "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20",
     icon: AlertCircle,
-    onConfirm: () => {}
+    onConfirm: () => { }
   });
 
   const closeConfirm = () => setConfirmConfig({ ...confirmConfig, isOpen: false });
@@ -260,7 +260,7 @@ export default function PurchaseOrdersClient() {
     setConfirmConfig({
       isOpen: true,
       title: "Approve Purchase Order",
-      message: "Are you sure you want to approve this purchase order? Once approved, it can be sent to the vendor.",
+      message: "Are you sure you want to approve this purchase order?",
       confirmText: "Approve PO",
       confirmStyle: "bg-[#f58220] hover:bg-[#e8740e] shadow-[#f58220]/20 text-white",
       icon: CheckCircle2,
@@ -437,10 +437,10 @@ export default function PurchaseOrdersClient() {
               className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                onClick={() => setSearch("")}
               />
             )}
           </div>
@@ -797,7 +797,7 @@ export default function PurchaseOrdersClient() {
               <div className="flex items-center gap-3">
                 <ShoppingCart className="h-5 w-5 text-[#f58220]" />
                 <h2 className="text-base font-semibold text-gray-800 dark:text-white">
-                  Purchase Order <span className="text-gray-400 dark:text-slate-500 font-normal ml-1">#{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0,8)}</span>
+                  Purchase Order <span className="text-gray-400 dark:text-slate-500 font-normal ml-1">#{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0, 8)}</span>
                 </h2>
                 {viewingDetailsPO.vendor?.name && (
                   <span className="text-xs font-medium bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 px-2.5 py-1 rounded-md ml-2">
@@ -834,27 +834,27 @@ export default function PurchaseOrdersClient() {
                     <div>
                       <h2 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tight mb-1">Purchase Order</h2>
                       <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{viewingDetailsPO.poNumber || viewingDetailsPO.id.substring(0, 8)}</p>
-                      
+
                       <div className="mt-6 space-y-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</p>
-                        <span className={clsx("inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider", 
-                          viewingDetailsPO.status === 'COMPLETED' ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" : 
-                          viewingDetailsPO.status === 'PENDING_APPROVAL' ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" : 
-                          "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300"
+                        <span className={clsx("inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider",
+                          viewingDetailsPO.status === 'COMPLETED' ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400" :
+                            viewingDetailsPO.status === 'PENDING_APPROVAL' ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" :
+                              "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                         )}>
                           {viewingDetailsPO.status?.replace(/_/g, ' ')}
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="text-right">
                       <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
                         <div className="text-slate-500 dark:text-slate-400 font-medium">PO Date:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.createdAt)}</div>
-                        
+
                         <div className="text-slate-500 dark:text-slate-400 font-medium">Expected Delivery:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.expectedDeliveryDate)}</div>
-                        
+
                         <div className="text-slate-500 dark:text-slate-400 font-medium">Payment Terms:</div>
                         <div className="font-bold text-slate-800 dark:text-white">{formatPaymentTerms(viewingDetailsPO.paymentTerms)}</div>
                       </div>
@@ -866,12 +866,12 @@ export default function PurchaseOrdersClient() {
                     <div>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Vendor Details</h3>
                       <p className="text-sm font-bold text-slate-800 dark:text-white mb-2.5">
-                        {viewingDetailsPO.vendor?.name || "Not provided"} 
+                        {viewingDetailsPO.vendor?.name || "Not provided"}
                         {viewingDetailsPO.vendor?.vendorCode && (
                           <span className="text-slate-400 font-mono font-medium ml-1.5">({viewingDetailsPO.vendor.vendorCode})</span>
                         )}
                       </p>
-                      
+
                       <div className="space-y-1.5 text-xs">
                         <div className="flex items-center gap-2">
                           <span className="text-slate-400 dark:text-slate-500 font-medium w-16 shrink-0">Phone:</span>
@@ -904,7 +904,7 @@ export default function PurchaseOrdersClient() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div>
                       <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Delivery Destination</h3>
                       <p className="text-sm font-bold text-slate-800 dark:text-white mb-1">
@@ -923,7 +923,7 @@ export default function PurchaseOrdersClient() {
                   {/* Financial Summary */}
                   <div className="p-8 bg-slate-50/30 dark:bg-white/[0.01]">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Financial Summary</h3>
-                    
+
                     <div className="flex flex-col md:flex-row justify-end items-start gap-12">
                       <div className="flex-1 w-full max-w-md">
                         {/* Notes & Terms */}
@@ -933,26 +933,26 @@ export default function PurchaseOrdersClient() {
                           viewingDetailsPO.vendorNotes ||
                           viewingDetailsPO.deliveryInstructions
                         ) && (
-                          <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes &amp; Terms</h3>
-                            {(viewingDetailsPO.internalNotes || viewingDetailsPO.notes) && (
-                              <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Internal Remarks</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
-                                  {viewingDetailsPO.internalNotes || viewingDetailsPO.notes}
-                                </p>
-                              </div>
-                            )}
-                            {(viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions) && (
-                              <div>
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Supplier Instructions</p>
-                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
-                                  {viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                            <div className="space-y-4">
+                              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notes &amp; Terms</h3>
+                              {(viewingDetailsPO.internalNotes || viewingDetailsPO.notes) && (
+                                <div>
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Internal Remarks</p>
+                                  <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
+                                    {viewingDetailsPO.internalNotes || viewingDetailsPO.notes}
+                                  </p>
+                                </div>
+                              )}
+                              {(viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions) && (
+                                <div>
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Supplier Instructions</p>
+                                  <p className="text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 p-3 rounded-lg whitespace-pre-wrap">
+                                    {viewingDetailsPO.vendorNotes || viewingDetailsPO.deliveryInstructions}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
                       </div>
 
                       <div className="w-full md:w-72 space-y-3">
@@ -1211,10 +1211,10 @@ export default function PurchaseOrdersClient() {
                                 <span className="text-rose-500 italic font-medium">Update Warehouse</span>
                               )}</td>
                               <td className="px-4 py-3 text-xs">
-                                <span className={clsx("inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider", 
-                                  grn.status === 'COMPLETED' ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40" : 
-                                  grn.status === 'PENDING_INSPECTION' ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/40" : 
-                                  "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10"
+                                <span className={clsx("inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider",
+                                  grn.status === 'COMPLETED' ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40" :
+                                    grn.status === 'PENDING_INSPECTION' ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/40" :
+                                      "bg-slate-50 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10"
                                 )}>
                                   {grn.status?.replace(/_/g, ' ')}
                                 </span>
@@ -1279,8 +1279,8 @@ export default function PurchaseOrdersClient() {
             confirmConfig.confirmStyle?.includes("rose")
               ? "bg-rose-50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/30 text-rose-500"
               : confirmConfig.confirmStyle?.includes("emerald")
-              ? "bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 text-emerald-500"
-              : "bg-orange-50 border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 text-[#f58220]"
+                ? "bg-emerald-50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/30 text-emerald-500"
+                : "bg-orange-50 border-orange-100 dark:bg-orange-950/20 dark:border-orange-900/30 text-[#f58220]"
           )}>
             {confirmConfig.icon && <confirmConfig.icon size={28} />}
           </div>
@@ -1292,7 +1292,7 @@ export default function PurchaseOrdersClient() {
           <button onClick={closeConfirm} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl transition-colors">
             Cancel
           </button>
-          <button 
+          <button
             onClick={confirmConfig.onConfirm}
             className={clsx("flex-[2] py-4 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all", confirmConfig.confirmStyle)}
           >
