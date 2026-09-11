@@ -9,3 +9,4 @@ export * from './user.api';
 export * from './dashboard.api';
 export * from './warehouse.api';
 export * from './setup.api';
+export * from './gst.api';

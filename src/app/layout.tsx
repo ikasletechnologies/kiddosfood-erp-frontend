@@ -8,12 +8,12 @@ import { NotificationProvider } from "@/context/NotificationContext";
 import AppShell from "@/components/layout/AppShell";
 import { Toaster } from "react-hot-toast";
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ["latin"],
   weight: ['300', '400', '500', '600', '700', '800', '900'],
   variable: '--font-sans'
 });
-
+//
 export const metadata: Metadata = {
   title: "Kiddos Food ERP | Business Management",
   description: "Enterprise Resource Planning by Kiddos Food — manage sales, purchases, accounting and more",

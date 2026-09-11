@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { X, Loader2, User, Phone, Mail, MapPin, Tag, ShieldCheck } from "lucide-react";
-import { vendorsApi } from "@/lib/api";
+import { vendorsApi, gstApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
 interface VendorFormModalProps {
@@ -31,7 +31,7 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
 
   if (!isOpen) return null;
 
-  // Auto-fetch GST details from Next.js server-side route
+  // Auto-fetch GST details via our backend, which proxies GSTVerify and caches results
   const fetchGstDetails = async (gstin: string) => {
     const cleanGst = gstin.trim().toUpperCase();
     // Standard 15-character GSTIN regex validation
@@ -41,27 +41,18 @@ export default function VendorFormModal({ isOpen, onClose, onSuccess }: VendorFo
 
     setFetchingGst(true);
     try {
-      const res = await fetch(`/api/gst-verify/${cleanGst}`);
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || "Failed to fetch GST details");
-      }
-      
-      const data = await res.json();
+      const { data } = await gstApi.verify(cleanGst);
       if (data.success) {
         setForm((prev) => ({
           ...prev,
           name: data.legalName || prev.name,
           address: data.address || prev.address
         }));
-        showToast(
-          `Successfully auto-filled details for "${data.legalName}"${data.mocked ? " (Demo Mode)" : ""}`,
-          "success"
-        );
+        showToast(`Successfully auto-filled details for "${data.legalName}"`, "success");
       }
     } catch (err: any) {
       console.error("Auto-fetch GST details failed:", err);
-      showToast(err.message || "Could not auto-fetch GST details. Please enter manually.", "warning");
+      showToast(err.response?.data?.error || "Could not auto-fetch GST details. Please enter manually.", "warning");
     } finally {
       setFetchingGst(false);
     }
