@@ -859,19 +859,9 @@ export default function VendorsClient() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
-          <button
-            onClick={() => importFileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap"
-            title="Import Vendors from Excel"
-          >
-            <Upload className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">Import</span>
-          </button>
-
           <button
             onClick={handleDownloadAllPartiesReport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap cursor-pointer"
             title="Export All Vendors to Excel"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
