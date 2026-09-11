@@ -41,15 +41,7 @@ export default function CompleteStep({
   const { refreshSetupStatus } = useAuth();
   const router = useRouter();
 
-  // HQ + warehouse already exist on the backend by the time this screen
-  // renders, but AuthContext's setupStatus is only refetched on "Continue
-  // to ERP" (handleFinish) or a next-step click below. Until then it's
-  // still stale/uninitialized, and AppShell force-redirects to /setup on
-  // any other route. Refresh as soon as we mount so the guard clears early.
-  useEffect(() => {
-    refreshSetupStatus();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   const handleFinish = async () => {
     setFinishing(true);

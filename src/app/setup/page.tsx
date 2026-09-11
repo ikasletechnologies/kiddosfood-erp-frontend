@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import WelcomeStep from "./components/WelcomeStep";
@@ -24,6 +24,13 @@ export interface CreatedWarehouse {
 export default function SetupWizardPage() {
   const { setupStatus, refreshSetupStatus } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    if (setupStatus?.initialized) {
+      router.replace("/");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [step, setStep] = useState<SetupStep>("welcome");
   const [hq, setHq] = useState<CreatedHq | null>(setupStatus?.hq ?? null);

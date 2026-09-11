@@ -60,10 +60,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         router.replace(SETUP_PATH);
         return;
       }
-      if (setupStatus.initialized && isSetupPath) {
-        router.replace("/");
-        return;
-      }
     }
 
     if (pathname === "/" && role === "FRANCHISE_ADMIN") {
