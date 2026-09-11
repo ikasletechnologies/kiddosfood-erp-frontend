@@ -95,6 +95,18 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
   useEffect(() => setMounted(true), []);
   const docRef = useRef<HTMLDivElement>(null);
   const [generating, setGenerating] = useState<'download' | 'share' | null>(null);
+  const [canShareFiles, setCanShareFiles] = useState(false);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && 'canShare' in navigator) {
+      try {
+        const dummyFile = new File([''], 'test.pdf', { type: 'application/pdf' });
+        setCanShareFiles((navigator as any).canShare({ files: [dummyFile] }));
+      } catch (e) {
+        setCanShareFiles(false);
+      }
+    }
+  }, []);
 
   const { title: docTitle, numberLabel, dueDateLabel } = DOCUMENT_LABELS[documentType];
 
@@ -281,13 +293,15 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
         >
           {generating === 'download' ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} <span>Download</span>
         </button>
-        <button
-          onClick={handleShare}
-          disabled={generating !== null}
-          className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
-        >
-          {generating === 'share' ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />} <span>Share</span>
-        </button>
+        {canShareFiles && (
+          <button
+            onClick={handleShare}
+            disabled={generating !== null}
+            className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors disabled:opacity-60"
+          >
+            {generating === 'share' ? <Loader2 size={15} className="animate-spin" /> : <Share2 size={15} />} <span>Share</span>
+          </button>
+        )}
         <button
           onClick={onClose}
           className="flex items-center gap-1.5 sm:gap-2 bg-white text-gray-700 px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow hover:bg-gray-50 transition-colors"
