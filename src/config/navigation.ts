@@ -4,7 +4,6 @@ import {
   Package,
   AlertTriangle,
   Users,
-  BarChart3,
   FileText,
   Settings,
   ClipboardList,
@@ -176,6 +175,12 @@ const REPORT_GROUPS: { icon: any; label: string; items: { label: string; href: s
     ],
   },
 ];
+
+// Franchise REPORTS mirrors HQ's REPORT_GROUPS, minus the two groups that are
+// intentionally HQ-only (franchise-wide rollups / loans aren't branch-level data).
+const FRANCHISE_REPORT_GROUPS = REPORT_GROUPS.filter(
+  (g) => g.label !== "Franchise Reports" && g.label !== "Loan Account Reports"
+);
 
 // ─── SUPER_ADMIN (HQ CONTROL CENTER) ──────────────────────────────────────────
 export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
@@ -573,6 +578,9 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
 ];
 
 // ─── FRANCHISE_ADMIN (BRANCH OPERATOR) ────────────────────────────────────────
+// Mirrors the HQ module's structure/functionality wherever the workflow spec
+// calls for it (Wholesale & Dispatch, Financial, Reports), but every route here
+// is franchise-scoped data — it never reads or writes HQ-wide records.
 export const franchiseMenuSections: MenuSection[] = [
   {
     title: "DASHBOARD",
@@ -584,33 +592,11 @@ export const franchiseMenuSections: MenuSection[] = [
         roles: FRANCHISE_ONLY,
       },
       {
-        icon: BarChart3,
-        label: "Branch Reports",
-        href: "/reports",
+        icon: Warehouse,
+        label: "Manage Warehouse",
+        href: "/warehouse/manage",
         roles: FRANCHISE_ONLY,
       },
-    ],
-  },
-  {
-    title: "POS",
-    items: [
-      {
-        icon: ShoppingCart,
-        label: "New Invoice",
-        href: "/pos",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: FileText,
-        label: "Settlement",
-        href: "/pos/settlement",
-        roles: FRANCHISE_ONLY,
-      },
-    ],
-  },
-  {
-    title: "WAREHOUSE",
-    items: [
       {
         icon: Building2,
         label: "Warehouse",
@@ -623,6 +609,12 @@ export const franchiseMenuSections: MenuSection[] = [
     title: "INVENTORY",
     items: [
       {
+        icon: Building2,
+        label: "Warehouse",
+        href: "/warehouse",
+        roles: FRANCHISE_ONLY,
+      },
+      {
         icon: Package,
         label: "Product Inventory",
         href: "/franchise/stock",
@@ -630,7 +622,7 @@ export const franchiseMenuSections: MenuSection[] = [
       },
       {
         icon: AlertTriangle,
-        label: "Low Stock Alerts",
+        label: "Low Stock Alert",
         href: "/alerts",
         roles: FRANCHISE_ONLY,
       },
@@ -639,6 +631,58 @@ export const franchiseMenuSections: MenuSection[] = [
         label: "Expiry Tracking",
         href: "/inventory/expiry-tracking",
         roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "POS",
+    items: [
+      {
+        icon: Store,
+        label: "Counter Billing",
+        href: "/pos",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Undo2,
+        label: "Returns",
+        href: "/sales/returns",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Clock,
+        label: "Day Closing",
+        href: "/pos/settlement",
+        roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
+    title: "WHOLESALE & DISPATCH",
+    items: [
+      {
+        icon: ShoppingCart,
+        label: "Wholesale",
+        href: "/sales/estimation",
+        roles: FRANCHISE_ONLY,
+        children: [
+          { label: "Estimate", href: "/sales/estimation" },
+          { label: "Sales Orders", href: "/sales/orders" },
+          { label: "Proforma Invoice", href: "/sales/proforma-invoice" },
+          { label: "Sale Invoice", href: "/sales/invoices" },
+          { label: "Payments", href: "/sales/payment-in" },
+        ],
+      },
+      {
+        icon: Truck,
+        label: "Dispatch",
+        href: "/sales/delivery-challan",
+        roles: FRANCHISE_ONLY,
+        children: [
+          { label: "Delivery Challan", href: "/sales/delivery-challan" },
+          { label: "Transit Stock", href: "/dispatch/transit-stock" },
+          { label: "Dispatch Tracking", href: "/delivery" },
+        ],
       },
     ],
   },
@@ -659,30 +703,7 @@ export const franchiseMenuSections: MenuSection[] = [
       },
       {
         icon: Landmark,
-        label: "Supplier Ledger (HQ)",
-        href: "/franchise/supplier-ledger",
-        roles: FRANCHISE_ONLY,
-      },
-    ],
-  },
-  {
-    title: "FINANCE",
-    items: [
-      {
-        icon: Landmark,
-        label: "Bank Accounts",
-        href: "/franchise/bank-accounts",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: CreditCard,
-        label: "Settlement",
-        href: "/franchise/payments",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: TrendingUp,
-        label: "Outstanding",
+        label: "Supplier Ledger",
         href: "/franchise/supplier-ledger",
         roles: FRANCHISE_ONLY,
       },
@@ -692,35 +713,63 @@ export const franchiseMenuSections: MenuSection[] = [
     title: "PARTNERS",
     items: [
       {
-        icon: Users,
+        icon: Store,
         label: "Dealers",
         href: "/franchise/dealers",
         roles: FRANCHISE_ONLY,
       },
       {
-        icon: User,
-        label: "Parties",
+        icon: Users,
+        label: "Customers",
         href: "/customers",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: Undo2,
-        label: "Returns",
-        href: "/sales/returns",
         roles: FRANCHISE_ONLY,
       },
     ],
   },
   {
-    title: "APPROVALS",
+    title: "FINANCIAL",
     items: [
       {
-        icon: UserCheck,
-        label: "Approval Workflows",
-        href: "/admin/approvals",
+        icon: Wallet,
+        label: "Cash Flow",
+        href: "/accounting/cash-flow",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Landmark,
+        label: "Receivables",
+        href: "/accounting/receivables",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Landmark,
+        label: "Payables",
+        href: "/accounting/payables",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: TrendingUp,
+        label: "Expenses",
+        href: "/accounting/expenses",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Landmark,
+        label: "Bank Accounts",
+        href: "/franchise/bank-accounts",
         roles: FRANCHISE_ONLY,
       },
     ],
+  },
+  {
+    title: "REPORTS",
+    items: FRANCHISE_REPORT_GROUPS.map((g) => ({
+      icon: g.icon,
+      label: g.label,
+      href: g.items[0].href,
+      roles: FRANCHISE_ONLY,
+      children: g.items,
+    })),
   },
   {
     title: "SETTINGS",
