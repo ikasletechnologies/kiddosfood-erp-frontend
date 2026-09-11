@@ -7,7 +7,7 @@ import {
   Download,
   Info,
   Package,
-  CircleDollarSign,
+  IndianRupee,
   Columns,
   Loader2
 } from "lucide-react";
@@ -107,7 +107,7 @@ export default function StockValueReport() {
               </div>
               <div className="flex items-center gap-4">
                  <div className="w-12 h-12 bg-orange-50 dark:bg-orange-900/20 rounded-full flex items-center justify-center text-orange-500">
-                    <CircleDollarSign size={24} />
+                    <IndianRupee size={24} />
                  </div>
                  <div>
                     <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#666]">

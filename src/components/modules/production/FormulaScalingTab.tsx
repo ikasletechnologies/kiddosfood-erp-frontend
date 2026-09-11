@@ -182,7 +182,10 @@ export default function FormulaScalingTab() {
         .filter((item) => item.shortage > 0);
 
       sessionStorage.setItem('prefilledPoItems', JSON.stringify(shortageItems));
-      router.push('/purchases/new');
+      // Full navigation, not router.push — see production/page.tsx's identical
+      // handler for why (Next's router cache can reuse an already-mounted New
+      // PO page instance and skip the sessionStorage read entirely).
+      window.location.href = '/purchases/new';
       return;
     }
     if (!selectedWarehouseId) {

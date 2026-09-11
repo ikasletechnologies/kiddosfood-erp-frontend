@@ -8,7 +8,7 @@ import {
   Plus as PlusIcon,
   ChevronDown as ChevronDownIcon,
   X as XIcon,
-  DollarSign as DollarSignIcon,
+  IndianRupee as IndianRupeeIcon,
   FileText as FileTextIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";

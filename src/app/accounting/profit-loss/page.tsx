@@ -13,7 +13,7 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  DollarSign,
+  IndianRupee,
   X,
   PieChart
 } from 'lucide-react';
@@ -584,7 +584,7 @@ export default function ProfitLossPage() {
                   "p-2 rounded-lg shrink-0",
                   netProfit >= 0 ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600" : "bg-rose-50 dark:bg-rose-500/10 text-rose-600"
                 )}>
-                  <DollarSign className="h-4 w-4" />
+                  <IndianRupee className="h-4 w-4" />
                 </div>
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">

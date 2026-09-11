@@ -50,6 +50,22 @@ const STATUS_ICONS: Record<string, any> = {
   CANCELLED: XCircle,
 };
 
+const PAYMENT_TERMS_LABELS: Record<string, string> = {
+  IMMEDIATE: "Immediate",
+  ADVANCE_100: "Advance Payment (100%)",
+  ADVANCE_PARTIAL: "Advance Payment (Partial)",
+  NET_7: "Net 7 Days",
+  NET_15: "Net 15 Days",
+  NET_30: "Net 30 Days",
+  NET_45: "Net 45 Days",
+  NET_60: "Net 60 Days",
+};
+
+function formatPaymentTerms(paymentTerms?: string | null): string {
+  if (!paymentTerms) return "Immediate";
+  return PAYMENT_TERMS_LABELS[paymentTerms] || paymentTerms;
+}
+
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
   gstin: "",
@@ -840,7 +856,7 @@ export default function PurchaseOrdersClient() {
                         <div className="font-bold text-slate-800 dark:text-white">{formatDate(viewingDetailsPO.expectedDeliveryDate)}</div>
                         
                         <div className="text-slate-500 dark:text-slate-400 font-medium">Payment Terms:</div>
-                        <div className="font-bold text-slate-800 dark:text-white">{viewingDetailsPO.vendor?.paymentTerms || "Immediate"}</div>
+                        <div className="font-bold text-slate-800 dark:text-white">{formatPaymentTerms(viewingDetailsPO.paymentTerms)}</div>
                       </div>
                     </div>
                   </div>

@@ -10,7 +10,7 @@ import {
   Search,
   Undo2,
   ArrowUpRight,
-  DollarSign,
+  IndianRupee,
   Calendar,
   X,
   RotateCcw,
@@ -410,7 +410,7 @@ export default function GSTR1Page() {
               Taxable Value
             </span>
             <div className="p-2 rounded-xl bg-orange-50 dark:bg-orange-500/10 text-[#f58220] print:hidden">
-              <DollarSign size={16} />
+              <IndianRupee size={16} />
             </div>
           </div>
           <p className="text-lg sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-2 print:text-base">

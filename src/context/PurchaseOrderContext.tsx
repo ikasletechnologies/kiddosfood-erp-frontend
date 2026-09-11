@@ -339,13 +339,43 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     // Never clobber line items the operator actually chose/edited themselves.
     // A row only counts as "safe to replace" if it's still blank or if it was
     // populated by this same auto-fill (never touched since) — anything else
-    // means the operator picked or edited it manually and it must survive a
-    // vendor change/selection.
+    // means the operator picked or edited it manually (or it arrived
+    // pre-filled from a recipe shortage) and it must survive a vendor
+    // change/selection.
     const currentItems = itemsRef.current;
     const hasManualItems = currentItems.some(
       item => item.materialId && !autoFilledIdsRef.current.has(item.id)
     );
-    if (hasManualItems) return;
+    if (hasManualItems) {
+      // The rows themselves stay untouched, but a vendor's negotiated rate
+      // for a material already on the order is still worth applying — this
+      // is what lets a shortage-prefilled PO (materials already chosen, no
+      // vendor yet) actually pick up real pricing the moment a vendor is
+      // selected, instead of selecting a vendor visibly doing nothing.
+      const rateByMaterial = new Map(
+        (selectedVendor?.suppliedMaterials || []).map(sm => [sm.materialId, sm.price])
+      );
+      let changed = false;
+      const updated = currentItems.map(item => {
+        const rate = item.materialId ? rateByMaterial.get(item.materialId) : undefined;
+        if (rate !== undefined && rate !== item.price) {
+          changed = true;
+          return { ...item, price: rate };
+        }
+        return item;
+      });
+      if (changed) {
+        setItems(updated);
+        setAutoFilledIds(prev => {
+          const next = new Set(prev);
+          updated.forEach(item => {
+            if (item.materialId && rateByMaterial.has(item.materialId)) next.add(item.id);
+          });
+          return next;
+        });
+      }
+      return;
+    }
 
     if (selectedVendor) {
       if (selectedVendor.suppliedMaterials && selectedVendor.suppliedMaterials.length > 0) {

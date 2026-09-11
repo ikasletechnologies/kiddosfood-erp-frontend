@@ -6,7 +6,7 @@ import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2,
   ChevronRight, Printer, FileSpreadsheet, Check,
   CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X,
-  Store, AlertCircle, Calendar, Hash, Tag, DollarSign } from "lucide-react";
+  Store, AlertCircle, Calendar, Hash, Tag, IndianRupee } from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";

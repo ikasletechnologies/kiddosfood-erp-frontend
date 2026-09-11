@@ -10,7 +10,7 @@ import {
   Phone as PhoneIcon, 
   Mail, 
   User as UserIcon, 
-  DollarSign, 
+  IndianRupee, 
   Wallet, 
   CreditCard,
   Lock,

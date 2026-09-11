@@ -363,18 +363,18 @@ export default function PurchaseBillsPage() {
            }
            setSourcePoId(grn.poId);
            setSourceGrnId(grn.id);
-            if (grn.items && grn.items.length > 0) {
-               let poItems: any[] = [];
-               try {
-                  if (typeof grn.procurementOrder?.items === 'string') {
-                     poItems = JSON.parse(grn.procurementOrder.items);
-                  } else if (Array.isArray(grn.procurementOrder?.items)) {
-                     poItems = grn.procurementOrder.items;
-                  } else if (Array.isArray(grn.procurementOrder?.poItems)) {
-                     poItems = grn.procurementOrder.poItems;
-                  }
-               } catch(e) {}
+            let poItems: any[] = [];
+            try {
+               if (typeof grn.procurementOrder?.items === 'string') {
+                  poItems = JSON.parse(grn.procurementOrder.items);
+               } else if (Array.isArray(grn.procurementOrder?.items)) {
+                  poItems = grn.procurementOrder.items;
+               } else if (Array.isArray(grn.procurementOrder?.poItems)) {
+                  poItems = grn.procurementOrder.poItems;
+               }
+            } catch(e) {}
 
+            if (grn.items && grn.items.length > 0) {
                const newItems = grn.items.map((item: any) => {
                   let rate = item.gstRate || 0;
                   if (rate === 0 && poItems.length > 0) {
@@ -405,14 +405,20 @@ export default function PurchaseBillsPage() {
             let poFreight = Number(grn.procurementOrder?.freightCost) || Number(grn.freightCost) || 0;
 
             const poSubtotal = Number(grn.procurementOrder?.subtotal) || 0;
-            const acceptedSubtotal = (grn.items || []).reduce((acc: number, it: any) => {
+            // Priced at the PO's own rate, not the (possibly overridden) actual
+            // received price — otherwise a price override alone shifts this
+            // ratio and scales the PO's discount up or down with it, even
+            // though nothing about how much was actually fulfilled changed.
+            const acceptedValueAtPoPrice = (grn.items || []).reduce((acc: number, it: any) => {
               const qty = Number(it.acceptedQty ?? it.quantity ?? 0);
-              const price = Number(it.price ?? 0);
+              const matId = it.materialId || it.inventoryItemId;
+              const poItem = poItems.find((pi: any) => (pi.inventoryItemId === matId || pi.id === matId));
+              const price = Number(poItem?.price ?? it.price ?? 0);
               return acc + (qty * price);
             }, 0);
 
-            if (poSubtotal > 0 && acceptedSubtotal > 0 && acceptedSubtotal < poSubtotal) {
-              const ratio = acceptedSubtotal / poSubtotal;
+            if (poSubtotal > 0 && acceptedValueAtPoPrice > 0 && acceptedValueAtPoPrice < poSubtotal) {
+              const ratio = acceptedValueAtPoPrice / poSubtotal;
               poDiscount = parseFloat((poDiscount * ratio).toFixed(2));
               poFreight = parseFloat((poFreight * ratio).toFixed(2));
             }
@@ -512,10 +518,16 @@ export default function PurchaseBillsPage() {
   // Computed
   const rowData = items.map(item => ({ item, ...computeRow(item, priceMode) }));
   const subtotal = parseFloat(rowData.reduce((s, r) => s + r.base, 0).toFixed(2));
-  const totalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
+  const rawTotalTax = parseFloat(rowData.reduce((s, r) => s + r.taxAmt, 0).toFixed(2));
   const safeDiscount = Math.min(Math.max(0, Number(discount) || 0), subtotal);
   const safeFreight = Math.max(0, Number(freight) || 0);
-  const netAmount = Math.max(0, parseFloat((subtotal + totalTax - safeDiscount + safeFreight).toFixed(2)));
+  // A discount reduces the taxable value, so GST must be recalculated on the
+  // discounted amount — not charged in full and then subtracted afterward,
+  // which overstates tax the same way the Purchase Order form used to before
+  // it was fixed to apply the discount ratio to GST as well.
+  const discountRatio = subtotal > 0 ? Math.max(0, subtotal - safeDiscount) / subtotal : 1;
+  const totalTax = safeDiscount > 0 ? parseFloat((rawTotalTax * discountRatio).toFixed(2)) : rawTotalTax;
+  const netAmount = Math.max(0, parseFloat((subtotal - safeDiscount + totalTax + safeFreight).toFixed(2)));
   const roundOff = roundOffEnabled ? parseFloat((Math.round(netAmount) - netAmount).toFixed(2)) : 0;
   const finalTotal = parseFloat((netAmount + roundOff).toFixed(2));
 

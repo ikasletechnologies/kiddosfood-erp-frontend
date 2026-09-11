@@ -8,7 +8,7 @@ import {
   Printer,
   Package,
   Search,
-  DollarSign,
+  IndianRupee,
   Receipt,
   Calendar,
   X,
@@ -315,7 +315,7 @@ export default function HsnSummaryPage() {
               Taxable Value
             </span>
             <div className="p-2 rounded-xl bg-orange-50 dark:bg-orange-500/10 text-[#f58220] print:hidden">
-              <DollarSign size={16} />
+              <IndianRupee size={16} />
             </div>
           </div>
           <p className="text-lg sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-2 print:text-base">
@@ -343,7 +343,7 @@ export default function HsnSummaryPage() {
               Total Value
             </span>
             <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 print:hidden">
-              <DollarSign size={16} />
+              <IndianRupee size={16} />
             </div>
           </div>
           <p className="text-lg sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-2 print:text-base">

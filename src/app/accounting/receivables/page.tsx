@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Wallet, Search, RefreshCw, Filter, ArrowUpRight, ArrowDownRight,
   Clock, AlertCircle, CheckCircle2, User, FileText, ChevronDown,
-  Calendar, FileSpreadsheet, Printer, X, Eye, DollarSign,
+  Calendar, FileSpreadsheet, Printer, X, Eye, IndianRupee,
   Building2, Smartphone, CreditCard, ChevronRight, Layers,
   Phone, Mail, MapPin, Receipt, ArrowRight
 } from "lucide-react";
@@ -961,7 +961,7 @@ export default function ReceivablesPage() {
                               onClick={() => handleOpenPayment(inv)}
                               className="px-2.5 py-1 bg-[#f58220] hover:bg-[#e0751a] text-white text-[11px] font-bold rounded-lg transition-all shadow-2xs cursor-pointer inline-flex items-center gap-1"
                             >
-                              <DollarSign size={12} />
+                              <IndianRupee size={12} />
                               <span>Collect</span>
                             </button>
                           )}
@@ -1038,7 +1038,7 @@ export default function ReceivablesPage() {
                         onClick={() => handleOpenPayment(inv)}
                         className="px-3.5 py-1.5 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1"
                       >
-                        <DollarSign size={13} />
+                        <IndianRupee size={13} />
                         <span>Collect Payment</span>
                       </button>
                     )}
@@ -1236,7 +1236,7 @@ export default function ReceivablesPage() {
                   }}
                   className="px-4 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white text-xs font-bold rounded-xl shadow-2xs transition-all cursor-pointer inline-flex items-center gap-1.5"
                 >
-                  <DollarSign size={14} />
+                  <IndianRupee size={14} />
                   <span>Collect Payment</span>
                 </button>
               )}
@@ -1252,7 +1252,7 @@ export default function ReceivablesPage() {
             <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.01]">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-lg">
-                  <DollarSign size={18} />
+                  <IndianRupee size={18} />
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white">Collect Payment</h3>

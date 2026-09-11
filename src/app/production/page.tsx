@@ -372,7 +372,12 @@ function ProductionPlanningContent() {
         .filter((item) => item.shortage > 0);
 
       sessionStorage.setItem("prefilledPoItems", JSON.stringify(shortageItems));
-      router.push("/purchases/new");
+      // A full navigation, not router.push — the New PO page only reads this
+      // sessionStorage flag in its mount effect, and Next's client-side router
+      // cache can reuse an already-mounted instance of that page from an
+      // earlier visit (well within its default staleTime), silently skipping
+      // that read and leaving the page on whatever stale state it already had.
+      window.location.href = "/purchases/new";
       return;
     }
     if (!selectedWarehouseId) {
