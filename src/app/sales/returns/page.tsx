@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Plus, Search, RefreshCw, ArrowLeft, Trash2,
+import {
+  Plus, Search, RefreshCw, ArrowLeft, Trash2,
   User, Building2, AlertTriangle, Receipt, Undo2,
   ChevronRight, Printer, FileSpreadsheet, Check,
   CheckCircle2, XCircle, Sparkles, ShoppingBag, Clock, X,
-  Store, AlertCircle, Calendar, Hash, Tag, IndianRupee, ShieldAlert } from "lucide-react";
+  Store, AlertCircle, Calendar, Hash, Tag, IndianRupee, ShieldAlert
+} from "lucide-react";
 import { salesApi, franchiseApi, customersApi, franchiseOrdersApi, settingsApi, posApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { clsx } from "clsx";
@@ -66,11 +68,11 @@ interface ReturnOrder {
 }
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  PENDING:   { label: "Pending Approval", color: "text-[#f58220]",  bg: "bg-orange-50 dark:bg-orange-500/10",  border: "border-orange-200 dark:border-orange-500/20" },
-  APPROVED:  { label: "Approved",         color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
+  PENDING: { label: "Pending Approval", color: "text-[#f58220]", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
+  APPROVED: { label: "Approved", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   COMPLETED: { label: "Refund Processed", color: "text-emerald-600 dark:text-emerald-400 font-bold", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
-  REJECTED:  { label: "Rejected",         color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
-  DRAFT:     { label: "Draft Request",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
+  REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", border: "border-rose-200 dark:border-rose-500/20" },
+  DRAFT: { label: "Draft Request", color: "text-slate-600 dark:text-slate-400", bg: "bg-slate-50 dark:bg-white/5", border: "border-slate-200 dark:border-white/10" },
 };
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ export default function SalesReturnsPage() {
   useEffect(() => {
     settingsApi.getCompanyProfile()
       .then(res => { if (res.data) setCompanyProfile(res.data); })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const normalizeReturn = (r: any): ReturnOrder => {
@@ -325,23 +327,23 @@ export default function SalesReturnsPage() {
             partyType: matchedOrder.partyType || (matchedEntity?._kind || 'CUSTOMER'),
             items: matchedOrder.orderItems
               ? matchedOrder.orderItems.map((i: any) => ({
-                  productId: i.productId,
-                  productName: i.product?.name || i.productName || "Item",
-                  sku: i.product?.sku || i.sku,
-                  quantity: i.quantity,
-                  unitPrice: i.price ?? i.unitPrice,
-                  taxPercent: i.taxPercent ?? 0,
-                  totalPrice: i.totalPrice ?? ((i.price ?? 0) * (i.quantity ?? 1)),
-                }))
+                productId: i.productId,
+                productName: i.product?.name || i.productName || "Item",
+                sku: i.product?.sku || i.sku,
+                quantity: i.quantity,
+                unitPrice: i.price ?? i.unitPrice,
+                taxPercent: i.taxPercent ?? 0,
+                totalPrice: i.totalPrice ?? ((i.price ?? 0) * (i.quantity ?? 1)),
+              }))
               : (matchedOrder.items || []).map((i: any) => ({
-                  productId: i.productId,
-                  productName: i.productName || i.product?.name || i.description || "Item",
-                  sku: i.product?.sku || i.sku,
-                  quantity: i.quantity || i.qty,
-                  unitPrice: i.unitPrice ?? i.rate ?? 0,
-                  taxPercent: i.taxPercent ?? i.gstRate ?? 0,
-                  totalPrice: (i.unitPrice ?? i.rate ?? 0) * (i.quantity || i.qty || 1),
-                })),
+                productId: i.productId,
+                productName: i.productName || i.product?.name || i.description || "Item",
+                sku: i.product?.sku || i.sku,
+                quantity: i.quantity || i.qty,
+                unitPrice: i.unitPrice ?? i.rate ?? 0,
+                taxPercent: i.taxPercent ?? i.gstRate ?? 0,
+                totalPrice: (i.unitPrice ?? i.rate ?? 0) * (i.quantity || i.qty || 1),
+              })),
             raw: matchedOrder,
           };
 
@@ -354,8 +356,8 @@ export default function SalesReturnsPage() {
             const matches = normalizedOrder._source === 'POS'
               ? r.posOrderId === normalizedOrder.id
               : normalizedOrder._source === 'FRANCHISE'
-              ? r.franchiseOrderId === normalizedOrder.id
-              : r.salesOrderId === normalizedOrder.id;
+                ? r.franchiseOrderId === normalizedOrder.id
+                : r.salesOrderId === normalizedOrder.id;
             if (!matches || r.status === 'REJECTED') return;
             (r.items || []).forEach((it: any) => {
               const key = it.productId || it.productName;
@@ -365,7 +367,7 @@ export default function SalesReturnsPage() {
 
           // Populate Return Items
           const populated: ReturnItem[] = (normalizedOrder.items || []).map((i: any) => {
-            const productId = i.productId || `prod_${Math.random().toString(36).substring(2,6)}`;
+            const productId = i.productId || `prod_${Math.random().toString(36).substring(2, 6)}`;
             const productName = i.productName || "Item";
             const soldQty = Number(i.quantity) || 1;
             const prevReturned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
@@ -497,7 +499,7 @@ export default function SalesReturnsPage() {
     });
 
     const populated: ReturnItem[] = (order.items || []).map((i: any) => {
-      const productId = i.productId || `prod_${Math.random().toString(36).substr(2,4)}`;
+      const productId = i.productId || `prod_${Math.random().toString(36).substr(2, 4)}`;
       const productName = i.productName || i.description || "Item";
       const boughtQuantity = Number(i.quantity || i.qty) || 1;
       const returned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
@@ -587,11 +589,11 @@ export default function SalesReturnsPage() {
         ...(returnSource === 'FRANCHISE'
           ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
           : {
-              ...(hasRealCustomer ? { customerId: selectedEntity.id } : {}),
-              ...(selectedOrder._source === 'POS'
-                ? { posOrderId: selectedOrder.id }
-                : { salesOrderId: selectedOrder.id }),
-            }
+            ...(hasRealCustomer ? { customerId: selectedEntity.id } : {}),
+            ...(selectedOrder._source === 'POS'
+              ? { posOrderId: selectedOrder.id }
+              : { salesOrderId: selectedOrder.id }),
+          }
         )
       });
 
@@ -692,11 +694,11 @@ export default function SalesReturnsPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-bold text-gray-400 dark:text-slate-500 hidden sm:inline">
               Session: {submitKeyRef.current.substring(0, 8)}
             </span>
-          </div>
+          </div> */}
         </div>
 
         {/* Scrollable Form Workspace */}
@@ -769,10 +771,10 @@ export default function SalesReturnsPage() {
                     {!selectedEntity
                       ? "Select partner first"
                       : loadingOrders
-                      ? "Loading invoices..."
-                      : ordersList.length === 0
-                      ? "No eligible invoices for this party"
-                      : "Choose original invoice..."}
+                        ? "Loading invoices..."
+                        : ordersList.length === 0
+                          ? "No eligible invoices for this party"
+                          : "Choose original invoice..."}
                   </option>
                   {ordersList.map(o => (
                     <option key={o.id} value={o.id}>
@@ -805,8 +807,8 @@ export default function SalesReturnsPage() {
                           partyTypeLabel.toUpperCase().includes('DEALER')
                             ? "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-500/20"
                             : partyTypeLabel.toUpperCase().includes('FRANCHISE')
-                            ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
-                            : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                              ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                              : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
                         )}>
                           {partyTypeLabel}
                         </span>
@@ -1142,10 +1144,10 @@ export default function SalesReturnsPage() {
         {/* ── Summary Strip ── */}
         <div className="grid grid-cols-4 gap-4">
           {[
-            { label: "Total",     value: stats.total,                               color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
-            { label: "Pending",   value: stats.pending,                             color: "text-orange-600 dark:text-orange-400",  dot: "bg-orange-500" },
-            { label: "Refunded",  value: `₹${stats.refunded.toLocaleString()}`,     color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-            { label: "Rejected",  value: stats.rejected,                            color: "text-rose-600 dark:text-rose-400",    dot: "bg-rose-500" },
+            { label: "Total", value: stats.total, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
+            { label: "Pending", value: stats.pending, color: "text-orange-600 dark:text-orange-400", dot: "bg-orange-500" },
+            { label: "Refunded", value: `₹${stats.refunded.toLocaleString()}`, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Rejected", value: stats.rejected, color: "text-rose-600 dark:text-rose-400", dot: "bg-rose-500" },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3">
               <div className={clsx("w-2.5 h-2.5 rounded-full", s.dot)} />
@@ -1168,10 +1170,10 @@ export default function SalesReturnsPage() {
               className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                onClick={() => setSearch("")}
               />
             )}
           </div>

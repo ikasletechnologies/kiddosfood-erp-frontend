@@ -19,10 +19,10 @@ const CARD_CLASS =
   "w-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-white/20 dark:border-slate-800/50 p-10 space-y-6";
 
 const NEXT_STEPS = [
-  { icon: Package, label: "Import Finished Goods", action: "Import", href: "/inventory/stock" },
-  { icon: Boxes, label: "Add Raw Materials", action: "Add", href: "/inventory/stock" },
+  { icon: Package, label: "Import Finished Goods", action: "Import", href: "/inventory/stock?type=FINISHED_GOOD" },
+  { icon: Boxes, label: "Add Raw Materials", action: "Add", href: "/inventory/stock?type=RAW_MATERIAL" },
   { icon: FlaskConical, label: "Configure Recipes", action: "Configure", href: "/production/recipes" },
-  { icon: PackagePlus, label: "Add Opening Stock", action: "Add Stock", href: "/inventory/stock" },
+  { icon: PackagePlus, label: "Add Opening Stock", action: "Add Stock", href: "/inventory/stock/add" },
   { icon: ShoppingCart, label: "Start POS", action: "Open POS", href: "/pos" },
 ];
 
