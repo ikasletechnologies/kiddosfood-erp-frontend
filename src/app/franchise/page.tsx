@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
@@ -101,6 +102,33 @@ export default function FranchisePage() {
   const [confirmToggle, setConfirmToggle] = useState<any>(null);
   const [resettingPassword, setResettingPassword] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (confirmToggle || confirmDelete) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [confirmToggle, confirmDelete]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (confirmToggle) setConfirmToggle(null);
+        if (confirmDelete) setConfirmDelete(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmToggle, confirmDelete]);
 
   const [showAddUser, setShowAddUser] = useState(false);
   const [userForm, setUserForm] = useState({
@@ -370,7 +398,7 @@ export default function FranchisePage() {
               </div>
               <input
                 type="text"
-                placeholder="Search branches..."
+                placeholder="Search franchises..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="bg-transparent border-none text-slate-700 dark:text-slate-200 focus:ring-0 p-1 font-semibold text-sm outline-none w-44"
@@ -394,7 +422,7 @@ export default function FranchisePage() {
               onClick={openCreate}
               className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-bold text-sm shadow-sm transition-all duration-150 active:scale-95 flex items-center gap-2"
             >
-              <Plus size={16} /> Add Branch
+              <Plus size={16} /> Add Franchise
             </button>
           </div>
         )}
@@ -465,21 +493,21 @@ export default function FranchisePage() {
         <div className="py-20 text-center space-y-3">
           <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 animate-pulse">
-            Loading branches...
+            Loading franchises...
           </p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="py-20 text-center space-y-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm">
           <Building2 size={40} className="text-slate-300 mx-auto" />
           <p className="text-sm font-semibold text-slate-400">
-            {search ? "No branches match your search." : "No branches found."}
+            {search ? "No franchises match your search." : "No franchises found."}
           </p>
           {!search && (
             <button
               onClick={openCreate}
               className="text-orange-500 font-bold hover:underline text-sm"
             >
-              Register your first branch
+              Register your first franchise
             </button>
           )}
         </div>
@@ -983,7 +1011,7 @@ export default function FranchisePage() {
                   ? editingUser
                     ? "Update Admin"
                     : "Create Admin"
-                  : "Save Branch"}
+                  : "Save Franchise"}
               </button>
             </div>
           </div>
@@ -991,73 +1019,136 @@ export default function FranchisePage() {
       </SlideOver>
 
       {/* Delete Confirmation Modal */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 p-6 text-center">
-            <div className="w-16 h-16 bg-red-50 dark:bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-red-600 dark:text-red-400">
-              <Trash2 size={28} />
+      {confirmDelete && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setConfirmDelete(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Full-screen Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-[2px] transition-opacity"
+            aria-hidden="true"
+          />
+
+          {/* Modal Card */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 text-center animate-in zoom-in-95 duration-200 min-w-0"
+          >
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-rose-50 dark:bg-rose-950/40 rounded-2xl flex items-center justify-center mx-auto mb-4 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30">
+              <Trash2 className="h-7 w-7 sm:h-8 sm:w-8" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Delete Branch</h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              Delete Franchise
+            </h2>
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-2 mb-6 leading-relaxed">
               Are you sure you want to delete{" "}
-              <span className="font-bold text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-slate-900 dark:text-white">
                 "{confirmDelete.name}"
               </span>
               ? This action cannot be undone.
             </p>
-            <div className="flex gap-3">
+
+            <div className="grid grid-cols-2 gap-3 w-full">
               <button
+                type="button"
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                className="w-full px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-all cursor-pointer flex items-center justify-center"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleDelete}
-                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-bold shadow-sm transition-all"
+                className="w-full px-4 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:shadow transition-all cursor-pointer flex items-center justify-center"
               >
                 Delete
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Toggle Confirmation Modal */}
-      {confirmToggle && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 p-6 text-center">
-            <div className={clsx(
-              "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4",
-              confirmToggle.status === "ACTIVE" 
-                ? "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400"
-                : "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"
-            )}>
-              <Power size={28} />
+      {/* Toggle Status Confirmation Modal */}
+      {confirmToggle && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+          onClick={() => setConfirmToggle(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          {/* Full-screen Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-[2px] transition-opacity"
+            aria-hidden="true"
+          />
+
+          {/* Modal Card */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm sm:max-w-md bg-white dark:bg-slate-900 rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-6 sm:p-7 text-center animate-in zoom-in-95 duration-200 min-w-0"
+          >
+            <button
+              type="button"
+              onClick={() => setConfirmToggle(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div
+              className={clsx(
+                "w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border transition-colors",
+                confirmToggle.status === "ACTIVE"
+                  ? "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border-rose-100 dark:border-rose-900/30"
+                  : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/30"
+              )}
+            >
+              <Power className="h-7 w-7 sm:h-8 sm:w-8" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-              {confirmToggle.status === "ACTIVE" ? "Deactivate Branch" : "Activate Branch"}
+
+            <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              {confirmToggle.status === "ACTIVE" ? "Deactivate Franchise" : "Activate Franchise"}
             </h2>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-2 mb-6 leading-relaxed">
               Are you sure you want to {confirmToggle.status === "ACTIVE" ? "deactivate" : "activate"}{" "}
-              <span className="font-bold text-slate-700 dark:text-slate-300">
+              <span className="font-bold text-slate-900 dark:text-white">
                 "{confirmToggle.name}"
               </span>
               ?
             </p>
-            <div className="flex gap-3">
+
+            <div className="grid grid-cols-2 gap-3 w-full">
               <button
+                type="button"
                 onClick={() => setConfirmToggle(null)}
-                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                className="w-full px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/80 dark:border-slate-700 transition-all cursor-pointer flex items-center justify-center"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={executeToggleStatus}
                 className={clsx(
-                  "flex-1 px-4 py-2.5 text-white rounded-lg text-sm font-bold shadow-sm transition-all",
+                  "w-full px-4 py-2.5 text-white rounded-xl text-xs sm:text-sm font-bold shadow-sm hover:shadow active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center",
                   confirmToggle.status === "ACTIVE"
-                    ? "bg-red-600 hover:bg-red-700"
+                    ? "bg-rose-600 hover:bg-rose-700"
                     : "bg-emerald-600 hover:bg-emerald-700"
                 )}
               >
@@ -1065,7 +1156,8 @@ export default function FranchisePage() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Notification Modal */}
