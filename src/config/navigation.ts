@@ -23,7 +23,6 @@ import {
   Undo2,
   Clock,
   User,
-  Calculator,
   Receipt,
   FileClock,
   Wallet,
@@ -354,55 +353,60 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
     ],
   },
   {
-    title: "WHOLESALE & DISPATCH",
+    title: "SALE",
     items: [
       {
-        icon: Calculator, // Representing sales/wholesale
-        label: "Wholesale",
+        icon: FileText,
+        label: "Estimate",
         href: "/sales/estimation",
         roles: SUPER_ONLY,
-        children: [
-          {
-            label: "Estimate",
-            href: "/sales/estimation",
-          },
-          {
-            label: "Sales Orders",
-            href: "/sales/orders",
-          },
-          {
-            label: "Proforma Invoice",
-            href: "/sales/proforma-invoice",
-          },
-          {
-            label: "Sale Invoice",
-            href: "/sales/invoices",
-          },
-          {
-            label: "Payments",
-            href: "/sales/payment-in",
-          },
-        ],
       },
       {
+        icon: ClipboardList,
+        label: "Sales Orders",
+        href: "/sales/orders",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: FilePlus2,
+        label: "Proforma Invoice",
+        href: "/sales/proforma-invoice",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Receipt,
+        label: "Sale Invoice",
+        href: "/sales/invoices",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Wallet,
+        label: "Payments",
+        href: "/sales/payment-in",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "DISPATCH",
+    items: [
+      {
         icon: Truck,
-        label: "Dispatch",
+        label: "Delivery Challan",
         href: "/sales/delivery-challan",
         roles: SUPER_ONLY,
-        children: [
-          {
-            label: "Delivery Challan",
-            href: "/sales/delivery-challan",
-          },
-          {
-            label: "Transit Stock",
-            href: "/dispatch/transit-stock",
-          },
-          {
-            label: "Dispatch Tracking",
-            href: "/delivery",
-          },
-        ],
+      },
+      {
+        icon: PackageCheck,
+        label: "Transit Stock",
+        href: "/dispatch/transit-stock",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: MapPin,
+        label: "Dispatch Tracking",
+        href: "/delivery",
+        roles: SUPER_ONLY,
       },
     ],
   },
@@ -637,32 +641,21 @@ export const franchiseMenuSections: MenuSection[] = [
     ],
   },
   {
-    title: "WHOLESALE & DISPATCH",
+    title: "SALE",
     items: [
-      {
-        icon: ShoppingCart,
-        label: "Wholesale",
-        href: "/sales/estimation",
-        roles: FRANCHISE_ONLY,
-        children: [
-          { label: "Estimate", href: "/sales/estimation" },
-          { label: "Sales Orders", href: "/sales/orders" },
-          { label: "Proforma Invoice", href: "/sales/proforma-invoice" },
-          { label: "Sale Invoice", href: "/sales/invoices" },
-          { label: "Payments", href: "/sales/payment-in" },
-        ],
-      },
-      {
-        icon: Truck,
-        label: "Dispatch",
-        href: "/sales/delivery-challan",
-        roles: FRANCHISE_ONLY,
-        children: [
-          { label: "Delivery Challan", href: "/sales/delivery-challan" },
-          { label: "Transit Stock", href: "/dispatch/transit-stock" },
-          { label: "Dispatch Tracking", href: "/delivery" },
-        ],
-      },
+      { icon: FileText, label: "Estimate", href: "/sales/estimation", roles: FRANCHISE_ONLY },
+      { icon: ClipboardList, label: "Sales Orders", href: "/sales/orders", roles: FRANCHISE_ONLY },
+      { icon: FilePlus2, label: "Proforma Invoice", href: "/sales/proforma-invoice", roles: FRANCHISE_ONLY },
+      { icon: Receipt, label: "Sale Invoice", href: "/sales/invoices", roles: FRANCHISE_ONLY },
+      { icon: Wallet, label: "Payments", href: "/sales/payment-in", roles: FRANCHISE_ONLY },
+    ],
+  },
+  {
+    title: "DISPATCH",
+    items: [
+      { icon: Truck, label: "Delivery Challan", href: "/sales/delivery-challan", roles: FRANCHISE_ONLY },
+      { icon: PackageCheck, label: "Transit Stock", href: "/dispatch/transit-stock", roles: FRANCHISE_ONLY },
+      { icon: MapPin, label: "Dispatch Tracking", href: "/delivery", roles: FRANCHISE_ONLY },
     ],
   },
   {
