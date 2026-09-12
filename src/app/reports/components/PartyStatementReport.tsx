@@ -22,6 +22,7 @@ export default function CentralPartyStatementReport({
   const [startDate, setStartDate] = useState("2026-05-01");
   const [endDate, setEndDate] = useState("2026-05-31");
   const [partyName, setPartyName] = useState("");
+  const [partyType, setPartyType] = useState("");
   const [customerId, setCustomerId] = useState("");
   
   // Real data state
@@ -32,7 +33,9 @@ export default function CentralPartyStatementReport({
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const pn = params.get("partyName");
+      const pt = params.get("partyType");
       if (pn) setPartyName(pn);
+      if (pt) setPartyType(pt);
     }
   }, []);
 
@@ -40,7 +43,10 @@ export default function CentralPartyStatementReport({
     setLoading(true);
     reportsApi.getPartyStatement({
       startDate,
-      endDate
+      endDate,
+      partyName: partyName || undefined,
+      partyType: partyType || undefined,
+      customerId: customerId || undefined
     }).then((res: any) => {
       setData(res.data);
     }).catch(() => {
@@ -48,7 +54,7 @@ export default function CentralPartyStatementReport({
     }).finally(() => {
       setLoading(false);
     });
-  }, [startDate, endDate, customerId]);
+  }, [startDate, endDate, customerId, partyName, partyType]);
 
   const transactions = (data?.transactions || []).filter((t: any) => {
     if (!partyName || !partyName.trim()) return true;
@@ -299,7 +305,15 @@ export default function CentralPartyStatementReport({
               
               {/* Bottom Right Total */}
               <div className="absolute bottom-4 right-4 text-sm font-semibold">
-                <span className="text-slate-700 dark:text-slate-300">Total Receivable <span className="text-emerald-500 ml-1">{fmt(data?.summary?.totalReceivable)}</span></span>
+                {data?.accountingType === 'PAYABLE' || data?.partyType === 'VENDOR' ? (
+                  <span className="text-slate-700 dark:text-slate-300">
+                    Total Payable <span className="text-rose-500 ml-1">{fmt(data?.summary?.totalPayable !== undefined ? data?.summary?.totalPayable : data?.summary?.totalReceivable)}</span>
+                  </span>
+                ) : (
+                  <span className="text-slate-700 dark:text-slate-300">
+                    Total Receivable <span className="text-emerald-500 ml-1">{fmt(data?.summary?.totalReceivable)}</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>

@@ -4,10 +4,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
-  Edit3, MessageSquare, Phone as PhoneIcon, Clock,
-  Printer, FileText as ExcelIcon, MoreHorizontal, BookOpen,
-  X, Info, SlidersHorizontal
+  Edit3, MessageSquare, Phone, Mail, FileText, Clock,
+  Printer, MoreHorizontal, BookOpen, X, Info, SlidersHorizontal,
+  MapPin, Truck, User, ArrowUpRight, CheckCircle2, AlertCircle, Building2, ShieldCheck, Download, Package
 } from "lucide-react";
+import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import AddPartyModal from "@/components/modals/AddPartyModal";
@@ -31,45 +32,34 @@ export default function PartiesPage() {
   const router = useRouter();
   const isSuper = user?.role === "SUPER_ADMIN";
 
-  // HQ / Franchise scope — Super Admin only. Franchise Admin is always
-  // implicitly scoped to their own franchiseId (see effectiveFranchiseId below).
-  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
   const [franchises, setFranchises] = useState<any[]>([]);
   const [franchisesLoading, setFranchisesLoading] = useState(true);
-  const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
 
   useEffect(() => {
-    if (!isSuper) {
-      setFranchisesLoading(false);
-      return;
-    }
     setFranchisesLoading(true);
     franchiseApi.getAll()
       .then((res) => setFranchises(res.data ?? []))
       .catch((err) => console.error("Failed to load franchises list", err))
       .finally(() => setFranchisesLoading(false));
-  }, [isSuper]);
+  }, []);
 
-  // HQ is resolved from the real Franchise row where isHQ === true — never a
-  // hardcoded id or name.
+  // Exclusively scoped to HQ Franchise row where isHQ === true
   const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
-  const effectiveFranchiseId = isSuper
-    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
-    : (user as any)?.franchiseId;
-
-  const scopeLabel = isSuper
-    ? (scope === "HQ"
-      ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
-      : (selectedFranchiseId ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected"))
-    : undefined;
-  const [activeTab, setActiveTab] = useState("Transactions");
+  const effectiveFranchiseId = hqFranchiseId || (user as any)?.franchiseId;
+  const hqName = franchises.find((f: any) => f.isHQ)?.name || "HQ";
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Active section tab: Transactions vs Item / Product Sales History
+  const [activeTab, setActiveTab] = useState<"TRANSACTIONS" | "ITEMS">("TRANSACTIONS");
+  const [customerItems, setCustomerItems] = useState<any[]>([]);
+  const [customerItemsLoading, setCustomerItemsLoading] = useState(false);
+  const [itemSearchQuery, setItemSearchQuery] = useState("");
+  const [isItemSearchOpen, setIsItemSearchOpen] = useState(false);
 
   // Read-only invoice viewer state — View/Print/Download all reuse the one
   // fetched Order, they never create or alter anything.
@@ -90,7 +80,6 @@ export default function PartiesPage() {
       const target = e.target as HTMLElement;
       if (!target.closest('.filter-popover-container')) {
         setIsFilterOpen(false);
-        setIsTypeFilterOpen(false);
         setIsMoreMenuOpen(false);
       }
     };
@@ -102,24 +91,12 @@ export default function PartiesPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCustomerDetail, setSelectedCustomerDetail] = useState<any>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
   const [isTransactionSearchOpen, setIsTransactionSearchOpen] = useState(false);
   const [transactionSearchQuery, setTransactionSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-
-  const transactionTypes = [
-    "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note",
-    "Credit Note (e-Invoice)", "Debit Note", "Sale Order",
-    "Purchase Order", "Payment-In", "Payment-Out", "Estimate",
-    "Proforma Invoice", "Delivery Challan", "Receivable Opening Balance",
-    "Payable Opening Balance", "Party to Party [Received]",
-    "Party to Party [Paid]", "Sale FA", "Sale FA (e-Invoice)",
-    "Purchase FA", "Sale[Cancelled]", "Job work out (Challan)",
-    "Purchase (Job work)", "Journal Entry"
-  ];
-
-  // Fake state for filter checkboxes
+  // Filters state
   const [filters, setFilters] = useState({
     all: false,
     active: false,
@@ -128,7 +105,7 @@ export default function PartiesPage() {
     toPay: false
   });
 
-  // Fake state for settings
+  // Settings state
   const [settings, setSettings] = useState({
     partyGrouping: false,
     shippingAddress: false,
@@ -146,15 +123,7 @@ export default function PartiesPage() {
     field3Print: false,
   });
 
-  // Sourced from selectedCustomerDetail.orders, which GET /api/customers/:id
-  // (CustomerService.getById) already returns via the real Order.customerId
-  // relation on Customer — i.e. completed POS sales are linked by the
-  // customer's stable id, not by name matching. Includes payments so the
-  // outstanding balance per order reflects what has actually been recorded,
-  // not a name-derived guess.
-  // Full, unfiltered list — used for the header Statement print and the
-  // export icon, so a live search in the table doesn't silently narrow what
-  // a printed/exported "party statement" contains.
+  // Sourced from selectedCustomerDetail.orders
   const allTransactions = React.useMemo(() => {
     const orders: any[] = selectedCustomerDetail?.orders || [];
     return orders.map((o: any) => {
@@ -162,13 +131,13 @@ export default function PartiesPage() {
         .filter((p: any) => !p.isCancelled && p.status !== 'CANCELLED')
         .reduce((sum: number, p: any) => sum + (Number(p.paidAmount) || 0), 0);
       const balance = Number(o.totalAmount || 0) - paidAmount;
+      const invNum = o.invoiceNum || o.invoiceNumber || o.orderNumber || o.referenceNumber || (o.id ? String(o.id).slice(-8).toUpperCase() : '');
+      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleDateString() : (o.date || '');
       return {
         id: o.id,
         type: o.status === 'CANCELLED' ? 'Sale [Cancelled]' : 'Sale',
-        number: o.invoiceNum,
-        date: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : '',
-        // Always a real number (0 for fully paid) — never undefined, so a
-        // fully-paid sale never renders as a blank Balance cell.
+        number: invNum,
+        date: dateStr,
         total: Number(o.totalAmount || 0),
         balance: balance > 0.005 ? balance : 0,
       };
@@ -176,24 +145,28 @@ export default function PartiesPage() {
   }, [selectedCustomerDetail]);
 
   const transactions = React.useMemo(() => {
-    if (!transactionSearchQuery.trim()) return allTransactions;
-    const q = transactionSearchQuery.trim().toLowerCase();
-    return allTransactions.filter((t) =>
-      (t.number || '').toLowerCase().includes(q) ||
-      (t.type || '').toLowerCase().includes(q) ||
-      (t.date || '').toLowerCase().includes(q)
-    );
+    let list = allTransactions;
+    if (transactionSearchQuery.trim()) {
+      const q = transactionSearchQuery.trim().toLowerCase();
+      list = list.filter((t) =>
+        (t.number || '').toLowerCase().includes(q) ||
+        (t.type || '').toLowerCase().includes(q) ||
+        (t.date || '').toLowerCase().includes(q) ||
+        String(t.total || '').toLowerCase().includes(q) ||
+        String(t.balance || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
   }, [allTransactions, transactionSearchQuery]);
 
   const fetchCustomers = async (franchiseId?: string) => {
     setLoading(true);
     try {
-      const res = await customersApi.getAll(franchiseId ? { franchiseId } : {});
+      const params: any = {};
+      if (franchiseId) params.franchiseId = franchiseId;
+      const res = await customersApi.getAll(params);
       const data = res.data || [];
       setCustomers(data);
-      if (!selectedCustomerId && data.length > 0) {
-        setSelectedCustomerId(data[0].id);
-      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to load parties");
@@ -203,39 +176,127 @@ export default function PartiesPage() {
   };
 
   useEffect(() => {
-    if (isSuper && franchisesLoading) return;
+    if (franchisesLoading) return;
 
-    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+    if (!effectiveFranchiseId) {
       setCustomers([]);
       setLoading(false);
       return;
     }
-    if (isSuper && scope === "HQ" && !hqFranchiseId) {
-      setCustomers([]);
-      setLoading(false);
-      return;
-    }
+
     fetchCustomers(effectiveFranchiseId);
-  }, [isSuper, scope, selectedFranchiseId, hqFranchiseId, franchisesLoading, effectiveFranchiseId]);
+  }, [franchisesLoading, effectiveFranchiseId]);
+
+  // Reset transaction search whenever selected customer changes
+  useEffect(() => {
+    setTransactionSearchQuery("");
+    setIsTransactionSearchOpen(false);
+  }, [selectedCustomerId]);
 
   useEffect(() => {
+    let isCancelled = false;
     const fetchCustomerDetail = async () => {
-      if (!selectedCustomerId) return;
+      if (!selectedCustomerId) {
+        setSelectedCustomerDetail(null);
+        return;
+      }
       try {
         const res = await customersApi.getById(selectedCustomerId);
-        setSelectedCustomerDetail(res.data);
+        if (!isCancelled) {
+          setSelectedCustomerDetail(res.data);
+        }
       } catch (error) {
         console.error("Failed to fetch customer detail", error);
+        if (!isCancelled) {
+          setSelectedCustomerDetail(null);
+        }
       }
     };
     fetchCustomerDetail();
+    return () => {
+      isCancelled = true;
+    };
   }, [selectedCustomerId]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchCustomerItems = async () => {
+      if (!selectedCustomerId) {
+        setCustomerItems([]);
+        return;
+      }
+      setCustomerItemsLoading(true);
+      try {
+        const res = await customersApi.getItems(selectedCustomerId);
+        if (!isCancelled) {
+          setCustomerItems(res.data || []);
+        }
+      } catch (error) {
+        console.error("Failed to fetch customer items", error);
+        if (!isCancelled) {
+          setCustomerItems([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setCustomerItemsLoading(false);
+        }
+      }
+    };
+    fetchCustomerItems();
+    return () => {
+      isCancelled = true;
+    };
+  }, [selectedCustomerId]);
+
+  const filteredItems = React.useMemo(() => {
+    if (!itemSearchQuery.trim()) return customerItems;
+    const q = itemSearchQuery.trim().toLowerCase();
+    return customerItems.filter((it: any) =>
+      (it.name || "").toLowerCase().includes(q) ||
+      (it.sku || "").toLowerCase().includes(q) ||
+      (it.category || "").toLowerCase().includes(q)
+    );
+  }, [customerItems, itemSearchQuery]);
+
+  const handleExportItemsExcel = () => {
+    try {
+      if (filteredItems.length === 0) {
+        toast("No item history to export.", { icon: "ℹ️" });
+        return;
+      }
+      const headers = [
+        "Product Name",
+        "SKU",
+        "Category",
+        "Quantity Sold",
+        "Unit",
+        "Total Value (₹)",
+        "Orders Count",
+        "Last Purchased"
+      ];
+      const rows = filteredItems.map((it: any) => [
+        it.name || "",
+        it.sku || "—",
+        it.category || "—",
+        Number(it.quantitySold || 0),
+        it.unit || "PCS",
+        Number(it.totalValue || 0),
+        Number(it.orderCount || 1),
+        it.lastPurchased ? new Date(it.lastPurchased).toLocaleDateString() : "—"
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Item Sales History");
+      const filename = `${(customerName || "Customer").replace(/[^a-zA-Z0-9_-]/g, "_")}_Item_History.xlsx`;
+      XLSX.writeFile(wb, filename);
+      toast.success("Exported item sales history to Excel");
+    } catch (err) {
+      toast.error("Failed to export items to Excel");
+    }
+  };
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || null;
 
-  // Read-only: fetches the exact existing Order (with its real invoiceNum
-  // and line items) and opens it in the shared GSTInvoice viewer — no new
-  // invoice/order is ever created here, this only reads GET /api/orders/:id.
   const openInvoiceAction = async (orderId: string, action: 'print' | 'download' | undefined) => {
     setLoadingInvoiceId(orderId);
     try {
@@ -249,177 +310,230 @@ export default function PartiesPage() {
     }
   };
 
-  const handleExportTransactions = () => {
-    if (!selectedCustomer) { toast.error("Select a customer first."); return; }
-    if (allTransactions.length === 0) { toast.error("No transactions to export."); return; }
-    const cleanName = selectedCustomer.name.replace(/[^a-zA-Z0-9]/g, "_");
-    const filename = `Customer_Transactions_${cleanName}_${new Date().toISOString().split("T")[0]}.xlsx`;
+  const handleExportExcel = () => {
+    try {
+      const targetCustomers = customers || [];
+      if (targetCustomers.length === 0) {
+        toast("No customers available to export for this scope.", { icon: "ℹ️" });
+      }
 
-    const partyName = selectedCustomer.name;
-    const partyPhone = selectedCustomerDetail?.phone || selectedCustomer.phone || "-";
-    const partyEmail = selectedCustomerDetail?.email || selectedCustomer.email || "-";
+      const headers = [
+        "Party Name",
+        "Phone Number",
+        "Email Address",
+        "GSTIN",
+        "GST Type",
+        "Billing Address",
+        "Shipping Address",
+        "Net Balance (₹)",
+        "Customer Status"
+      ];
 
-    const headers = ["Party Name", "Phone", "Email", "Transaction Type", "Invoice/Transaction Number", "Date", "Total (₹)", "Balance (₹)"];
-    const rows = allTransactions.map((t) => [partyName, partyPhone, partyEmail, t.type, t.number, t.date, t.total, t.balance]);
-    const totalAmount = allTransactions.reduce((s, t) => s + t.total, 0);
-    const totalBalance = allTransactions.reduce((s, t) => s + t.balance, 0);
+      const rows = targetCustomers.map((c: any) => [
+        c.name || "",
+        c.phone || c.contact || "",
+        c.email || "",
+        c.gstNumber || c.gstin || "",
+        c.gstType || "",
+        c.billingAddress || c.address || "",
+        c.shippingAddress || "",
+        Number(c.balance) || 0,
+        c.status || "ACTIVE"
+      ]);
 
-    const aoa = [
-      ["CUSTOMER TRANSACTIONS"],
-      [`Customer: ${partyName}`, `Phone: ${partyPhone}`, `Email: ${partyEmail}`],
-      [`Generated: ${new Date().toLocaleDateString()}`],
-      [],
-      headers,
-      ...rows,
-      [],
-      ["TOTALS", "", "", "", "", "", totalAmount, totalBalance]
-    ];
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Transactions");
-    XLSX.writeFile(wb, filename);
-    toast.success("Transactions exported (.xlsx)");
+      // Set explicit column widths for professional formatting
+      ws["!cols"] = [
+        { wch: 28 }, // Party Name
+        { wch: 18 }, // Phone Number
+        { wch: 26 }, // Email Address
+        { wch: 20 }, // GSTIN
+        { wch: 24 }, // GST Type
+        { wch: 34 }, // Billing Address
+        { wch: 34 }, // Shipping Address
+        { wch: 16 }, // Net Balance
+        { wch: 16 }, // Customer Status
+      ];
+
+      // Explicit formatting: force text types for phone, GSTIN, GST Type to prevent numeric clipping
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1:I1");
+      for (let R = 1; R <= range.e.r; ++R) {
+        // Phone (Col 1)
+        const phoneCell = ws[XLSX.utils.encode_cell({ r: R, c: 1 })];
+        if (phoneCell) {
+          phoneCell.t = "s";
+          phoneCell.v = String(phoneCell.v || "");
+        }
+        // GSTIN (Col 3)
+        const gstCell = ws[XLSX.utils.encode_cell({ r: R, c: 3 })];
+        if (gstCell) {
+          gstCell.t = "s";
+          gstCell.v = String(gstCell.v || "");
+        }
+        // GST Type (Col 4)
+        const gstTypeCell = ws[XLSX.utils.encode_cell({ r: R, c: 4 })];
+        if (gstTypeCell) {
+          gstTypeCell.t = "s";
+          gstTypeCell.v = String(gstTypeCell.v || "");
+        }
+        // Net Balance (Col 7)
+        const balCell = ws[XLSX.utils.encode_cell({ r: R, c: 7 })];
+        if (balCell && typeof balCell.v === "number") {
+          balCell.z = "₹#,##0.00;[Red]₹-#,##0.00;₹0.00";
+        }
+      }
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "HQ Customers");
+
+      const dateStr = new Date().toISOString().split("T")[0];
+      const filename = `HQ_Customers_${dateStr}.xlsx`;
+
+      XLSX.writeFile(wb, filename);
+      toast.success(`Exported ${targetCustomers.length} HQ customer(s) to Excel`);
+    } catch (error) {
+      console.error("Failed to export customers Excel", error);
+      toast.error("Failed to download Excel file.");
+    }
   };
 
-  const filteredCustomers = customers.filter(c => {
-    // 1. Search filter
-    // Note: Assuming there is a 'search' state. If not, we skip search for now or rely on an existing one. 
-    // The previous code didn't have search state implemented in customers/page.tsx, let's just do the checkboxes.
-    if (filters.all) return true;
+  const filteredCustomers = React.useMemo(() => {
+    return customers.filter(c => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const name = (c.name || "").toLowerCase();
+        const phone = (c.phone || c.contact || "").toLowerCase();
+        const email = (c.email || "").toLowerCase();
+        const gst = (c.gstNumber || c.gstin || "").toLowerCase();
+        const gstType = (c.gstType || "").toLowerCase();
 
-    const checkStatus = filters.active || filters.inactive;
-    let statusMatch = true;
-    if (checkStatus) {
-      statusMatch = (filters.active && c.status === 'ACTIVE') || (filters.inactive && c.status !== 'ACTIVE');
+        const nameMatch = name.includes(q);
+        const phoneMatch = phone.includes(q);
+        const emailMatch = email.includes(q);
+        const gstMatch = gst.includes(q);
+        const gstTypeMatch = gstType.includes(q);
+
+        if (!nameMatch && !phoneMatch && !emailMatch && !gstMatch && !gstTypeMatch) {
+          return false;
+        }
+      }
+
+      if (filters.all) return true;
+
+      const checkStatus = filters.active || filters.inactive;
+      let statusMatch = true;
+      if (checkStatus) {
+        statusMatch = (filters.active && c.status === 'ACTIVE') || (filters.inactive && c.status !== 'ACTIVE');
+      }
+
+      const bal = Number(c.balance) || 0;
+      const checkBalance = filters.toReceive || filters.toPay;
+      let balanceMatch = true;
+      if (checkBalance) {
+        balanceMatch = (filters.toReceive && bal > 0) || (filters.toPay && bal < 0);
+      }
+
+      if (!checkStatus && !checkBalance) return true;
+
+      return statusMatch && balanceMatch;
+    });
+  }, [customers, searchQuery, filters]);
+
+  // Keep selection synchronized with filtered customer list
+  useEffect(() => {
+    if (filteredCustomers.length > 0) {
+      const exists = filteredCustomers.some((c) => c.id === selectedCustomerId);
+      if (!exists) {
+        setSelectedCustomerId(filteredCustomers[0].id);
+      }
+    } else {
+      setSelectedCustomerId(null);
     }
+  }, [filteredCustomers, selectedCustomerId]);
 
-    // c.balance is the real outstanding balance computed server-side by
-    // CustomerService.getAll (opening balance + unpaid amount across all of
-    // the customer's orders) — not a name-derived guess. A fully-paid order
-    // contributes 0, so a customer with only paid-in-full sales nets to
-    // whatever their opening balance was (0 by default).
-    const bal = Number(c.balance) || 0;
-    const checkBalance = filters.toReceive || filters.toPay;
-    let balanceMatch = true;
-    if (checkBalance) {
-      balanceMatch = (filters.toReceive && bal > 0) || (filters.toPay && bal < 0);
-    }
-
-    if (!checkStatus && !checkBalance) return true;
-
-    return statusMatch && balanceMatch;
-  });
+  const customerPhone = selectedCustomerDetail?.phone || selectedCustomer?.phone || "—";
+  const customerEmail = selectedCustomerDetail?.email || selectedCustomer?.email || "—";
+  const customerGstin = selectedCustomerDetail?.gstNumber || selectedCustomerDetail?.gstin || selectedCustomer?.gstNumber || selectedCustomer?.gstin || "—";
+  const customerGstType = selectedCustomerDetail?.gstType || selectedCustomer?.gstType || "—";
+  const customerBilling = selectedCustomerDetail?.billingAddress || selectedCustomerDetail?.address || selectedCustomer?.billingAddress || selectedCustomer?.address || "—";
+  const customerShipping = selectedCustomerDetail?.shippingAddress || selectedCustomer?.shippingAddress || "—";
+  const customerBalance = Number(selectedCustomerDetail?.balance ?? selectedCustomer?.balance ?? 0);
+  const customerName = selectedCustomerDetail?.name || selectedCustomer?.name || "";
+  const customerInitials = customerName ? customerName.slice(0, 2).toUpperCase() : "CU";
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen md:h-[calc(100vh-64px)] w-full overflow-hidden bg-white dark:bg-background text-slate-800 dark:text-foreground min-w-0">
+    <div className="flex flex-col md:flex-row h-auto md:h-[calc(100vh-64px)] w-full overflow-hidden bg-slate-50/60 dark:bg-background text-slate-800 dark:text-foreground min-w-0">
 
-      {/* Left Sidebar - Party List */}
-      <div className="w-full md:w-[300px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-card relative z-10 min-w-0 max-h-[320px] md:max-h-full">
+      {/* ── Left Sidebar - Customer / Party List ── */}
+      <div className="w-full md:w-[320px] lg:w-[340px] border-b md:border-b-0 md:border-r border-slate-200/90 dark:border-slate-800/90 flex flex-col shrink-0 bg-white dark:bg-[#0A0D14] z-10 min-w-0 max-h-[380px] md:max-h-full shadow-xs">
 
-        {/* HQ / Franchise Scope Selector — Super Admin only */}
-        {isSuper && (
-          <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
-            <div className="flex gap-1 bg-slate-100 dark:bg-white/5 rounded-full p-1">
-              <button
-                type="button"
-                onClick={() => setScope("HQ")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white dark:bg-white/10 text-orange-600 dark:text-orange-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
-              >
-                HQ
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope("FRANCHISE")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white dark:bg-white/10 text-orange-600 dark:text-orange-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
-              >
-                Franchise
-              </button>
-            </div>
-            {scope === "FRANCHISE" && (
-              <select
-                value={selectedFranchiseId}
-                onChange={(e) => setSelectedFranchiseId(e.target.value)}
-                className="w-full text-xs border border-slate-200 dark:border-white/10 rounded-full px-3 py-1.5 outline-none focus:border-orange-400 bg-white dark:bg-white/5 text-slate-800 dark:text-white"
-                disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
-              >
-                {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
-                  <option value="" className="dark:bg-[#13151f]">No franchises available</option>
-                ) : (
-                  <>
-                    <option value="" className="dark:bg-[#13151f]">Select Franchise</option>
-                    {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
-                      <option key={f.id} value={f.id} className="dark:bg-[#13151f]">{f.name}</option>
-                    ))}
-                  </>
-                )}
-              </select>
-            )}
-            {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
-              <div className="w-full text-xs border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-full px-3 py-1.5 text-center font-medium">
-                HQ is not configured
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Search & List Headers */}
-        <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        {/* Search & Filter Header */}
+        <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 space-y-2.5">
+          <div className="relative flex items-center">
+            <Search size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search Party Name"
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 dark:border-white/10 rounded-full text-xs outline-none focus:border-orange-400 bg-white dark:bg-white/5 text-slate-800 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search party name, phone, GSTIN..."
+              className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-medium outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 bg-slate-50/70 dark:bg-slate-900 text-slate-800 dark:text-white placeholder:text-slate-400 transition-all"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-white/5 relative filter-popover-container">
-            <div
-              className="flex items-center gap-2 cursor-pointer"
+          <div className="flex items-center justify-between px-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider relative filter-popover-container">
+            <button
+              type="button"
               onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className="flex items-center gap-1.5 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
             >
-              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Party Name</span>
-              <Filter size={12} className="text-orange-500" />
-            </div>
+              <span>Party Name</span>
+              <Filter size={12} className={clsx((filters.active || filters.inactive || filters.toReceive || filters.toPay) ? "text-orange-500" : "text-slate-400")} />
+            </button>
 
             {/* Filter Popover */}
             {isFilterOpen && (
-              <div className="absolute top-full left-4 mt-2 w-48 bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-slate-100 dark:border-white/10 z-50 p-3">
-                <div className="space-y-2 mb-3">
+              <div className="absolute top-full left-0 mt-2 w-52 bg-white dark:bg-[#13151f] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 p-3.5 space-y-3 font-normal normal-case tracking-normal">
+                <p className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">Filter Parties</p>
+                <div className="space-y-2">
                   {[
-                    { id: "all", label: "All" },
+                    { id: "all", label: "All Parties" },
                     { id: "active", label: "Active" },
                     { id: "inactive", label: "Inactive" },
-                    { id: "toReceive", label: "To Receive" },
-                    { id: "toPay", label: "To Pay" },
+                    { id: "toReceive", label: "To Receive (Receivables)" },
+                    { id: "toPay", label: "To Pay (Payables)" },
                   ].map((f) => (
-                    <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
-                      <div className="relative flex items-center justify-center">
-                        <input
-                          type="checkbox"
-                          checked={(filters as any)[f.id]}
-                          onChange={(e) => setFilters({ ...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false })}
-                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 dark:border-white/20 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors bg-white dark:bg-white/5"
-                        />
-                        <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{f.label}</span>
+                    <label key={f.id} className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300 hover:text-orange-500 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={(filters as any)[f.id]}
+                        onChange={(e) => setFilters({ ...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false })}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-orange-500 focus:ring-orange-500"
+                      />
+                      <span>{f.label}</span>
                     </label>
                   ))}
                 </div>
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/5">
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                   <button
                     onClick={() => { setFilters({ all: true, active: false, inactive: false, toReceive: false, toPay: false }); setIsFilterOpen(false); }}
-                    className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full transition-colors"
+                    className="flex-1 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                   >
-                    Clear
+                    Reset
                   </button>
                   <button
                     onClick={() => setIsFilterOpen(false)}
-                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-full transition-colors"
+                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-2xs"
                   >
                     Apply
                   </button>
@@ -427,39 +541,68 @@ export default function PartiesPage() {
               </div>
             )}
 
-            <div className="flex items-center gap-1.5 cursor-pointer">
-              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Amount</span>
-            </div>
+            <span>Net Balance</span>
           </div>
         </div>
 
-        {/* List Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* Customer List Items */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar divide-y divide-slate-100 dark:divide-slate-800/60">
           {loading ? (
-            <div className="p-6 text-center text-xs font-semibold text-slate-400 animate-pulse">Loading parties...</div>
+            <div className="p-8 text-center text-xs font-bold text-slate-400 animate-pulse">Loading parties...</div>
           ) : filteredCustomers.length === 0 ? (
-            <div className="p-6 text-center text-xs font-semibold text-slate-400">No parties match filters</div>
+            <div className="p-8 text-center space-y-2">
+              <User size={28} className="mx-auto text-slate-300 dark:text-slate-600" />
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">No parties match filters</p>
+              <p className="text-[11px] text-slate-400">Try adjusting your search query.</p>
+            </div>
           ) : (
             filteredCustomers.map((c) => {
               const isActive = c.id === selectedCustomerId;
-              // See filteredCustomers above — c.balance is the real computed
-              // outstanding balance, not just the static openingBalance.
               const bal = Number(c.balance) || 0;
+              const initials = c.name ? c.name.slice(0, 2).toUpperCase() : "CU";
+
               return (
                 <div
                   key={c.id}
                   onClick={() => setSelectedCustomerId(c.id)}
-                  className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 dark:border-white/5 transition-colors ${isActive ? "bg-[#e6f4fc] dark:bg-orange-500/10" : "hover:bg-slate-50 dark:hover:bg-white/5 bg-white dark:bg-card"
-                    }`}
+                  className={clsx(
+                    "flex items-center justify-between p-3.5 cursor-pointer transition-all border-l-[3.5px]",
+                    isActive
+                      ? "bg-orange-50/80 dark:bg-orange-500/10 border-orange-500 text-orange-950 dark:text-white"
+                      : "bg-white dark:bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-white/[0.02] text-slate-700 dark:text-slate-300"
+                  )}
                 >
-                  <span className="text-sm text-slate-800 dark:text-slate-200 truncate pr-2">{c.name}</span>
-                  <div className="flex flex-col items-end shrink-0">
-                    <span className={`text-sm font-semibold ${bal > 0 ? "text-emerald-500" : bal < 0 ? "text-rose-500" : "text-slate-400"
-                      }`}>
-                      {bal === 0 ? "0.00" : Math.abs(bal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    <div className={clsx(
+                      "w-8 h-8 rounded-xl flex items-center justify-center font-black text-[11px] shrink-0",
+                      isActive ? "bg-orange-500 text-white shadow-2xs" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    )}>
+                      {initials}
+                    </div>
+                    <div className="min-w-0">
+                      <p className={clsx("text-xs font-bold truncate", isActive ? "text-slate-900 dark:text-white" : "text-slate-800 dark:text-slate-200")}>
+                        {c.name}
+                      </p>
+                      {c.phone && (
+                        <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
+                          {c.phone}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end shrink-0 pl-1">
+                    <span className={clsx(
+                      "text-xs font-mono font-bold",
+                      bal > 0 ? "text-emerald-600 dark:text-emerald-400" : bal < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400"
+                    )}>
+                      {bal === 0 ? "₹0.00" : `₹${Math.abs(bal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                     </span>
                     {bal !== 0 && (
-                      <span className="text-[9px] font-bold uppercase text-slate-400 -mt-0.5">
+                      <span className={clsx(
+                        "text-[9px] font-bold uppercase tracking-wider px-1 py-0.2 rounded-md mt-0.5",
+                        bal > 0 ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400" : "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+                      )}>
                         {bal > 0 ? "To Receive" : "To Pay"}
                       </span>
                     )}
@@ -472,52 +615,119 @@ export default function PartiesPage() {
 
       </div>
 
-      {/* Right Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-card">
+      {/* ── Right Main Content ── */}
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50/40 dark:bg-card overflow-y-auto custom-scrollbar">
 
-        {/* Top Header Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200 dark:border-white/5">
+        {/* Top Header Actions Bar */}
+        <div className="px-5 sm:px-6 py-3 bg-white dark:bg-[#0A0D14] border-b border-slate-200/90 dark:border-slate-800/90 flex items-center justify-between gap-3 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="p-1.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 rounded-lg shrink-0">
+              <User size={16} />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider truncate">
+                HQ Customers & Ledger
+              </h1>
+              <p className="text-[10px] font-bold text-slate-400 truncate">
+                {franchisesLoading ? "Loading HQ..." : `HQ — ${hqName}`}
+              </p>
+            </div>
+          </div>
+
           <button
             onClick={() => {
-              if (isSuper && franchisesLoading) return;
-              if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
-                toast.error("Select a franchise before adding a customer.");
-                return;
-              }
-              if (isSuper && scope === "HQ" && !hqFranchiseId) {
+              if (franchisesLoading) return;
+              if (!effectiveFranchiseId) {
                 toast.error("HQ is not configured.");
                 return;
               }
               setIsAddModalOpen(true);
             }}
-            disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
-                ? "bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed"
+            disabled={franchisesLoading || !effectiveFranchiseId}
+            className={clsx(
+              "flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer shrink-0",
+              franchisesLoading || !effectiveFranchiseId
+                ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
                 : "bg-orange-500 hover:bg-orange-600 text-white"
-              }`}
+            )}
           >
-            <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Customer"}
+            <Plus size={15} />
+            <span>{franchisesLoading ? "Loading..." : "Add Customer"}</span>
           </button>
         </div>
 
-        {/* Party Details Header */}
+        {/* Selected Customer Profile Card */}
         {selectedCustomer ? (
-          <div className="px-6 py-4 flex items-start justify-between border-b border-slate-200 dark:border-white/5 bg-white dark:bg-card">
-            <div className="space-y-4 w-full">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{selectedCustomer.name}</h2>
-                  <button onClick={() => setIsEditModalOpen(true)} className="text-orange-500 hover:text-orange-600 transition-colors">
-                    <Edit3 size={16} />
-                  </button>
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+            {/* Customer Details Header Card */}
+            <div className="bg-white dark:bg-[#0A0D14] border border-slate-200/90 dark:border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+              {/* Header Title Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 font-black text-base sm:text-lg flex items-center justify-center border border-orange-500/20 shrink-0 shadow-2xs">
+                    {customerInitials}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase truncate">
+                        {customerName}
+                      </h2>
+                      <button
+                        onClick={() => setIsEditModalOpen(true)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors cursor-pointer"
+                        title="Edit Customer Details"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <span className={clsx(
+                        "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md",
+                        selectedCustomer.status === "INACTIVE"
+                          ? "bg-slate-100 text-slate-500 dark:bg-slate-800"
+                          : "bg-emerald-50 text-emerald-600 border border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40"
+                      )}>
+                        {selectedCustomer.status === "INACTIVE" ? "Inactive" : "Active Customer"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-slate-400">
-                  <button onClick={() => setIsSettingsOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Settings size={18} /></button>
+
+                {/* Balance & Menu */}
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="text-left sm:text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Outstanding Balance</p>
+                    <p className={clsx(
+                      "text-base sm:text-lg font-black font-mono leading-none mt-0.5",
+                      customerBalance > 0 ? "text-emerald-600 dark:text-emerald-400" : customerBalance < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"
+                    )}>
+                      {customerBalance === 0 ? "₹0.00" : `₹${Math.abs(customerBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      {customerBalance !== 0 && (
+                        <span className="text-[10px] font-bold ml-1 uppercase opacity-80">
+                          {customerBalance > 0 ? "(To Receive)" : "(To Pay)"}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
                   <div className="relative filter-popover-container">
-                    <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><MoreVertical size={18} /></button>
-                    {/* More Options Menu */}
+                    <button
+                      onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                      className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                      title="More Options"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
                     {isMoreMenuOpen && (
-                      <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5 overflow-hidden">
+                      <div className="absolute top-full right-0 mt-1.5 w-56 bg-white dark:bg-[#13151f] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 py-1.5 overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            handleExportExcel();
+                          }}
+                          className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                        >
+                          <Download size={14} className="text-emerald-500 shrink-0" />
+                          <span>Export Customer List (Excel)</span>
+                        </button>
                         <button
                           onClick={() => {
                             setIsMoreMenuOpen(false);
@@ -525,9 +735,10 @@ export default function PartiesPage() {
                             if (selectedCustomer?.name) params.set("partyName", selectedCustomer.name);
                             router.push(`/reports?${params.toString()}`);
                           }}
-                          className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                          className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
                         >
-                          Party Statement (Report)
+                          <FileText size={14} className="text-orange-500 shrink-0" />
+                          <span>Party Statement (Report)</span>
                         </button>
                       </div>
                     )}
@@ -535,186 +746,381 @@ export default function PartiesPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-6 max-w-3xl">
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Phone Number</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedCustomerDetail?.phone || selectedCustomer.phone || "—"}</p>
+              {/* Information Grid: Phone, Email, GSTIN, GST Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone size={11} className="text-slate-400 shrink-0" /> Phone Number
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">
+                    {customerPhone}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Email</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedCustomerDetail?.email || selectedCustomer.email || "—"}</p>
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail size={11} className="text-slate-400 shrink-0" /> Email Address
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {customerEmail}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">GSTIN</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedCustomerDetail?.gstNumber || selectedCustomer.gstNumber || "—"}</p>
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText size={11} className="text-slate-400 shrink-0" /> GSTIN
+                  </p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 font-mono tracking-wide truncate">
+                    {customerGstin}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={11} className="text-slate-400 shrink-0" /> GST Type
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {customerGstType}
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Billing Address</p>
-                <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedCustomerDetail?.address || selectedCustomer.address || "—"}</p>
+              {/* Address Row: Billing & Shipping */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                <div className="p-3.5 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin size={11} className="text-slate-400 shrink-0" /> Billing Address
+                  </p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed break-words">
+                    {customerBilling}
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Truck size={11} className="text-slate-400 shrink-0" /> Shipping Address
+                  </p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed break-words">
+                    {customerShipping}
+                  </p>
+                </div>
               </div>
+            </div>
+
+            {/* History Section: Transactions & Finished Goods Item Sales History */}
+            <div className="bg-white dark:bg-[#0A0D14] border border-slate-200/90 dark:border-slate-800/90 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+              {/* Tab Switcher Navigation */}
+              <div className="flex border-b border-slate-100 dark:border-slate-800/80 px-5 pt-3 gap-6 bg-slate-50/40 dark:bg-slate-900/20">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("TRANSACTIONS")}
+                  className={clsx(
+                    "pb-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2",
+                    activeTab === "TRANSACTIONS"
+                      ? "border-orange-500 text-orange-600 dark:text-orange-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText size={13} />
+                  <span>Transactions</span>
+                  {transactions.length > 0 && (
+                    <span className={clsx(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                      activeTab === "TRANSACTIONS" ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                    )}>
+                      {transactions.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ITEMS")}
+                  className={clsx(
+                    "pb-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2",
+                    activeTab === "ITEMS"
+                      ? "border-orange-500 text-orange-600 dark:text-orange-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  )}
+                >
+                  <Package size={13} />
+                  <span>Item / Product History</span>
+                  {customerItems.length > 0 && (
+                    <span className={clsx(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                      activeTab === "ITEMS" ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                    )}>
+                      {customerItems.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    {activeTab === "TRANSACTIONS" ? "Transactions" : "Sold Finished Products"}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  {activeTab === "TRANSACTIONS" ? (
+                    <>
+                      {isTransactionSearchOpen ? (
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
+                          <Search size={13} className="text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search invoice number, type..."
+                            className="bg-transparent border-none text-xs w-36 sm:w-48 focus:outline-none ml-2 pr-6 text-slate-800 dark:text-white placeholder:text-slate-400"
+                            value={transactionSearchQuery}
+                            onChange={(e) => setTransactionSearchQuery(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransactionSearchQuery("");
+                              setIsTransactionSearchOpen(false);
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer rounded"
+                            title="Close search"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setIsTransactionSearchOpen(true)}
+                          className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                          title="Search Transactions"
+                        >
+                          <Search size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleExportExcel}
+                        disabled={loading || (isSuper && franchisesLoading)}
+                        title="Download Excel"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download size={14} />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedCustomer) { toast.error("Select a customer first."); return; }
+                          setIsStatementOpen(true);
+                        }}
+                        title="Print Transaction Statement"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Printer size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {isItemSearchOpen ? (
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
+                          <Search size={13} className="text-slate-400 shrink-0" />
+                          <input
+                            type="text"
+                            autoFocus
+                            placeholder="Search product name, SKU..."
+                            className="bg-transparent border-none text-xs w-36 sm:w-48 focus:outline-none ml-2 pr-6 text-slate-800 dark:text-white placeholder:text-slate-400"
+                            value={itemSearchQuery}
+                            onChange={(e) => setItemSearchQuery(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItemSearchQuery("");
+                              setIsItemSearchOpen(false);
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer rounded"
+                            title="Close search"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setIsItemSearchOpen(true)}
+                          className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                          title="Search Item History"
+                        >
+                          <Search size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleExportItemsExcel}
+                        disabled={customerItemsLoading || filteredItems.length === 0}
+                        title="Export Item History to Excel"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Tab 1 Content: Transactions Table */}
+              {activeTab === "TRANSACTIONS" && (
+                <div className="overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left table-auto min-w-[660px]">
+                    <thead className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                      <tr>
+                        <th className="w-36 px-5 py-3.5">Type</th>
+                        <th className="px-5 py-3.5">Number</th>
+                        <th className="px-5 py-3.5">Date</th>
+                        <th className="px-5 py-3.5 text-right">Total</th>
+                        <th className="px-5 py-3.5 text-right">Balance</th>
+                        <th className="w-24 px-5 py-3.5 text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
+                      {transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="px-5 py-12 text-center">
+                            <div className="max-w-xs mx-auto space-y-2">
+                              <FileText size={32} className="mx-auto text-slate-300 dark:text-slate-600" />
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">No transactions recorded</p>
+                              <p className="text-[11px] text-slate-400">Transactions created for this party will appear here.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        transactions.map((t, idx) => {
+                          const hasInvoice = t.type.startsWith('Sale');
+                          return (
+                            <tr key={t.id || idx} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors group">
+                              <td className="px-5 py-3.5">
+                                <span className={clsx(
+                                  "inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider",
+                                  t.type.includes("Cancelled")
+                                    ? "bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400"
+                                    : "bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400"
+                                )}>
+                                  {t.type}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3.5 font-mono font-semibold text-slate-800 dark:text-slate-200">
+                                {t.number || "—"}
+                              </td>
+                              <td className="px-5 py-3.5 text-slate-600 dark:text-slate-400 font-medium">
+                                {t.date || "—"}
+                              </td>
+                              <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-900 dark:text-white">
+                                ₹ {t.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                              <td className="px-5 py-3.5 text-right font-mono font-bold">
+                                <span className={t.balance > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-slate-500"}>
+                                  ₹ {t.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3.5 text-center">
+                                <TransactionActionsMenu
+                                  hasInvoice={hasInvoice}
+                                  busy={loadingInvoiceId === t.id}
+                                  onView={() => openInvoiceAction(t.id, undefined)}
+                                  onPrint={() => openInvoiceAction(t.id, 'print')}
+                                  onDownload={() => openInvoiceAction(t.id, 'download')}
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Tab 2 Content: Finished Goods Item / Sales History Table */}
+              {activeTab === "ITEMS" && (
+                <div className="overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left table-auto min-w-[660px]">
+                    <thead className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                      <tr>
+                        <th className="px-5 py-3.5">Product Name</th>
+                        <th className="px-5 py-3.5">SKU</th>
+                        <th className="px-5 py-3.5 text-right">Quantity Sold</th>
+                        <th className="px-5 py-3.5 text-right">Total Value</th>
+                        <th className="px-5 py-3.5 text-right">Last Purchased</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
+                      {customerItemsLoading ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                            Loading product sales history...
+                          </td>
+                        </tr>
+                      ) : filteredItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-12 text-center">
+                            <div className="max-w-xs mx-auto space-y-2">
+                              <Package size={32} className="mx-auto text-slate-300 dark:text-slate-600" />
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                {itemSearchQuery ? "No products match your search" : "No finished goods sold yet"}
+                              </p>
+                              <p className="text-[11px] text-slate-400">Finished goods purchased by this customer will be listed here.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredItems.map((item, idx) => (
+                          <tr key={item.productId || idx} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors group">
+                            <td className="px-5 py-3.5">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  {item.name}
+                                </span>
+                                {item.category && item.category !== '—' && (
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {item.category}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-slate-600 dark:text-slate-300 font-medium">
+                              {item.sku || "—"}
+                            </td>
+                            <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {Number(item.quantitySold || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400 uppercase">{item.unit || "PCS"}</span>
+                            </td>
+                            <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              ₹ {(Number(item.totalValue) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400 font-medium">
+                              {item.lastPurchased ? new Date(item.lastPurchased).toLocaleDateString() : "—"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         ) : (
-          <div className="px-6 py-4 flex items-center justify-center border-b border-slate-200 dark:border-white/5">
-            <span className="text-sm font-semibold text-slate-400">Select a party to view details</span>
-          </div>
-        )}
-
-        {/* Transactions Section */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-card">
-          {/* Section Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 dark:border-white/5">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Transactions</h3>
-            <div className="flex items-center gap-3 text-slate-400">
-              {isTransactionSearchOpen ? (
-                <div className="flex items-center bg-slate-100 dark:bg-white/5 rounded-full px-3 py-1">
-                  <Search size={14} className="text-slate-400" />
-                  <input
-                    type="text"
-                    autoFocus
-                    placeholder="Search transactions..."
-                    className="bg-transparent border-none text-xs w-32 focus:outline-none ml-2 text-slate-700 dark:text-white placeholder:text-slate-400"
-                    value={transactionSearchQuery}
-                    onChange={(e) => setTransactionSearchQuery(e.target.value)}
-                    onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
-                  />
-            {transactionSearchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setTransactionSearchQuery("")} 
-              />
-            )}
-                  {transactionSearchQuery && (
-                    <X
-                      size={14}
-                      className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors ml-1"
-                      onClick={() => setTransactionSearchQuery("")}
-                    />
-                  )}
-                </div>
-              ) : (
-                <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Search size={16} /></button>
-              )}
-              <button
-                onClick={() => {
-                  if (!selectedCustomer) { toast.error("Select a customer first."); return; }
-                  setIsStatementOpen(true);
-                }}
-                title="Print Transaction Statement"
-                className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-              >
-                <Printer size={16} />
-              </button>
-              <button
-                onClick={handleExportTransactions}
-                title="Export Transactions (.xlsx)"
-                className="text-emerald-600 hover:text-emerald-700 transition-colors"
-              >
-                <ExcelIcon size={16} fill="currentColor" className="opacity-20" />
-              </button>
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center space-y-3 max-w-sm">
+              <div className="w-14 h-14 rounded-2xl bg-orange-500/10 text-orange-500 mx-auto flex items-center justify-center">
+                <User size={28} />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-white">Select a Customer</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Choose a customer from the left list to view their contact information, GSTIN details, and ledger transactions.
+              </p>
             </div>
           </div>
-
-          {/* Transactions Table */}
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-white dark:bg-card sticky top-0 z-10 border-b border-slate-200 dark:border-white/5">
-                <tr>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 relative filter-popover-container">
-                    <div className="flex items-center justify-between">
-                      Type
-                      <button onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
-                        <Filter size={14} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                      </button>
-                    </div>
-                    {/* Type Filter Popover */}
-                    {isTypeFilterOpen && (
-                      <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-200 normal-case tracking-normal">
-                        <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-2 space-y-1">
-                          {transactionTypes.map(type => (
-                            <label key={type} className="flex items-start gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded cursor-pointer group">
-                              <input
-                                type="checkbox"
-                                checked={selectedTypes.includes(type)}
-                                onChange={(e) => {
-                                  if (e.target.checked) setSelectedTypes([...selectedTypes, type]);
-                                  else setSelectedTypes(selectedTypes.filter(t => t !== type));
-                                }}
-                                className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 cursor-pointer bg-white dark:bg-white/5"
-                              />
-                              <span className="text-[11px] leading-tight group-hover:text-slate-900 dark:group-hover:text-white">{type}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <div className="p-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-2 bg-white dark:bg-[#13151f]">
-                          <button
-                            onClick={() => setSelectedTypes([])}
-                            className="flex-1 py-1.5 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Clear
-                          </button>
-                          <button
-                            onClick={() => setIsTypeFilterOpen(false)}
-                            className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
-                    Number
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
-                    Balance
-                  </th>
-                  <th className="w-10 px-2 py-3 border-b border-slate-200 dark:border-white/5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {transactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
-                      No transactions yet
-                    </td>
-                  </tr>
-                ) : (
-                  transactions.map((t, idx) => {
-                    const hasInvoice = t.type.startsWith('Sale');
-                    return (
-                      <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.date}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.total.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {t.balance.toFixed(2)}</td>
-                        <td className="px-2 py-4 text-center">
-                          <TransactionActionsMenu
-                            hasInvoice={hasInvoice}
-                            busy={loadingInvoiceId === t.id}
-                            onView={() => openInvoiceAction(t.id, undefined)}
-                            onPrint={() => openInvoiceAction(t.id, 'print')}
-                            onDownload={() => openInvoiceAction(t.id, 'download')}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        )}
 
       </div>
 
@@ -851,50 +1257,53 @@ export default function PartiesPage() {
         onClose={() => setIsAddModalOpen(false)}
         onSave={async (data) => {
           try {
-            if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
-              toast.error("Select a franchise before adding a customer.");
-              return;
-            }
-            if (isSuper && scope === "HQ" && !hqFranchiseId) {
+            if (!effectiveFranchiseId) {
               toast.error("HQ is not configured.");
               return;
             }
-            const payload = isSuper
-              ? { ...data, phone: data.contact, franchiseId: effectiveFranchiseId }
-              : { ...data, phone: data.contact };
-            await customersApi.create(payload);
+            const payload = {
+              ...data,
+              phone: data.contact,
+              franchiseId: effectiveFranchiseId
+            };
+            const res = await customersApi.create(payload);
             toast.success("Customer added successfully!");
             setIsAddModalOpen(false);
-            fetchCustomers(effectiveFranchiseId);
+            await fetchCustomers(effectiveFranchiseId);
+            if (res.data?.id) {
+              setSelectedCustomerId(res.data.id);
+            }
           } catch (error: any) {
             toast.error(error.response?.data?.error || "Failed to add customer");
             throw error;
           }
         }}
-        title="ADD CUSTOMER"
+        title="ADD HQ CUSTOMER"
         partyType="customer"
-        scopeLabel={scopeLabel}
+        scopeLabel={`HQ — ${hqName}`}
       />
 
       <AddPartyModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        initialData={selectedCustomerDetail}
+        initialData={selectedCustomerDetail || selectedCustomer}
         onSave={async (data) => {
           try {
             if (!selectedCustomerId) return;
             await customersApi.update(selectedCustomerId, { ...data, phone: data.contact });
             toast.success("Customer updated successfully!");
             setIsEditModalOpen(false);
-            fetchCustomers(effectiveFranchiseId);
+            await fetchCustomers(effectiveFranchiseId);
+            const res = await customersApi.getById(selectedCustomerId);
+            setSelectedCustomerDetail(res.data);
           } catch (error: any) {
             toast.error(error.response?.data?.error || "Failed to update customer");
             throw error;
           }
         }}
-        title="EDIT CUSTOMER"
+        title="EDIT HQ CUSTOMER"
         partyType="customer"
-        scopeLabel={scopeLabel}
+        scopeLabel={`HQ — ${hqName}`}
       />
 
     </div>

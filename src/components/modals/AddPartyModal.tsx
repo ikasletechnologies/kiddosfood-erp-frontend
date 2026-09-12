@@ -324,36 +324,50 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         return;
       }
 
-      // Opening Balance validation (must be non-negative)
-      if (form.openingBalance !== "") {
-        const openingBalNum = Number(form.openingBalance);
-        if (isNaN(openingBalNum) || openingBalNum < 0) {
-          toast.error("Opening Balance must be a non-negative number.");
-          return;
-        }
-      }
-
-      // As Of Date validation (must not be in the future)
-      if (form.asOfDate) {
-        const selectedDate = new Date(form.asOfDate);
-        const today = new Date();
-        selectedDate.setHours(0, 0, 0, 0);
-        today.setHours(0, 0, 0, 0);
-        if (selectedDate > today) {
-          toast.error("As Of Date cannot be in the future.");
-          return;
-        }
-      }
-
-
-
-      let finalOpeningBalance = Number(form.openingBalance) || 0;
+      // Opening Balance validation (must be non-negative) — Vendor only
       if (partyType === 'vendor') {
+        if (form.openingBalance !== "") {
+          const openingBalNum = Number(form.openingBalance);
+          if (isNaN(openingBalNum) || openingBalNum < 0) {
+            toast.error("Opening Balance must be a non-negative number.");
+            return;
+          }
+        }
+
+        // As Of Date validation (must not be in the future)
+        if (form.asOfDate) {
+          const selectedDate = new Date(form.asOfDate);
+          const today = new Date();
+          selectedDate.setHours(0, 0, 0, 0);
+          today.setHours(0, 0, 0, 0);
+          if (selectedDate > today) {
+            toast.error("As Of Date cannot be in the future.");
+            return;
+          }
+        }
+
+        // Credit Limit validation (must be non-negative and is required if Custom Limit is selected)
+        if (!form.noCreditLimit) {
+          const limitStr = String(form.customCreditLimit).trim();
+          if (limitStr === "") {
+            toast.error("Credit Limit is required when Custom Limit is selected.");
+            return;
+          }
+          const limitNum = Number(limitStr);
+          if (isNaN(limitNum) || limitNum < 0) {
+            toast.error("Credit Limit must be a non-negative number.");
+            return;
+          }
+        }
+      }
+
+      let finalOpeningBalance = 0;
+      if (partyType === 'vendor') {
+        finalOpeningBalance = Number(form.openingBalance) || 0;
         if (form.openingBalanceType === 'receive') finalOpeningBalance = -Math.abs(finalOpeningBalance);
         else finalOpeningBalance = Math.abs(finalOpeningBalance);
       } else {
-        if (form.openingBalanceType === 'pay') finalOpeningBalance = -Math.abs(finalOpeningBalance);
-        else finalOpeningBalance = Math.abs(finalOpeningBalance);
+        finalOpeningBalance = initialData?.openingBalance !== undefined ? Number(initialData.openingBalance) : 0;
       }
 
       const payload = {
@@ -369,10 +383,10 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         pincode: cleanPincode,
         gstNumber: form.gstNumber && form.gstNumber.trim() ? form.gstNumber.trim().toUpperCase() : null,
         gstType: form.gstType || "Unregistered/Consumer",
-        openingBalance: finalOpeningBalance,
-        openingBalanceType: form.openingBalanceType,
-        asOfDate: form.asOfDate || null,
-        creditLimit: form.noCreditLimit ? null : (Number(form.customCreditLimit) || 0),
+        openingBalance: partyType === 'vendor' ? finalOpeningBalance : (initialData?.openingBalance !== undefined ? Number(initialData.openingBalance) : 0),
+        openingBalanceType: partyType === 'vendor' ? form.openingBalanceType : (initialData?.openingBalanceType || null),
+        asOfDate: partyType === 'vendor' ? (form.asOfDate || null) : (initialData?.asOfDate || null),
+        creditLimit: partyType === 'vendor' ? (form.noCreditLimit ? null : (Number(form.customCreditLimit) || 0)) : (initialData?.creditLimit ?? null),
         category: form.category && form.category.trim() ? form.category.trim() : null,
         paymentTerms: form.paymentTerms || "IMMEDIATE",
         status: form.status || "ACTIVE",
@@ -644,73 +658,102 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
             </div>
           </div>
 
-          {/* SECTION: Credit & Balance */}
-          <div>
-            <label className={sectionLabelClass}>Credit & Balance</label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-blue-500 mb-1.5">Opening Balance</label>
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      value={form.openingBalance}
-                      onChange={(e) => setForm({...form, openingBalance: e.target.value})}
-                      className="w-full border-2 border-blue-500 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:ring-4 ring-blue-500/10 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                    />
+          {/* SECTION: Credit & Balance (Vendor Only) */}
+          {partyType === 'vendor' && (
+            <div>
+              <label className={sectionLabelClass}>Credit & Balance</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-blue-500 mb-1.5">Opening Balance</label>
+                      <input
+                        type="number"
+                        placeholder="0.00"
+                        value={form.openingBalance}
+                        onChange={(e) => setForm({...form, openingBalance: e.target.value})}
+                        className="w-full border-2 border-blue-500 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:ring-4 ring-blue-500/10 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">As Of Date</label>
+                      <input
+                        type="date"
+                        value={form.asOfDate}
+                        onChange={(e) => setForm({...form, asOfDate: e.target.value})}
+                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">As Of Date</label>
-                    <input
-                      type="date"
-                      value={form.asOfDate}
-                      onChange={(e) => setForm({...form, asOfDate: e.target.value})}
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
-                    />
+
+                  <div className="flex items-center gap-6 pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className={clsx(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                        form.openingBalanceType === "pay" ? "border-blue-500" : "border-gray-300 dark:border-white/20 group-hover:border-blue-300"
+                      )}>
+                        {form.openingBalanceType === "pay" && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
+                      </div>
+                      <input
+                        type="radio"
+                        name="balanceType"
+                        className="hidden"
+                        checked={form.openingBalanceType === "pay"}
+                        onChange={() => setForm({...form, openingBalanceType: "pay"})}
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Pay</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className={clsx(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                        form.openingBalanceType === "receive" ? "border-emerald-500" : "border-gray-300 dark:border-white/20 group-hover:border-emerald-300"
+                      )}>
+                        {form.openingBalanceType === "receive" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
+                      </div>
+                      <input
+                        type="radio"
+                        name="balanceType"
+                        className="hidden"
+                        checked={form.openingBalanceType === "receive"}
+                        onChange={() => setForm({...form, openingBalanceType: "receive"})}
+                      />
+                      <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Receive</span>
+                    </label>
+                  </div>
+
+                  <div className="border border-gray-200 dark:border-white/10 rounded-xl p-4 space-y-2 bg-slate-50/50 dark:bg-white/[0.02]">
+                    <div className="flex items-center gap-1">
+                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Credit Limit</label>
+                      <Info size={12} className="text-gray-400" />
+                    </div>
+                    <div className="flex items-center gap-3 pt-1">
+                      <span className={clsx("text-sm transition-colors", form.noCreditLimit ? "text-blue-500 font-medium" : "text-gray-400")}>No Limit</span>
+                      <button
+                        onClick={() => setForm({...form, noCreditLimit: !form.noCreditLimit})}
+                        className={clsx("w-9 h-5 rounded-full relative transition-colors", form.noCreditLimit ? "bg-blue-500" : "bg-gray-300 dark:bg-white/20")}
+                      >
+                        <div className={clsx("w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm", form.noCreditLimit ? "left-5" : "left-1")} />
+                      </button>
+                      <span className={clsx("text-sm transition-colors", !form.noCreditLimit ? "text-gray-700 dark:text-slate-300 font-medium" : "text-gray-400")}>Custom Limit</span>
+                    </div>
+
+                    {!form.noCreditLimit && (
+                      <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                        <input
+                          type="number"
+                          placeholder="Enter limit amount..."
+                          value={form.customCreditLimit}
+                          onChange={(e) => setForm({...form, customCreditLimit: e.target.value})}
+                          className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="flex items-center gap-6 pt-1">
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className={clsx(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      form.openingBalanceType === "pay" ? "border-blue-500" : "border-gray-300 dark:border-white/20 group-hover:border-blue-300"
-                    )}>
-                      {form.openingBalanceType === "pay" && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
-                    </div>
-                    <input
-                      type="radio"
-                      name="balanceType"
-                      className="hidden"
-                      checked={form.openingBalanceType === "pay"}
-                      onChange={() => setForm({...form, openingBalanceType: "pay"})}
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Pay</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <div className={clsx(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      form.openingBalanceType === "receive" ? "border-emerald-500" : "border-gray-300 dark:border-white/20 group-hover:border-emerald-300"
-                    )}>
-                      {form.openingBalanceType === "receive" && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
-                    </div>
-                    <input
-                      type="radio"
-                      name="balanceType"
-                      className="hidden"
-                      checked={form.openingBalanceType === "receive"}
-                      onChange={() => setForm({...form, openingBalanceType: "receive"})}
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Receive</span>
-                  </label>
-                </div>
-
-
               </div>
             </div>
-          </div>
+          )}
 
         </div>
 

@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Search, Filter, ChevronDown, Plus, Settings, MoreVertical,
-  Edit3, Printer, FileText as ExcelIcon, X, Info, Store,
-  MapPin, Phone as PhoneIcon, Mail, Building2, XCircle
+  Search, Plus, MoreVertical, Edit3, Printer,
+  FileText, X, MapPin, Phone, Mail,
+  ShieldCheck, Truck, Download, User, Package
 } from "lucide-react";
+import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import * as XLSX from "xlsx";
 import api, { franchiseApi, posApi, settingsApi } from "@/lib/api";
@@ -14,6 +16,7 @@ import { formatDate } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import PartyStatement from "@/components/documents/PartyStatement";
 import TransactionActionsMenu from "@/components/documents/TransactionActionsMenu";
+import AddDealerModal from "@/components/modals/AddDealerModal";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -24,56 +27,66 @@ const FALLBACK_COMPANY = {
   state: "Tamil Nadu"
 };
 
-const dealerSectionLabelClass = "block text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-400 mb-3 pb-2 border-b border-gray-100 dark:border-white/5";
-
 interface Dealer {
   id: string;
   name: string;
-  email: string;
-  phone: string;
-  address: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  shippingAddress?: string;
+  gstNumber?: string;
+  gstin?: string;
+  taxNumber?: string;
+  gstType?: string;
+  pincode?: string;
+  state?: string;
+  city?: string;
+  district?: string;
+  balance?: number;
+  openingBalance?: number;
+  openingBalanceType?: string;
+  asOfDate?: string;
+  creditLimit?: number;
   status: string;
   franchiseId: string;
   franchise?: {
     id: string;
     name: string;
   };
-  createdAt: string;
+  createdAt?: string;
 }
 
 export default function DealersClient() {
   const { user } = useAuth();
-  const isSuper = user?.role === "SUPER_ADMIN";
+  const router = useRouter();
 
-  const [scope, setScope] = useState<"HQ" | "FRANCHISE">("HQ");
   const [franchises, setFranchises] = useState<any[]>([]);
   const [franchisesLoading, setFranchisesLoading] = useState(true);
-  const [selectedFranchiseId, setSelectedFranchiseId] = useState("");
 
   useEffect(() => {
-    if (!isSuper) {
-      setFranchisesLoading(false);
-      return;
-    }
     setFranchisesLoading(true);
     franchiseApi.getAll()
       .then((res) => setFranchises(res.data ?? []))
       .catch((err) => console.error("Failed to load franchises list", err))
       .finally(() => setFranchisesLoading(false));
-  }, [isSuper]);
+  }, []);
 
+  // Exclusively scoped to HQ Franchise row where isHQ === true
   const hqFranchiseId = franchises.find((f: any) => f.isHQ)?.id;
-  const effectiveFranchiseId = isSuper
-    ? (scope === "HQ" ? hqFranchiseId : selectedFranchiseId)
-    : (user as any)?.franchiseId;
+  const effectiveFranchiseId = hqFranchiseId || (user as any)?.franchiseId;
+  const hqName = franchises.find((f: any) => f.isHQ)?.name || "Kiddos Food Headquarters";
 
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
 
-  // Read-only invoice viewer state — View/Print/Download all reuse the one
-  // fetched Order, they never create or alter anything.
+  // Active section tab: Transactions vs Item / Product Sales History
+  const [activeTab, setActiveTab] = useState<"TRANSACTIONS" | "ITEMS">("TRANSACTIONS");
+  const [dealerItems, setDealerItems] = useState<any[]>([]);
+  const [dealerItemsLoading, setDealerItemsLoading] = useState(false);
+  const [itemSearchQuery, setItemSearchQuery] = useState("");
+  const [isItemSearchOpen, setIsItemSearchOpen] = useState(false);
+
+  // Read-only invoice viewer state
   const [invoiceDoc, setInvoiceDoc] = useState<any>(null);
   const [invoiceAction, setInvoiceAction] = useState<'print' | 'download' | undefined>(undefined);
   const [loadingInvoiceId, setLoadingInvoiceId] = useState<string | null>(null);
@@ -86,6 +99,16 @@ export default function DealersClient() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.filter-popover-container')) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [selectedDealerId, setSelectedDealerId] = useState<string | null>(null);
@@ -95,33 +118,12 @@ export default function DealersClient() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editDealerId, setEditDealerId] = useState<string | null>(null);
-
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    address: "",
-    franchiseId: ""
-  });
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedDealerForEdit, setSelectedDealerForEdit] = useState<Dealer | null>(null);
 
   const [dealerTransactions, setDealerTransactions] = useState<any[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
-
-  const transactionTypes = [
-    "Sale", "Sale (e-Invoice)", "Purchase", "Credit Note", 
-    "Debit Note", "Sale Order", "Purchase Order", "Payment-In", 
-    "Payment-Out", "Estimate", "Delivery Challan", "Journal Entry"
-  ];
-  
-  const [filters, setFilters] = useState({
-    all: false,
-    active: false,
-    inactive: false
-  });
 
   const fetchDealerTransactions = async (dealerId: string) => {
     setTransactionsLoading(true);
@@ -136,13 +138,83 @@ export default function DealersClient() {
     }
   };
 
+  const fetchDealerItems = async (dealerId: string) => {
+    setDealerItemsLoading(true);
+    try {
+      const res = await api.get(`/api/dealers/${dealerId}/items`);
+      setDealerItems(res.data || []);
+    } catch (error) {
+      console.error("Failed to fetch dealer items", error);
+      setDealerItems([]);
+    } finally {
+      setDealerItemsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedDealerId) {
       fetchDealerTransactions(selectedDealerId);
+      fetchDealerItems(selectedDealerId);
     } else {
       setDealerTransactions([]);
+      setDealerItems([]);
     }
   }, [selectedDealerId]);
+
+  // Reset search queries on dealer change
+  useEffect(() => {
+    setTransactionSearchQuery("");
+    setIsTransactionSearchOpen(false);
+    setItemSearchQuery("");
+    setIsItemSearchOpen(false);
+  }, [selectedDealerId]);
+
+  const filteredItems = React.useMemo(() => {
+    if (!itemSearchQuery.trim()) return dealerItems;
+    const q = itemSearchQuery.trim().toLowerCase();
+    return dealerItems.filter((it: any) =>
+      (it.name || "").toLowerCase().includes(q) ||
+      (it.sku || "").toLowerCase().includes(q) ||
+      (it.category || "").toLowerCase().includes(q)
+    );
+  }, [dealerItems, itemSearchQuery]);
+
+  const handleExportItemsExcel = () => {
+    try {
+      if (filteredItems.length === 0) {
+        toast("No item history to export.", { icon: "ℹ️" });
+        return;
+      }
+      const headers = [
+        "Product Name",
+        "SKU",
+        "Category",
+        "Quantity Sold",
+        "Unit",
+        "Total Value (₹)",
+        "Orders Count",
+        "Last Purchased"
+      ];
+      const rows = filteredItems.map((it: any) => [
+        it.name || "",
+        it.sku || "—",
+        it.category || "—",
+        Number(it.quantitySold || 0),
+        it.unit || "PCS",
+        Number(it.totalValue || 0),
+        Number(it.orderCount || 1),
+        it.lastPurchased ? new Date(it.lastPurchased).toLocaleDateString() : "—"
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Dealer Item History");
+      const filename = `${(selectedDealer?.name || "Dealer").replace(/[^a-zA-Z0-9_-]/g, "_")}_Item_History.xlsx`;
+      XLSX.writeFile(wb, filename);
+      toast.success("Exported dealer item sales history to Excel");
+    } catch (err) {
+      toast.error("Failed to export items to Excel");
+    }
+  };
 
   const transactions = dealerTransactions.filter((t) => {
     if (!transactionSearchQuery.trim()) return true;
@@ -150,21 +222,22 @@ export default function DealersClient() {
     return (
       (t.type && String(t.type).toLowerCase().includes(q)) ||
       (t.number && String(t.number).toLowerCase().includes(q)) ||
-      (t.date && formatDate(t.date).toLowerCase().includes(q))
+      (t.date && formatDate(t.date).toLowerCase().includes(q)) ||
+      String(t.total || '').toLowerCase().includes(q) ||
+      String(t.balance || '').toLowerCase().includes(q)
     );
   });
 
   const fetchDealers = async () => {
-    if (isSuper && franchisesLoading) return;
-    if (isSuper && scope === "FRANCHISE" && !selectedFranchiseId) {
+    if (franchisesLoading) return;
+    if (!effectiveFranchiseId) {
       setDealers([]);
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const fId = effectiveFranchiseId;
-      const url = fId ? `/api/dealers?franchiseId=${fId}` : `/api/dealers`;
+      const url = `/api/dealers?franchiseId=${effectiveFranchiseId}`;
       const res = await api.get(url);
       const data = res.data || [];
       setDealers(data);
@@ -181,81 +254,28 @@ export default function DealersClient() {
 
   useEffect(() => {
     fetchDealers();
-  }, [user, isSuper, scope, selectedFranchiseId, franchisesLoading, effectiveFranchiseId]);
-
-  const handleCreate = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-
-    if (!formData.name.trim()) {
-      toast.error("Dealer Name is required.");
-      return;
-    }
-
-    // Editing an existing dealer only updates its own fields — no franchise
-    // scope re-validation needed (a dealer's franchise assignment doesn't
-    // change from this form).
-    if (isEditMode && editDealerId) {
-      try {
-        await api.patch(`/api/dealers/${editDealerId}`, {
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address
-        });
-        toast.success("Dealer updated successfully");
-        setShowAddModal(false);
-        setIsEditMode(false);
-        setEditDealerId(null);
-        setFormData({ name: "", email: "", phone: "", address: "", franchiseId: "" });
-        fetchDealers();
-      } catch (error: any) {
-        toast.error(error.response?.data?.error || "Failed to update dealer");
-      }
-      return;
-    }
-
-    if (isSuper && scope === "HQ" && !hqFranchiseId) {
-      toast.error("HQ is not configured.");
-      return;
-    }
-
-    if ((isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) || (!isSuper && !effectiveFranchiseId)) {
-      toast.error(isSuper ? "Select a franchise branch first." : "Please select a franchise branch.");
-      return;
-    }
-
-    try {
-      await api.post(`/api/dealers`, {
-        ...formData,
-        franchiseId: effectiveFranchiseId
-      });
-      toast.success("Dealer added successfully");
-      setShowAddModal(false);
-      setFormData({ name: "", email: "", phone: "", address: "", franchiseId: "" });
-      fetchDealers();
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || "Failed to add dealer");
-    }
-  };
+  }, [franchisesLoading, effectiveFranchiseId]);
 
   const handleOpenEdit = (dealer: Dealer) => {
-    setIsEditMode(true);
-    setEditDealerId(dealer.id);
-    setFormData({
-      name: dealer.name || "",
-      email: dealer.email || "",
-      phone: dealer.phone || "",
-      address: dealer.address || "",
-      franchiseId: dealer.franchiseId || ""
-    });
-    setShowAddModal(true);
+    setSelectedDealerForEdit(dealer);
+    setIsEditModalOpen(true);
   };
 
   const selectedDealer = dealers.find(d => d.id === selectedDealerId) || null;
 
-  // Read-only: fetches the exact existing Order (with its real invoiceNum
-  // and line items) and opens it in the shared GSTInvoice viewer — no new
-  // invoice/order is ever created here, this only reads GET /api/orders/:id.
+  // Selected dealer display values
+  const dealerInitials = selectedDealer?.name ? selectedDealer.name.slice(0, 2).toUpperCase() : "DL";
+  const dealerName = selectedDealer?.name || "—";
+  const dealerPhone = selectedDealer?.phone || "—";
+  const dealerEmail = selectedDealer?.email || "—";
+  const dealerGstin = selectedDealer?.gstNumber || selectedDealer?.gstin || (selectedDealer as any)?.taxNumber || "—";
+  const dealerGstType = selectedDealer?.gstType || "—";
+  const dealerAddress = selectedDealer?.address || "—";
+  const dealerShippingAddress = selectedDealer?.shippingAddress || "—";
+  const hasShippingAddress = Boolean(selectedDealer?.shippingAddress && selectedDealer.shippingAddress.trim() !== "");
+  
+  const dealerBalance = Number(selectedDealer?.balance) || dealerTransactions.reduce((sum, t) => sum + (Number(t.balance) || 0), 0) || 0;
+
   const openInvoiceAction = async (orderId: string, action: 'print' | 'download' | undefined) => {
     setLoadingInvoiceId(orderId);
     try {
@@ -269,238 +289,102 @@ export default function DealersClient() {
     }
   };
 
-  const handleDealerStatementReport = () => {
-    if (!selectedDealer) {
-      toast.error("Select a dealer first.");
-      return;
+  const handleExportExcel = () => {
+    try {
+      const targetDealers = dealers || [];
+      if (targetDealers.length === 0) {
+        toast("No dealers available to export.", { icon: "ℹ️" });
+        return;
+      }
+
+      const headers = [
+        "Dealer Name",
+        "Phone Number",
+        "Email Address",
+        "GSTIN",
+        "GST Type",
+        "Address",
+        "Shipping Address",
+        "Status"
+      ];
+
+      const rows = targetDealers.map((d: any) => [
+        d.name || "",
+        d.phone || "",
+        d.email || "",
+        d.gstNumber || d.gstin || d.taxNumber || "",
+        d.gstType || "",
+        d.address || "",
+        d.shippingAddress || "",
+        d.status || "ACTIVE"
+      ]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Dealers");
+      
+      const today = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(workbook, `HQ_Dealers_List_${today}.xlsx`);
+      toast.success("Dealer list exported successfully (.xlsx)");
+    } catch (error) {
+      console.error("Export Excel error", error);
+      toast.error("Failed to export dealer list");
     }
-    if (dealerTransactions.length === 0) {
-      toast.error("No transactions to include in the statement.");
-      return;
-    }
-    const cleanName = selectedDealer.name.replace(/[^a-zA-Z0-9]/g, "_");
-    const todayStr = new Date().toISOString().split("T")[0];
-    const filename = `Dealer_Statement_${cleanName}_${todayStr}.xlsx`;
-
-    const partyName = selectedDealer.name;
-    const partyPhone = selectedDealer.phone || "-";
-    const partyEmail = selectedDealer.email || "-";
-
-    const headers = ["Party Name", "Phone", "Email", "Transaction Type", "Invoice/Transaction Number", "Date", "Total (₹)", "Balance (₹)"];
-    const rows = dealerTransactions.map((t) => [
-      partyName,
-      partyPhone,
-      partyEmail,
-      t.type || "",
-      t.number || "",
-      formatDate(t.date),
-      Number(t.total || 0),
-      Number(t.balance || 0)
-    ]);
-    const totalAmount = dealerTransactions.reduce((s, t) => s + Number(t.total || 0), 0);
-    const totalBalance = dealerTransactions.reduce((s, t) => s + Number(t.balance || 0), 0);
-
-    const aoa = [
-      ["DEALER STATEMENT"],
-      [`Dealer Name: ${partyName}`, `Branch: ${selectedDealer.franchise?.name || "HQ"}`],
-      [`Phone: ${partyPhone}`, `Email: ${partyEmail}`],
-      [`Generated Date: ${formatDate(new Date())}`],
-      [],
-      headers,
-      ...rows,
-      [],
-      ["TOTALS", "", "", "", "", "", totalAmount, totalBalance]
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Dealer Statement");
-    XLSX.writeFile(wb, filename);
-    toast.success(`Dealer Statement for ${selectedDealer.name} downloaded (.xlsx)`);
-    setIsMoreMenuOpen(false);
-  };
-
-  const handleAllDealersReport = () => {
-    if (dealers.length === 0) {
-      toast.error("No dealer data available to download.");
-      return;
-    }
-    const todayStr = new Date().toISOString().split("T")[0];
-    const filename = `All_Dealers_Report_${todayStr}.xlsx`;
-
-    const headers = ["#", "Dealer Name", "Phone", "Email", "Address", "Branch", "Status"];
-    const rows = dealers.map((d, idx) => [
-      idx + 1,
-      d.name || "",
-      d.phone || "—",
-      d.email || "—",
-      d.address || "—",
-      d.franchise?.name || "HQ",
-      d.status || "ACTIVE"
-    ]);
-
-    const aoa = [
-      ["ALL DEALERS REPORT"],
-      [`Generated Date: ${formatDate(new Date())}`, `Total Dealers: ${dealers.length}`],
-      [],
-      headers,
-      ...rows
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "All Dealers");
-    XLSX.writeFile(wb, filename);
-    toast.success("All Dealers report downloaded (.xlsx)");
-    setIsMoreMenuOpen(false);
   };
 
   const filteredDealers = dealers.filter(d => {
-    if (searchQuery && !d.name.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    if (filters.all) return true;
-    const checkStatus = filters.active || filters.inactive;
-    if (checkStatus) {
-      const statusMatch = (filters.active && d.status === 'ACTIVE') || (filters.inactive && d.status !== 'ACTIVE');
-      if (!statusMatch) return false;
-    }
-    return true;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.trim().toLowerCase();
+    const nameMatch = (d.name || "").toLowerCase().includes(q);
+    const phoneMatch = (d.phone || "").toLowerCase().includes(q);
+    const emailMatch = (d.email || "").toLowerCase().includes(q);
+    return nameMatch || phoneMatch || emailMatch;
   });
+
+  // Keep selection synchronized with filtered dealers list
+  useEffect(() => {
+    if (filteredDealers.length > 0) {
+      const exists = filteredDealers.some((d) => d.id === selectedDealerId);
+      if (!exists) {
+        setSelectedDealerId(filteredDealers[0].id);
+      }
+    } else {
+      setSelectedDealerId(null);
+    }
+  }, [filteredDealers, selectedDealerId]);
 
   return (
     <div className="flex h-[calc(100vh-64px)] w-full overflow-hidden bg-white dark:bg-background text-slate-800 dark:text-slate-100">
       
       {/* Left Sidebar - Dealer List */}
       <div className="w-[300px] border-r border-slate-200 dark:border-white/5 flex flex-col shrink-0 bg-white dark:bg-card relative z-10">
-        
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-white/5">
-          <button className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-            Dealers <ChevronDown size={18} className="text-blue-500" />
-          </button>
-        </div>
-
-        {/* HQ / Franchise Scope Selector — Super Admin only */}
-        {isSuper && (
-          <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
-            <div className="flex gap-1 bg-slate-100 dark:bg-white/5 rounded-full p-1">
-              <button
-                type="button"
-                onClick={() => setScope("HQ")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "HQ" ? "bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
-              >
-                HQ
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope("FRANCHISE")}
-                className={`flex-1 text-[11px] font-bold py-1.5 rounded-full transition-colors ${scope === "FRANCHISE" ? "bg-white dark:bg-white/10 text-blue-600 dark:text-blue-400 shadow" : "text-slate-500 dark:text-slate-400"}`}
-              >
-                Franchise
-              </button>
-            </div>
-            {scope === "FRANCHISE" && (
-              <select
-                value={selectedFranchiseId}
-                onChange={(e) => setSelectedFranchiseId(e.target.value)}
-                className="w-full text-xs border border-slate-200 dark:border-white/10 bg-white dark:bg-[#13151f] text-slate-800 dark:text-white rounded-full px-3 py-1.5 outline-none focus:border-blue-400"
-                disabled={franchises.filter((f: any) => !f.isHQ).length === 0}
-              >
-                {franchises.filter((f: any) => !f.isHQ).length === 0 ? (
-                  <option value="">No franchises available</option>
-                ) : (
-                  <>
-                    <option value="">Select Franchise</option>
-                    {franchises.filter((f: any) => !f.isHQ).map((f: any) => (
-                      <option key={f.id} value={f.id}>{f.name}</option>
-                    ))}
-                  </>
-                )}
-              </select>
-            )}
-            {scope === "HQ" && !hqFranchiseId && !franchisesLoading && (
-              <div className="w-full text-xs border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 rounded-full px-3 py-1.5 text-center font-medium">
-                HQ is not configured
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Search & List Headers */}
-        <div className="px-3 py-2 border-b border-slate-200 dark:border-white/5 space-y-2">
+        <div className="p-3 border-b border-slate-200 dark:border-white/5 space-y-2.5">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search Dealer Name" 
+              placeholder="Search Dealer Name, Phone..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 text-slate-800 dark:text-white rounded-full text-xs outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-white/10 bg-slate-50/70 dark:bg-white/5 text-slate-800 dark:text-white rounded-xl text-xs outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
             />
             {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                title="Clear search"
+              >
+                <X size={13} />
+              </button>
             )}
           </div>
           
-          <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-white/5 relative filter-popover-container">
-            <div 
-              className="flex items-center gap-2 cursor-pointer"
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-            >
-              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Dealer Name</span>
-              <Filter size={12} className="text-orange-500" />
-            </div>
-
-            {/* Filter Popover */}
-            {isFilterOpen && (
-              <div className="absolute top-full left-4 mt-2 w-48 bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-slate-100 dark:border-white/10 z-50 p-3">
-                <div className="space-y-2 mb-3">
-                  {[
-                    { id: "all", label: "All" },
-                    { id: "active", label: "Active" },
-                    { id: "inactive", label: "Inactive" },
-                  ].map((f) => (
-                    <label key={f.id} className="flex items-center gap-3 cursor-pointer group">
-                      <div className="relative flex items-center justify-center">
-                        <input 
-                          type="checkbox" 
-                          checked={(filters as any)[f.id]}
-                          onChange={(e) => setFilters({...filters, [f.id]: e.target.checked, all: f.id === 'all' ? e.target.checked : false})}
-                          className="peer appearance-none w-4 h-4 rounded border border-slate-300 dark:border-white/20 checked:bg-orange-500 checked:border-orange-500 cursor-pointer transition-colors bg-white dark:bg-white/5" 
-                        />
-                        <svg className="absolute w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{f.label}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-white/10">
-                  <button 
-                    onClick={() => { setFilters({ all: true, active: false, inactive: false }); setIsFilterOpen(false); }}
-                    className="flex-1 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-full transition-colors"
-                  >
-                    Clear
-                  </button>
-                  <button 
-                    onClick={() => setIsFilterOpen(false)}
-                    className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-full transition-colors shadow-sm"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            <div className="flex items-center gap-1.5 cursor-pointer">
-              <span className="text-[12px] font-bold text-slate-500 dark:text-slate-400">Status</span>
-            </div>
+          <div className="flex items-center justify-between px-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <span>Dealer Name</span>
+            <span>Status</span>
           </div>
         </div>
 
@@ -518,12 +402,21 @@ export default function DealersClient() {
                   key={d.id}
                   onClick={() => setSelectedDealerId(d.id)}
                   className={`flex items-center justify-between px-4 py-3 cursor-pointer border-b border-slate-50 dark:border-white/5 transition-colors ${
-                    isActive ? "bg-[#e6f4fc] dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-white/[0.02] bg-white dark:bg-transparent"
+                    isActive ? "bg-orange-50/80 dark:bg-orange-950/20 border-l-[3.5px] border-l-orange-500" : "hover:bg-slate-50 dark:hover:bg-white/[0.02] bg-white dark:bg-transparent"
                   }`}
                 >
-                  <span className="text-sm text-slate-800 dark:text-slate-200 truncate pr-2">{d.name}</span>
+                  <div className="min-w-0 pr-2">
+                    <p className={`text-xs font-bold truncate ${isActive ? "text-slate-900 dark:text-white" : "text-slate-800 dark:text-slate-200"}`}>
+                      {d.name}
+                    </p>
+                    {d.phone && (
+                      <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5">
+                        {d.phone}
+                      </p>
+                    )}
+                  </div>
                   <div className="flex flex-col items-end shrink-0">
-                    <span className={`text-[10px] font-bold uppercase ${d.status === 'ACTIVE' ? 'text-emerald-500 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
+                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${d.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
                       {d.status}
                     </span>
                   </div>
@@ -536,275 +429,504 @@ export default function DealersClient() {
       </div>
 
       {/* Right Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-card">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-50/40 dark:bg-card overflow-y-auto custom-scrollbar">
         
         {/* Top Header Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-2.5 border-b border-slate-200 dark:border-white/5">
+        <div className="flex items-center justify-between gap-3 px-6 py-3 border-b border-slate-200/90 dark:border-slate-800/90 bg-white dark:bg-[#0A0D14] shadow-2xs">
+          <div>
+            <h1 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+              HQ Dealers & Ledger
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400">
+              {franchisesLoading ? "Loading HQ..." : `HQ — ${hqName}`}
+            </p>
+          </div>
+
           <button 
             onClick={() => {
-              if (isSuper && franchisesLoading) return;
-              if (isSuper && scope === "FRANCHISE" && !effectiveFranchiseId) {
-                toast.error("Select a franchise before adding a dealer.");
-                return;
-              }
-              if (isSuper && scope === "HQ" && !hqFranchiseId) {
+              if (franchisesLoading) return;
+              if (!effectiveFranchiseId) {
                 toast.error("HQ is not configured.");
                 return;
               }
-              setIsEditMode(false);
-              setEditDealerId(null);
-              setFormData({
-                name: "", email: "", phone: "", address: "", franchiseId: ""
-              });
-              setShowAddModal(true);
+              setIsAddModalOpen(true);
             }}
-            disabled={(isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)}
-            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-              (isSuper && franchisesLoading) || (isSuper && scope === "HQ" && !hqFranchiseId) || (isSuper && scope === "FRANCHISE" && franchises.filter((f: any) => !f.isHQ).length === 0)
-                ? "bg-slate-300 dark:bg-white/10 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                : "bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+            disabled={franchisesLoading || !effectiveFranchiseId}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-[0.98] cursor-pointer ${
+              franchisesLoading || !effectiveFranchiseId
+                ? "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 text-white"
             }`}
           >
-            <Plus size={14} /> {isSuper && franchisesLoading ? "Loading scope..." : "Add Dealer"}
+            <Plus size={15} /> {franchisesLoading ? "Loading..." : "Add Dealer"}
           </button>
         </div>
 
-        {/* Dealer Details Header */}
+        {/* Dealer Details Header Card */}
         {selectedDealer ? (
-          <div className="px-6 py-4 flex items-start justify-between border-b border-slate-200 dark:border-white/5 bg-white dark:bg-card">
-            <div className="space-y-4 w-full">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-800 dark:text-white tracking-tight">{selectedDealer.name}</h2>
-                  <button
-                    onClick={() => handleOpenEdit(selectedDealer)}
-                    className="text-orange-500 hover:text-orange-600 transition-colors"
-                  >
-                    <Edit3 size={16} />
-                  </button>
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
+            <div className="bg-white dark:bg-[#0A0D14] border border-slate-200/90 dark:border-slate-800/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+              {/* Header Title Row */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3.5 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-orange-500/10 text-orange-600 dark:text-orange-400 font-black text-base sm:text-lg flex items-center justify-center border border-orange-500/20 shrink-0 shadow-2xs">
+                    {dealerInitials}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight uppercase truncate">
+                        {dealerName}
+                      </h2>
+                      <button
+                        onClick={() => handleOpenEdit(selectedDealer)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors cursor-pointer"
+                        title="Edit Dealer Details"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <span className={clsx(
+                        "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md",
+                        selectedDealer.status === "INACTIVE"
+                          ? "bg-slate-100 text-slate-500 dark:bg-slate-800"
+                          : "bg-emerald-50 text-emerald-600 border border-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/40"
+                      )}>
+                        {selectedDealer.status === "INACTIVE" ? "Inactive" : "Active Dealer"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 text-slate-400">
+
+                {/* Balance & Menu */}
+                <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  <div className="text-left sm:text-right">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Outstanding Balance</p>
+                    <p className={clsx(
+                      "text-base sm:text-lg font-black font-mono leading-none mt-0.5",
+                      dealerBalance > 0 ? "text-emerald-600 dark:text-emerald-400" : dealerBalance < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-300"
+                    )}>
+                      {dealerBalance === 0 ? "₹0.00" : `₹${Math.abs(dealerBalance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                      {dealerBalance !== 0 && (
+                        <span className="text-[10px] font-bold ml-1 uppercase opacity-80">
+                          {dealerBalance > 0 ? "(To Receive)" : "(To Pay)"}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+
                   <div className="relative filter-popover-container">
-                    <button onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><MoreVertical size={18} /></button>
-                    {/* More Options Menu */}
+                    <button 
+                      onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)} 
+                      className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                      title="More Options"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {/* Customer-style More Options Menu for Dealers */}
                     {isMoreMenuOpen && (
-                      <div className="absolute top-full right-0 mt-2 w-60 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-200 dark:border-white/10 z-50 py-1.5">
-                        {[
-                          { label: "Dealer Statement (Report)", onClick: handleDealerStatementReport },
-                          { label: "All Dealers (Report)", onClick: handleAllDealersReport }
-                        ].map((item, i) => (
-                          <button
-                            key={i}
-                            onClick={item.onClick}
-                            className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
-                          >
-                            {item.label}
-                          </button>
-                        ))}
+                      <div className="absolute top-full right-0 mt-1.5 w-56 bg-white dark:bg-[#13151f] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 z-50 py-1.5 overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            handleExportExcel();
+                          }}
+                          className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer text-left"
+                        >
+                          <Download size={14} className="text-emerald-500 shrink-0" />
+                          <span>Export Dealer List (Excel)</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsMoreMenuOpen(false);
+                            const params = new URLSearchParams({ parent: "franchise", report: "Dealer Statement" });
+                            if (selectedDealer?.name) params.set("partyName", selectedDealer.name);
+                            router.push(`/reports?${params.toString()}`);
+                          }}
+                          className="w-full flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors cursor-pointer text-left"
+                        >
+                          <FileText size={14} className="text-orange-500 shrink-0" />
+                          <span>Dealer Statement (Report)</span>
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-3 gap-6 max-w-3xl">
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Phone Number</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedDealer.phone || "—"}</p>
+
+              {/* Information Grid: Phone, Email, GSTIN, GST Type */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone size={11} className="text-slate-400 shrink-0" /> Phone Number
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono truncate">
+                    {dealerPhone}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Email</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200">{selectedDealer.email || "—"}</p>
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail size={11} className="text-slate-400 shrink-0" /> Email Address
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {dealerEmail}
+                  </p>
                 </div>
-                <div>
-                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Branch</p>
-                  <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                    <Building2 size={12} className="text-slate-400" />
-                    {selectedDealer.franchise?.name || "HQ"}
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText size={11} className="text-slate-400 shrink-0" /> GSTIN
+                  </p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 font-mono tracking-wide truncate">
+                    {dealerGstin}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck size={11} className="text-slate-400 shrink-0" /> GST Type
+                  </p>
+                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+                    {dealerGstType}
                   </p>
                 </div>
               </div>
 
-              <div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-0.5">Address</p>
-                <p className="text-[13px] font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                  <MapPin size={12} className="text-slate-400" />
-                  {selectedDealer.address || "—"}
-                </p>
+              {/* Address Row */}
+              <div className={clsx("grid gap-3 pt-1", hasShippingAddress ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+                <div className="p-3.5 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin size={11} className="text-slate-400 shrink-0" /> Address
+                  </p>
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed break-words">
+                    {dealerAddress}
+                  </p>
+                </div>
+
+                {hasShippingAddress && (
+                  <div className="p-3.5 bg-slate-50/70 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800/80 space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <Truck size={11} className="text-slate-400 shrink-0" /> Shipping Address
+                    </p>
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed break-words">
+                      {dealerShippingAddress}
+                    </p>
+                  </div>
+                )}
               </div>
+            </div>
+
+            {/* History Section: Transactions & Sold Finished Products History */}
+            <div className="bg-white dark:bg-[#0A0D14] border border-slate-200/90 dark:border-slate-800/90 rounded-2xl shadow-xs overflow-hidden flex flex-col">
+              {/* Tab Switcher Navigation */}
+              <div className="flex border-b border-slate-100 dark:border-slate-800/80 px-5 pt-3 gap-6 bg-slate-50/40 dark:bg-slate-900/20">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("TRANSACTIONS")}
+                  className={clsx(
+                    "pb-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2",
+                    activeTab === "TRANSACTIONS"
+                      ? "border-orange-500 text-orange-600 dark:text-orange-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText size={13} />
+                  <span>Transactions</span>
+                  {transactions.length > 0 && (
+                    <span className={clsx(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                      activeTab === "TRANSACTIONS" ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                    )}>
+                      {transactions.length}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ITEMS")}
+                  className={clsx(
+                    "pb-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer flex items-center gap-2",
+                    activeTab === "ITEMS"
+                      ? "border-orange-500 text-orange-600 dark:text-orange-400"
+                      : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  )}
+                >
+                  <Package size={13} />
+                  <span>Item / Product History</span>
+                  {dealerItems.length > 0 && (
+                    <span className={clsx(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                      activeTab === "ITEMS" ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300" : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                    )}>
+                      {dealerItems.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-3 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    {activeTab === "TRANSACTIONS" ? "Transactions" : "Sold Finished Products"}
+                  </h3>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  {activeTab === "TRANSACTIONS" ? (
+                    <>
+                      {isTransactionSearchOpen ? (
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
+                          <Search size={13} className="text-slate-400 shrink-0" />
+                          <input 
+                            type="text" 
+                            autoFocus
+                            placeholder="Search invoice number, type..." 
+                            className="bg-transparent border-none text-xs w-36 sm:w-48 focus:outline-none ml-2 pr-6 text-slate-800 dark:text-white placeholder:text-slate-400"
+                            value={transactionSearchQuery}
+                            onChange={(e) => setTransactionSearchQuery(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTransactionSearchQuery("");
+                              setIsTransactionSearchOpen(false);
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer rounded"
+                            title="Close transaction search"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setIsTransactionSearchOpen(true)} 
+                          className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                          title="Search Transactions"
+                        >
+                          <Search size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleExportExcel}
+                        title="Export Dealer List (Excel)"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Download size={14} />
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!selectedDealer) { toast.error("Select a dealer first."); return; }
+                          setIsStatementOpen(true);
+                        }}
+                        title="Print Transaction Statement"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Printer size={14} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {isItemSearchOpen ? (
+                        <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
+                          <Search size={13} className="text-slate-400 shrink-0" />
+                          <input 
+                            type="text" 
+                            autoFocus
+                            placeholder="Search product name, SKU..." 
+                            className="bg-transparent border-none text-xs w-36 sm:w-48 focus:outline-none ml-2 pr-6 text-slate-800 dark:text-white placeholder:text-slate-400"
+                            value={itemSearchQuery}
+                            onChange={(e) => setItemSearchQuery(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setItemSearchQuery("");
+                              setIsItemSearchOpen(false);
+                            }}
+                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer rounded"
+                            title="Close search"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setIsItemSearchOpen(true)} 
+                          className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors cursor-pointer shadow-2xs"
+                          title="Search Item History"
+                        >
+                          <Search size={14} />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={handleExportItemsExcel}
+                        disabled={dealerItemsLoading || filteredItems.length === 0}
+                        title="Export Item History to Excel"
+                        className="p-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Download size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Tab 1 Content: Transactions Table */}
+              {activeTab === "TRANSACTIONS" && (
+                <div className="overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left table-auto min-w-[660px]">
+                    <thead>
+                      <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-white/[0.01]">
+                        <th className="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Type</th>
+                        <th className="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Number</th>
+                        <th className="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date</th>
+                        <th className="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Total</th>
+                        <th className="py-3 px-4 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Balance</th>
+                        <th className="py-3 px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center w-12">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {transactionsLoading ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                            Loading transactions...
+                          </td>
+                        </tr>
+                      ) : transactions.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-8 text-center text-xs font-semibold text-slate-400">
+                            {transactionSearchQuery ? "No transactions match your search" : "No transactions found"}
+                          </td>
+                        </tr>
+                      ) : (
+                        transactions.map((t, idx) => (
+                          <tr 
+                            key={idx}
+                            className="hover:bg-slate-50/80 dark:hover:bg-white/[0.02] transition-colors group text-xs"
+                          >
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                {t.type}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-medium text-slate-800 dark:text-slate-200">
+                              {t.number || "—"}
+                            </td>
+                            <td className="py-3 px-4 text-slate-500 dark:text-slate-400">
+                              {formatDate(t.date)}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-semibold text-slate-800 dark:text-slate-200">
+                              ₹{(Number(t.total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono font-bold text-orange-600 dark:text-orange-400">
+                              ₹{(Number(t.balance) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <TransactionActionsMenu
+                                hasInvoice={Boolean(t.id)}
+                                busy={loadingInvoiceId === t.id}
+                                onView={() => openInvoiceAction(t.id, undefined)}
+                                onPrint={() => openInvoiceAction(t.id, 'print')}
+                                onDownload={() => openInvoiceAction(t.id, 'download')}
+                              />
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Tab 2 Content: Finished Goods Item / Sales History Table */}
+              {activeTab === "ITEMS" && (
+                <div className="overflow-x-auto custom-scrollbar w-full">
+                  <table className="w-full text-left table-auto min-w-[660px]">
+                    <thead className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap">
+                      <tr>
+                        <th className="px-5 py-3.5">Product Name</th>
+                        <th className="px-5 py-3.5">SKU</th>
+                        <th className="px-5 py-3.5 text-right">Quantity Sold</th>
+                        <th className="px-5 py-3.5 text-right">Total Value</th>
+                        <th className="px-5 py-3.5 text-right">Last Purchased</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-xs">
+                      {dealerItemsLoading ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-12 text-center text-xs font-semibold text-slate-400 animate-pulse">
+                            Loading product sales history...
+                          </td>
+                        </tr>
+                      ) : filteredItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-5 py-12 text-center">
+                            <div className="max-w-xs mx-auto space-y-2">
+                              <Package size={32} className="mx-auto text-slate-300 dark:text-slate-600" />
+                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                {itemSearchQuery ? "No products match your search" : "No finished goods sold yet"}
+                              </p>
+                              <p className="text-[11px] text-slate-400">Finished goods purchased by this dealer will be listed here.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredItems.map((item, idx) => (
+                          <tr key={item.productId || idx} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors group">
+                            <td className="px-5 py-3.5">
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                  {item.name}
+                                </span>
+                                {item.category && item.category !== '—' && (
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    {item.category}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 font-mono text-slate-600 dark:text-slate-300 font-medium">
+                              {item.sku || "—"}
+                            </td>
+                            <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {Number(item.quantitySold || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400 uppercase">{item.unit || "PCS"}</span>
+                            </td>
+                            <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                              ₹ {(Number(item.totalValue) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-5 py-3.5 text-right text-slate-600 dark:text-slate-400 font-medium">
+                              {item.lastPurchased ? new Date(item.lastPurchased).toLocaleDateString() : "—"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         ) : (
-          <div className="px-6 py-4 flex items-center justify-center border-b border-slate-200 dark:border-white/5">
-            <span className="text-sm font-semibold text-slate-400">Select a dealer to view details</span>
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center space-y-3 max-w-sm">
+              <div className="w-14 h-14 rounded-2xl bg-orange-500/10 text-orange-500 mx-auto flex items-center justify-center">
+                <User size={28} />
+              </div>
+              <h3 className="text-base font-bold text-slate-800 dark:text-white">Select a Dealer</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Choose a dealer from the left list to view their contact information, GSTIN details, and ledger transactions.
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Transactions Section */}
-        <div className="flex-1 flex flex-col min-h-0 bg-white dark:bg-card">
-          {/* Section Header */}
-          <div className="flex items-center justify-between px-6 py-3 border-b border-slate-200 dark:border-white/5">
-            <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">Transactions</h3>
-            <div className="flex items-center gap-3 text-slate-400">
-              {isTransactionSearchOpen ? (
-                <div className="flex items-center bg-slate-100 dark:bg-white/5 rounded-full px-3 py-1">
-                  <Search size={14} className="text-slate-400" />
-                  <input 
-                    type="text" 
-                    autoFocus
-                    placeholder="Search transactions..." 
-                    className="bg-transparent border-none text-xs w-32 focus:outline-none ml-2 text-slate-700 dark:text-white placeholder:text-slate-400"
-                    value={transactionSearchQuery}
-                    onChange={(e) => setTransactionSearchQuery(e.target.value)}
-                    onBlur={() => !transactionSearchQuery && setIsTransactionSearchOpen(false)}
-                  />
-            {transactionSearchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setTransactionSearchQuery("")} 
-              />
-            )}
-                  {transactionSearchQuery && (
-                    <X 
-                      size={14} 
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                      onClick={() => setTransactionSearchQuery("")} 
-                    />
-                  )}
-                </div>
-              ) : (
-                <button onClick={() => setIsTransactionSearchOpen(true)} className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"><Search size={16} /></button>
-              )}
-              <button
-                onClick={() => {
-                  if (!selectedDealer) { toast.error("Select a dealer first."); return; }
-                  setIsStatementOpen(true);
-                }}
-                title="Print Transaction Statement"
-                className="hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-              >
-                <Printer size={16} />
-              </button>
-              <button
-                onClick={handleDealerStatementReport}
-                title="Export Transactions (.xlsx)"
-                className="text-emerald-600 hover:text-emerald-700 transition-colors"
-              >
-                <ExcelIcon size={16} fill="currentColor" className="opacity-20" />
-              </button>
-            </div>
-          </div>
-
-          {/* Transactions Table */}
-          <div className="flex-1 overflow-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-white dark:bg-card sticky top-0 z-10 border-b border-slate-200 dark:border-white/5">
-                <tr>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 relative filter-popover-container">
-                    <div className="flex items-center justify-between">
-                      Type 
-                      <button onClick={() => setIsTypeFilterOpen(!isTypeFilterOpen)}>
-                        <Filter size={14} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" />
-                      </button>
-                    </div>
-                    {/* Type Filter Popover */}
-                    {isTypeFilterOpen && (
-                      <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#13151f] rounded-xl shadow-xl border border-slate-100 dark:border-white/10 z-50 overflow-hidden flex flex-col font-normal text-slate-700 dark:text-slate-200 normal-case tracking-normal">
-                        <div className="max-h-[240px] overflow-y-auto custom-scrollbar p-2 space-y-1">
-                          {transactionTypes.map(type => (
-                            <label key={type} className="flex items-start gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-white/5 rounded cursor-pointer group">
-                              <input 
-                                type="checkbox" 
-                                checked={selectedTypes.includes(type)}
-                                onChange={(e) => {
-                                  if (e.target.checked) setSelectedTypes([...selectedTypes, type]);
-                                  else setSelectedTypes(selectedTypes.filter(t => t !== type));
-                                }}
-                                className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 dark:border-white/20 text-orange-500 focus:ring-orange-500 cursor-pointer bg-white dark:bg-white/5"
-                              />
-                              <span className="text-[11px] leading-tight group-hover:text-slate-900 dark:group-hover:text-white">{type}</span>
-                            </label>
-                          ))}
-                        </div>
-                        <div className="p-2 border-t border-slate-100 dark:border-white/5 flex items-center gap-2 bg-white dark:bg-[#13151f]">
-                          <button 
-                            onClick={() => setSelectedTypes([])} 
-                            className="flex-1 py-1.5 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-bold transition-colors"
-                          >
-                            Clear
-                          </button>
-                          <button 
-                            onClick={() => setIsTypeFilterOpen(false)} 
-                            className="flex-1 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-colors shadow-sm"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
-                    Number
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5">
-                    Date
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
-                    Total
-                  </th>
-                  <th className="px-6 py-3 font-semibold text-xs text-slate-500 dark:text-slate-400 border-r border-slate-100 dark:border-white/5 text-right">
-                    Balance
-                  </th>
-                  <th className="w-10 px-2 py-3 border-b border-slate-200 dark:border-white/5"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                {transactionsLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400 animate-pulse">
-                      Loading transactions...
-                    </td>
-                  </tr>
-                ) : transactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-xs font-semibold text-slate-400">
-                      No transactions yet
-                    </td>
-                  </tr>
-                ) : (
-                  transactions.map((t, idx) => {
-                    // Only a POS Sale row has a real backing Order/Invoice —
-                    // Delivery Challan rows have no invoice to view/print/download.
-                    const hasInvoice = t.type === 'POS Sale' && !!t.id;
-                    return (
-                      <tr key={t.id || idx} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.type}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{t.number}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5">{formatDate(t.date)}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.total || 0).toFixed(2)}</td>
-                        <td className="px-6 py-4 text-xs font-medium text-slate-700 dark:text-slate-300 border-r border-slate-100 dark:border-white/5 text-right">₹ {Number(t.balance || 0).toFixed(2)}</td>
-                        <td className="px-2 py-4 text-center">
-                          <TransactionActionsMenu
-                            hasInvoice={hasInvoice}
-                            busy={loadingInvoiceId === t.id}
-                            onView={() => openInvoiceAction(t.id, undefined)}
-                            onPrint={() => openInvoiceAction(t.id, 'print')}
-                            onDownload={() => openInvoiceAction(t.id, 'download')}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
       </div>
 
-      {/* Dealer Transaction Statement — real print action, replaces the old no-op options dialog */}
+      {/* Statement Print Document (Shared Component) */}
       {isStatementOpen && selectedDealer && (
         <PartyStatement
           title="Dealer Transaction Statement"
@@ -813,14 +935,13 @@ export default function DealersClient() {
             phone: selectedDealer.phone,
             email: selectedDealer.email,
             address: selectedDealer.address,
-            branch: selectedDealer.franchise?.name || "HQ",
           }}
-          transactions={dealerTransactions}
+          transactions={transactions}
           onClose={() => setIsStatementOpen(false)}
         />
       )}
 
-      {/* Row-level View/Print/Download Invoice — reads the exact existing Order, never creates one */}
+      {/* Read-only Invoice Modal */}
       {invoiceDoc && (
         <GSTInvoice
           order={{
@@ -840,6 +961,7 @@ export default function DealersClient() {
             name: selectedDealer.name,
             phone: selectedDealer.phone,
             address: selectedDealer.address,
+            gstin: selectedDealer.gstNumber || selectedDealer.gstin || (selectedDealer as any).taxNumber,
           } : { name: "Dealer" }}
           companyDetails={currentCompany}
           documentType="TAX_INVOICE"
@@ -848,101 +970,47 @@ export default function DealersClient() {
         />
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-[2rem] shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[90vh]">
-            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-b border-gray-200 dark:border-white/10">
-              <h2 className="text-base font-semibold text-gray-800 dark:text-white">{isEditMode ? "EDIT DEALER" : "ADD DEALER"}</h2>
-              <button
-                onClick={() => { setShowAddModal(false); setIsEditMode(false); setEditDealerId(null); }}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors"
-              >
-                <XCircle size={20} />
-              </button>
-            </div>
+      {/* Add HQ Dealer Modal (Matches Add HQ Customer Form UX) */}
+      <AddDealerModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="ADD HQ DEALER"
+        scopeLabel={`HQ — ${hqName}`}
+        onSave={async (data) => {
+          if (!effectiveFranchiseId) {
+            toast.error("HQ is not configured.");
+            return;
+          }
+          const res = await api.post("/api/dealers", {
+            ...data,
+            franchiseId: effectiveFranchiseId
+          });
+          toast.success("HQ Dealer added successfully");
+          await fetchDealers();
+          if (res.data?.id) {
+            setSelectedDealerId(res.data.id);
+          }
+        }}
+      />
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-              {isSuper && !isEditMode && (
-                <div>
-                  <label className={dealerSectionLabelClass}>Target Scope</label>
-                  <div className="w-full border border-orange-200 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-950/20 rounded-lg px-3 py-2.5 text-sm font-semibold text-orange-700 dark:text-orange-400">
-                    {scope === "HQ"
-                      ? (hqFranchiseId ? `HQ — ${franchises.find((f: any) => f.isHQ)?.name}` : "HQ is not configured")
-                      : (franchises.find((f: any) => f.id === selectedFranchiseId)?.name ? `Franchise — ${franchises.find((f: any) => f.id === selectedFranchiseId)?.name}` : "No franchise selected")}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className={dealerSectionLabelClass}>Business Information</label>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Dealer Name *</label>
-                    <input
-                      required
-                      type="text"
-                      placeholder="e.g. Acme Distribution"
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                      value={formData.name}
-                      onChange={e => setFormData({...formData, name: e.target.value})}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Email</label>
-                      <input
-                        type="email"
-                        placeholder="dealer@example.com"
-                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                        value={formData.email}
-                        onChange={e => setFormData({...formData, email: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
-                      <input
-                        type="tel"
-                        placeholder="Contact Number"
-                        className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                        value={formData.phone}
-                        onChange={e => setFormData({...formData, phone: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className={dealerSectionLabelClass}>Address</label>
-                <textarea
-                  rows={3}
-                  placeholder="Enter shop/office address..."
-                  className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none"
-                  value={formData.address}
-                  onChange={e => setFormData({...formData, address: e.target.value})}
-                />
-              </div>
-            </div>
-
-            <div className="px-6 py-4 flex items-center justify-between shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.02]">
-              <button
-                type="button"
-                onClick={() => { setShowAddModal(false); setIsEditMode(false); setEditDealerId(null); }}
-                className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-semibold transition-all active:scale-95 flex items-center justify-center gap-2 shadow-sm"
-              >
-                {isEditMode ? "Update Dealer" : "Save Dealer"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Edit HQ Dealer Modal */}
+      <AddDealerModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setSelectedDealerForEdit(null);
+        }}
+        initialData={selectedDealerForEdit || selectedDealer}
+        title="EDIT HQ DEALER"
+        scopeLabel={`HQ — ${hqName}`}
+        onSave={async (data) => {
+          const dealerId = selectedDealerForEdit?.id || selectedDealer?.id;
+          if (!dealerId) return;
+          await api.patch(`/api/dealers/${dealerId}`, data);
+          toast.success("Dealer updated successfully");
+          await fetchDealers();
+        }}
+      />
 
     </div>
   );

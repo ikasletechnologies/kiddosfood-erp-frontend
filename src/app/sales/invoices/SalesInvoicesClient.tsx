@@ -2003,7 +2003,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             setShowAddParty(false);
             setNewParty({ name: "", phone: "", email: "", gstin: "", gstType: "Unregistered/Consumer", state: "", city: "", pincode: "", billingAddress: "", shippingAddress: "", openingBalance: "", creditLimit: "" });
           }}
-          partyType={partyType === "DEALER" ? "vendor" : "customer"}
+          partyType="customer"
           title={partyType === "DEALER" ? "ADD DEALER" : "ADD CUSTOMER"}
           initialData={newParty.name || newParty.phone ? newParty : undefined}
           onSave={async (data) => {
