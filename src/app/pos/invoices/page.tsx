@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { X,
   Search as SearchIcon,
   Filter as FilterIcon,
@@ -42,7 +43,8 @@ interface Invoice {
   items?: any[];
 }
 
-export default function InvoicesPage() {
+function InvoicesPageContent() {
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -55,6 +57,16 @@ export default function InvoicesPage() {
   useEffect(() => {
     fetchInvoices();
   }, []);
+
+  // Deep-link from the POS-order notification (?id=<orderId>) — auto-select
+  // the matching invoice once the list has loaded, instead of landing on an
+  // empty "no invoice selected" state with no indication anything happened.
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (!id || invoices.length === 0) return;
+    const match = invoices.find(inv => inv.id === id);
+    if (match) setSelectedInvoice(match);
+  }, [searchParams, invoices]);
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -405,5 +417,13 @@ export default function InvoicesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function InvoicesPage() {
+  return (
+    <Suspense fallback={<div className="p-20 text-center font-black uppercase tracking-widest text-slate-400">Loading Invoices...</div>}>
+      <InvoicesPageContent />
+    </Suspense>
   );
 }
