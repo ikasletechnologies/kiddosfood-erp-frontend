@@ -5,7 +5,7 @@ import {
   ArrowLeft, Save, X,
   ChevronDown,
   AlertCircle, CheckCircle2,
-  Scale, Tag, LayoutGrid,
+  Tag, LayoutGrid,
   RefreshCw, Plus, Percent,
   Coins, Calendar, Search, Barcode, Globe
 } from "lucide-react";
@@ -105,11 +105,6 @@ function EditItemForm() {
   // UOM Quantity settings
   const [primaryUnit, setPrimaryUnit] = useState("kg");
   const [secondaryUnit, setSecondaryUnit] = useState("box");
-  const [customUnits, setCustomUnits] = useState<string[]>([]);
-  const [showAddPrimaryUnit, setShowAddPrimaryUnit] = useState(false);
-  const [newPrimaryUnitInput, setNewPrimaryUnitInput] = useState("");
-  const [showAddSecondaryUnit, setShowAddSecondaryUnit] = useState(false);
-  const [newSecondaryUnitInput, setNewSecondaryUnitInput] = useState("");
   const [conversionRatio, setConversionRatio] = useState(10); // e.g. 1 Box = 10 KG
 
   // Tax brackets
@@ -118,31 +113,31 @@ function EditItemForm() {
 
   // Discount options
   const [discountType, setDiscountType] = useState<"PERCENT" | "VALUE">("PERCENT");
-  const [discountValue, setDiscountValue] = useState(0);
+  const [discountValue, setDiscountValue] = useState<number | string>(0);
 
   // Pricing models - Track both "Without Tax" and "With Tax" versions!
-  const [prices, setPrices] = useState({
-    purchasePrice: 0,
-    purchasePriceWithTax: 0,
-    franchisePrice: 0,
-    franchisePriceWithTax: 0,
-    dealerPrice: 0,
-    dealerPriceWithTax: 0,
-    customerPrice: 0,
-    customerPriceWithTax: 0,
+  const [prices, setPrices] = useState<Record<string, number | string>>({
+    purchasePrice: "",
+    purchasePriceWithTax: "",
+    franchisePrice: "",
+    franchisePriceWithTax: "",
+    dealerPrice: "",
+    dealerPriceWithTax: "",
+    customerPrice: "",
+    customerPriceWithTax: "",
     customModeName: "Amazon",
-    customModePrice: 0,
-    customModePriceWithTax: 0,
+    customModePrice: "",
+    customModePriceWithTax: "",
   });
 
   // Dynamic Custom Channels State for multi-card option
   const [customChannels, setCustomChannels] = useState<Array<{
     id: string;
     name: string;
-    price: number;
-    priceWithTax: number;
+    price: number | string;
+    priceWithTax: number | string;
   }>>([
-    { id: "1", name: "Amazon", price: 0, priceWithTax: 0 }
+    { id: "1", name: "Amazon", price: "", priceWithTax: "" }
   ]);
 
   // Dynamic double-way calculator for custom channels
@@ -151,30 +146,43 @@ function EditItemForm() {
       const updated = [...prev];
       const channel = { ...updated[index] };
       const factor = 1 + gstRate / 100;
-      
+
       if (field === "name") {
         channel.name = value;
-      } else if (field === "price") {
-        channel.price = value;
-        channel.priceWithTax = Math.round(value * factor * 100) / 100;
-      } else if (field === "priceWithTax") {
-        channel.priceWithTax = value;
-        channel.price = Math.round((value / factor) * 100) / 100;
+      } else if (value === "") {
+        if (field === "price") {
+          channel.price = "";
+          channel.priceWithTax = "";
+        } else if (field === "priceWithTax") {
+          channel.priceWithTax = "";
+          channel.price = "";
+        }
+      } else {
+        const numValue = Number(value);
+        if (!isNaN(numValue)) {
+          if (field === "price") {
+            channel.price = value;
+            channel.priceWithTax = Math.round(numValue * factor * 100) / 100;
+          } else if (field === "priceWithTax") {
+            channel.priceWithTax = value;
+            channel.price = Math.round((numValue / factor) * 100) / 100;
+          }
+        }
       }
-      
+
       updated[index] = channel;
       return updated;
     });
   };
 
   // Parallel Tab: Opening stock setup
-  const [openingStock, setOpeningStock] = useState(0);
+  const [openingStock, setOpeningStock] = useState<number | string>("");
   const [openingDate, setOpeningDate] = useState(() => {
     const today = new Date();
     return today.toISOString().split("T")[0];
   });
-  const [openingPurchasePrice, setOpeningPurchasePrice] = useState(0);
-  const [openingPurchasePriceWithTax, setOpeningPurchasePriceWithTax] = useState(0);
+  const [openingPurchasePrice, setOpeningPurchasePrice] = useState<number | string>("");
+  const [openingPurchasePriceWithTax, setOpeningPurchasePriceWithTax] = useState<number | string>("");
   const [minimumStock, setMinimumStock] = useState<string | number>("5");
   const [itemLocation, setItemLocation] = useState("");
   const [warehouses, setWarehouses] = useState<any[]>([]);
@@ -225,11 +233,11 @@ function EditItemForm() {
         setGstRate(m.gstRate !== undefined && m.gstRate !== null ? m.gstRate : 18);
         setDiscountType(m.discountType || "PERCENT");
         setDiscountValue(m.discountValue || 0);
-        
+
         let initialSize = "1KG";
         if (m.sku) {
-           const parts = m.sku.split('-');
-           if (parts.length >= 2) initialSize = parts[parts.length - 1];
+          const parts = m.sku.split('-');
+          if (parts.length >= 2) initialSize = parts[parts.length - 1];
         }
         setSize(initialSize);
 
@@ -308,50 +316,69 @@ function EditItemForm() {
       const factor = 1 + gstRate / 100;
       return {
         ...prev,
-        purchasePriceWithTax: Math.round(prev.purchasePrice * factor * 100) / 100,
-        franchisePriceWithTax: Math.round(prev.franchisePrice * factor * 100) / 100,
-        dealerPriceWithTax: Math.round(prev.dealerPrice * factor * 100) / 100,
-        customerPriceWithTax: Math.round(prev.customerPrice * factor * 100) / 100,
-        customModePriceWithTax: Math.round(prev.customModePrice * factor * 100) / 100,
+        purchasePriceWithTax: Math.round(Number(prev.purchasePrice) * factor * 100) / 100,
+        franchisePriceWithTax: Math.round(Number(prev.franchisePrice) * factor * 100) / 100,
+        dealerPriceWithTax: Math.round(Number(prev.dealerPrice) * factor * 100) / 100,
+        customerPriceWithTax: Math.round(Number(prev.customerPrice) * factor * 100) / 100,
+        customModePriceWithTax: Math.round(Number(prev.customModePrice) * factor * 100) / 100,
       };
     });
     setCustomChannels(prev => {
       const factor = 1 + gstRate / 100;
       return prev.map(ch => ({
         ...ch,
-        priceWithTax: Math.round(ch.price * factor * 100) / 100
+        priceWithTax: Math.round(Number(ch.price) * factor * 100) / 100
       }));
     });
     setOpeningPurchasePriceWithTax(() => {
       const factor = 1 + gstRate / 100;
-      return Math.round(openingPurchasePrice * factor * 100) / 100;
+      return Math.round(Number(openingPurchasePrice) * factor * 100) / 100;
     });
   }, [gstRate]);
 
   // Double-Way Calculation Handlers for Price changes
-  const handlePriceChange = (field: keyof typeof prices, value: number, isWithTax: boolean) => {
+  const handlePriceChange = (field: string, value: string | number, isWithTax: boolean) => {
     const factor = 1 + gstRate / 100;
 
     setPrices(prev => {
       const updated = { ...prev };
+
+      if (value === "") {
+        if (isWithTax) {
+          updated[`${field}WithTax`] = "";
+          const cleanField = field.replace("WithTax", "");
+          updated[cleanField] = "";
+        } else {
+          updated[field] = "";
+          updated[`${field}WithTax`] = "";
+        }
+        if (field === "purchasePrice") {
+          setOpeningPurchasePriceWithTax(0);
+          setOpeningPurchasePrice(0);
+        }
+        return updated;
+      }
+
+      const numValue = Number(value);
+      if (isNaN(numValue)) return prev;
+
       if (isWithTax) {
-        updated[`${field}WithTax` as keyof typeof prices] = value as never;
-        const cleanField = field.replace("WithTax", "") as keyof typeof prices;
-        updated[cleanField] = Math.round((value / factor) * 100) / 100 as never;
+        updated[`${field}WithTax`] = value;
+        const cleanField = field.replace("WithTax", "");
+        updated[cleanField] = Math.round((numValue / factor) * 100) / 100;
       } else {
-        updated[field] = value as never;
-        const taxField = `${field}WithTax` as keyof typeof prices;
-        updated[taxField] = Math.round(value * factor * 100) / 100 as never;
+        updated[field] = value;
+        updated[`${field}WithTax`] = Math.round(numValue * factor * 100) / 100;
       }
 
       // Automatically sync opening stock purchase price if standard purchase price is changed
       if (field === "purchasePrice") {
         if (isWithTax) {
-          setOpeningPurchasePriceWithTax(value);
-          setOpeningPurchasePrice(Math.round((value / factor) * 100) / 100);
+          setOpeningPurchasePriceWithTax(numValue);
+          setOpeningPurchasePrice(Math.round((numValue / factor) * 100) / 100);
         } else {
-          setOpeningPurchasePrice(value);
-          setOpeningPurchasePriceWithTax(Math.round(value * factor * 100) / 100);
+          setOpeningPurchasePrice(numValue);
+          setOpeningPurchasePriceWithTax(Math.round(numValue * factor * 100) / 100);
         }
       }
 
@@ -360,11 +387,28 @@ function EditItemForm() {
   };
 
   // Helper for Opening stock price calculations
-  const handleOpeningPriceChange = (value: number, isWithTax: boolean) => {
+  const handleOpeningPriceChange = (value: number | string, isWithTax: boolean) => {
     const factor = 1 + gstRate / 100;
+
+    if (value === "") {
+      if (isWithTax) {
+        setOpeningPurchasePriceWithTax("");
+        setOpeningPurchasePrice("");
+        setPrices(prev => ({ ...prev, purchasePrice: "", purchasePriceWithTax: "" }));
+      } else {
+        setOpeningPurchasePrice("");
+        setOpeningPurchasePriceWithTax("");
+        setPrices(prev => ({ ...prev, purchasePrice: "", purchasePriceWithTax: "" }));
+      }
+      return;
+    }
+
+    const numValue = Number(value);
+    if (isNaN(numValue)) return;
+
     if (isWithTax) {
       setOpeningPurchasePriceWithTax(value);
-      const exclTax = Math.round((value / factor) * 100) / 100;
+      const exclTax = Math.round((numValue / factor) * 100) / 100;
       setOpeningPurchasePrice(exclTax);
       setPrices(prev => ({
         ...prev,
@@ -373,7 +417,7 @@ function EditItemForm() {
       }));
     } else {
       setOpeningPurchasePrice(value);
-      const inclTax = Math.round(value * factor * 100) / 100;
+      const inclTax = Math.round(numValue * factor * 100) / 100;
       setOpeningPurchasePriceWithTax(inclTax);
       setPrices(prev => ({
         ...prev,
@@ -385,10 +429,10 @@ function EditItemForm() {
 
   // Calculate final discounted customer retail price
   const discountAmount = discountType === "PERCENT"
-    ? (prices.customerPrice * (discountValue / 100))
-    : discountValue;
+    ? (Number(prices.customerPrice) * (Number(discountValue) / 100))
+    : Number(discountValue);
 
-  const discountedSellingPrice = Math.max(0, prices.customerPrice - discountAmount);
+  const discountedSellingPrice = Math.max(0, Number(prices.customerPrice) - discountAmount);
   const discountedSellingPriceWithTax = Math.round(discountedSellingPrice * (1 + gstRate / 100) * 100) / 100;
 
   const handleSave = async () => {
@@ -413,7 +457,7 @@ function EditItemForm() {
       gstRate,
       minimumStock: Number(minimumStock) || 0,
       costPrice: prices.purchasePrice,
-      basePrice: discountValue > 0 ? discountedSellingPrice : prices.customerPrice,
+      basePrice: Number(discountValue) > 0 ? discountedSellingPrice : prices.customerPrice,
       secondaryUnit,
       conversionRatio,
       discountType,
@@ -454,7 +498,7 @@ function EditItemForm() {
     <div className="max-w-6xl mx-auto pb-24 px-4 sm:px-6">
 
       {/* Strategic Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6 border-b border-slate-100 dark:border-white/5 pb-6 animate-in fade-in duration-300">
+      <div className="sticky -top-3 sm:-top-4 md:-top-6 z-[60] bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-3 sm:pt-4 md:pt-6 pb-4 mb-6 border-b border-slate-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 animate-in fade-in duration-300">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Link href="/inventory/stock" className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-orange-500 hover:border-orange-200 transition-all shadow-sm active:scale-95">
@@ -474,25 +518,25 @@ function EditItemForm() {
 
         {/* Dynamic Navigation Parallel Tabs */}
         <div className="flex border-b border-slate-200 dark:border-white/10 w-full md:w-80">
-          <button 
+          <button
             type="button"
-            onClick={() => setActiveTab("specs")} 
+            onClick={() => setActiveTab("specs")}
             className={clsx(
               "flex-1 text-center py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 outline-none",
-              activeTab === "specs" 
-                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold" 
+              activeTab === "specs"
+                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold"
                 : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             )}
           >
             Pricing
           </button>
-          <button 
+          <button
             type="button"
-            onClick={() => setActiveTab("opening")} 
+            onClick={() => setActiveTab("opening")}
             className={clsx(
               "flex-1 text-center py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 outline-none",
-              activeTab === "opening" 
-                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold" 
+              activeTab === "opening"
+                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold"
                 : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             )}
           >
@@ -517,14 +561,14 @@ function EditItemForm() {
 
       {/* Main Container */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Hand: Config Tabs */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* TAB 1: Product Specifications & pricing models */}
           {activeTab === "specs" && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
+
               {/* General Identity */}
               <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-6">
                 <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-4">
@@ -642,72 +686,12 @@ function EditItemForm() {
                       </div>
                     </div>
                   </div>
-
-                  {/* HSN Search Modal */}
-                  {showHsnSearch && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-                      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md mx-4 p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Search HSN / SAC Code</h3>
-                          <button type="button" onClick={() => { setShowHsnSearch(false); setHsnSearchQuery(""); }} className="text-slate-400 hover:text-slate-600">
-                            <X size={16} />
-                          </button>
-                        </div>
-                        <div className="relative">
-                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                          <input
-                            autoFocus
-                            placeholder="Search by description or code..."
-                            value={hsnSearchQuery}
-                            onChange={e => setHsnSearchQuery(e.target.value)}
-                            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-orange-500 bg-slate-50 dark:bg-slate-800 dark:text-white font-semibold"
-                          />
-            {hsnSearchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setHsnSearchQuery("")} 
-              />
-            )}
-                        </div>
-                        <div className="max-h-64 overflow-y-auto space-y-1 divide-y divide-slate-50 dark:divide-white/5">
-                          {loadingHsn ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-slate-400 space-y-2">
-                              <RefreshCw size={24} className="animate-spin text-orange-500" />
-                              <span className="text-xs font-medium uppercase tracking-wider">Loading HSN Database...</span>
-                            </div>
-                          ) : filteredHsnResults.length === 0 ? (
-                            <div className="text-center py-8 text-xs font-medium text-slate-400">
-                              No matching HSN codes found
-                            </div>
-                          ) : (
-                            filteredHsnResults.map(h => (
-                              <button
-                                key={h.hsn}
-                                type="button"
-                                onClick={() => {
-                                  setHsnCode(h.hsn);
-                                  setShowHsnSearch(false);
-                                  setHsnSearchQuery("");
-                                }}
-                                className="w-full flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-all text-left group"
-                              >
-                                <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{h.description}</span>
-                                <span className="text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded shrink-0">{h.hsn}</span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="space-y-2 pt-2 border-t border-slate-50 dark:border-white/5">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Weight Variant</label>
                     <div className="flex items-center bg-slate-50 dark:bg-white/5 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden w-fit">
-                      <input 
+                      <input
                         type="number"
-                        placeholder="Qty (e.g. 25)" 
+                        placeholder="Qty (e.g. 25)"
                         value={customNumber}
                         onChange={e => {
                           const num = e.target.value;
@@ -736,182 +720,6 @@ function EditItemForm() {
                   </div>
                 </div>
               </div>
-
-              {/* UOM Setup - only for Finished Goods; raw materials derive unit from weight variant */}
-              {category === "FINISHED_GOOD" && (
-              <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
-                  <Scale size={16} className="text-orange-500" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Stocking Units (UOM)</span>
-                </div>
-
-                <>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      {/* Primary Unit */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Primary Unit</label>
-                        {showAddPrimaryUnit ? (
-                          <div className="flex gap-2">
-                            <input
-                              autoFocus
-                              placeholder="e.g. BKT"
-                              value={newPrimaryUnitInput}
-                              onChange={e => setNewPrimaryUnitInput(e.target.value.toUpperCase())}
-                              className="flex-1 px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 border border-orange-400 rounded-lg outline-none text-slate-800 dark:text-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                  if (newPrimaryUnitInput.trim()) {
-                                    const val = newPrimaryUnitInput.trim().toLowerCase();
-                                    setCustomUnits(prev => prev.includes(val) ? prev : [...prev, val]);
-                                    setPrimaryUnit(val);
-                                  }
-                                  setShowAddPrimaryUnit(false);
-                                  setNewPrimaryUnitInput("");
-                              }}
-                              className="px-3 py-2 bg-orange-500 text-white rounded-lg text-[10px] font-bold"
-                            >
-                              Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setShowAddPrimaryUnit(false); setNewPrimaryUnitInput(""); }}
-                              className="px-2 py-2 bg-slate-100 dark:bg-white/5 rounded-lg text-slate-400 hover:text-slate-600"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select 
-                                value={primaryUnit} 
-                                onChange={e => setPrimaryUnit(e.target.value)}
-                                className="w-full appearance-none border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-orange-500 cursor-pointer"
-                              >
-                                {[...UNITS, ...customUnits].map(u => <option key={u} value={u} className="dark:bg-slate-950">{u.toUpperCase()}</option>)}
-                              </select>
-                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowAddPrimaryUnit(true)}
-                              className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold text-slate-500 hover:text-orange-600 hover:border-orange-400 transition-all whitespace-nowrap flex items-center gap-1"
-                            >
-                              <Plus size={11} /> New
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Secondary Unit */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Secondary Unit (Bulk)</label>
-                        {showAddSecondaryUnit ? (
-                          <div className="flex gap-2">
-                            <input
-                              autoFocus
-                              placeholder="e.g. CRATE"
-                              value={newSecondaryUnitInput}
-                              onChange={e => setNewSecondaryUnitInput(e.target.value.toUpperCase())}
-                              className="flex-1 px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 border border-orange-400 rounded-lg outline-none text-slate-800 dark:text-white"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                  if (newSecondaryUnitInput.trim()) {
-                                    const val = newSecondaryUnitInput.trim().toLowerCase();
-                                    setCustomUnits(prev => prev.includes(val) ? prev : [...prev, val]);
-                                    setSecondaryUnit(val);
-                                  }
-                                  setShowAddSecondaryUnit(false);
-                                  setNewSecondaryUnitInput("");
-                              }}
-                              className="px-3 py-2 bg-orange-500 text-white rounded-lg text-[10px] font-bold"
-                            >
-                              Add
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => { setShowAddSecondaryUnit(false); setNewSecondaryUnitInput(""); }}
-                              className="px-2 py-2 bg-slate-100 dark:bg-white/5 rounded-lg text-slate-400 hover:text-slate-600"
-                            >
-                              <X size={12} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <select 
-                                value={secondaryUnit} 
-                                onChange={e => setSecondaryUnit(e.target.value)}
-                                className="w-full appearance-none border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-orange-500 cursor-pointer"
-                              >
-                                {Array.from(new Set(["box", "bag", "dozen", "carton", "packet", ...customUnits])).map(u => (
-                                  <option key={u} value={u} className="dark:bg-slate-950">{u.toUpperCase()}</option>
-                                ))}
-                              </select>
-                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setShowAddSecondaryUnit(true)}
-                              className="px-3 py-2 bg-slate-100 dark:bg-white/5 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg text-[10px] font-bold text-slate-500 hover:text-orange-600 hover:border-orange-400 transition-all whitespace-nowrap flex items-center gap-1"
-                            >
-                              <Plus size={11} /> New
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Conversion Ratio */}
-                      <div className="space-y-1">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Conversion Ratio</label>
-                        <div className="relative">
-                          <input 
-                            type="number"
-                            value={conversionRatio}
-                            onChange={e => setConversionRatio(Math.max(1, Number(e.target.value) || 0))}
-                            className="w-full pl-3 pr-16 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white"
-                          />
-                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-slate-400 font-bold uppercase">
-                            PCS/{secondaryUnit.toUpperCase()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {(() => {
-                      const kgMatch = size.match(/^([\d.]+)\s*KG$/i);
-                      const gMatch  = size.match(/^([\d.]+)\s*G$/i);
-                      const pieceG  = kgMatch ? parseFloat(kgMatch[1]) * 1000
-                                    : gMatch  ? parseFloat(gMatch[1])
-                                    : null;
-                      const totalG  = pieceG !== null ? pieceG * conversionRatio : null;
-                      const totalLabel = totalG !== null
-                        ? totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} KG` : `${totalG.toFixed(0)} G`
-                        : null;
-                      return (
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-white/5 px-4 py-2.5 rounded-lg border border-slate-100 dark:border-white/5 flex flex-wrap items-center gap-x-1.5 gap-y-1 animate-in fade-in duration-200">
-                          <span>Stocking translation:</span>
-                          <strong className="text-slate-700 dark:text-slate-200">1 {secondaryUnit.toUpperCase()}</strong>
-                          <span>=</span>
-                          <strong className="text-orange-500">{conversionRatio} pieces</strong>
-                          <span>×</span>
-                          <strong className="text-slate-700 dark:text-slate-200">{size} each</strong>
-                          {totalLabel && (
-                            <>
-                              <span>=</span>
-                              <strong className="text-emerald-600 dark:text-emerald-400">{totalLabel} total</strong>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })()}
-                </>
-              </div>
-              )}
 
               {/* GST Compliance */}
               <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
@@ -963,7 +771,7 @@ function EditItemForm() {
                           const num = parseFloat(val);
                           if (!isNaN(num) && num >= 0 && num <= 100) setGstRate(num);
                         }}
-                        placeholder="Custom %"
+                        placeholder="Custom "
                         className={clsx(
                           "w-24 px-3 py-2 font-bold text-xs outline-none bg-transparent",
                           customGstInput ? "text-orange-600 dark:text-orange-400" : "text-slate-400"
@@ -974,7 +782,7 @@ function EditItemForm() {
                         customGstInput ? "text-orange-500" : "text-slate-400"
                       )}>%</span>
                     </div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Custom GST</span>
+                    {/* <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Custom GST</span> */}
                   </div>
                 </div>
 
@@ -1036,10 +844,10 @@ function EditItemForm() {
                         </td>
                         <td className="py-4 px-2">
                           <div className="relative max-w-[160px]">
-                            <input 
+                            <input
                               type="number"
                               value={prices.purchasePrice}
-                              onChange={e => handlePriceChange("purchasePrice", Number(e.target.value) || 0, false)}
+                              onChange={e => handlePriceChange("purchasePrice", e.target.value, false)}
                               className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1047,10 +855,10 @@ function EditItemForm() {
                         </td>
                         <td className="py-4 px-2">
                           <div className="relative max-w-[160px]">
-                            <input 
+                            <input
                               type="number"
                               value={prices.purchasePriceWithTax}
-                              onChange={e => handlePriceChange("purchasePrice", Number(e.target.value) || 0, true)}
+                              onChange={e => handlePriceChange("purchasePrice", e.target.value, true)}
                               className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1068,10 +876,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.franchisePrice}
-                                  onChange={e => handlePriceChange("franchisePrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("franchisePrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1079,10 +887,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.franchisePriceWithTax}
-                                  onChange={e => handlePriceChange("franchisePrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("franchisePrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1098,10 +906,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.dealerPrice}
-                                  onChange={e => handlePriceChange("dealerPrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("dealerPrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1109,10 +917,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.dealerPriceWithTax}
-                                  onChange={e => handlePriceChange("dealerPrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("dealerPrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1128,10 +936,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.customerPrice}
-                                  onChange={e => handlePriceChange("customerPrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("customerPrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1139,10 +947,10 @@ function EditItemForm() {
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.customerPriceWithTax}
-                                  onChange={e => handlePriceChange("customerPrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("customerPrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1187,7 +995,7 @@ function EditItemForm() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Channel Platform Name</label>
-                            <input 
+                            <input
                               type="text"
                               value={ch.name}
                               onChange={e => handleCustomChannelChange(idx, "name", e.target.value)}
@@ -1195,27 +1003,27 @@ function EditItemForm() {
                               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-xs font-semibold text-slate-800 dark:text-white"
                             />
                           </div>
-                          
+
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price Excl. GST (Without Tax)</label>
                             <div className="relative">
-                              <input 
+                              <input
                                 type="number"
                                 value={ch.price || ""}
-                                onChange={e => handleCustomChannelChange(idx, "price", Number(e.target.value) || 0)}
+                                onChange={e => handleCustomChannelChange(idx, "price", e.target.value)}
                                 className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-1">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Price Incl. GST (With Tax)</label>
                             <div className="relative">
-                              <input 
+                              <input
                                 type="number"
                                 value={ch.priceWithTax || ""}
-                                onChange={e => handleCustomChannelChange(idx, "priceWithTax", Number(e.target.value) || 0)}
+                                onChange={e => handleCustomChannelChange(idx, "priceWithTax", e.target.value)}
                                 className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white"
                               />
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1247,29 +1055,29 @@ function EditItemForm() {
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Customer Retail Discount</span>
                       </div>
                       <div className="flex bg-slate-100 dark:bg-white/5 p-0.5 rounded-lg border border-slate-200 dark:border-white/10">
-                        <button 
-                          type="button" 
-                          onClick={() => setDiscountType("PERCENT")} 
+                        <button
+                          type="button"
+                          onClick={() => setDiscountType("PERCENT")}
                           className={clsx("px-3 py-1 rounded-md text-[10px] font-bold transition-all", discountType === "PERCENT" ? "bg-white dark:bg-slate-800 text-orange-600 shadow-sm" : "text-slate-400")}
                         >
                           Percent %
                         </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setDiscountType("VALUE")} 
+                        <button
+                          type="button"
+                          onClick={() => setDiscountType("VALUE")}
                           className={clsx("px-3 py-1 rounded-md text-[10px] font-bold transition-all", discountType === "VALUE" ? "bg-white dark:bg-slate-800 text-orange-600 shadow-sm" : "text-slate-400")}
                         >
                           Flat ₹
                         </button>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                       <div className="relative">
-                        <input 
+                        <input
                           type="number"
                           value={discountValue}
-                          onChange={e => setDiscountValue(Math.max(0, Number(e.target.value) || 0))}
+                          onChange={e => setDiscountValue(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
                           placeholder="Enter discount value..."
                           className="w-full pl-3 pr-10 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                         />
@@ -1278,7 +1086,7 @@ function EditItemForm() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-white/5 px-4 py-2.5 rounded-lg border border-slate-100 dark:border-white/5">
-                        {discountValue > 0 ? (
+                        {Number(discountValue) > 0 ? (
                           <span>Customer retail reduces to <strong className="text-orange-500">₹{discountedSellingPriceWithTax}</strong> (incl. tax)</span>
                         ) : (
                           <span>No discount applied. Standard channel rates apply.</span>
@@ -1296,7 +1104,7 @@ function EditItemForm() {
           {activeTab === "opening" && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-6">
-                
+
                 {/* Row 1: Opening Stock */}
                 <div className="relative mt-2">
                   <label className="absolute -top-2 left-3 bg-white dark:bg-[#12141a] px-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 z-10 transition-all select-none">
@@ -1308,7 +1116,7 @@ function EditItemForm() {
                       type="number"
                       placeholder={category === "FINISHED_GOOD" ? "Ex: 24" : "Ex: 300"}
                       value={openingStock || ""}
-                      onChange={e => setOpeningStock(Math.max(0, Number(e.target.value) || 0))}
+                      onChange={e => setOpeningStock(e.target.value)}
                       className="flex-1 px-3.5 py-3 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                     />
                     <div className="flex items-center justify-center px-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-black text-slate-700 dark:text-slate-200 min-w-[3.5rem]">
@@ -1317,25 +1125,25 @@ function EditItemForm() {
                   </div>
 
                   {/* Raw material: show entry info with optional conversion */}
-                  {category !== "FINISHED_GOOD" && openingStock > 0 && (
+                  {category !== "FINISHED_GOOD" && Number(openingStock) > 0 && (
                     <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 rounded-lg text-[10px] font-semibold text-blue-700 dark:text-blue-400 flex-wrap">
                       <span className="font-black">{openingStock} {primaryUnit.toUpperCase()}</span>
                       <span className="text-blue-400">→</span>
                       <span>entering opening inventory</span>
-                      {primaryUnit.toLowerCase() === "g" && openingStock >= 1000 && (
-                        <span className="ml-auto font-black">= {(openingStock / 1000).toFixed(2)} KG</span>
+                      {primaryUnit.toLowerCase() === "g" && Number(openingStock) >= 1000 && (
+                        <span className="ml-auto font-black">= {(Number(openingStock) / 1000).toFixed(2)} KG</span>
                       )}
-                      {primaryUnit.toLowerCase() === "ml" && openingStock >= 1000 && (
-                        <span className="ml-auto font-black">= {(openingStock / 1000).toFixed(2)} L</span>
+                      {primaryUnit.toLowerCase() === "ml" && Number(openingStock) >= 1000 && (
+                        <span className="ml-auto font-black">= {(Number(openingStock) / 1000).toFixed(2)} L</span>
                       )}
                     </div>
                   )}
 
                   {/* Finished good: show unit × variant = total weight breakdown */}
-                  {category === "FINISHED_GOOD" && openingStock > 0 && (() => {
+                  {category === "FINISHED_GOOD" && Number(openingStock) > 0 && (() => {
                     const variantQty = parseFloat(customNumber) || 1;
                     const variantUnit = customUnit.toUpperCase();
-                    const totalRaw = openingStock * variantQty;
+                    const totalRaw = Number(openingStock) * variantQty;
                     let totalStr = "";
                     if (variantUnit === "G" || variantUnit === "GM") {
                       totalStr = totalRaw >= 1000 ? `${(totalRaw / 1000).toFixed(2)} KG` : `${totalRaw.toFixed(0)} G`;
@@ -1380,7 +1188,7 @@ function EditItemForm() {
                         type="number"
                         placeholder="Ex: 2,000"
                         value={openingPurchasePrice || ""}
-                        onChange={e => handleOpeningPriceChange(Number(e.target.value) || 0, false)}
+                        onChange={e => handleOpeningPriceChange(e.target.value, false)}
                         className="w-full px-3.5 pr-16 py-3 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                       />
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-black text-orange-500">
@@ -1401,7 +1209,7 @@ function EditItemForm() {
                       type="number"
                       placeholder="Ex: 5"
                       value={minimumStock || ""}
-                      onChange={e => setMinimumStock(Math.max(0, Number(e.target.value) || 0))}
+                      onChange={e => setMinimumStock(e.target.value)}
                       className="w-full px-3.5 py-3 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                     />
                   </div>
@@ -1451,7 +1259,7 @@ function EditItemForm() {
                   }}
                 />
 
-                {openingStock > 0 && openingPurchasePrice > 0 && (
+                {Number(openingStock) > 0 && Number(openingPurchasePrice) > 0 && (
                   <div className="mt-4 p-4 rounded-lg bg-rose-500/5 border border-rose-500/10 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 animate-in fade-in duration-300">
                     <div className="space-y-0.5">
                       <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block">Computed Asset Value</span>
@@ -1462,7 +1270,7 @@ function EditItemForm() {
                       </span>
                     </div>
                     <span className="text-base font-black text-rose-600 dark:text-rose-400">
-                      ₹{(openingStock * openingPurchasePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      ₹{(Number(openingStock) * Number(openingPurchasePrice)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 )}
@@ -1473,8 +1281,8 @@ function EditItemForm() {
         </div>
 
         {/* Right Hand Side: Summary and Actions */}
-        <div className="space-y-6">
-          
+        <div className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+
           {/* Item Code Card */}
           <div className="bg-slate-900 text-white rounded-xl p-6 shadow-md relative overflow-hidden group">
             <div className="absolute -right-16 -top-16 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl group-hover:bg-orange-500/20 transition-all duration-700" />
@@ -1490,7 +1298,7 @@ function EditItemForm() {
           {/* Pricing & Valuation Dashboard */}
           <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-50 dark:border-white/5 pb-2">Commercial Summary</h3>
-            
+
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                 <span>Base Purchase Cost</span>
@@ -1514,7 +1322,8 @@ function EditItemForm() {
                       // "selling at ₹0" — treating it as the latter made every
                       // unconfigured channel show a bogus -100% loss against the
                       // purchase cost.
-                      if (!price || price <= 0) {
+                      const priceNum = Number(price) || 0;
+                      if (!priceNum || priceNum <= 0) {
                         return (
                           <div key={label} className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                             <span>{label}</span>
@@ -1522,20 +1331,21 @@ function EditItemForm() {
                           </div>
                         );
                       }
-                      const margin = price - prices.purchasePrice;
-                      const pct = prices.purchasePrice > 0 ? ((margin / prices.purchasePrice) * 100).toFixed(0) : "—";
+                      const purchasePriceNum = Number(prices.purchasePrice) || 0;
+                      const margin = priceNum - purchasePriceNum;
+                      const pct = purchasePriceNum > 0 ? ((margin / purchasePriceNum) * 100).toFixed(0) : "—";
                       return (
                         <div key={label} className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                           <span>{label}</span>
                           <span className={`font-bold text-xs ${margin > 0 ? "text-emerald-600 dark:text-emerald-400" : margin < 0 ? "text-red-500" : "text-slate-400"}`}>
                             {margin > 0 ? "+" : ""}{margin !== 0 ? `₹${margin.toFixed(0)}` : "—"}
-                            {prices.purchasePrice > 0 && margin !== 0 && <span className="text-[9px] ml-1 opacity-70">({pct}%)</span>}
+                            {purchasePriceNum > 0 && margin !== 0 && <span className="text-[9px] ml-1 opacity-70">({pct}%)</span>}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                  {discountValue > 0 && (
+                  {Number(discountValue) > 0 && (
                     <div className="flex justify-between items-center text-red-500 font-bold">
                       <span>Customer Discount</span>
                       <span>-{discountType === "PERCENT" ? `${discountValue}%` : `₹${discountValue}`}</span>
@@ -1548,27 +1358,86 @@ function EditItemForm() {
 
           {/* Action Bar */}
           <div className="flex flex-col gap-2">
-            <button 
+            <button
               type="button"
-              onClick={handleSave} 
-              disabled={saving} 
+              onClick={handleSave}
+              disabled={saving}
               className="flex items-center justify-center gap-2 w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 border-none cursor-pointer"
             >
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
               {saving ? "Syncing..." : "Update Item Master"}
             </button>
 
-            <Link 
-              href="/inventory/stock" 
+            <Link
+              href="/inventory/stock"
               className="w-full text-center py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
             >
               Discard & Quit
             </Link>
           </div>
-
         </div>
 
       </div>
+
+      {/* HSN Search Modal - moved to root to overlay sticky sidebar correctly */}
+      {showHsnSearch && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md mx-4 p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Search HSN / SAC Code</h3>
+              <button type="button" onClick={() => { setShowHsnSearch(false); setHsnSearchQuery(""); }} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                autoFocus
+                placeholder="Search by description or code..."
+                value={hsnSearchQuery}
+                onChange={e => setHsnSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-orange-500 bg-slate-50 dark:bg-slate-800 dark:text-white font-semibold"
+              />
+              {hsnSearchQuery && (
+                <X
+                  size={14}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                  onClick={() => setHsnSearchQuery("")}
+                />
+              )}
+            </div>
+            <div className="max-h-64 overflow-y-auto space-y-1 divide-y divide-slate-50 dark:divide-white/5">
+              {loadingHsn ? (
+                <div className="flex flex-col items-center justify-center py-8 text-slate-400 space-y-2">
+                  <RefreshCw size={24} className="animate-spin text-orange-500" />
+                  <span className="text-xs font-medium uppercase tracking-wider">Loading HSN Database...</span>
+                </div>
+              ) : filteredHsnResults.length === 0 ? (
+                <div className="text-center py-8 text-xs font-medium text-slate-400">
+                  No matching HSN codes found
+                </div>
+              ) : (
+                filteredHsnResults.map(h => (
+                  <button
+                    key={h.hsn}
+                    type="button"
+                    onClick={() => {
+                      setHsnCode(h.hsn);
+                      setShowHsnSearch(false);
+                      setHsnSearchQuery("");
+                    }}
+                    className="w-full flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-all text-left group"
+                  >
+                    <span className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{h.description}</span>
+                    <span className="text-xs font-bold text-orange-600 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded shrink-0">{h.hsn}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

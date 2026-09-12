@@ -774,15 +774,45 @@ export default function EstimationsPageClient({
     setShowCustomerDrop(false);
   };
 
+  // Channel prices default to 0 (unconfigured, not "genuinely free") on
+  // items that predate these fields — only a positive value counts as
+  // configured, otherwise fall back to the generic base price. Mirrors
+  // pos/page.tsx's getPrice().
+  const getChannelPrice = (p: any, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
+    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
+    if (p.customerPrice > 0) return p.customerPrice;
+    return p.basePrice || p.price || 0;
+  };
+
+  // The Item Master's "Customer Retail Discount" (discountType/discountValue)
+  // applies only to the Customer channel — Dealer/Franchise never receive
+  // it. This only auto-fills the line's existing discount fields as a
+  // starting point (the operator can still freely edit them afterward via
+  // the existing manual discount inputs) — it does not add a second,
+  // separate discount concept.
+  const getAutoDiscount = (p: any, price: number, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type !== "CUSTOMER") return { discountPct: 0, discountAmount: 0 };
+    const val = Number(p.discountValue) || 0;
+    if (val <= 0 || price <= 0) return { discountPct: 0, discountAmount: 0 };
+    const discountAmount = p.discountType === "FLAT" ? Math.min(val, price) : Math.min(price, roundMoney(price * val / 100));
+    const discountPct = price > 0 ? parseFloat(((discountAmount / price) * 100).toFixed(2)) : 0;
+    return { discountPct, discountAmount: roundMoney(discountAmount) };
+  };
+
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
     const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
+    const rate = getChannelPrice(p, partyType);
+    const { discountPct, discountAmount } = getAutoDiscount(p, rate, partyType);
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
-        rate: p.customerPrice || p.basePrice || p.price || 0,
+        rate,
+        discountPct,
+        discountAmount,
         unit: normalizeUnit(rawUnit),
         taxPct,
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
@@ -792,6 +822,29 @@ export default function EstimationsPageClient({
     ));
     setOpenItemDrop(null);
   };
+
+  // Line items are priced at selection-time; if the party channel changes
+  // after items are already picked, re-derive each line's rate against the
+  // newly selected channel so the form never shows a stale Customer rate
+  // while Dealer/Franchise is now active (or vice versa).
+  useEffect(() => {
+    if (!products.length) return;
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const p = products.find((pr: any) => pr.id === it.productId);
+      if (!p) return it;
+      const rate = getChannelPrice(p, partyType);
+      if (rate === it.rate) return it;
+      // Re-derive the auto discount for the new channel too — a Customer
+      // Retail Discount must never carry over onto a Dealer/Franchise line
+      // (and must reapply when switching back to Customer), matching the
+      // channel switch, not just the price.
+      const { discountPct, discountAmount } = getAutoDiscount(p, rate, partyType);
+      const updated = { ...it, rate, discountPct, discountAmount };
+      return updated;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyType, products]);
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
     setItems(prev => prev.map((it, i) => {
@@ -1713,7 +1766,7 @@ export default function EstimationsPageClient({
                                     >
                                       <div>
                                         <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{p.customerPrice || p.basePrice || p.price || 0}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{getChannelPrice(p, partyType)}</div>
                                       </div>
                                     </button>
                                   ))

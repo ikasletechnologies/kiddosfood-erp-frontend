@@ -24,9 +24,11 @@ const INPUT_CLASS =
 
 export default function CreateWarehouseStep({
   hq,
+  nextWarehouseCode,
   onCreated,
 }: {
   hq: CreatedHq;
+  nextWarehouseCode?: string | null;
   onCreated: (warehouse: CreatedWarehouse) => void;
 }) {
   const [name, setName] = useState("Central Warehouse");
@@ -88,7 +90,7 @@ export default function CreateWarehouseStep({
         </div>
         <div>
           <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Code</label>
-          <input className={INPUT_CLASS} value={code} onChange={(e) => setCode(e.target.value)} placeholder="Optional" />
+          <input className={INPUT_CLASS} value={code} onChange={(e) => setCode(e.target.value)} placeholder={nextWarehouseCode ? `e.g. ${nextWarehouseCode} (Auto-generated)` : "Optional"} />
         </div>
         <div>
           <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5">Address</label>
@@ -100,7 +102,7 @@ export default function CreateWarehouseStep({
           disabled={saving}
           className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors"
         >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : "Create Warehouse & Continue"}
+          {saving ? <Loader2 size={18} className="animate-spin" /> : "Continue"}
         </button>
       </form>
     </div>

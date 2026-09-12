@@ -743,18 +743,18 @@ export default function FinishedGoodsStockClient() {
             placeholder="Search by Product Name or SKU..."
             className="bg-transparent text-xs font-medium text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-slate-400"
           />
-            {searchTerm && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchTerm("")} 
-              />
-            )}
+          {searchTerm && (
+            <X
+              size={14}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+              onClick={() => setSearchTerm("")}
+            />
+          )}
         </div>
 
         {/* Demand Filter Buttons & View Switcher */}
         <div className="flex items-center gap-2 flex-wrap justify-between lg:justify-end w-full lg:w-auto min-w-0">
-          <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
+          {/* <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
             {[
               { id: "ALL", label: "All" },
               { id: "SELLABLE", label: "Sellable" },
@@ -772,7 +772,7 @@ export default function FinishedGoodsStockClient() {
                 {f.label}
               </button>
             ))}
-          </div>
+          </div> */}
 
           <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto custom-scrollbar max-w-full">
             {[
@@ -801,17 +801,17 @@ export default function FinishedGoodsStockClient() {
 
           <div className="flex items-center gap-2 shrink-0">
             {/* View Mode Switcher */}
-            <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
-              <button
+            {/* <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+              {/* {/* <button
                 onClick={() => setViewMode("GRID")}
                 className={clsx(
                   "p-2 rounded-md text-slate-400 transition-all",
                   viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "hover:text-slate-650"
                 )}
                 title="Grid Cards View"
-              >
-                <LayoutGrid size={16} />
-              </button>
+              > 
+              <LayoutGrid size={16} />
+            </button> 
               <button
                 onClick={() => setViewMode("TABLE")}
                 className={clsx(
@@ -822,7 +822,7 @@ export default function FinishedGoodsStockClient() {
               >
                 <List size={16} />
               </button>
-            </div>
+            </div> */}
 
             {/* Bulk Import */}
             <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
@@ -848,283 +848,287 @@ export default function FinishedGoodsStockClient() {
       </div>
 
       {/* ── View 1: Super Admin Finished Goods Product Cards (Exact User Requirement) ── */}
-      {viewMode === "GRID" && (
-        <div>
-          {loading ? (
-            <div className="py-24 text-center text-slate-400 font-bold text-xs animate-pulse">
-              Syncing Finished Goods Demand & Inventory Hub...
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="py-20 text-center bg-white dark:bg-card rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 space-y-3">
-              <Package size={48} strokeWidth={1} className="mx-auto text-slate-300" />
-              <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No matching finished goods found</p>
-              <p className="text-xs text-slate-400">Try adjusting your search query or filters.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((item) => {
-                const hasPending = item.pendingDemandQuantity > 0;
-                const firstPendingRecord = item.demandRecords.find((r) => r.status === "PENDING");
-                return (
-                  <div
-                    key={item.productId}
-                    className="bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-4">
-                        <div className={clsx(
-                          "w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0",
-                          isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
-                        )}>
-                          <Package size={28} />
-                        </div>
-                        {isUncatalogued(item) ? (
-                          <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 tracking-wider">
-                            Needs Catalog Setup
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 tracking-wider">
-                            AUTOMATED SYNC
-                          </span>
-                        )}
-                      </div>
+      {
+        viewMode === "GRID" && (
+          <div>
+            {loading ? (
+              <div className="py-24 text-center text-slate-400 font-bold text-xs animate-pulse">
+                Syncing Finished Goods Demand & Inventory Hub...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="py-20 text-center bg-white dark:bg-card rounded-[2.5rem] border border-slate-100 dark:border-white/5 p-8 space-y-3">
+                <Package size={48} strokeWidth={1} className="mx-auto text-slate-300" />
+                <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No matching finished goods found</p>
+                <p className="text-xs text-slate-400">Try adjusting your search query or filters.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filtered.map((item) => {
+                  const hasPending = item.pendingDemandQuantity > 0;
+                  const firstPendingRecord = item.demandRecords.find((r) => r.status === "PENDING");
+                  return (
+                    <div
+                      key={item.productId}
+                      className="bg-white dark:bg-[#0A0D14] border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                    >
                       <div>
-                        <h3 className="text-base font-bold text-slate-905 dark:text-white leading-tight">
-                          {item.productName}
-                        </h3>
-                        <p className="text-xs font-mono text-slate-400 mt-1 uppercase tracking-wider">
-                          SKU: {item.sku || "N/A"} · UNIT: <strong>{item.unit}</strong>
-                        </p>
-                      </div>
-                      <div className="mt-5 space-y-2.5">
-                        {hasAnyBranchHoldings && (
-                          <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50 dark:border-white/[0.03]">
-                            <span className="text-slate-400 font-bold">Current Branch Stock:</span>
-                            <span className="font-black text-slate-900 dark:text-white">
-                              {item.totalFranchiseAvailableStock} {item.unit}
+                        <div className="flex items-start justify-between gap-3 mb-4">
+                          <div className={clsx(
+                            "w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl shrink-0",
+                            isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
+                          )}>
+                            <Package size={28} />
+                          </div>
+                          {isUncatalogued(item) ? (
+                            <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 tracking-wider">
+                              Needs Catalog Setup
                             </span>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                          <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
-                            <p className="text-[9px] font-semibold text-slate-500 uppercase">HQ Available</p>
-                            <p className="text-sm font-bold text-slate-800 dark:text-white mt-0.5">
-                              {item.hqAvailableStock}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900/30">
-                            <p className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
-                            <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
-                              {item.hqReservedStock}
-                            </p>
-                          </div>
-                          <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
-                            <p className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase">In-Transit</p>
-                            <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
-                              {item.inTransitStock}
-                            </p>
-                          </div>
+                          ) : (
+                            <span className="text-[9px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 tracking-wider">
+                              AUTOMATED SYNC
+                            </span>
+                          )}
                         </div>
-                      </div>
-                      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                            <Send size={13} className="text-amber-500" /> Pending Franchise Demand:
-                          </span>
-                          <span className={clsx("text-xs font-black px-2.5 py-0.5 rounded-lg", hasPending ? "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40" : "text-slate-400")}>
-                            {item.pendingDemandQuantity} {item.unit}
-                          </span>
+                        <div>
+                          <h3 className="text-base font-bold text-slate-905 dark:text-white leading-tight">
+                            {item.productName}
+                          </h3>
+                          <p className="text-xs font-mono text-slate-400 mt-1 uppercase tracking-wider">
+                            SKU: {item.sku || "N/A"} · UNIT: <strong>{item.unit}</strong>
+                          </p>
                         </div>
-                        {firstPendingRecord ? (
-                          <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
-                            <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-white">
-                              <span>{firstPendingRecord.referenceNumber}</span>
-                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-md">
-                                {firstPendingRecord.status}
+                        <div className="mt-5 space-y-2.5">
+                          {hasAnyBranchHoldings && (
+                            <div className="flex items-center justify-between text-xs py-1 border-b border-slate-50 dark:border-white/[0.03]">
+                              <span className="text-slate-400 font-bold">Current Branch Stock:</span>
+                              <span className="font-black text-slate-900 dark:text-white">
+                                {item.totalFranchiseAvailableStock} {item.unit}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between text-[11px] text-slate-500">
-                              <span>{firstPendingRecord.franchiseName}</span>
-                              <span>{firstPendingRecord.quantity} {item.unit}</span>
+                          )}
+                          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                            <div className="p-2 bg-slate-50 dark:bg-slate-900 rounded-lg">
+                              <p className="text-[9px] font-semibold text-slate-500 uppercase">HQ Available</p>
+                              <p className="text-sm font-bold text-slate-800 dark:text-white mt-0.5">
+                                {item.hqAvailableStock}
+                              </p>
+                            </div>
+                            <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900/30">
+                              <p className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
+                              <p className="text-sm font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                                {item.hqReservedStock}
+                              </p>
+                            </div>
+                            <div className="p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30">
+                              <p className="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 uppercase">In-Transit</p>
+                              <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                                {item.inTransitStock}
+                              </p>
                             </div>
                           </div>
-                        ) : (
-                          <p className="text-[11px] text-slate-400 italic">No pending requests awaiting review.</p>
-                        )}
+                        </div>
+                        <div className="mt-5 pt-4 border-t border-slate-100 dark:border-white/5 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              <Send size={13} className="text-amber-500" /> Pending Franchise Demand:
+                            </span>
+                            <span className={clsx("text-xs font-black px-2.5 py-0.5 rounded-lg", hasPending ? "bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40" : "text-slate-400")}>
+                              {item.pendingDemandQuantity} {item.unit}
+                            </span>
+                          </div>
+                          {firstPendingRecord ? (
+                            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+                              <div className="flex items-center justify-between font-semibold text-slate-800 dark:text-white">
+                                <span>{firstPendingRecord.referenceNumber}</span>
+                                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-md">
+                                  {firstPendingRecord.status}
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                <span>{firstPendingRecord.franchiseName}</span>
+                                <span>{firstPendingRecord.quantity} {item.unit}</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-400 italic">No pending requests awaiting review.</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-2">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setSelectedDemandProduct(item)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            <Send size={14} /> Review Request ({item.demandRecords.length})
+                          </button>
+                          {hasAnyBranchHoldings && (
+                            <button
+                              onClick={() => setSelectedBranchProduct(item)}
+                              className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                              title="View Multi-Branch Stock Holdings"
+                            >
+                              <Building2 size={15} />
+                            </button>
+                          )}
+                          {isUncatalogued(item) ? (
+                            <>
+                              <button
+                                onClick={() => openLinkModal(item)}
+                                className="px-2.5 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
+                                title="Link this inventory item to an existing Product catalog entry with matching SKU"
+                              >
+                                Link Existing
+                              </button>
+                              <button
+                                onClick={() => goToCreateProduct(item)}
+                                className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-colors"
+                                title="Add this inventory item to the Product catalog so it becomes sellable in POS"
+                              >
+                                Create Product
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => openEditPage(item)}
+                              disabled={!isEditable(item) || creatingItemId === item.productId}
+                              className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                            >
+                              {creatingItemId === item.productId ? <RefreshCw size={15} className="animate-spin" /> : <Edit2 size={15} />}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-2">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setSelectedDemandProduct(item)}
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-lg transition-colors"
-                        >
-                          <Send size={14} /> Review Request ({item.demandRecords.length})
-                        </button>
-                        {hasAnyBranchHoldings && (
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      {/* ── View 2: Dense Ledger Table View ── */}
+      {
+        viewMode === "TABLE" && (
+          <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full text-left table-auto min-w-[760px]">
+                <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
+                  <tr>
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4">Finished Product Specification</th>
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Available</th>
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Reserved</th>
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">In-Transit</th>
+                    {hasAnyBranchHoldings && <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">Branch Holdings</th>}
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Franchise Demand</th>
+                    <th className="w-[70px] px-4 sm:px-6 py-3.5 sm:py-4 text-right">Edit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                  {filtered.map((item) => (
+                    <tr key={item.productId} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={clsx(
+                            "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
+                            isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
+                          )}>
+                            <Package size={16} />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-slate-800 dark:text-white uppercase truncate">
+                                {item.productName}
+                              </p>
+                              {isUncatalogued(item) && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                                  Needs Catalog Setup
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                              SKU: {item.sku || "N/A"} · Unit: {item.unit}
+                            </p>
+                            {isUncatalogued(item) && (
+                              <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                                Not available in POS — no Product catalog entry
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-center font-bold text-slate-800 dark:text-white">
+                        {item.hqAvailableStock} <span className="text-[10px] text-slate-450 font-normal">{item.unit}</span>
+                      </td>
+
+                      <td className="px-6 py-4 text-center font-bold text-purple-650 dark:text-purple-400">
+                        {item.hqReservedStock} <span className="text-[10px] font-normal">{item.unit}</span>
+                      </td>
+
+                      <td className="px-6 py-4 text-center font-bold text-indigo-650 dark:text-indigo-400">
+                        {item.inTransitStock} <span className="text-[10px] font-normal">{item.unit}</span>
+                      </td>
+
+                      {hasAnyBranchHoldings && (
+                        <td className="px-6 py-4 text-center">
                           <button
                             onClick={() => setSelectedBranchProduct(item)}
-                            className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
-                            title="View Multi-Branch Stock Holdings"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-55 dark:bg-white/5 hover:bg-slate-100 rounded-lg text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
                           >
-                            <Building2 size={15} />
+                            <Building2 size={13} className="text-slate-400" />
+                            {item.totalFranchiseAvailableStock} {item.unit}
+                          </button>
+                        </td>
+                      )}
+
+                      <td className="px-6 py-4 text-right">
+                        {item.pendingDemandQuantity > 0 ? (
+                          <button
+                            onClick={() => setSelectedDemandProduct(item)}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-600 border border-amber-200 dark:border-amber-800/40 rounded-lg text-xs font-semibold transition-all shadow-sm"
+                          >
+                            <Send size={13} /> {item.pendingDemandQuantity} {item.unit} ({item.pendingRequestCount})
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setSelectedDemandProduct(item)}
+                            className="text-xs font-semibold text-slate-400 hover:text-slate-650"
+                          >
+                            View Demand ({item.demandRecords.length})
                           </button>
                         )}
+                      </td>
+
+                      <td className="px-6 py-4 text-right">
                         {isUncatalogued(item) ? (
-                          <>
-                            <button
-                              onClick={() => openLinkModal(item)}
-                              className="px-2.5 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-semibold transition-colors"
-                              title="Link this inventory item to an existing Product catalog entry with matching SKU"
-                            >
-                              Link Existing
-                            </button>
-                            <button
-                              onClick={() => goToCreateProduct(item)}
-                              className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold transition-colors"
-                              title="Add this inventory item to the Product catalog so it becomes sellable in POS"
-                            >
-                              Create Product
-                            </button>
-                          </>
+                          <button
+                            onClick={() => goToCreateProduct(item)}
+                            title="Add this inventory item to the Product catalog so it becomes sellable in POS"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 rounded-lg text-white font-semibold text-[11px] uppercase tracking-wide transition-colors"
+                          >
+                            Create Product
+                          </button>
                         ) : (
                           <button
                             onClick={() => openEditPage(item)}
                             disabled={!isEditable(item) || creatingItemId === item.productId}
-                            className="px-3 py-2 bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors"
+                            title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
                           >
-                            {creatingItemId === item.productId ? <RefreshCw size={15} className="animate-spin" /> : <Edit2 size={15} />}
+                            {creatingItemId === item.productId ? <RefreshCw size={12} className="animate-spin" /> : <Edit2 size={12} />}
                           </button>
                         )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── View 2: Dense Ledger Table View ── */}
-      {viewMode === "TABLE" && (
-        <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
-          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-            <table className="w-full text-left table-auto min-w-[760px]">
-              <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
-                <tr>
-                  <th className="px-4 sm:px-6 py-3.5 sm:py-4">Finished Product Specification</th>
-                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Available</th>
-                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Reserved</th>
-                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">In-Transit</th>
-                  {hasAnyBranchHoldings && <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">Branch Holdings</th>}
-                  <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Franchise Demand</th>
-                  <th className="w-[70px] px-4 sm:px-6 py-3.5 sm:py-4 text-right">Edit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                {filtered.map((item) => (
-                  <tr key={item.productId} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className={clsx(
-                          "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
-                          isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
-                        )}>
-                          <Package size={16} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold text-slate-800 dark:text-white uppercase truncate">
-                              {item.productName}
-                            </p>
-                            {isUncatalogued(item) && (
-                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
-                                Needs Catalog Setup
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-                            SKU: {item.sku || "N/A"} · Unit: {item.unit}
-                          </p>
-                          {isUncatalogued(item) && (
-                            <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
-                              Not available in POS — no Product catalog entry
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    <td className="px-6 py-4 text-center font-bold text-slate-800 dark:text-white">
-                      {item.hqAvailableStock} <span className="text-[10px] text-slate-450 font-normal">{item.unit}</span>
-                    </td>
-
-                    <td className="px-6 py-4 text-center font-bold text-purple-650 dark:text-purple-400">
-                      {item.hqReservedStock} <span className="text-[10px] font-normal">{item.unit}</span>
-                    </td>
-
-                    <td className="px-6 py-4 text-center font-bold text-indigo-650 dark:text-indigo-400">
-                      {item.inTransitStock} <span className="text-[10px] font-normal">{item.unit}</span>
-                    </td>
-
-                    {hasAnyBranchHoldings && (
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => setSelectedBranchProduct(item)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-55 dark:bg-white/5 hover:bg-slate-100 rounded-lg text-slate-700 dark:text-slate-300 font-semibold text-xs transition-colors"
-                        >
-                          <Building2 size={13} className="text-slate-400" />
-                          {item.totalFranchiseAvailableStock} {item.unit}
-                        </button>
                       </td>
-                    )}
-
-                    <td className="px-6 py-4 text-right">
-                      {item.pendingDemandQuantity > 0 ? (
-                        <button
-                          onClick={() => setSelectedDemandProduct(item)}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 dark:bg-amber-950/30 hover:bg-amber-100 text-amber-600 border border-amber-200 dark:border-amber-800/40 rounded-lg text-xs font-semibold transition-all shadow-sm"
-                        >
-                          <Send size={13} /> {item.pendingDemandQuantity} {item.unit} ({item.pendingRequestCount})
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setSelectedDemandProduct(item)}
-                          className="text-xs font-semibold text-slate-400 hover:text-slate-650"
-                        >
-                          View Demand ({item.demandRecords.length})
-                        </button>
-                      )}
-                    </td>
-
-                    <td className="px-6 py-4 text-right">
-                      {isUncatalogued(item) ? (
-                        <button
-                          onClick={() => goToCreateProduct(item)}
-                          title="Add this inventory item to the Product catalog so it becomes sellable in POS"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 rounded-lg text-white font-semibold text-[11px] uppercase tracking-wide transition-colors"
-                        >
-                          Create Product
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => openEditPage(item)}
-                          disabled={!isEditable(item) || creatingItemId === item.productId}
-                          title={item.hqInventoryItemId ? "Edit Item" : isEditable(item) ? "Edit Item Master (creates the stock record)" : "No HQ inventory record to edit"}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
-                        >
-                          {creatingItemId === item.productId ? <RefreshCw size={12} className="animate-spin" /> : <Edit2 size={12} />}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* ── Demand Drawer Modal ── */}
       <ProductDemandDrawer
@@ -1228,7 +1232,7 @@ export default function FinishedGoodsStockClient() {
 
               {/* Progress Track & Fill Bar */}
               <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 relative">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-[#f58220] to-[#ff9838] rounded-full transition-all duration-300 ease-out shadow-sm relative overflow-hidden"
                   style={{ width: `${importProgress.percent}%` }}
                 >
@@ -1316,9 +1320,9 @@ export default function FinishedGoodsStockClient() {
                   <>Select an Excel file (.xlsx, .csv) to preview finished goods before importing.</>
                 )}
               </p>
-              <button 
+              <button
                 type="button"
-                onClick={handleDownloadTemplate} 
+                onClick={handleDownloadTemplate}
                 className="flex items-center gap-1.5 text-sm font-bold text-[#f58220] hover:underline cursor-pointer"
               >
                 <Download size={15} /> Download Template
@@ -1326,7 +1330,7 @@ export default function FinishedGoodsStockClient() {
             </div>
 
             {importRows.length === 0 ? (
-              <div 
+              <div
                 onClick={() => importFileRef.current?.click()}
                 className="border-2 border-dashed border-slate-200 dark:border-slate-800 hover:border-[#f58220] rounded-2xl p-10 text-center bg-slate-50/50 dark:bg-slate-900/50 hover:bg-orange-50/20 transition-all cursor-pointer group"
               >
@@ -1390,76 +1394,80 @@ export default function FinishedGoodsStockClient() {
       </Modal>
 
       {/* ── Minimized Floating Import Widget ── */}
-      {showImportModal && isImportMinimized && (
-        <MinimizedImportWidget
-          title="Import Finished Goods"
-          importing={importing}
-          importProgress={importProgress}
-          importResult={importResult}
-          importRowsCount={importRows.length}
-          onRestore={() => setIsImportMinimized(false)}
-          onClose={() => {
-            setShowImportModal(false);
-            setIsImportMinimized(false);
-            setImportRows([]);
-            setImportResult(null);
-            setImportDuplicates([]);
-            setImportInvalid([]);
-          }}
-        />
-      )}
+      {
+        showImportModal && isImportMinimized && (
+          <MinimizedImportWidget
+            title="Import Finished Goods"
+            importing={importing}
+            importProgress={importProgress}
+            importResult={importResult}
+            importRowsCount={importRows.length}
+            onRestore={() => setIsImportMinimized(false)}
+            onClose={() => {
+              setShowImportModal(false);
+              setIsImportMinimized(false);
+              setImportRows([]);
+              setImportResult(null);
+              setImportDuplicates([]);
+              setImportInvalid([]);
+            }}
+          />
+        )
+      }
 
       {/* ── Link Existing Product Modal ── */}
-      {linkItem && (
-        <Modal
-          isOpen={!!linkItem}
-          onClose={() => setLinkItem(null)}
-          title={`Link Existing Product for ${linkItem.productName}`}
-          size="md"
-        >
-          <div className="space-y-4">
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300 space-y-1">
-              <p>Inventory Item SKU: <strong className="font-mono">{linkItem.sku}</strong></p>
-              <p>Current HQ Stock: <strong>{linkItem.hqAvailableStock} {linkItem.unit}</strong></p>
-              <p className="text-[11px] opacity-90 mt-1">
-                Linking requires an exact SKU match to preserve stock integrity. If SKUs differ, a validation error will prevent invalid links.
-              </p>
-            </div>
+      {
+        linkItem && (
+          <Modal
+            isOpen={!!linkItem}
+            onClose={() => setLinkItem(null)}
+            title={`Link Existing Product for ${linkItem.productName}`}
+            size="md"
+          >
+            <div className="space-y-4">
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-900/40 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <p>Inventory Item SKU: <strong className="font-mono">{linkItem.sku}</strong></p>
+                <p>Current HQ Stock: <strong>{linkItem.hqAvailableStock} {linkItem.unit}</strong></p>
+                <p className="text-[11px] opacity-90 mt-1">
+                  Linking requires an exact SKU match to preserve stock integrity. If SKUs differ, a validation error will prevent invalid links.
+                </p>
+              </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Existing Catalog Product</label>
-              <select
-                value={selectedLinkProductId}
-                onChange={(e) => setSelectedLinkProductId(e.target.value)}
-                className="w-full h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 rounded-lg text-xs font-medium outline-none text-slate-800 dark:text-slate-200"
-              >
-                <option value="">-- Choose Matching Catalog Product --</option>
-                {productListForLink.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} {p.sku ? `(SKU: ${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Select Existing Catalog Product</label>
+                <select
+                  value={selectedLinkProductId}
+                  onChange={(e) => setSelectedLinkProductId(e.target.value)}
+                  className="w-full h-9 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3 rounded-lg text-xs font-medium outline-none text-slate-800 dark:text-slate-200"
+                >
+                  <option value="">-- Choose Matching Catalog Product --</option>
+                  {productListForLink.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.sku ? `(SKU: ${p.sku})` : ""} {p.basePrice ? `· ₹${p.basePrice}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setLinkItem(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmLink}
-                disabled={linking || !selectedLinkProductId}
-                className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors"
-              >
-                {linking ? "Linking..." : "Confirm Link"}
-              </button>
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  onClick={() => setLinkItem(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmLink}
+                  disabled={linking || !selectedLinkProductId}
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition-colors"
+                >
+                  {linking ? "Linking..." : "Confirm Link"}
+                </button>
+              </div>
             </div>
-          </div>
-        </Modal>
-      )}
-    </div>
+          </Modal>
+        )
+      }
+    </div >
   );
 }

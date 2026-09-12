@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   ArrowLeft, Save, X,
   ChevronDown,
@@ -125,10 +126,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
   // Discount options
   const [discountType, setDiscountType] = useState<"PERCENT" | "VALUE">("PERCENT");
-  const [discountValue, setDiscountValue] = useState(0);
+  const [discountValue, setDiscountValue] = useState<number | string>("");
 
   // Pricing models - Track both "Without Tax" and "With Tax" versions!
-  const [prices, setPrices] = useState({
+  const [prices, setPrices] = useState<Record<string, number | string>>({
     purchasePrice: 0,
     purchasePriceWithTax: 0,
     franchisePrice: 0,
@@ -158,7 +159,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       const updated = [...prev];
       const channel = { ...updated[index] };
       const factor = 1 + gstRate / 100;
-      
+
       if (field === "name") {
         channel.name = value;
       } else if (field === "price") {
@@ -168,7 +169,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
         channel.priceWithTax = value;
         channel.price = Math.round((value / factor) * 100) / 100;
       }
-      
+
       updated[index] = channel;
       return updated;
     });
@@ -257,11 +258,11 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       const factor = 1 + gstRate / 100;
       return {
         ...prev,
-        purchasePriceWithTax: Math.round(prev.purchasePrice * factor * 100) / 100,
-        franchisePriceWithTax: Math.round(prev.franchisePrice * factor * 100) / 100,
-        dealerPriceWithTax: Math.round(prev.dealerPrice * factor * 100) / 100,
-        customerPriceWithTax: Math.round(prev.customerPrice * factor * 100) / 100,
-        customModePriceWithTax: Math.round(prev.customModePrice * factor * 100) / 100,
+        purchasePriceWithTax: Math.round(Number(prev.purchasePrice) * factor * 100) / 100,
+        franchisePriceWithTax: Math.round(Number(prev.franchisePrice) * factor * 100) / 100,
+        dealerPriceWithTax: Math.round(Number(prev.dealerPrice) * factor * 100) / 100,
+        customerPriceWithTax: Math.round(Number(prev.customerPrice) * factor * 100) / 100,
+        customModePriceWithTax: Math.round(Number(prev.customModePrice) * factor * 100) / 100,
       };
     });
     setCustomChannels(prev => {
@@ -278,29 +279,32 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
   }, [gstRate]);
 
   // Double-Way Calculation Handlers for Price changes
-  const handlePriceChange = (field: keyof typeof prices, value: number, isWithTax: boolean) => {
+  const handlePriceChange = (field: string, rawValue: string, isWithTax: boolean) => {
     const factor = 1 + gstRate / 100;
 
     setPrices(prev => {
       const updated = { ...prev };
+      const valNum = Number(rawValue);
+      const cleanValNum = isNaN(valNum) ? 0 : valNum;
+
       if (isWithTax) {
-        updated[`${field}WithTax` as keyof typeof prices] = value as never;
-        const cleanField = field.replace("WithTax", "") as keyof typeof prices;
-        updated[cleanField] = Math.round((value / factor) * 100) / 100 as never;
+        updated[`${field}WithTax`] = rawValue;
+        const cleanField = field.replace("WithTax", "");
+        updated[cleanField] = rawValue === "" ? "" : Math.round((cleanValNum / factor) * 100) / 100;
       } else {
-        updated[field] = value as never;
-        const taxField = `${field}WithTax` as keyof typeof prices;
-        updated[taxField] = Math.round(value * factor * 100) / 100 as never;
+        updated[field] = rawValue;
+        const taxField = `${field}WithTax`;
+        updated[taxField] = rawValue === "" ? "" : Math.round(cleanValNum * factor * 100) / 100;
       }
 
       // Automatically sync opening stock purchase price if standard purchase price is changed
-      if (field === "purchasePrice") {
+      if (field === "purchasePrice" || field === "purchasePriceWithTax") {
         if (isWithTax) {
-          setOpeningPurchasePriceWithTax(value);
-          setOpeningPurchasePrice(Math.round((value / factor) * 100) / 100);
+          setOpeningPurchasePriceWithTax(cleanValNum);
+          setOpeningPurchasePrice(rawValue === "" ? 0 : Math.round((cleanValNum / factor) * 100) / 100);
         } else {
-          setOpeningPurchasePrice(value);
-          setOpeningPurchasePriceWithTax(Math.round(value * factor * 100) / 100);
+          setOpeningPurchasePrice(cleanValNum);
+          setOpeningPurchasePriceWithTax(rawValue === "" ? 0 : Math.round(cleanValNum * factor * 100) / 100);
         }
       }
 
@@ -334,10 +338,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
   // Calculate final discounted customer retail price
   const discountAmount = discountType === "PERCENT"
-    ? (prices.customerPrice * (discountValue / 100))
-    : discountValue;
+    ? (Number(prices.customerPrice) * (Number(discountValue) / 100))
+    : Number(discountValue);
 
-  const discountedSellingPrice = Math.max(0, prices.customerPrice - discountAmount);
+  const discountedSellingPrice = Math.max(0, Number(prices.customerPrice) - discountAmount);
   const discountedSellingPriceWithTax = Math.round(discountedSellingPrice * (1 + gstRate / 100) * 100) / 100;
 
   const handleSave = async () => {
@@ -370,15 +374,15 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       gstRate,
       minimumStock: Number(minimumStock) || 0,
       initialStock: Number(openingStock) || 0,
-      costPrice: prices.purchasePrice,
-      basePrice: discountValue > 0 ? discountedSellingPrice : prices.customerPrice,
+      costPrice: Number(prices.purchasePrice) || 0,
+      basePrice: Number(discountValue) > 0 ? discountedSellingPrice : (Number(prices.customerPrice) || 0),
       secondaryUnit,
       conversionRatio,
       discountType,
-      discountValue,
-      franchisePrice: prices.franchisePrice,
-      dealerPrice: prices.dealerPrice,
-      customerPrice: prices.customerPrice,
+      discountValue: Number(discountValue) || 0,
+      franchisePrice: Number(prices.franchisePrice) || 0,
+      dealerPrice: Number(prices.dealerPrice) || 0,
+      customerPrice: Number(prices.customerPrice) || 0,
       customModeName: customChannels[0]?.name || "",
       customModePrice: customChannels[0]?.price || 0,
       openingStockDate: openingDate,
@@ -389,7 +393,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
     try {
       const res = await rawMaterialsApi.create(payload);
       setSuccess("Inventory Product Master successfully registered!");
-      
+
       if (onSuccess) {
         onSuccess((res as any).data || payload);
       } else {
@@ -438,7 +442,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
       `}</style>
 
       {/* Strategic Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-6 border-b border-slate-100 dark:border-white/5 pb-6 animate-in fade-in duration-300">
+      <div className="sticky -top-3 sm:-top-4 md:-top-6 z-[60] bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md pt-3 sm:pt-4 md:pt-6 pb-4 mb-6 border-b border-slate-200 dark:border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-6 animate-in fade-in duration-300">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <Link href="/inventory/stock" className="p-2 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-400 hover:text-orange-500 hover:border-orange-200 transition-all shadow-sm active:scale-95">
@@ -458,25 +462,25 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
         {/* Dynamic Navigation Parallel Tabs */}
         <div className="flex border-b border-slate-200 dark:border-white/10 w-full md:w-80">
-          <button 
+          <button
             type="button"
-            onClick={() => setActiveTab("specs")} 
+            onClick={() => setActiveTab("specs")}
             className={clsx(
               "flex-1 text-center py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 outline-none",
-              activeTab === "specs" 
-                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold" 
+              activeTab === "specs"
+                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold"
                 : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             )}
           >
             Pricing
           </button>
-          <button 
+          <button
             type="button"
-            onClick={() => setActiveTab("opening")} 
+            onClick={() => setActiveTab("opening")}
             className={clsx(
               "flex-1 text-center py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 outline-none",
-              activeTab === "opening" 
-                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold" 
+              activeTab === "opening"
+                ? "border-rose-500 text-rose-600 dark:text-rose-400 font-extrabold"
                 : "border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             )}
           >
@@ -501,14 +505,14 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
       {/* Main Container */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Left Hand: Config Tabs */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* TAB 1: Product Specifications & pricing models */}
           {activeTab === "specs" && (
             <div className="space-y-6 animate-in fade-in duration-300">
-              
+
               {/* General Identity */}
               <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-6">
                 <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-4">
@@ -664,8 +668,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                   </div>
 
                   {/* HSN Search Modal */}
-                  {showHsnSearch && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+                  {showHsnSearch && typeof document !== 'undefined' && createPortal(
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 dark:bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
                       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-md mx-4 p-5 space-y-4">
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">Search HSN / SAC Code</h3>
@@ -682,13 +686,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             onChange={e => setHsnSearchQuery(e.target.value)}
                             className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-orange-500 bg-slate-50 dark:bg-slate-800 dark:text-white font-semibold"
                           />
-            {hsnSearchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                onClick={() => setHsnSearchQuery("")} 
-              />
-            )}
+                          {hsnSearchQuery && (
+                            <X
+                              size={14}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                              onClick={() => setHsnSearchQuery("")}
+                            />
+                          )}
                         </div>
                         <div className="max-h-64 overflow-y-auto space-y-1 divide-y divide-slate-50 dark:divide-white/5">
                           {loadingHsn ? (
@@ -720,14 +724,14 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </div>
                       </div>
                     </div>
-                  )}
+                    , document.body)}
 
                   <div className="space-y-2 pt-2 border-t border-slate-50 dark:border-white/5">
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Weight Variant</label>
                     <div className="flex items-center bg-slate-50 dark:bg-white/5 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden w-fit">
-                      <input 
+                      <input
                         type="number"
-                        placeholder="Qty (e.g. 25)" 
+                        placeholder="Qty (e.g. 25)"
                         value={customNumber}
                         onChange={e => {
                           const num = e.target.value;
@@ -759,13 +763,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
               {/* UOM Setup - only for Finished Goods; raw materials derive unit from weight variant */}
               {category === "FINISHED_GOOD" && (
-              <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
-                  <Scale size={16} className="text-orange-500" />
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Stocking Units (UOM)</span>
-                </div>
+                <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-3">
+                    <Scale size={16} className="text-orange-500" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Stocking Units (UOM)</span>
+                  </div>
 
-                <>
+                  <>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {/* Primary Unit */}
                       <div className="space-y-1">
@@ -805,8 +809,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         ) : (
                           <div className="flex gap-2">
                             <div className="relative flex-1">
-                              <select 
-                                value={primaryUnit} 
+                              <select
+                                value={primaryUnit}
                                 onChange={e => setPrimaryUnit(e.target.value)}
                                 className="w-full appearance-none border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-orange-500 cursor-pointer"
                               >
@@ -824,7 +828,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Secondary Unit */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Secondary Unit (Bulk)</label>
@@ -863,8 +867,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         ) : (
                           <div className="flex gap-2">
                             <div className="relative flex-1">
-                              <select 
-                                value={secondaryUnit} 
+                              <select
+                                value={secondaryUnit}
                                 onChange={e => setSecondaryUnit(e.target.value)}
                                 className="w-full appearance-none border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-semibold bg-white dark:bg-slate-900 dark:text-white outline-none focus:border-orange-500 cursor-pointer"
                               >
@@ -884,12 +888,12 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Conversion Ratio */}
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Conversion Ratio</label>
                         <div className="relative">
-                          <input 
+                          <input
                             type="number"
                             value={conversionRatio}
                             onChange={e => setConversionRatio(Math.max(1, Number(e.target.value) || 0))}
@@ -901,14 +905,14 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </div>
                       </div>
                     </div>
-                    
+
                     {(() => {
                       const kgMatch = size.match(/^([\d.]+)\s*KG$/i);
-                      const gMatch  = size.match(/^([\d.]+)\s*G$/i);
-                      const pieceG  = kgMatch ? parseFloat(kgMatch[1]) * 1000
-                                    : gMatch  ? parseFloat(gMatch[1])
-                                    : null;
-                      const totalG  = pieceG !== null ? pieceG * conversionRatio : null;
+                      const gMatch = size.match(/^([\d.]+)\s*G$/i);
+                      const pieceG = kgMatch ? parseFloat(kgMatch[1]) * 1000
+                        : gMatch ? parseFloat(gMatch[1])
+                          : null;
+                      const totalG = pieceG !== null ? pieceG * conversionRatio : null;
                       const totalLabel = totalG !== null
                         ? totalG >= 1000 ? `${(totalG / 1000).toFixed(2)} KG` : `${totalG.toFixed(0)} G`
                         : null;
@@ -929,8 +933,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </div>
                       );
                     })()}
-                </>
-              </div>
+                  </>
+                </div>
               )}
 
               {/* GST Compliance */}
@@ -983,7 +987,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                           const num = parseFloat(val);
                           if (!isNaN(num) && num >= 0 && num <= 100) setGstRate(num);
                         }}
-                        placeholder="Custom %"
+                        placeholder="Custom "
                         className={clsx(
                           "w-24 px-3 py-2 font-bold text-xs outline-none bg-transparent",
                           customGstInput ? "text-orange-600 dark:text-orange-400" : "text-slate-400"
@@ -994,7 +998,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         customGstInput ? "text-orange-500" : "text-slate-400"
                       )}>%</span>
                     </div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Custom GST</span>
+                    {/* <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Custom GST</span> */}
                   </div>
                 </div>
 
@@ -1056,10 +1060,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </td>
                         <td className="py-4 px-2">
                           <div className="relative max-w-[160px]">
-                            <input 
+                            <input
                               type="number"
                               value={prices.purchasePrice}
-                              onChange={e => handlePriceChange("purchasePrice", Number(e.target.value) || 0, false)}
+                              onChange={e => handlePriceChange("purchasePrice", e.target.value, false)}
                               className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1067,10 +1071,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </td>
                         <td className="py-4 px-2">
                           <div className="relative max-w-[160px]">
-                            <input 
+                            <input
                               type="number"
                               value={prices.purchasePriceWithTax}
-                              onChange={e => handlePriceChange("purchasePrice", Number(e.target.value) || 0, true)}
+                              onChange={e => handlePriceChange("purchasePrice", e.target.value, true)}
                               className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                             />
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1088,10 +1092,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.franchisePrice}
-                                  onChange={e => handlePriceChange("franchisePrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("franchisePrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1099,10 +1103,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.franchisePriceWithTax}
-                                  onChange={e => handlePriceChange("franchisePrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("franchisePrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1118,10 +1122,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.dealerPrice}
-                                  onChange={e => handlePriceChange("dealerPrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("dealerPrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1129,10 +1133,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.dealerPriceWithTax}
-                                  onChange={e => handlePriceChange("dealerPrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("dealerPrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1148,10 +1152,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.customerPrice}
-                                  onChange={e => handlePriceChange("customerPrice", Number(e.target.value) || 0, false)}
+                                  onChange={e => handlePriceChange("customerPrice", e.target.value, false)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1159,10 +1163,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             </td>
                             <td className="py-4 px-2">
                               <div className="relative max-w-[160px]">
-                                <input 
+                                <input
                                   type="number"
                                   value={prices.customerPriceWithTax}
-                                  onChange={e => handlePriceChange("customerPrice", Number(e.target.value) || 0, true)}
+                                  onChange={e => handlePriceChange("customerPrice", e.target.value, true)}
                                   className="w-full pl-3 pr-8 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                                 />
                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
@@ -1209,7 +1213,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                             <div className="min-h-[28px] flex items-end">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Channel Platform Name</label>
                             </div>
-                            <input 
+                            <input
                               type="text"
                               value={ch.name}
                               onChange={e => handleCustomChannelChange(idx, "name", e.target.value)}
@@ -1217,13 +1221,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-xs font-semibold text-slate-800 dark:text-white"
                             />
                           </div>
-                          
+
                           <div className="space-y-1">
                             <div className="min-h-[28px] flex items-end">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Price Excl. GST (Without Tax)</label>
                             </div>
                             <div className="relative">
-                              <input 
+                              <input
                                 type="number"
                                 value={ch.price || ""}
                                 onChange={e => handleCustomChannelChange(idx, "price", Number(e.target.value) || 0)}
@@ -1232,13 +1236,13 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">₹</span>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-1">
                             <div className="min-h-[28px] flex items-end">
                               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-tight">Price Incl. GST (With Tax)</label>
                             </div>
                             <div className="relative">
-                              <input 
+                              <input
                                 type="number"
                                 value={ch.priceWithTax || ""}
                                 onChange={e => handleCustomChannelChange(idx, "priceWithTax", Number(e.target.value) || 0)}
@@ -1273,29 +1277,29 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Customer Retail Discount</span>
                       </div>
                       <div className="flex bg-slate-100 dark:bg-white/5 p-0.5 rounded-lg border border-slate-200 dark:border-white/10">
-                        <button 
-                          type="button" 
-                          onClick={() => setDiscountType("PERCENT")} 
+                        <button
+                          type="button"
+                          onClick={() => setDiscountType("PERCENT")}
                           className={clsx("px-3 py-1 rounded-md text-[10px] font-bold transition-all", discountType === "PERCENT" ? "bg-white dark:bg-slate-800 text-orange-600 shadow-sm" : "text-slate-400")}
                         >
                           Percent %
                         </button>
-                        <button 
-                          type="button" 
-                          onClick={() => setDiscountType("VALUE")} 
+                        <button
+                          type="button"
+                          onClick={() => setDiscountType("VALUE")}
                           className={clsx("px-3 py-1 rounded-md text-[10px] font-bold transition-all", discountType === "VALUE" ? "bg-white dark:bg-slate-800 text-orange-600 shadow-sm" : "text-slate-400")}
                         >
                           Flat ₹
                         </button>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
                       <div className="relative">
-                        <input 
+                        <input
                           type="number"
                           value={discountValue}
-                          onChange={e => setDiscountValue(Math.max(0, Number(e.target.value) || 0))}
+                          onChange={e => setDiscountValue(e.target.value)}
                           placeholder="Enter discount value..."
                           className="w-full pl-3 pr-10 py-2 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-orange-500 text-sm font-semibold bg-white dark:bg-slate-900 dark:text-white"
                         />
@@ -1304,7 +1308,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-white/5 px-4 py-2.5 rounded-lg border border-slate-100 dark:border-white/5">
-                        {discountValue > 0 ? (
+                        {Number(discountValue) > 0 ? (
                           <span>Customer retail reduces to <strong className="text-orange-500">₹{discountedSellingPriceWithTax}</strong> (incl. tax)</span>
                         ) : (
                           <span>No discount applied. Standard channel rates apply.</span>
@@ -1322,7 +1326,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
           {activeTab === "opening" && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-6">
-                
+
                 {/* Row 1: Opening Stock */}
                 <div className="relative mt-2">
                   <label className="absolute -top-2 left-3 bg-white dark:bg-[#12141a] px-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 z-10 transition-all select-none">
@@ -1500,7 +1504,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
         {/* Right Hand Side: Summary and Actions */}
         <div className="space-y-6">
-          
+
           {/* Item Code Card */}
           <div className="bg-slate-900 text-white rounded-xl p-6 shadow-md relative overflow-hidden group">
             <div className="absolute -right-16 -top-16 w-32 h-32 bg-orange-500/10 rounded-full blur-3xl group-hover:bg-orange-500/20 transition-all duration-700" />
@@ -1516,7 +1520,7 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
           {/* Pricing & Valuation Dashboard */}
           <div className="bg-white dark:bg-slate-900/40 rounded-xl border border-slate-100 dark:border-white/5 p-6 shadow-md space-y-4">
             <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-50 dark:border-white/5 pb-2">Commercial Summary</h3>
-            
+
             <div className="space-y-2.5 text-xs">
               <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                 <span>Base Purchase Cost</span>
@@ -1540,7 +1544,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                       // "selling at ₹0" — treating it as the latter made every
                       // unconfigured channel show a bogus -100% loss against the
                       // purchase cost.
-                      if (!price || price <= 0) {
+                      const numPrice = Number(price);
+                      if (!numPrice || numPrice <= 0) {
                         return (
                           <div key={label} className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                             <span>{label}</span>
@@ -1548,20 +1553,20 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                           </div>
                         );
                       }
-                      const margin = price - prices.purchasePrice;
-                      const pct = prices.purchasePrice > 0 ? ((margin / prices.purchasePrice) * 100).toFixed(0) : "—";
+                      const margin = numPrice - Number(prices.purchasePrice);
+                      const pct = Number(prices.purchasePrice) > 0 ? ((margin / Number(prices.purchasePrice)) * 100).toFixed(0) : "—";
                       return (
                         <div key={label} className="flex justify-between items-center text-slate-500 dark:text-slate-400">
                           <span>{label}</span>
                           <span className={`font-bold text-xs ${margin > 0 ? "text-emerald-600 dark:text-emerald-400" : margin < 0 ? "text-red-500" : "text-slate-400"}`}>
                             {margin > 0 ? "+" : ""}{margin !== 0 ? `₹${margin.toFixed(0)}` : "—"}
-                            {prices.purchasePrice > 0 && margin !== 0 && <span className="text-[9px] ml-1 opacity-70">({pct}%)</span>}
+                            {Number(prices.purchasePrice) > 0 && margin !== 0 && <span className="text-[9px] ml-1 opacity-70">({pct}%)</span>}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                  {discountValue > 0 && (
+                  {Number(discountValue) > 0 && (
                     <div className="flex justify-between items-center text-red-500 font-bold">
                       <span>Customer Discount</span>
                       <span>-{discountType === "PERCENT" ? `${discountValue}%` : `₹${discountValue}`}</span>
@@ -1574,10 +1579,10 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
 
           {/* Action Bar */}
           <div className="flex flex-col gap-2">
-            <button 
+            <button
               type="button"
-              onClick={handleSave} 
-              disabled={saving} 
+              onClick={handleSave}
+              disabled={saving}
               className="flex items-center justify-center gap-2 w-full py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-md hover:shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 border-none cursor-pointer"
             >
               {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
@@ -1593,8 +1598,8 @@ export default function AddInventoryProductForm({ onSuccess, onCancel, isModal }
                 Discard & Quit
               </button>
             ) : (
-              <Link 
-                href="/inventory/stock" 
+              <Link
+                href="/inventory/stock"
                 className="w-full text-center py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-all"
               >
                 Discard & Quit

@@ -34,7 +34,7 @@ export default function WelcomeStep({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Kiddos Food Logo" className="w-full h-full object-contain" />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Welcome to Kiddos Food ERP</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Welcome to Kiddos Foods ERP</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Let&apos;s complete your initial setup before you start using the system.
         </p>
@@ -51,7 +51,7 @@ export default function WelcomeStep({
         onClick={onGetStarted}
         className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 rounded-xl transition-colors"
       >
-        Start Setup <ArrowRight size={18} />
+        Start Setup
       </button>
     </div>
   );

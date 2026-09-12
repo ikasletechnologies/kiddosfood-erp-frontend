@@ -701,6 +701,19 @@ export default function DeliveryChallanPage() {
     setShowCustomerDrop(false);
   };
 
+  // Channel prices default to 0 (unconfigured, not "genuinely free") on
+  // items that predate these fields — only a positive value counts as
+  // configured, otherwise fall back to the generic base price. destType
+  // maps 1:1 to the channel since a DC's destination is mutually
+  // exclusive (customerId/dealerId/franchiseId). Mirrors pos/page.tsx's
+  // getPrice().
+  const getChannelPrice = (p: any, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
+    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
+    if (p.customerPrice > 0) return p.customerPrice;
+    return p.basePrice || p.price || 0;
+  };
+
   const selectProduct = (idx: number, p: any) => {
     const validBatches = getValidBatches(p.id);
     const autoBatch = validBatches.length === 1 ? (validBatches[0].batchCode || validBatches[0].id) : "";
@@ -711,7 +724,7 @@ export default function DeliveryChallanPage() {
         ...it,
         productId: p.id,
         itemSearch: p.name,
-        rate: p.basePrice || p.price || 0,
+        rate: getChannelPrice(p, destType),
         unit: normalizedUnit,
         taxPct: p.taxPercent || 0,
         taxLabel: TAX_OPTIONS.find(o => o.value === (p.taxPercent || 0))?.label || "NONE",
@@ -745,6 +758,28 @@ export default function DeliveryChallanPage() {
       return updated;
     }));
   };
+
+  // Line items are priced at selection-time; if the destination type
+  // changes after items are already picked, re-derive each line's rate
+  // against the newly selected channel so the form never shows a stale
+  // Customer rate while Dealer/Franchise is now the destination.
+  useEffect(() => {
+    if (!products.length) return;
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const p = products.find((pr: any) => pr.id === it.productId);
+      if (!p) return it;
+      const rate = getChannelPrice(p, destType);
+      if (rate === it.rate) return it;
+      const updated = { ...it, rate };
+      if (updated.discountPct) {
+        const gross = (updated.qty || 0) * rate;
+        updated.discountAmount = parseFloat((gross * updated.discountPct / 100).toFixed(2));
+      }
+      return updated;
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destType, products]);
 
   const addRow = () => setItems(prev => [...prev, makeItem()]);
 
@@ -1440,7 +1475,7 @@ export default function DeliveryChallanPage() {
                               ) : products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).map(p => (
                                 <button key={p.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs" onClick={() => selectProduct(idx, p)}>
                                   <div><strong className="text-gray-800 dark:text-white font-medium">{p.name}</strong><div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div></div>
-                                  <div className="text-orange-500 font-semibold">₹{p.basePrice || p.price || 0}</div>
+                                  <div className="text-orange-500 font-semibold">₹{getChannelPrice(p, destType)}</div>
                                 </button>
                               ))}
                             </div>

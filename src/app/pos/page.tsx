@@ -23,7 +23,6 @@ type PartyType = "CUSTOMER" | "DEALER" | "FRANCHISE";
 const PARTY_TABS: { type: PartyType; label: string; icon: any }[] = [
   { type: "CUSTOMER",  label: "Customer",  icon: User      },
   { type: "DEALER",    label: "Dealer",    icon: Store     },
-  { type: "FRANCHISE", label: "Franchise", icon: Building2 },
 ];
 
 const BRAND_ORANGE = "#f58220";
@@ -37,6 +36,7 @@ interface CartItem {
   quantity: number;
   taxPercent: number;
   stock: number | null;
+  itemDiscount: number;
 }
 
 // ── Receipt data ───────────────────────────────────────────────────────────────
@@ -322,11 +322,14 @@ export default function POSPage() {
           price: p.inventoryBasePrice ?? p.basePrice ?? p.price ?? 0,
           franchisePrice: p.franchisePrice,
           dealerPrice: p.dealerPrice,
+          customerPrice: p.customerPrice,
           taxPercent: p.taxPercent ?? p.gstRate ?? 0,
           category: p.category || p.categoryName || "General",
           stock: p.currentStock ?? p.stock ?? null,
           noPrice: (p.inventoryBasePrice ?? p.basePrice ?? p.price ?? 0) <= 0,
           packSize: p.packSize as { qty: number; unit: string } | null | undefined,
+          discountType: p.discountType || "PERCENT",
+          discountValue: p.discountValue || 0,
         }));
         setProducts(mapped);
         const cats = Array.from(new Set(mapped.map(p => p.category).filter(Boolean))) as string[];
@@ -407,10 +410,23 @@ export default function POSPage() {
 
   // ── Cart helpers ──────────────────────────────────────────────────────────
 
+  // Channel prices default to 0 (unconfigured, not "genuinely free") on
+  // items that predate these fields — only a positive value counts as
+  // configured, otherwise fall back to the generic base price.
   const getPrice = (p: any, type: string) => {
-    if (type === "DEALER" && p.dealerPrice != null) return p.dealerPrice;
-    if (type === "FRANCHISE" && p.franchisePrice != null) return p.franchisePrice;
+    if (type === "CUSTOMER" && p.customerPrice > 0) return p.customerPrice;
+    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
+    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
     return p.price || 0;
+  };
+
+  // "Customer Retail Discount" is exactly that — a customer-channel-only
+  // modifier configured on the item master. Dealer/Franchise sell at their
+  // own channel price with no discount layered on top unless a manual
+  // discount is entered at checkout.
+  const getItemDiscount = (p: any, type: string, price: number) => {
+    if (type !== "CUSTOMER" || !(p.discountValue > 0)) return 0;
+    return p.discountType === "PERCENT" ? price * (p.discountValue / 100) : p.discountValue;
   };
 
   const addToCart = (p: any) => {
@@ -419,11 +435,28 @@ export default function POSPage() {
     const cur = ex?.quantity || 0;
     if (p.stock !== null && cur >= p.stock) { toast.error(`Only ${p.stock} left in stock`); return; }
     const actualPrice = getPrice(p, partyType);
+    const itemDiscount = getItemDiscount(p, partyType, actualPrice);
     setCart(prev => ex
       ? prev.map(i => i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i)
-      : [...prev, { id: p.id, name: p.name, price: actualPrice, quantity: 1, taxPercent: p.taxPercent, stock: p.stock }]
+      : [...prev, { id: p.id, name: p.name, price: actualPrice, quantity: 1, taxPercent: p.taxPercent, stock: p.stock, itemDiscount }]
     );
   };
+
+  // Cart lines are priced at add-time; if the party channel changes after
+  // items are already in the cart, re-derive each line's price/discount
+  // against the newly selected channel so the cart never shows a Customer
+  // price while a Dealer/Franchise channel is active (or vice versa).
+  useEffect(() => {
+    if (!products.length) return;
+    setCart(prev => prev.map(item => {
+      const p = products.find(pr => pr.id === item.id);
+      if (!p) return item;
+      const price = getPrice(p, partyType);
+      const itemDiscount = getItemDiscount(p, partyType, price);
+      return price === item.price && itemDiscount === item.itemDiscount ? item : { ...item, price, itemDiscount };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyType, products]);
 
   const updateQty = (id: string, delta: number) => {
     const p = products.find(x => x.id === id);
@@ -441,7 +474,9 @@ export default function POSPage() {
 
   const subtotal   = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const gst        = parseFloat(cart.reduce((s, i) => s + i.price * i.quantity * ((i.taxPercent || 0) / 100), 0).toFixed(2));
-  const discAmt    = Math.max(0, parseFloat(discount) || 0);
+  const productDiscounts = cart.reduce((s, i) => s + (i.itemDiscount * i.quantity), 0);
+  const manualDisc = Math.max(0, parseFloat(discount) || 0);
+  const discAmt    = Math.max(0, manualDisc + productDiscounts);
   const total      = Math.max(0, subtotal + gst - discAmt);
   const changeDue  = paidAmount ? parseFloat(paidAmount) - total : 0;
 
@@ -506,6 +541,12 @@ export default function POSPage() {
           subTotal: subtotal,
           taxAmount: gst,
           discountAmount: discAmt,
+          // The per-item "Customer Retail Discount" portion is recomputed
+          // and validated server-side from the item master — only the
+          // cashier-entered manual discount is sent separately so the
+          // backend can trust it (bounded to the bill total) without also
+          // trusting a client-claimed product-discount figure.
+          manualDiscount: manualDisc,
           totalAmount: total,
           items: cart.map(i => ({
             productId: i.id,
@@ -976,6 +1017,12 @@ export default function POSPage() {
               <span className="flex items-center gap-1"><Percent size={10} className="text-blue-500" /> Tax (GST)</span>
               <span className="font-medium text-gray-700 dark:text-slate-200">{fmt(gst)}</span>
             </div>
+            {productDiscounts > 0 && (
+              <div className="flex justify-between text-xs text-green-600 dark:text-green-400">
+                <span className="flex items-center gap-1"><Tag size={10} className="text-green-500" /> Product Discounts</span>
+                <span className="font-medium">-{fmt(productDiscounts)}</span>
+              </div>
+            )}
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-slate-400"><Tag size={10} className="text-green-500" /> Discount</span>
               <div className="relative w-24">

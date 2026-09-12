@@ -21,7 +21,7 @@ const CARD_CLASS =
 
 const NEXT_STEPS = [
   { icon: Package, label: "Import Finished Goods", action: "Import", href: "/inventory/stock?type=FINISHED_GOOD" },
-  { icon: Boxes, label: "Add Raw Materials", action: "Add", href: "/inventory/stock?type=RAW_MATERIAL" },
+  { icon: Boxes, label: "Import Raw Materials", action: "Import", href: "/inventory/stock?type=RAW_MATERIAL" },
   { icon: FlaskConical, label: "Configure Recipes", action: "Configure", href: "/production/recipes" },
   { icon: PackagePlus, label: "Add Opening Stock", action: "Add Stock", href: "/inventory/stock/add" },
   { icon: ShoppingCart, label: "Start POS", action: "Open POS", href: "/pos" },
@@ -63,7 +63,7 @@ export default function CompleteStep({
     <div className={CARD_CLASS}>
       <div className="text-center space-y-2">
         <div className="w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-500/10 flex items-center justify-center mx-auto">
-          <PartyPopper size={26} className="text-emerald-500" />
+          <img src="/KIDOOS logo.png" alt="Kiddos Foods Logo" className="w-8 h-8 object-contain" />
         </div>
         <h2 className="text-lg font-bold text-slate-900 dark:text-white">Your Headquarters is ready</h2>
       </div>
@@ -113,7 +113,7 @@ export default function CompleteStep({
         disabled={finishing || navigatingTo !== null}
         className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white font-semibold py-3 rounded-xl transition-colors"
       >
-        {finishing ? <Loader2 size={18} className="animate-spin" /> : <>Continue to ERP <ArrowRight size={18} /></>}
+        {finishing ? <Loader2 size={18} className="animate-spin" /> : <>Continue to ERP </>}
       </button>
     </div>
   );

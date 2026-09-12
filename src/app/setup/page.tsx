@@ -65,7 +65,11 @@ export default function SetupWizardPage() {
         )}
         {step === "hq" && <CreateHqStep onCreated={handleHqCreated} />}
         {step === "warehouse" && hq && (
-          <CreateWarehouseStep hq={hq} onCreated={handleWarehouseCreated} />
+          <CreateWarehouseStep 
+            hq={hq} 
+            nextWarehouseCode={setupStatus?.nextWarehouseCode}
+            onCreated={handleWarehouseCreated} 
+          />
         )}
         {step === "complete" && hq && warehouse && (
           <CompleteStep hq={hq} warehouse={warehouse} onFinish={handleFinish} />

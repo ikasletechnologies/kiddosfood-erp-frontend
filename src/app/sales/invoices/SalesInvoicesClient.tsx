@@ -775,20 +775,49 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setShowCustomerDrop(false);
   };
 
+  // Channel prices default to 0 (unconfigured, not "genuinely free") on
+  // items that predate these fields — only a positive value counts as
+  // configured, otherwise fall back to the generic base price. Mirrors
+  // pos/page.tsx's getPrice().
+  const getChannelPrice = (p: any, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
+    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
+    if (p.customerPrice > 0) return p.customerPrice;
+    return p.basePrice || p.price || 0;
+  };
+
+  // The Item Master's "Customer Retail Discount" (discountType/discountValue)
+  // applies only to the Customer channel. This LineItem model only tracks a
+  // percent (no separate flat-amount field), so a FLAT-configured discount
+  // is converted to an equivalent percent of this line's resolved price.
+  // This only auto-fills discountPct as a starting point — the operator can
+  // still freely edit it via the existing manual discount input.
+  const getAutoDiscountPct = (p: any, price: number, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type !== "CUSTOMER" || price <= 0) return 0;
+    const val = Number(p.discountValue) || 0;
+    if (val <= 0) return 0;
+    if (p.discountType === "FLAT") {
+      return parseFloat((Math.min(val, price) / price * 100).toFixed(2));
+    }
+    return Math.min(100, val);
+  };
+
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
-    const validBatches = Array.isArray(p.batches) 
+    const validBatches = Array.isArray(p.batches)
       ? p.batches.filter((b: any) => (b.quantity || b.currentStock || 0) > 0)
       : [];
     const firstBatch = validBatches.length > 0 ? validBatches[0].batchCode : "";
+    const resolvedRate = getChannelPrice(p, partyType);
 
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
-        rate: p.basePrice || p.price || 0,
-        basePrice: p.basePrice || p.price || 0,
+        rate: resolvedRate,
+        basePrice: resolvedRate,
+        discountPct: getAutoDiscountPct(p, resolvedRate, partyType),
         unit: p.unit?.code || p.unit || "NONE",
         baseUnit: p.baseUnit || p.unit,
         conversions: p.conversions || [],
@@ -805,6 +834,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
+
+  // Line items are priced at selection-time; if the party channel changes
+  // after items are already picked, re-derive each line's rate against the
+  // newly selected channel so the form never shows a stale Customer rate
+  // while Dealer/Franchise is now active (or vice versa).
+  useEffect(() => {
+    if (!products.length) return;
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const p = products.find((pr: any) => pr.id === it.productId);
+      if (!p) return it;
+      const rate = getChannelPrice(p, partyType);
+      if (rate === it.rate) return it;
+      // Re-derive the auto discount for the new channel too — a Customer
+      // Retail Discount must never carry over onto a Dealer/Franchise line
+      // (and must reapply when switching back to Customer).
+      return { ...it, rate, basePrice: rate, discountPct: getAutoDiscountPct(p, rate, partyType) };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyType, products]);
 
   const addRow = () => setItems(prev => [...prev, makeItem()]);
 
@@ -1576,7 +1625,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                     >
                                       <div>
                                         <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{p.basePrice || p.price || 0}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{getChannelPrice(p, partyType)}</div>
                                       </div>
                                     </button>
                                   ))

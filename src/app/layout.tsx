@@ -15,12 +15,12 @@ const inter = Inter({
 });
 //
 export const metadata: Metadata = {
-  title: "Kiddos Food ERP | Business Management",
-  description: "Enterprise Resource Planning by Kiddos Food — manage sales, purchases, accounting and more",
+  title: "Kiddos Foods ERP",
+  description: "Kiddos Foods ERP - manage sales, purchases, accounting and more",
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
-    apple: "/favicon.png",
+    icon: "/KIDOOS logo.png",
+    shortcut: "/KIDOOS logo.png",
+    apple: "/KIDOOS logo.png",
   }
 };
 
