@@ -19,7 +19,7 @@ import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { Modal } from "@/components/ui/Modal";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 
 function toLocalDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -400,9 +400,9 @@ export default function VendorsClient() {
           <td>${formatReferenceType(e.referenceType)}</td>
           <td>${refNo}</td>
           <td>${e.note || '—'}</td>
-          <td style="text-align: right; color: #dc2626;">${e.type === 'DEBIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
-          <td style="text-align: right; color: #16a34a;">${e.type === 'CREDIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
-          <td style="text-align: right; font-weight: bold;">₹ ${Math.abs(Math.round(balance)).toLocaleString()} ${balance >= 0 ? 'Cr' : 'Dr'}</td>
+          <td style="text-align: right; color: #dc2626;">${e.type === 'DEBIT' ? formatCurrency(e.amount) : '₹ 0'}</td>
+          <td style="text-align: right; color: #16a34a;">${e.type === 'CREDIT' ? formatCurrency(e.amount) : '₹ 0'}</td>
+          <td style="text-align: right; font-weight: bold;">₹ ${formatCurrency(Math.abs(balance)).replace(/^₹/, "")} ${balance >= 0 ? 'Cr' : 'Dr'}</td>
         </tr>
       `;
     }).join('');
@@ -452,9 +452,9 @@ export default function VendorsClient() {
               ${rowsHtml}
               <tr class="total-row">
                 <td colspan="4" style="text-align: right;">Totals:</td>
-                <td style="text-align: right; color: #dc2626;">₹ ${Math.round(printDebitTotal).toLocaleString()}</td>
-                <td style="text-align: right; color: #16a34a;">₹ ${Math.round(printCreditTotal).toLocaleString()}</td>
-                <td style="text-align: right;">₹ ${Math.abs(Math.round(printCreditTotal - printDebitTotal)).toLocaleString()} ${(printCreditTotal - printDebitTotal) >= 0 ? 'Cr' : 'Dr'}</td>
+                <td style="text-align: right; color: #dc2626;">${formatCurrency(printDebitTotal)}</td>
+                <td style="text-align: right; color: #16a34a;">${formatCurrency(printCreditTotal)}</td>
+                <td style="text-align: right;">₹ ${formatCurrency(Math.abs(printCreditTotal - printDebitTotal)).replace(/^₹/, "")} ${(printCreditTotal - printDebitTotal) >= 0 ? 'Cr' : 'Dr'}</td>
               </tr>
             </tbody>
           </table>
@@ -1183,14 +1183,14 @@ export default function VendorsClient() {
                       <div className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-xl">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Purchases</div>
                         <div className="text-lg sm:text-xl font-bold font-mono text-slate-800 dark:text-white mt-1">
-                          ₹ {Math.round(selectedVendor.totalPurchased || 0).toLocaleString()}
+                          {formatCurrency(selectedVendor.totalPurchased || 0)}
                         </div>
                       </div>
 
                       <div className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-xl">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payments Made</div>
                         <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-                          ₹ {Math.round(selectedVendor.totalPayments || 0).toLocaleString()}
+                          {formatCurrency(selectedVendor.totalPayments || 0)}
                         </div>
                       </div>
 
@@ -1202,7 +1202,7 @@ export default function VendorsClient() {
                           "text-lg sm:text-xl font-bold font-mono mt-1",
                           Number(selectedVendor.balance) > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
                         )}>
-                          ₹ {Math.abs(Math.round(selectedVendor.balance || 0)).toLocaleString()}
+                          {formatCurrency(Math.abs(selectedVendor.balance || 0))}
                         </div>
                       </div>
                     </div>
@@ -1258,7 +1258,7 @@ export default function VendorsClient() {
                             <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credit Limit</p>
                               <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                                {detail?.creditLimit ? `₹ ${Number(detail.creditLimit).toLocaleString()}` : "No Limit"}
+                                {detail?.creditLimit ? `${formatCurrency(detail.creditLimit)}` : "No Limit"}
                               </p>
                             </div>
                             <div>
@@ -1490,13 +1490,13 @@ export default function VendorsClient() {
                                     {e.note || "—"}
                                   </td>
                                   <td className="px-4 py-3 font-semibold font-mono text-rose-600 dark:text-rose-400 text-right">
-                                    {e.type === 'DEBIT' ? `₹ ${Math.round(e.amount).toLocaleString()}` : '₹ 0'}
+                                    {e.type === 'DEBIT' ? `${formatCurrency(e.amount)}` : '₹ 0'}
                                   </td>
                                   <td className="px-4 py-3 font-semibold font-mono text-emerald-600 dark:text-emerald-400 text-right">
-                                    {e.type === 'CREDIT' ? `₹ ${Math.round(e.amount).toLocaleString()}` : '₹ 0'}
+                                    {e.type === 'CREDIT' ? `${formatCurrency(e.amount)}` : '₹ 0'}
                                   </td>
                                   <td className="px-4 py-3 font-bold font-mono text-slate-800 dark:text-white text-right">
-                                    ₹ {Math.abs(Math.round(balance)).toLocaleString()} {balance >= 0 ? 'Cr' : 'Dr'}
+                                    {formatCurrency(Math.abs(balance))} {balance >= 0 ? 'Cr' : 'Dr'}
                                   </td>
                                   <td className="px-2 py-3 text-center">
                                     <button
@@ -1518,13 +1518,13 @@ export default function VendorsClient() {
                               Totals:
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-rose-600 dark:text-rose-400">
-                              ₹ {Math.round(ledgerTotals.totalDebit).toLocaleString()}
+                              {formatCurrency(ledgerTotals.totalDebit)}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                              ₹ {Math.round(ledgerTotals.totalCredit).toLocaleString()}
+                              {formatCurrency(ledgerTotals.totalCredit)}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">
-                              ₹ {Math.abs(Math.round(ledgerTotals.closingBalance)).toLocaleString()} {ledgerTotals.closingBalance >= 0 ? 'Cr' : 'Dr'}
+                              {formatCurrency(Math.abs(ledgerTotals.closingBalance))} {ledgerTotals.closingBalance >= 0 ? 'Cr' : 'Dr'}
                             </td>
                             <td></td>
                           </tr>
@@ -1765,9 +1765,9 @@ export default function VendorsClient() {
               { label: "Type", value: formatReferenceType(ledgerDetailEntry.referenceType) },
               { label: "Reference", value: ledgerDetailEntry.returnNumber || ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
               { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
-              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
-              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
-              { label: "Balance After", value: `₹ ${Math.abs(Math.round(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0)).toLocaleString()} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
+              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `${formatCurrency(ledgerDetailEntry.amount)}` : "—" },
+              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `${formatCurrency(ledgerDetailEntry.amount)}` : "—" },
+              { label: "Balance After", value: `${formatCurrency(Math.abs(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0))} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
               { label: "Note", value: ledgerDetailEntry.note || "—" },
             ].map((row) => (
               <div key={row.label} className="flex items-start justify-between gap-4 py-1 border-b border-slate-50 dark:border-white/5 last:border-0">
