@@ -79,7 +79,12 @@ export const grnApi = {
   getAll: (params: any = {}) => api.get('/api/grn', { params }),
   getById: (id: string) => api.get(`/api/grn/${id}`),
   generateLotNumber: () => api.get('/api/grn/generate-lot-number'),
-  createFromPO: (poId: string, data: { items: any[], receivedBy?: string }) => 
+  // Authoritative remaining-receivable quantity per PO line (ordered minus
+  // cumulative received from COMPLETED GRNs) — the New Receipt screen must
+  // use this instead of the PO's raw ordered quantity, or a partially
+  // received PO shows its full original quantity as still receivable.
+  getRemainingQuantities: (poId: string) => api.get(`/api/grn/po/${poId}/remaining`),
+  createFromPO: (poId: string, data: { items: any[], receivedBy?: string }) =>
     api.post(`/api/grn/from-po/${poId}`, data),
   approve: (id: string) => api.patch(`/api/grn/${id}/approve`),
   cancel: (id: string) => api.patch(`/api/grn/${id}/cancel`),

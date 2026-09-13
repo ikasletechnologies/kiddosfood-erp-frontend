@@ -361,10 +361,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               <span className="font-bold text-gray-900">GSTIN</span>
               <span className="text-gray-600 font-mono">{companyDetails.gstin}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs mt-1">
-              <span className="font-bold text-gray-900">PAN</span>
-              <span className="text-gray-600 font-mono">ABCDE1234F</span>
-            </div>
+
           </div>
           
           <div className="flex-1 bg-[#f8f9fa] p-6 rounded-xl">
@@ -377,10 +374,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
               <span className="font-bold text-gray-900">GSTIN</span>
               <span className="text-gray-600 font-mono">{vendor?.gstin || vendor?.gstNumber || order.franchise?.gstin || order.customer?.gstNumber || '-'}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs mt-1">
-              <span className="font-bold text-gray-900">PAN</span>
-              <span className="text-gray-600 font-mono">{vendor?.pan || order.customer?.pan || '-'}</span>
-            </div>
+
             {(vendor?.phone || vendor?.contact || order.customer?.phone || order.customer?.contact || order.franchise?.contactNum) && (
               <div className="flex items-center gap-2 text-xs mt-1">
                 <span className="font-bold text-gray-900">Phone</span>

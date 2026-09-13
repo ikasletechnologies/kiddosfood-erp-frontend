@@ -146,6 +146,12 @@ interface PO {
 interface GRNItem {
   materialId: string;
   quantity: number;       // ordered
+  // Authoritative remaining-receivable quantity (ordered minus cumulative
+  // received from COMPLETED GRNs) — from GRNService.getRemainingQuantities.
+  // Falls back to `quantity` if the lookup fails, so the field is always
+  // present once selectPO resolves; the backend re-validates regardless.
+  remaining?: number;
+  previouslyReceived?: number;
   receivedQty: number;
   acceptedQty: number;
   rejectedQty: number;
@@ -393,16 +399,38 @@ export default function GRNPage() {
     }
   }, [view, loadPOs, loadHistory]);
 
-  const selectPO = (po: PO) => {
+  const selectPO = async (po: PO) => {
     setSelectedPO(po);
+
+    // Authoritative remaining-receivable quantity per line (ordered minus
+    // cumulative received from COMPLETED GRNs) — a partially-received PO
+    // must default/cap to what's actually still outstanding, not the full
+    // original ordered quantity again. Falls back to the raw ordered
+    // quantity if the lookup fails; the backend still rejects any
+    // over-receipt on submit regardless of what the UI shows.
+    let remainingByMaterial = new Map<string, { remaining: number; previouslyReceived: number }>();
+    try {
+      const res = await grnApi.getRemainingQuantities(po.id);
+      (res.data || []).forEach((r: any) => {
+        if (r.materialId) remainingByMaterial.set(r.materialId, { remaining: r.remaining, previouslyReceived: r.previouslyReceived });
+      });
+    } catch (e) {
+      console.error("Failed to load remaining receivable quantities:", e);
+      toast.error("Could not load remaining receivable quantity for this PO — showing full ordered quantity, but the server will still block over-receiving.");
+    }
+
     setGrnItems(
       (po.poItems || []).map(item => {
         const gstRate = item.gstRate ?? (item.inventoryItem as any)?.taxRate ?? (item.inventoryItem as any)?.gstRate ?? 0;
+        const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
+        const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
         return {
           materialId: item.inventoryItem.id,
           quantity: item.quantity,
-          receivedQty: item.quantity,
-          acceptedQty: item.quantity,
+          remaining,
+          previouslyReceived: remainingInfo?.previouslyReceived ?? 0,
+          receivedQty: remaining,
+          acceptedQty: remaining,
           rejectedQty: 0,
           price: item.price,
           poPrice: item.price,
@@ -427,7 +455,11 @@ export default function GRNPage() {
       const parsedVal = Math.max(0, val);
 
       if (field === "receivedQty") {
-        currentItem.receivedQty = Math.min(currentItem.quantity, parsedVal);
+        // Cap at the remaining receivable quantity, not the PO's full
+        // original ordered quantity — a partially-received PO must not let
+        // the UI offer the already-fulfilled portion again. Falls back to
+        // `quantity` only if remaining was never resolved (see selectPO).
+        currentItem.receivedQty = Math.min(currentItem.remaining ?? currentItem.quantity, parsedVal);
       } else if (field === "rejectedQty") {
         currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
       }
@@ -1224,11 +1256,18 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-mono text-xs font-bold text-gray-600 dark:text-slate-300">{item.quantity}</span>
+                            {(item.previouslyReceived ?? 0) > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                <div className="text-[10px] text-gray-400 dark:text-slate-500">Received so far: {item.previouslyReceived}</div>
+                                <div className="text-[10px] font-semibold text-[#f58220]">Remaining: {item.remaining}</div>
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"
                               min={0}
+                              max={item.remaining ?? item.quantity}
                               value={item.receivedQty}
                               onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
                               className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
