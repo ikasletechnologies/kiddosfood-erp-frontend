@@ -44,7 +44,12 @@ interface ReturnItem {
 interface ReturnOrder {
   id: string;
   returnNumber: string;
+  // 'source' is kept for the existing FRANCHISE/PARTNER split used
+  // elsewhere (creation flow, franchise-order matching); 'partyKind' is the
+  // real three-way party identity (Customer/Dealer/Franchise) used for
+  // display and filtering.
   source: 'FRANCHISE' | 'PARTNER';
+  partyKind: 'CUSTOMER' | 'DEALER' | 'FRANCHISE';
   entityId: string;
   entityName: string;
   entityPhone?: string;
@@ -87,7 +92,7 @@ export default function SalesReturnsPage() {
   const [returns, setReturns] = useState<ReturnOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<'ALL' | 'FRANCHISE' | 'PARTNER'>('ALL');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'CUSTOMER' | 'DEALER' | 'FRANCHISE'>('ALL');
 
   // Form State
   const [returnSource, setReturnSource] = useState<'FRANCHISE' | 'PARTNER'>('PARTNER');
@@ -120,13 +125,20 @@ export default function SalesReturnsPage() {
 
   const normalizeReturn = (r: any): ReturnOrder => {
     const orderRef = r.posOrder || r.salesOrder || r.franchiseOrder;
+    // dealerId is a real, distinct field now (ReturnOrder.dealerId) — before
+    // this, a Dealer return had no party reference at all and silently fell
+    // into the same "PARTNER" bucket as Customer returns, both displayed
+    // and labeled as "Dealer" regardless of which one it actually was.
+    const partyKind: 'CUSTOMER' | 'DEALER' | 'FRANCHISE' =
+      r.dealerId ? 'DEALER' : r.franchiseId ? 'FRANCHISE' : 'CUSTOMER';
     return {
       id: r.id,
       returnNumber: r.returnNumber,
       source: r.franchiseId ? 'FRANCHISE' : 'PARTNER',
-      entityId: r.customerId || r.franchiseId || '',
-      entityName: r.customer?.name || r.franchise?.name || 'Walk-in Partner',
-      entityPhone: r.customer?.phone || '',
+      partyKind,
+      entityId: r.customerId || r.dealerId || r.franchiseId || '',
+      entityName: r.customer?.name || r.dealer?.name || r.franchise?.name || (partyKind === 'CUSTOMER' ? 'Walk-in Customer' : 'Walk-in Partner'),
+      entityPhone: r.customer?.phone || r.dealer?.phone || '',
       orderRefId: r.posOrderId || r.salesOrderId || r.franchiseOrderId || '',
       orderRefNumber: orderRef?.invoiceNum || orderRef?.orderNumber || orderRef?.challanNumber || 'Direct',
       reason: r.reason,
@@ -575,6 +587,11 @@ export default function SalesReturnsPage() {
 
     try {
       const hasRealCustomer = selectedEntity?.id && selectedEntity.id !== 'walk-in' && !/walk[-_ ]?in/i.test(selectedEntity.id) && selectedEntity._kind === 'CUSTOMER';
+      // Dealer returns used to have no party reference sent at all — the
+      // dealer's identity was silently dropped, so every dealer return
+      // showed up as an unlabeled "Walk-in Partner". ReturnOrder.dealerId
+      // now exists specifically to carry this.
+      const isDealerEntity = selectedEntity?._kind === 'DEALER';
 
       await salesApi.createReturn({
         reason,
@@ -590,6 +607,7 @@ export default function SalesReturnsPage() {
           ? { franchiseId: selectedEntity.id, franchiseOrderId: selectedOrder.id }
           : {
             ...(hasRealCustomer ? { customerId: selectedEntity.id } : {}),
+            ...(isDealerEntity ? { dealerId: selectedEntity.id } : {}),
             ...(selectedOrder._source === 'POS'
               ? { posOrderId: selectedOrder.id }
               : { salesOrderId: selectedOrder.id }),
@@ -640,9 +658,7 @@ export default function SalesReturnsPage() {
         r.returnNumber.toLowerCase().includes(search.toLowerCase()) ||
         r.entityName.toLowerCase().includes(search.toLowerCase());
 
-      let matchTab = true;
-      if (activeTab === 'FRANCHISE') matchTab = r.source === 'FRANCHISE';
-      if (activeTab === 'PARTNER') matchTab = r.source === 'PARTNER';
+      const matchTab = activeTab === 'ALL' || r.partyKind === activeTab;
 
       return matchSearch && matchTab;
     });
@@ -1178,7 +1194,7 @@ export default function SalesReturnsPage() {
             )}
           </div>
           <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
-            {(['ALL', 'PARTNER', 'FRANCHISE'] as const).map(tab => (
+            {(['ALL', 'CUSTOMER', 'DEALER', 'FRANCHISE'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1187,7 +1203,7 @@ export default function SalesReturnsPage() {
                   activeTab === tab ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
-                {tab === 'ALL' ? 'All' : tab === 'PARTNER' ? 'Dealers' : 'Franchise'}
+                {tab === 'ALL' ? 'All' : tab === 'CUSTOMER' ? 'Customers' : tab === 'DEALER' ? 'Dealers' : 'Franchise'}
               </button>
             ))}
           </div>
@@ -1240,7 +1256,9 @@ export default function SalesReturnsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-800 dark:text-white text-sm">{r.entityName}</div>
-                        <div className="text-xs text-gray-400 dark:text-slate-500">{r.source === 'FRANCHISE' ? 'Franchise' : 'Dealer'}</div>
+                        <div className="text-xs text-gray-400 dark:text-slate-500">
+                          {r.partyKind === 'CUSTOMER' ? 'Customer' : r.partyKind === 'DEALER' ? 'Dealer' : 'Franchise'}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400 font-medium">
                         #{r.orderRefNumber}

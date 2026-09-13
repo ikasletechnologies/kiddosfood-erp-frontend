@@ -59,6 +59,13 @@ const UNITS = [
   { label: "Units (Unt)",      short: "Unt",   code: "UNT" },
 ];
 
+// Same pattern as pos/page.tsx's formatPackSize — displays a SKU's pack/
+// weight variant (e.g. "450G") as a label distinguishing it from other
+// variants of the same product name. Never used as the stocking unit.
+const PACK_UNIT_LABEL: Record<string, string> = { KG: "kg", G: "g", L: "L", ML: "ml", PCS: "pcs", PC: "pc" };
+const formatPackSize = (p?: { qty: number; unit: string } | null) =>
+  p ? `${p.qty % 1 === 0 ? p.qty : p.qty.toFixed(2)}${PACK_UNIT_LABEL[p.unit] || p.unit.toLowerCase()}` : null;
+
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
   { label: "IGST@0%", value: 0 },
@@ -113,6 +120,10 @@ interface LineItem {
   basePrice: number;
   batchNumber?: string;
   batches?: any[];
+  // Pack/weight variant (e.g. "450G" parsed off the SKU) — display-only
+  // metadata distinguishing which SKU variant this is (APPAM 450G vs
+  // APPAM 900G). Never the transaction/stocking unit — `unit` above is.
+  packSize?: { qty: number; unit: string } | null;
 }
 
 function makeItem(): LineItem {
@@ -308,6 +319,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [showPriceDrop, setShowPriceDrop] = useState(false);
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
   const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  // The dropdown only ever renders when BOTH openItemDrop and itemDropRect
+  // are set (it's positioned via itemDropRect, fixed-position so it can
+  // escape the table's overflow clipping) — clicking/focusing the search
+  // input must compute this rect too, not just the chevron button, or the
+  // list never appears when the user's insertion point is in the search box.
+  const openItemDropdownFor = (itemId: string, target: Element) => {
+    setOpenItemDrop(itemId);
+    const rect = target.closest("td")?.getBoundingClientRect();
+    if (rect && typeof window !== "undefined") {
+      const dropWidth = Math.min(300, window.innerWidth - 32);
+      const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
+      setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
+    }
+  };
   const [openUnitDrop, setOpenUnitDrop] = useState<string | null>(null);
   const [unitDropRect, setUnitDropRect] = useState<{ top: number; left: number } | null>(null);
   const [termsText, setTermsText] = useState("");
@@ -559,16 +584,31 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [invRes, custRes, prodRes, franRes, dealRes] = await Promise.allSettled([
+      const [invRes, custRes, prodRes, franRes, dealRes, draftRes] = await Promise.allSettled([
         api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}`).catch(() => ({ data: [] })),
         customersApi.getAll(),
         productsFullApi.getAll({ stockSource: "HQ" }),
         franchiseApi.getAll(),
         dealersApi.getAll().catch(() => ({ data: [] })),
+        draftsApi.getDrafts("SALES_INVOICE").catch(() => ({ data: [] })),
       ]);
 
       if (invRes.status === "fulfilled") {
-        setInvoices(invRes.value.data || []);
+        // Saved drafts (Draft table, type SALES_INVOICE) are a separate
+        // record from a real Order/Invoice — merged in here so the DRAFT
+        // tab (already fully built to render them: "Not yet numbered",
+        // click-to-resume via loadDraft, the Delete action below) has
+        // something to show. `data` is kept on the row as-is so loadDraft
+        // can read the exact saved form state back out of it.
+        const draftRows = (draftRes.status === "fulfilled" ? draftRes.value.data || [] : []).map((d: any) => ({
+          id: d.id,
+          status: "DRAFT",
+          createdAt: d.updatedAt || d.createdAt,
+          finalAmount: 0,
+          data: d.data,
+          customerName: d.data?.selectedCustomer?.name || d.data?.customerSearch || d.name || "Draft Invoice",
+        }));
+        setInvoices([...draftRows, ...(invRes.value.data || [])]);
       }
       if (custRes.status === "fulfilled") {
         const cData = custRes.value.data?.customers || custRes.value.data || [];
@@ -821,6 +861,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         unit: p.unit?.code || p.unit || "NONE",
         baseUnit: p.baseUnit || p.unit,
         conversions: p.conversions || [],
+        packSize: p.packSize || null,
         availableStock: p.currentStock !== undefined ? p.currentStock : (p.stock || 0),
         taxPct,
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
@@ -918,7 +959,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           id: draftId || undefined,
           type: "SALES_INVOICE",
           name: selectedCustomer?.name || customerSearch || "Draft Invoice",
-          state: { ...payload, partyType: effectivePartyType, selectedCustomer, customerSearch, customerPhone, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
+          data: { ...payload, partyType: effectivePartyType, selectedCustomer, customerSearch, customerPhone, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
         });
         if (dRes?.data?.id) setDraftId(dRes.data.id);
         showToast("Draft saved successfully", "success");
@@ -957,7 +998,11 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const loadDraft = (inv: any) => {
     const raw = inv.order || inv;
-    const rawState = raw._rawState || {};
+    // A saved draft's actual content lives on `inv.data` (the Draft row's
+    // own Json field, see fetchData's draftRows mapping and
+    // DraftsService.saveDraft) — `_rawState` is kept only as a defensive
+    // fallback for any other shape this function might ever be called with.
+    const rawState = inv.data || raw._rawState || {};
     setDraftId(inv.id);
     const draftPartyType = rawState.partyType || (raw.partyType === "FRANCHISE" || rawState.sourceFranchiseOrderId || rawState.selectedCustomer?.isFranchise ? "FRANCHISE" : raw.partyType === "DEALER" || rawState.selectedCustomer?.isDealer ? "DEALER" : "CUSTOMER");
     setPartyType(draftPartyType);
@@ -1523,10 +1568,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 min-w-0"
                               placeholder="Search item..."
                               value={item.itemSearch}
+                              onClick={e => openItemDropdownFor(item.id, e.currentTarget)}
+                              onFocus={e => openItemDropdownFor(item.id, e.currentTarget)}
                               onChange={e => {
                                 updateItem(idx, "itemSearch", e.target.value);
                                 updateItem(idx, "productId", "");
-                                setOpenItemDrop(item.id);
+                                openItemDropdownFor(item.id, e.currentTarget);
                               }}
                             />
                             {item.itemSearch && (
@@ -1544,18 +1591,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                 if (openItemDrop === item.id) {
                                   setOpenItemDrop(null);
                                 } else {
-                                  setOpenItemDrop(item.id);
-                                  const rect = (e.target as HTMLElement).closest("td")?.getBoundingClientRect();
-                                  if (rect && typeof window !== "undefined") {
-                                    const dropWidth = Math.min(300, window.innerWidth - 32);
-                                    const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
-                                    setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
-                                  }
+                                  openItemDropdownFor(item.id, e.currentTarget);
                                 }
                               }}
                             />
                           </div>
                           
+                          {item.productId && formatPackSize(item.packSize) && (
+                            <div className="text-[10px] text-gray-400 dark:text-slate-500 leading-tight">
+                              Pack: {formatPackSize(item.packSize)}
+                            </div>
+                          )}
+
                           {item.productId && (
                             <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
                               {(() => {
@@ -1624,7 +1671,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                       onMouseDown={() => selectProduct(idx, p)}
                                     >
                                       <div>
-                                        <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
+                                        <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">
+                                          {p.name}
+                                          {formatPackSize(p.packSize) && (
+                                            <span className="ml-1 font-normal text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
+                                          )}
+                                        </div>
                                         <div className="text-xs text-gray-400 dark:text-slate-500">₹{getChannelPrice(p, partyType)}</div>
                                       </div>
                                     </button>
@@ -2355,6 +2407,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                             >
                               Print
                             </button>
+
+                            {/* Draft-only: a direct, one-click delete — the
+                                3-dot menu's "Delete Invoice" already handles
+                                this via handleDeleteDraft, this is just a
+                                more visible shortcut for a disposable draft. */}
+                            {isDraft && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}
+                                className="px-2 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Draft"
+                              >
+                                Delete
+                              </button>
+                            )}
 
                             {/* 3-Dots Menu Icon (⋮) */}
                             <div className="relative inline-block text-left">

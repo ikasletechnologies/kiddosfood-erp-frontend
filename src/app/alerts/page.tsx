@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { inventoryApi, franchiseOrdersApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -58,8 +58,20 @@ export default function AlertsPage() {
   const [filterSeverity, setFilterSeverity] = useState<"all" | AlertSeverity>("all");
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLiveMonitoring, setIsLiveMonitoring] = useState(false);
+  const isFetchingRef = useRef(false);
+
+  const getStorageKey = useCallback(() => {
+    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+    const parsedUser = userStr ? JSON.parse(userStr) : null;
+    return `erp_alerts_read_${parsedUser?.id || "anonymous"}`;
+  }, []);
 
   const fetchAlerts = useCallback(async () => {
+    // Live Monitoring polls every 60s; a manual Refresh click or a slow prior
+    // poll must not overlap with another in-flight fetch.
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsRefreshing(true);
     try {
       const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
@@ -77,6 +89,13 @@ export default function AlertsPage() {
       const rawInv: any[] = Array.isArray(invRes?.data) ? invRes.data : Array.isArray(invRes?.data?.data) ? invRes.data.data : [];
       const rawOrders: any[] = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
 
+      const storageKey = getStorageKey();
+      const saved = localStorage.getItem(storageKey);
+      let currentReadIds = new Set<string>();
+      if (saved) {
+        try { currentReadIds = new Set(JSON.parse(saved)); } catch (e) {}
+      }
+
       const invAlerts: Alert[] = rawInv.map((item: any, i: number) => {
         const isOutOfStock = item.currentStock <= 0;
         const minVal = item.minStockLevel ?? item.minimumStock ?? item.reorderPoint ?? 10;
@@ -89,7 +108,7 @@ export default function AlertsPage() {
             : `Low Stock: ${item.name}`,
           message: `${item.name} has ${item.currentStock} ${item.unit ?? "units"} remaining. Minimum threshold: ${minVal}.`,
           time: "Just now",
-          read: false,
+          read: currentReadIds.has(item.id ?? `inv-${i}`),
           actionLabel: isFranchise ? "Order from HQ" : "Reorder",
           actionHref: isFranchise ? "/franchise-orders" : "/purchases/new",
         };
@@ -110,22 +129,43 @@ export default function AlertsPage() {
             ? `Shipment is in transit from Central HQ (Total: ₹${o.totalAmount}). Click to view and inward.`
             : `Order is being processed by HQ (Total: ₹${o.totalAmount}).`,
           time: "Recent",
-          read: false,
+          read: currentReadIds.has(`ord-${o.id}`),
           actionLabel: o.status === "DISPATCHED" ? "Inward Stock" : "View Order",
           actionHref: "/franchise-orders",
         }));
 
-      setAlerts([...invAlerts, ...orderAlerts]);
+      const allAlerts = [...invAlerts, ...orderAlerts];
+      
+      const nextReadIds = new Set<string>();
+      allAlerts.forEach(a => {
+        if (a.read) nextReadIds.add(a.id);
+      });
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(nextReadIds)));
+
+      setAlerts(allAlerts);
     } catch (e) {
       console.error("Failed to load alerts:", e);
     } finally {
+      isFetchingRef.current = false;
       setIsRefreshing(false);
     }
-  }, [user]);
+  }, [user, getStorageKey]);
 
   useEffect(() => {
     fetchAlerts();
   }, [fetchAlerts]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLiveMonitoring) {
+      interval = setInterval(() => {
+        fetchAlerts();
+      }, 60000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isLiveMonitoring, fetchAlerts]);
 
   const filtered = alerts.filter((a) => {
     if (filterType !== "all" && a.type !== filterType) return false;
@@ -135,12 +175,27 @@ export default function AlertsPage() {
   });
 
   const unreadCount = alerts.filter((a) => !a.read).length;
-  const criticalCount = alerts.filter((a) => a.severity === "critical" && !a.read).length;
+  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
   const inventoryCount = alerts.filter((a) => a.type === "inventory").length;
   const orderCount = alerts.filter((a) => a.type === "order").length;
 
-  const markRead = (id: string) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, read: true } : a));
-  const markAllRead = () => setAlerts((p) => p.map((a) => ({ ...a, read: true })));
+  const markRead = (id: string) => {
+    setAlerts((p) => p.map((a) => a.id === id ? { ...a, read: true } : a));
+    const storageKey = getStorageKey();
+    const saved = localStorage.getItem(storageKey);
+    let ids = new Set<string>();
+    if (saved) { try { ids = new Set(JSON.parse(saved)); } catch(e) {} }
+    ids.add(id);
+    localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
+  };
+
+  const markAllRead = () => {
+    setAlerts((p) => p.map((a) => ({ ...a, read: true })));
+    const storageKey = getStorageKey();
+    const ids = new Set(alerts.map(a => a.id));
+    localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
+  };
+
   const dismiss = (id: string) => setAlerts((p) => p.filter((a) => a.id !== id));
 
   return (
@@ -174,10 +229,19 @@ export default function AlertsPage() {
             </button>
           )}
 
-          <div className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <button
+            type="button"
+            onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
+            className={clsx(
+              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-colors",
+              isLiveMonitoring
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                : "bg-slate-50 text-slate-500 dark:bg-white/5 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10"
+            )}
+          >
+            <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", isLiveMonitoring ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
             <span>Live Monitoring</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -456,7 +520,7 @@ export default function AlertsPage() {
           );
         })}
 
-        {filtered.length === 0 && (
+        {filtered.length === 0 && alerts.length === 0 && (
           <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-6 sm:p-12 text-center space-y-2 w-full max-w-full">
             <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
               <CheckCircle2 size={18} className="text-emerald-500" />
@@ -464,6 +528,18 @@ export default function AlertsPage() {
             <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">All Clear — No Active Alerts</p>
             <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed px-2">
               All inventory levels and incoming shipments are operating within normal parameters.
+            </p>
+          </div>
+        )}
+
+        {filtered.length === 0 && alerts.length > 0 && (
+          <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-6 sm:p-12 text-center space-y-2 w-full max-w-full">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
+              <EyeOff size={18} className="text-slate-500" />
+            </div>
+            <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">No Alerts Match Your Filters</p>
+            <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed px-2">
+              Try changing the alert type, severity, or unread filter.
             </p>
           </div>
         )}

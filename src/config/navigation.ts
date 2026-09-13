@@ -192,12 +192,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/",
         roles: SUPER_ONLY,
       },
-      {
-        icon: AlertTriangle,
-        label: "Inventory Alerts",
-        href: "/alerts",
-        roles: SUPER_ONLY,
-      },
     ],
   },
   {
@@ -601,12 +595,6 @@ export const franchiseMenuSections: MenuSection[] = [
         icon: Package,
         label: "Product Inventory",
         href: "/franchise/stock",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: AlertTriangle,
-        label: "Low Stock Alert",
-        href: "/alerts",
         roles: FRANCHISE_ONLY,
       },
       {
