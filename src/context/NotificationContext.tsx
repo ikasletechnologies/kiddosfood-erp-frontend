@@ -249,7 +249,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           type: "success",
           title: "New POS Order",
           message: `Invoice #${order.invoiceNum || order.id?.slice(0, 6)} created for ₹${order.totalAmount || 0}`,
-          link: `/pos/invoices?id=${order.id}`,
           targetRole: "SUPER_ADMIN",
         });
       } else if (userFranchiseId && order.franchiseId === userFranchiseId) {
@@ -257,7 +256,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           type: "success",
           title: "New POS Order",
           message: `Invoice #${order.invoiceNum || order.id?.slice(0, 6)} created for ₹${order.totalAmount || 0}`,
-          link: `/pos/invoices?id=${order.id}`,
           targetRole: "FRANCHISE",
           targetFranchiseId: userFranchiseId,
         });
