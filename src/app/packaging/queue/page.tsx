@@ -247,51 +247,17 @@ export default function PackagingQueuePage() {
 
     setSubmitting(true);
     try {
-      if (productMode === "create_new") {
-        const createRes = await productsFullApi.create({
-          name: newProductName.trim(),
-          sku: newProductSku.trim() || undefined,
-          basePrice: Number(newProductPrice) || 0,
-          category: "FINISHED_GOOD",
-          productType: "FINISHED_GOOD",
-          is_menu_item: true,
-          isVeg: true,
-          isActive: true,
-        });
-
-        const createdProduct = createRes.data?.data || createRes.data;
-        if (createdProduct?.id) {
-          toast.success(`Created new finished good: ${newProductName}`);
-          await refreshProducts();
-        }
-      }
-
-      let targetProductId = selectedProductId;
-      if (productMode === "create_new") {
-        const createRes = await productsFullApi.create({
-          name: newProductName.trim(),
-          sku: newProductSku.trim() || undefined,
-          basePrice: Number(newProductPrice) || 0,
-          category: "FINISHED_GOOD",
-          productType: "FINISHED_GOOD",
-          is_menu_item: true,
-          isVeg: true,
-          isActive: true,
-        });
-
-        const createdProduct = createRes.data?.data || createRes.data;
-        if (createdProduct?.id) {
-          targetProductId = createdProduct.id;
-          toast.success(`Created new finished good: ${newProductName}`);
-          await refreshProducts();
-        }
-      }
-
       // This creates an AWAITING_CONFIRMATION ticket and reserves bulk stock.
+      // If productMode is "create_new", the backend will atomically create and link the product.
       await productionApi.packageBatch(selectedBatch.id, {
         packetSize,
         quantityPackets,
-        productId: targetProductId || undefined,
+        productId: productMode === "existing" ? (selectedProductId || undefined) : undefined,
+        newProduct: productMode === "create_new" ? {
+          name: newProductName.trim(),
+          sku: newProductSku.trim() || undefined,
+          basePrice: Number(newProductPrice) || 0,
+        } : undefined,
       });
       toast.success("Packaging started — print stickers, then confirm once packing is complete.");
       setSelectedBatch(null);
