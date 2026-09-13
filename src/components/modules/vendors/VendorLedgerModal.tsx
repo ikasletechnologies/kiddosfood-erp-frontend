@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { X, ArrowDownLeft, ArrowUpRight, History, Info, Download, Printer } from "lucide-react";
 import { vendorsApi } from "@/lib/api";
 import { clsx } from "clsx";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 
 interface LedgerEntry {
   id: string;
@@ -138,7 +138,7 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
                 "text-base sm:text-lg font-bold font-mono",
                 isAdvance ? "text-emerald-600" : "text-rose-600"
               )}>
-                ₹ {Math.abs(currentBalance).toLocaleString()}{" "}
+                {formatCurrency(Math.abs(currentBalance))}{" "}
                 <span className="text-[10px] uppercase font-sans font-bold">
                   {isAdvance ? "Advance" : "Due"}
                 </span>
@@ -219,13 +219,13 @@ export default function VendorLedgerModal({ vendor, onClose }: { vendor: any; on
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-semibold text-rose-600 dark:text-rose-400">
-                        {entry.type === 'DEBIT' ? `₹ ${Math.round(entry.amount).toLocaleString()}` : '—'}
+                        {entry.type === 'DEBIT' ? formatCurrency(entry.amount) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                        {entry.type === 'CREDIT' ? `₹ ${Math.round(entry.amount).toLocaleString()}` : '—'}
+                        {entry.type === 'CREDIT' ? formatCurrency(entry.amount) : '—'}
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold text-slate-800 dark:text-white">
-                        ₹ {Math.abs(Math.round(entry.runningBalance)).toLocaleString()} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}
+                        {formatCurrency(Math.abs(entry.runningBalance))} {entry.runningBalance >= 0 ? 'Cr' : 'Dr'}
                       </td>
                     </tr>
                   ))
