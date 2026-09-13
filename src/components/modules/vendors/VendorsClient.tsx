@@ -150,7 +150,7 @@ export default function VendorsClient() {
   const [paymentForm, setPaymentForm] = useState({
     amount: "",
     note: "",
-    type: "PAYMENT" as "PAYMENT" | "ADVANCE",
+    type: "PAYMENT" as "PAYMENT" | "ADVANCE" | "REFUND",
     accountId: "",
     paymentMode: "CASH",
     transactionRef: "",
@@ -759,6 +759,7 @@ export default function VendorsClient() {
   const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
   const accountBalance = selectedAccount?.balance || 0;
   const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
+  const vendorReceivable = Number(selectedVendor?.balance || 0) < 0 ? Math.abs(Number(selectedVendor?.balance || 0)) : 0;
 
   const getFilteredAccounts = () => {
     if (paymentForm.paymentMode === "CASH") {
@@ -796,7 +797,11 @@ export default function VendorsClient() {
       showToast(`Payment amount cannot exceed Net Payable of ₹${vendorNetPayable.toLocaleString()}`, "error");
       return;
     }
-    if (amountNum > accountBalance) {
+    if (paymentForm.type === 'REFUND' && amountNum > vendorReceivable + 0.01) {
+      showToast(`Refund amount cannot exceed Receivable Balance of ₹${vendorReceivable.toLocaleString()}`, "error");
+      return;
+    }
+    if (paymentForm.type !== 'REFUND' && amountNum > accountBalance) {
       showToast(`Payment amount cannot exceed Available Account Balance of ₹${accountBalance.toLocaleString()}`, "error");
       return;
     }
@@ -1804,10 +1809,20 @@ export default function VendorsClient() {
                 >
                   Advance
                 </button>
+                {vendorReceivable > 0 && (
+                  <button
+                    onClick={() => setPaymentForm({ ...paymentForm, type: 'REFUND' })}
+                    className={clsx("flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'REFUND' ? "bg-white dark:bg-white/10 text-emerald-600 shadow-sm" : "text-gray-500")}
+                  >
+                    Receive Refund
+                  </button>
+                )}
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Payment Amount *</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                  {paymentForm.type === 'REFUND' ? 'Amount to Receive *' : 'Payment Amount *'}
+                </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
                   <input
@@ -1821,7 +1836,9 @@ export default function VendorsClient() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 block">Debit Account *</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 block">
+                    {paymentForm.type === 'REFUND' ? 'Receive Into Account *' : 'Debit Account *'}
+                  </label>
                   <select
                     value={paymentForm.accountId}
                     onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })}
