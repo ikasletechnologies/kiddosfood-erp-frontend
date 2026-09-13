@@ -211,7 +211,12 @@ export default function Dashboard() {
       "Metric / KPI,Recorded Telemetry Value",
       ...rows.map(([label, value]) => `"${String(label).replace(/"/g, '""')}","${String(value).replace(/"/g, '""')}"`),
     ].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    // Excel opens a .csv using the system's ANSI codepage unless a UTF-8 BOM
+    // is present — without it, the 3-byte UTF-8 encoding of ₹ (E2 82 B9) gets
+    // misread as three separate Latin-1 characters ("â‚¹"). The BOM tells
+    // Excel to actually decode the file as UTF-8. Numeric values themselves
+    // are untouched — this only fixes how the ₹ glyph decodes.
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement("a");
     downloadAnchor.href = url;
