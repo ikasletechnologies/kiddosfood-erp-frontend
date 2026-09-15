@@ -39,6 +39,8 @@ interface ReturnItem {
   returnQuantity: number;
   rate: number;
   taxPercent: number;
+  unitTax?: number;
+  lineTaxAmount?: number;
   originalLineAmount: number;
   condition: string;
 }
@@ -127,10 +129,6 @@ export default function SalesReturnsPage() {
   const [previewingReturn, setPreviewingReturn] = useState<ReturnOrder | null>(null);
   const [viewingReturnDetails, setViewingReturnDetails] = useState<ReturnOrder | null>(null);
   const [refundingReturn, setRefundingReturn] = useState<ReturnOrder | null>(null);
-  const [refundModalMethod, setRefundModalMethod] = useState<'CASH_BANK' | 'CREDIT_LEDGER'>('CASH_BANK');
-  const [refundAccounts, setRefundAccounts] = useState<any[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>("CASH");
   const [processingRefund, setProcessingRefund] = useState(false);
 
   const [companyProfile, setCompanyProfile] = useState<any>(null);
@@ -182,13 +180,21 @@ export default function SalesReturnsPage() {
       orderRefId: r.posOrderId || r.salesOrderId || r.franchiseOrderId || '',
       orderRefNumber: orderRef?.invoiceNum || orderRef?.orderNumber || orderRef?.challanNumber || (r.posOrderId ? 'Sale Invoice' : 'Direct'),
       reason: r.reason || 'Not specified',
-      refundAmount: Number(r.refundAmount) || 0,
       taxableValue: r.taxableValue != null ? Number(r.taxableValue) : undefined,
       gstRate: r.gstRate != null ? Number(r.gstRate) : undefined,
       cgst: r.cgst != null ? Number(r.cgst) : undefined,
       sgst: r.sgst != null ? Number(r.sgst) : undefined,
       igst: r.igst != null ? Number(r.igst) : undefined,
       taxAmount: r.taxAmount != null ? Number(r.taxAmount) : undefined,
+      refundAmount: (() => {
+        const rawRefund = Number(r.refundAmount) || 0;
+        const taxVal = r.taxableValue != null ? Number(r.taxableValue) : undefined;
+        const taxAmt = r.taxAmount != null ? Number(r.taxAmount) : undefined;
+        if (taxAmt != null && taxAmt > 0 && taxVal != null && Math.abs(rawRefund - taxVal) < 0.01) {
+          return Math.round((taxVal + taxAmt) * 100) / 100;
+        }
+        return rawRefund;
+      })(),
       refundMethod: r.refundMethod || 'Original Method',
       status: r.status,
       createdAt: r.createdAt,
@@ -294,7 +300,23 @@ export default function SalesReturnsPage() {
       const prevReturned = alreadyReturned[productId] ?? alreadyReturned[productName] ?? 0;
       const returnable = Math.max(0, soldQty - prevReturned);
       const rate = Number(i.price ?? i.unitPrice ?? 0);
-      const taxPct = Number(i.taxPercent ?? 0);
+      const lineGross = soldQty * rate;
+      const lineTaxAmount = Number(i.taxAmount ?? 0);
+
+      // Resolve accurate GST percentage and unit tax from original sale invoice line
+      let taxPct = 0;
+      if (i.product?.taxPercent != null && Number(i.product.taxPercent) > 0) {
+        taxPct = Number(i.product.taxPercent);
+      } else if (i.taxPercent != null && Number(i.taxPercent) > 0) {
+        taxPct = Number(i.taxPercent);
+      } else if (lineTaxAmount > 0 && lineGross > 0) {
+        taxPct = Number(((lineTaxAmount / lineGross) * 100).toFixed(2));
+      }
+
+      const unitTax = (soldQty > 0 && lineTaxAmount > 0)
+        ? (lineTaxAmount / soldQty)
+        : (rate * (taxPct / 100));
+
       const originalLineAmount = soldQty * rate;
 
       return {
@@ -307,6 +329,8 @@ export default function SalesReturnsPage() {
         returnQuantity: 0,
         rate,
         taxPercent: taxPct,
+        unitTax,
+        lineTaxAmount,
         originalLineAmount,
         condition: "Good",
       };
@@ -516,39 +540,16 @@ export default function SalesReturnsPage() {
   };
 
   // Open Refund Modal
-  const openRefundModal = async (ret: ReturnOrder) => {
+  const openRefundModal = (ret: ReturnOrder) => {
     setRefundingReturn(ret);
-    setRefundModalMethod('CASH_BANK');
-    setSelectedPaymentMode('CASH');
-    try {
-      const accRes = await accountsApi.getAll();
-      const list = Array.isArray(accRes.data) ? accRes.data : (accRes.data?.data || []);
-      setRefundAccounts(list);
-      if (list.length > 0) {
-        setSelectedAccountId(list[0].id);
-      }
-    } catch (e) {
-      setRefundAccounts([]);
-    }
   };
 
-  // Execute Refund
+  // Execute Refund (settlement method was decided earlier, no UI prompt needed)
   const handleExecuteRefund = async () => {
     if (!refundingReturn) return;
-    if (refundModalMethod === 'CASH_BANK' && !selectedAccountId) {
-      showToast("Please select a payout account", "error");
-      return;
-    }
-
     setProcessingRefund(true);
     try {
-      const payload: any = {
-        refundMethod: refundModalMethod === 'CREDIT_LEDGER' ? 'Credit Ledger' : 'Cash Voucher',
-        method: refundModalMethod === 'CREDIT_LEDGER' ? 'CASH' : selectedPaymentMode,
-        accountId: refundModalMethod === 'CREDIT_LEDGER' ? undefined : selectedAccountId
-      };
-
-      await (salesApi as any).refundReturn(refundingReturn.id, payload);
+      await (salesApi as any).refundReturn(refundingReturn.id, {});
       showToast("Refund processed successfully and return settled!", "success");
       setRefundingReturn(null);
       fetchReturns();
@@ -583,11 +584,12 @@ export default function SalesReturnsPage() {
     rejected: returns.filter(r => r.status === 'REJECTED').length,
   };
 
-  const estimatedRefund = returnItems.reduce((acc, it) => {
-    const gross = it.returnQuantity * it.rate;
-    const tax = gross * ((it.taxPercent || 0) / 100);
-    return acc + gross + tax;
+  const totalBaseAmount = returnItems.reduce((acc, it) => acc + (it.returnQuantity * it.rate), 0);
+  const totalGstAmount = returnItems.reduce((acc, it) => {
+    const itemUnitTax = it.unitTax != null ? it.unitTax : (it.rate * ((it.taxPercent || 0) / 100));
+    return acc + (it.returnQuantity * itemUnitTax);
   }, 0);
+  const estimatedRefund = Math.round((totalBaseAmount + totalGstAmount) * 100) / 100;
 
   const isInvoiceFullyReturned = selectedOrder && returnItems.length > 0 && returnItems.every(i => i.returnableQuantity === 0);
 
@@ -873,13 +875,17 @@ export default function SalesReturnsPage() {
                         <th className="px-3 py-3 text-center min-w-[100px]">Returnable</th>
                         <th className="px-4 py-3 text-center min-w-[130px]">Return Qty</th>
                         <th className="px-3 py-3 min-w-[140px]">Condition</th>
-                        <th className="px-3 py-3 text-right min-w-[100px]">Unit Price</th>
+                        <th className="px-3 py-3 text-right min-w-[90px]">Unit Price</th>
+                        <th className="px-3 py-3 text-right min-w-[90px]">GST</th>
                         <th className="px-4 py-3 text-right min-w-[110px]">Return Amt</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs">
                       {returnItems.map((item, idx) => {
-                        const lineReturnAmt = item.returnQuantity * item.rate * (1 + (item.taxPercent || 0) / 100);
+                        const itemUnitTax = item.unitTax != null ? item.unitTax : (item.rate * ((item.taxPercent || 0) / 100));
+                        const lineTax = item.returnQuantity * itemUnitTax;
+                        const lineBase = item.returnQuantity * item.rate;
+                        const lineReturnAmt = Math.round((lineBase + lineTax) * 100) / 100;
                         const isExhausted = item.returnableQuantity === 0;
 
                         return (
@@ -938,8 +944,20 @@ export default function SalesReturnsPage() {
                             <td className="px-3 py-3 text-right font-mono text-gray-700 dark:text-slate-300">
                               ₹{item.rate.toFixed(2)}
                             </td>
+                            <td className="px-3 py-3 text-right font-mono text-gray-500 dark:text-slate-400 text-[11px]">
+                              {item.unitTax ? `₹${item.unitTax.toFixed(2)}` : `${item.taxPercent}%`}
+                            </td>
                             <td className="px-4 py-3 text-right font-mono font-bold text-gray-900 dark:text-white">
-                              {item.returnQuantity > 0 ? `₹${lineReturnAmt.toFixed(2)}` : "—"}
+                              {item.returnQuantity > 0 ? (
+                                <div>
+                                  <span>₹{lineReturnAmt.toFixed(2)}</span>
+                                  {itemUnitTax > 0 && (
+                                    <span className="block text-[10px] text-gray-400 font-normal">
+                                      (₹{lineBase.toFixed(2)} + ₹{lineTax.toFixed(2)})
+                                    </span>
+                                  )}
+                                </div>
+                              ) : "—"}
                             </td>
                           </tr>
                         );
@@ -953,9 +971,17 @@ export default function SalesReturnsPage() {
                   <div className="text-xs text-gray-500 dark:text-slate-400">
                     Total Return Units: <span className="font-bold text-gray-900 dark:text-white">{returnItems.reduce((s, i) => s + i.returnQuantity, 0)}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-semibold text-gray-600 dark:text-slate-300">Estimated Total Credit:</span>
-                    <span className="font-mono font-bold text-lg text-[#f58220]">₹{estimatedRefund.toFixed(2)}</span>
+                  <div className="flex items-center gap-4 text-xs">
+                    {totalGstAmount > 0 && (
+                      <div className="text-gray-500">
+                        Base: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{totalBaseAmount.toFixed(2)}</span>
+                        {' '}+ GST: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{totalGstAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-semibold text-gray-600 dark:text-slate-300">Estimated Total Credit:</span>
+                      <span className="font-mono font-bold text-lg text-[#f58220]">₹{estimatedRefund.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1268,115 +1294,58 @@ export default function SalesReturnsPage() {
               </div>
               <button
                 onClick={() => setRefundingReturn(null)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Refund Overview Box */}
-            <div className="p-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-xl space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Party:</span>
+            <div className="p-4 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/10 rounded-xl space-y-2.5 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-slate-400">Party:</span>
                 <span className="font-bold text-gray-900 dark:text-white">{refundingReturn.entityName}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Sale Invoice:</span>
-                <span className="font-mono text-gray-700 dark:text-slate-300">#{refundingReturn.orderRefNumber}</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-white/5">
-                <span className="font-bold text-gray-700 dark:text-slate-200">Total Refund Amount:</span>
-                <span className="font-mono font-bold text-base text-rose-600 dark:text-rose-400">
-                  ₹{refundingReturn.refundAmount.toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* Refund Mode Selection */}
-            <div className="space-y-3">
-              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-                Choose Settlement Method
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setRefundModalMethod('CASH_BANK')}
-                  className={clsx(
-                    "p-3 rounded-xl border-2 text-left transition-all cursor-pointer",
-                    refundModalMethod === 'CASH_BANK'
-                      ? "border-[#f58220] bg-orange-50/50 dark:bg-orange-500/10"
-                      : "border-gray-200 dark:border-white/10"
-                  )}
-                >
-                  <CreditCard className="h-4 w-4 text-[#f58220] mb-1" />
-                  <p className="text-xs font-bold text-gray-900 dark:text-white">Cash / Bank / UPI</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Pay out from franchise account</p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRefundModalMethod('CREDIT_LEDGER')}
-                  className={clsx(
-                    "p-3 rounded-xl border-2 text-left transition-all cursor-pointer",
-                    refundModalMethod === 'CREDIT_LEDGER'
-                      ? "border-[#f58220] bg-orange-50/50 dark:bg-orange-500/10"
-                      : "border-gray-200 dark:border-white/10"
-                  )}
-                >
-                  <FileSpreadsheet className="h-4 w-4 text-emerald-600 mb-1" />
-                  <p className="text-xs font-bold text-gray-900 dark:text-white">Credit Ledger</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Adjust unpaid balance or credit party</p>
-                </button>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-500 dark:text-slate-400">Sale Invoice:</span>
+                <span className="font-mono font-bold text-gray-700 dark:text-slate-300">#{refundingReturn.orderRefNumber}</span>
               </div>
 
-              {/* Cash / Bank Details */}
-              {refundModalMethod === 'CASH_BANK' && (
-                <div className="space-y-3 pt-2">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
-                      Payment Account *
-                    </label>
-                    <select
-                      value={selectedAccountId}
-                      onChange={e => setSelectedAccountId(e.target.value)}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium bg-gray-50 dark:bg-white/5 outline-none focus:border-[#f58220]"
-                    >
-                      {refundAccounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.type}) — Balance: ₹{Number(acc.balance || 0).toLocaleString()}
-                        </option>
-                      ))}
-                    </select>
+              {/* Product base & GST breakdown */}
+              {refundingReturn.taxableValue != null && refundingReturn.taxAmount != null && refundingReturn.taxAmount > 0 && (
+                <div className="pt-2 border-t border-gray-200 dark:border-white/5 space-y-1 text-[11px] text-gray-500 dark:text-slate-400">
+                  <div className="flex justify-between">
+                    <span>Product / Base Amount:</span>
+                    <span className="font-mono font-semibold text-gray-800 dark:text-slate-200">
+                      ₹{refundingReturn.taxableValue.toFixed(2)}
+                    </span>
                   </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
-                      Payment Mode
-                    </label>
-                    <select
-                      value={selectedPaymentMode}
-                      onChange={e => setSelectedPaymentMode(e.target.value)}
-                      className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-medium bg-gray-50 dark:bg-white/5 outline-none focus:border-[#f58220]"
-                    >
-                      <option value="CASH">Cash</option>
-                      <option value="UPI">UPI</option>
-                      <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
-                      <option value="CHEQUE">Cheque</option>
-                    </select>
+                  <div className="flex justify-between">
+                    <span>
+                      Applicable GST
+                      {refundingReturn.gstRate ? ` (${refundingReturn.gstRate}%)` : ''}
+                      {refundingReturn.igst ? ' [IGST]' : ' [CGST + SGST]'}:
+                    </span>
+                    <span className="font-mono font-semibold text-gray-800 dark:text-slate-200">
+                      + ₹{refundingReturn.taxAmount.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               )}
 
-              {/* Credit Ledger Details */}
-              {refundModalMethod === 'CREDIT_LEDGER' && (
-                <div className="p-3 bg-emerald-50/60 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs text-emerald-800 dark:text-emerald-300">
-                  <p className="font-bold">Automated Receivable Reversal</p>
-                  <p className="text-[11px] mt-0.5 opacity-90 leading-relaxed">
-                    If the original sale has an unpaid or partially paid balance, it will be reduced automatically. Otherwise, a credit entry will be logged on the party ledger.
-                  </p>
+              <div className="flex justify-between items-baseline pt-2.5 border-t border-gray-200 dark:border-white/10">
+                <span className="font-bold text-xs text-gray-700 dark:text-slate-200">Total Refund Amount:</span>
+                <div className="text-right">
+                  <div className="font-mono font-bold text-lg text-rose-600 dark:text-rose-400">
+                    ₹{refundingReturn.refundAmount.toFixed(2)}
+                  </div>
+                  {refundingReturn.taxableValue != null && refundingReturn.taxAmount != null && refundingReturn.taxAmount > 0 && (
+                    <div className="text-[10px] text-gray-400 font-normal">
+                      ₹{refundingReturn.taxableValue.toFixed(2)} + ₹{refundingReturn.taxAmount.toFixed(2)} GST
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Modal Actions */}
@@ -1384,13 +1353,13 @@ export default function SalesReturnsPage() {
               <button
                 type="button"
                 onClick={() => setRefundingReturn(null)}
-                className="px-4 py-2 text-xs font-bold border border-gray-200 dark:border-white/10 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-bold border border-gray-200 dark:border-white/10 rounded-xl text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={processingRefund || (refundModalMethod === 'CASH_BANK' && !selectedAccountId)}
+                disabled={processingRefund}
                 onClick={handleExecuteRefund}
                 className="px-5 py-2 text-xs font-bold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl shadow-sm transition-all disabled:opacity-50 cursor-pointer"
               >
