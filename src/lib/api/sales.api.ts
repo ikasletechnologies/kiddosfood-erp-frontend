@@ -56,6 +56,8 @@ export const salesApi = {
   createReturn: (data: any) => api.post('/api/sales/returns', data),
   updateReturnStatus: (id: string, status: string, approvedBy?: string) => 
     api.patch(`/api/sales/returns/${id}`, { status, approvedBy }),
+  refundReturn: (id: string, data: { refundMethod?: string; accountId?: string; method?: string }) =>
+    api.post(`/api/sales/returns/${id}/refund`, data),
   
   getAnalytics: (params?: any) => api.get('/api/sales/analytics', { params }),
 

@@ -253,7 +253,10 @@ export function getPartyDisplayName(order: any, invoice?: any): string {
   if (o.dealer?.name && typeof o.dealer.name === "string" && o.dealer.name.trim()) {
     return o.dealer.name.trim();
   }
-  if (o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
+  if (o.buyerFranchise?.name && typeof o.buyerFranchise.name === "string" && o.buyerFranchise.name.trim()) {
+    return o.buyerFranchise.name.trim();
+  }
+  if (o.partyType === "FRANCHISE" && o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
     return o.franchise.name.trim();
   }
   if (o.customer?.name && typeof o.customer.name === "string" && o.customer.name.trim()) {
@@ -429,9 +432,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           const fList = (franRes?.data as any)?.franchises || franRes?.data || [];
           const fr = order.franchise || (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId) : null) || {};
 
-          if (order.franchiseId) {
-            setSelectedFranchiseId(order.franchiseId);
-          }
+          // Franchise Order deep-link buyer identity set to selectedCustomer
 
           // Auto-fetch Customer/Franchise details with actual Franchise name (e.g. gym)
           const resolvedFrName = fr.name || (order.franchiseName && order.franchiseName !== "Unknown" ? order.franchiseName : "") || (order.franchiseId ? (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId)?.name : "") : "") || "Franchise";
@@ -587,7 +588,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       const [invRes, custRes, prodRes, franRes, dealRes, draftRes] = await Promise.allSettled([
         api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}`).catch(() => ({ data: [] })),
         customersApi.getAll(),
-        productsFullApi.getAll({ stockSource: "HQ" }),
+        productsFullApi.getAll(isFranchiseUser ? { franchiseId: user?.franchiseId } : { stockSource: "HQ" }),
         franchiseApi.getAll(),
         dealersApi.getAll().catch(() => ({ data: [] })),
         draftsApi.getDrafts("SALES_INVOICE").catch(() => ({ data: [] })),
@@ -925,7 +926,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setSaving(true);
     try {
       const payload: any = {
-        franchiseId: selectedFranchiseId || (effectivePartyType === "FRANCHISE" ? selectedCustomer?.id : undefined) || undefined,
+        franchiseId: isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined),
         partyType: effectivePartyType,
         partyId: selectedCustomer?.id || undefined,
         dealerId: effectivePartyType === "DEALER" ? selectedCustomer?.id : undefined,
@@ -1092,26 +1093,37 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
   // ══════════════════════════════════════════════════════════════════════════
   if (viewInvoice) {
-    // GET /api/sales/invoices/:id (FinanceService.getInvoiceById) returns the
-    // Invoice row itself at the top level (id, status, finalAmount, ...) with
-    // Order-owned fields (invoiceNum, customer, orderItems, partyType, ...)
-    // nested under `order` — there is no nested `.invoice` key. Reading
-    // `inv.invoice`/`inv.orderItems`/`inv.customer`/etc. directly always came
-    // back empty, which is why this view showed a blank items table, "—" for
-    // invoice number, "UNPAID" regardless of real status, and never showed
-    // Record Payment for ANY invoice (not just cancelled ones).
     const inv = viewInvoice;
     const order = inv.order || {};
     const items = order.orderItems || [];
     const customer = order.customer || {};
+    const dealer = order.dealer || {};
+    const franchise = order.franchise || {};
     const invoice = inv;
     const payments = inv.payments || [];
     const paidAmt = payments
       .filter((p: any) => p.status === "PAID" && !p.isCancelled)
       .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-    // finalAmount (GST-inclusive) is what the customer actually owes — the
-    // old `inv.totalAmount` read the pre-tax subtotal, understating balance.
     const balance = Math.max(0, (inv.finalAmount || 0) - paidAmt);
+
+    const partyTypeLabel = order.partyType || (order.dealerId ? "DEALER" : order.franchiseId ? "FRANCHISE" : "CUSTOMER");
+    const partyPhone = customer.phone || customer.contact || dealer.phone || franchise.contactNum || order.customerPhone || "—";
+    const partyEmail = customer.email || dealer.email || franchise.email || "—";
+    const partyGstin = customer.gstNumber || customer.gstin || dealer.gstin || franchise.gstin || "—";
+    const partyGstType = customer.gstType || (partyGstin !== "—" ? "Registered Business" : "Unregistered / Consumer");
+    const billingAddress = customer.billingAddress || customer.address || dealer.address || franchise.location || "—";
+    const shippingAddress = customer.shippingAddress || customer.address || dealer.address || franchise.location || "—";
+
+    const companyState = (companyProfile?.state || "").toLowerCase().trim();
+    const supplyState = (order.stateOfSupply || customer.state || dealer.state || "").toLowerCase().trim();
+    const isIntraState = !supplyState || !companyState || supplyState === companyState || supplyState.includes(companyState) || companyState.includes(supplyState);
+    const totalTax = Number(inv.taxAmount || 0);
+    const cgstAmount = isIntraState ? totalTax / 2 : 0;
+    const sgstAmount = isIntraState ? totalTax / 2 : 0;
+    const igstAmount = isIntraState ? 0 : totalTax;
+
+    const deliveryCharge = Number(order.deliveryCharge || order.shippingAmount || order.freightCost || 0);
+    const discountAmount = Number(order.discountAmount || order.discount || 0);
 
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 min-h-screen w-full min-w-0">
@@ -1123,14 +1135,25 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 setViewInvoice(null);
                 window.history.replaceState({}, "", window.location.pathname);
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0 cursor-pointer"
             >
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                Sale Invoice — {order.invoiceNum || "—"}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
+                  Sale Invoice — {order.invoiceNum || "—"}
+                </h2>
+                <span className={clsx(
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
+                  invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
+                  : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
+                  : invoice.status === "CANCELLED" ? "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20"
+                  : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
+                )}>
+                  {invoice.status || order.paymentStatus || "UNPAID"}
+                </span>
+              </div>
               {order.sourceProformaInvoiceId && (
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
                   Source Proforma: <span className="font-mono font-semibold text-[#f58220]">{order.sourceProformaNumber || order.sourceProformaInvoiceId}</span>
@@ -1139,14 +1162,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className={clsx(
-              "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border",
-              invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
-              : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-              : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
-            )}>
-              {invoice.status || order.paymentStatus || "UNPAID"}
-            </span>
+            <button
+              onClick={() => handlePrint(inv)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <Printer size={14} />
+              <span>Print / Download</span>
+            </button>
             {invoice.id && balance > 0.01 && invoice.status !== "CANCELLED" && (
               <button
                 onClick={() => router.push(
@@ -1167,98 +1189,234 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-4 md:p-6 space-y-4 w-full min-w-0">
-          {/* Party + Invoice Meta */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
-              <div className="space-y-2 min-w-0">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Party Details</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{order.partyType || (order.franchiseId ? "FRANCHISE" : "CUSTOMER")}</span></p>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{getPartyDisplayName(order, inv)}</p>
-                {(customer.contact || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.contact || order.franchise?.contactNum}</p>}
-                {(customer.phone || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.phone || order.franchise?.contactNum}</p>}
-                {(customer.email || order.franchise?.email) && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{customer.email || order.franchise?.email}</p>}
-                {(customer.gstNumber || order.franchise?.gstin) && <p className="text-xs text-gray-500 dark:text-slate-400 font-mono">GSTIN: {customer.gstNumber || order.franchise?.gstin}</p>}
+          {/* Party Details & Invoice Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
+            {/* Customer / Party Card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Customer / Party Details</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20">
+                  {partyTypeLabel}
+                </span>
               </div>
-              <div className="space-y-2 min-w-0">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Invoice Information</p>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Date</span><span className="text-gray-700 dark:text-slate-300">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
-                {order.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">State of Supply</span><span className="text-gray-700 dark:text-slate-300">{order.stateOfSupply}</span></div>}
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Payment Type</span><span className="text-gray-700 dark:text-slate-300">{order.paymentType || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Order Type</span><span className="text-gray-700 dark:text-slate-300">{order.orderType || "TAX_INVOICE"}</span></div>
+              <div>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{getPartyDisplayName(order, inv)}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5 text-xs text-gray-600 dark:text-slate-300">
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Phone</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200">{partyPhone}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Email</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200 truncate block">{partyEmail}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">GSTIN</span>
+                    <span className="font-mono font-medium text-gray-800 dark:text-slate-200">{partyGstin}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">GST Type</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200">{partyGstType}</span>
+                  </div>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Billing Address</span>
+                    <p className="text-gray-700 dark:text-slate-300 mt-0.5 leading-relaxed">{billingAddress}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Shipping Address</span>
+                    <p className="text-gray-700 dark:text-slate-300 mt-0.5 leading-relaxed">{shippingAddress}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Information Card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Sale Invoice Details</span>
+                <span className="text-[11px] font-mono font-bold text-gray-700 dark:text-slate-300">
+                  {order.orderType || "TAX_INVOICE"}
+                </span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Invoice Number</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Invoice Date</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">State / Place of Supply</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{order.stateOfSupply || customer.state || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Payment Mode</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{order.paymentType || "CASH"}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-gray-100 dark:border-white/5">
+                  <span className="text-gray-500 dark:text-slate-400">Payment Status</span>
+                  <span className={clsx(
+                    "font-bold text-xs px-2 py-0.5 rounded",
+                    invoice.status === "PAID" ? "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10"
+                    : invoice.status === "PARTIAL" ? "text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10"
+                    : "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-white/5"
+                  )}>
+                    {invoice.status || order.paymentStatus || "UNPAID"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Items Table */}
+          {/* Products Sold Table */}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02] flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Products Sold</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
             </div>
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[680px]">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead>
                   <tr className="bg-gray-50/75 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="px-4 py-2.5 text-left w-8">#</th>
-                    <th className="px-4 py-2.5 text-left">Product</th>
+                    <th className="px-4 py-2.5 text-left">Product & SKU</th>
                     <th className="px-4 py-2.5 text-center">Qty</th>
                     <th className="px-4 py-2.5 text-center">UOM</th>
-                    <th className="px-4 py-2.5 text-right">Rate</th>
-                    <th className="px-4 py-2.5 text-center">Tax %</th>
+                    <th className="px-4 py-2.5 text-right">Selling Price</th>
+                    <th className="px-4 py-2.5 text-right">Discount</th>
+                    <th className="px-4 py-2.5 text-center">GST %</th>
                     <th className="px-4 py-2.5 text-right">Tax Amt</th>
                     <th className="px-4 py-2.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {items.map((it: any, idx: number) => (
-                    <tr key={it.id || idx} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="font-semibold text-gray-900 dark:text-white">{it.product?.name || it.productName || "—"}</div>
-                        {it.productId && <div className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">{it.productId}</div>}
-                        {it.batchNumber && <div className="text-[10px] text-gray-500 dark:text-slate-400">Batch: {it.batchNumber}</div>}
-                      </td>
-                      <td className="px-4 py-2.5 text-center dark:text-slate-200">{it.quantity}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || "—"}</td>
-                      <td className="px-4 py-2.5 text-right font-mono dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {items.map((it: any, idx: number) => {
+                    const skuCode = it.product?.sku || it.sku || (it.productId ? String(it.productId).slice(0, 8).toUpperCase() : "—");
+                    const discountVal = it.discountPct ? `${it.discountPct}%` : (it.discountAmount ? `₹${Number(it.discountAmount).toFixed(2)}` : "—");
+                    return (
+                      <tr key={it.id || idx} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="font-semibold text-gray-900 dark:text-white">{it.product?.name || it.productName || "—"}</div>
+                          <div className="text-[11px] text-gray-500 dark:text-slate-400 font-mono">SKU: {skuCode}</div>
+                          {it.batchNumber && <div className="text-[10px] text-gray-500 dark:text-slate-400">Batch: {it.batchNumber}</div>}
+                        </td>
+                        <td className="px-4 py-2.5 text-center font-semibold text-gray-900 dark:text-slate-100">{it.quantity}</td>
+                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || it.product?.unit || "PC"}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-800 dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-500 dark:text-slate-400">{discountVal}</td>
+                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Totals + Payment */}
+          {/* Financial Totals + Sales Payment History */}
           <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
-            {/* Payment history */}
-            {payments.length > 0 && (
-              <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 min-w-0 shadow-2xs">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Payment History</p>
-                <div className="space-y-1.5">
+            {/* Sales Payment History */}
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 min-w-0 shadow-2xs">
+              <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-white/5 pb-2">
+                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Sales Payment Transactions</p>
+                <span className="text-xs text-gray-400 dark:text-slate-500">{payments.length} {payments.length === 1 ? 'record' : 'records'}</span>
+              </div>
+              {payments.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500 py-4 text-center italic">No payment transactions recorded yet.</p>
+              ) : (
+                <div className="space-y-2">
                   {payments.map((p: any, i: number) => (
-                    <div key={i} className="flex justify-between text-sm py-1 border-b border-gray-50 dark:border-white/5 last:border-0">
-                      <span className={clsx("text-gray-600 dark:text-slate-300", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
-                        {p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}
-                        {p.isCancelled ? " (Cancelled)" : p.status !== "PAID" ? ` (${p.status})` : ""}
+                    <div key={i} className="flex justify-between items-center text-sm py-1.5 px-2 rounded-lg bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5">
+                      <div>
+                        <span className={clsx("font-medium text-gray-800 dark:text-slate-200 block text-xs", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
+                          {p.paymentMode || p.method || "Payment"} {p.reference ? `(${p.reference})` : ""}
+                        </span>
+                        <span className="text-[11px] text-gray-400 dark:text-slate-500">
+                          {p.createdAt ? formatDate(p.createdAt) : ""}
+                          {p.isCancelled ? " • Cancelled" : p.status !== "PAID" ? ` • ${p.status}` : " • Settled"}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                        ₹{Number(p.paidAmount || p.amount || 0).toFixed(2)}
                       </span>
-                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Summary card */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-80 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span></div>
-              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Tax</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Round Off</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span></div>
-              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between"><span className="font-bold text-gray-800 dark:text-white">Total</span><span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400 font-medium">Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm font-semibold"><span className={balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>Balance</span><span className={clsx("font-mono", balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>₹{balance.toFixed(2)}</span></div>
+            {/* Financial Summary card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full lg:w-88 shrink-0 space-y-2.5 shadow-2xs">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
+                <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Discount</span>
+                  <span className="font-mono font-semibold text-rose-600 dark:text-rose-400">-₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {deliveryCharge > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Delivery / Shipping</span>
+                  <span className="font-mono text-gray-700 dark:text-slate-200">+₹{deliveryCharge.toFixed(2)}</span>
+                </div>
+              )}
+              {totalTax > 0 && (
+                <div className="pt-2 border-t border-gray-100 dark:border-white/5 space-y-1.5 text-xs">
+                  {isIntraState ? (
+                    <>
+                      <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                        <span>CGST</span>
+                        <span className="font-mono">₹{cgstAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                        <span>SGST</span>
+                        <span className="font-mono">₹{sgstAmount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                      <span>IGST</span>
+                      <span className="font-mono">₹{igstAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-gray-700 dark:text-slate-300">
+                    <span>Total Tax</span>
+                    <span className="font-mono">₹{totalTax.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              {Number(inv.roundOff || 0) !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Round Off</span>
+                  <span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="pt-2.5 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
+                <span className="font-bold text-gray-800 dark:text-white">Grand Total</span>
+                <span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm pt-1">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Amount Paid</span>
+                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold pt-1 border-t border-gray-100 dark:border-white/5">
+                <span className={balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>
+                  {balance > 0 ? "Outstanding Balance" : "Balance Due"}
+                </span>
+                <span className={clsx("font-mono", balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
+                  ₹{balance.toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1314,7 +1472,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party Type</label>
                     <div className="flex flex-wrap items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-[#13151f] w-fit p-0.5">
-                      {PARTY_TYPES.map(pt => (
+                      {(isFranchiseUser ? PARTY_TYPES.filter(pt => pt.value !== "FRANCHISE") : PARTY_TYPES).map(pt => (
                         <button
                           key={pt.value}
                           type="button"

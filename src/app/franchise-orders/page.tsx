@@ -6,7 +6,7 @@ import {
   ShoppingCart, Plus, X, RefreshCw, CheckCircle2, Clock,
   Truck, PackageCheck, AlertTriangle, ChevronDown, Receipt,
   CreditCard, Banknote, ArrowRight, Package, Warehouse, ClipboardList,
-  Ban, XCircle, Trash2, ShieldAlert, ChefHat, Landmark, AlertCircle, Check
+  Ban, XCircle, Trash2, ShieldAlert, ChefHat, Landmark, AlertCircle, Check, Search, Loader2
 } from "lucide-react";
 import { clsx } from "clsx";
 import api, { franchiseOrdersApi, franchiseProductRequestsApi, accountsApi } from "@/lib/api";
@@ -26,31 +26,142 @@ const FALLBACK_COMPANY = {
   state: "Maharashtra"
 };
 
+const PACK_UNIT_LABELS: Record<string, string> = {
+  KG: "KG",
+  G: "G",
+  GM: "G",
+  GMS: "G",
+  L: "L",
+  LTR: "L",
+  LITRE: "L",
+  ML: "ML",
+  PCS: "PCS",
+  PC: "PC",
+  PKT: "PKT",
+  PACK: "PACK",
+  BOX: "BOX",
+};
+
+function getProductPackSize(productOrItem: any): string | null {
+  if (!productOrItem) return null;
+  const p = productOrItem.product || productOrItem;
+
+  // 1. Explicit packSize object
+  const packSize = p.packSize;
+  if (packSize) {
+    if (typeof packSize === "object" && packSize !== null) {
+      const qty = packSize.qty;
+      const unit = packSize.unit ? (PACK_UNIT_LABELS[String(packSize.unit).toUpperCase()] || String(packSize.unit).toUpperCase()) : "";
+      if (qty !== undefined && qty !== null && qty !== "") {
+        const formattedQty = Number(qty) % 1 === 0 ? Number(qty) : Number(qty).toFixed(2);
+        return unit ? `${formattedQty} ${unit}` : `${formattedQty}`;
+      }
+      if (unit) return unit;
+    }
+    if (typeof packSize === "string" && packSize.trim()) {
+      const trimmed = packSize.trim();
+      const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*([A-Za-z]+)$/);
+      if (match) {
+        const unit = PACK_UNIT_LABELS[match[2].toUpperCase()] || match[2].toUpperCase();
+        return `${match[1]} ${unit}`;
+      }
+      return trimmed;
+    }
+  }
+
+  // 2. Explicit netWeight / weight field
+  const weight = p.netWeight ?? p.weight;
+  if (weight !== undefined && weight !== null && weight !== "") {
+    if (typeof weight === "object" && weight !== null) {
+      const qty = weight.qty ?? weight.value;
+      const unit = weight.unit ? (PACK_UNIT_LABELS[String(weight.unit).toUpperCase()] || String(weight.unit).toUpperCase()) : "";
+      if (qty !== undefined && qty !== null && qty !== "") {
+        const formattedQty = Number(qty) % 1 === 0 ? Number(qty) : Number(qty).toFixed(2);
+        return unit ? `${formattedQty} ${unit}` : `${formattedQty}`;
+      }
+    }
+    if (typeof weight === "number") {
+      const formattedQty = weight % 1 === 0 ? weight : weight.toFixed(2);
+      const unit = p.unit ? (PACK_UNIT_LABELS[String(p.unit).toUpperCase()] || String(p.unit).toUpperCase()) : "G";
+      return `${formattedQty} ${unit}`;
+    }
+    if (typeof weight === "string" && weight.trim() !== "") {
+      const trimmed = weight.trim();
+      const m = trimmed.match(/^(\d+(?:\.\d+)?)\s*(KG|G|GM|GMS|L|LTR|LITRE|ML|PCS|PC|PKT|PACK)$/i);
+      if (m) {
+        const unit = PACK_UNIT_LABELS[m[2].toUpperCase()] || m[2].toUpperCase();
+        return `${m[1]} ${unit}`;
+      }
+      return trimmed;
+    }
+  }
+
+  // 3. Explicit size field
+  const size = p.size;
+  if (size && typeof size === "string" && size.trim() !== "") {
+    const trimmed = size.trim();
+    const m = trimmed.match(/^(\d+(?:\.\d+)?)\s*(KG|G|GM|GMS|L|LTR|LITRE|ML|PCS|PC|PKT|PACK)$/i);
+    if (m) {
+      const unit = PACK_UNIT_LABELS[m[2].toUpperCase()] || m[2].toUpperCase();
+      return `${m[1]} ${unit}`;
+    }
+    return trimmed;
+  }
+
+  // 4. SKU size suffix (e.g. FG-APPAM-500G, FG-CARROT-1KG, FG-BM-500G)
+  const sku = p.sku || p.code || p.productCode;
+  if (sku && typeof sku === "string") {
+    const m = sku.match(/(?:-|_|\s)(\d+(?:\.\d+)?)\s*(KG|G|GM|GMS|L|LTR|LITRE|ML|PCS|PC|PKT|PACK)$/i);
+    if (m) {
+      const unit = PACK_UNIT_LABELS[m[2].toUpperCase()] || m[2].toUpperCase();
+      return `${m[1]} ${unit}`;
+    }
+  }
+
+  // 5. Product name suffix / parentheses (e.g. "APPAM (500G)" or "CARROT 1KG")
+  const name = p.name || p.productName;
+  if (name && typeof name === "string") {
+    const nameMatch = name.match(/(?:\(|\b)(\d+(?:\.\d+)?)\s*(KG|G|GM|GMS|L|LTR|LITRE|ML|PCS|PC|PKT|PACK)(?:\)|\b)/i);
+    if (nameMatch) {
+      const unit = PACK_UNIT_LABELS[nameMatch[2].toUpperCase()] || nameMatch[2].toUpperCase();
+      return `${nameMatch[1]} ${unit}`;
+    }
+  }
+
+  return null;
+}
+
+function getProductSku(productOrItem: any): string {
+  if (!productOrItem) return "N/A";
+  const p = productOrItem.product || productOrItem;
+  return p.sku || p.code || p.productCode || "N/A";
+}
+
 function getProductUnit(productOrItem: any): string {
-  if (!productOrItem) return "";
-  const unit = productOrItem.unit || productOrItem.product?.unit;
-  if (unit && typeof unit === "string" && unit.trim()) return unit.trim();
-  if (unit && typeof unit === "object") {
-    const code = (unit.code || unit.name || unit.symbol || "").toString().trim();
+  if (!productOrItem) return "Units";
+  const p = productOrItem.product || productOrItem;
+  const unit = p.unit;
+  if (unit) {
+    if (typeof unit === "string" && unit.trim()) return unit.trim();
+    if (typeof unit === "object") {
+      const code = (unit.code || unit.name || unit.symbol || "").toString().trim();
+      if (code) return code;
+    }
+  }
+  const u = p.uom || p.inventoryItem?.unit || p.recipe?.yieldUnit || "";
+  if (typeof u === "string" && u.trim()) return u.trim();
+  if (typeof u === "object" && u !== null) {
+    const code = (u.code || u.name || u.symbol || "").toString().trim();
     if (code) return code;
   }
-  const packSize = productOrItem.packSize || productOrItem.product?.packSize;
-  if (packSize) {
-    if (typeof packSize === "string" && packSize.trim()) return packSize.trim();
-    if (packSize.qty && packSize.unit) return `${packSize.qty}${packSize.unit}`.trim();
-    if (packSize.unit) return packSize.unit.trim();
-  }
-  const sku = productOrItem.sku || productOrItem.product?.sku;
-  if (sku) {
-    const m = String(sku).match(/-(\d+(?:\.\d+)?)(KG|G|ML|L|PCS|PC)$/i);
-    if (m) return `${m[1]}${m[2].toUpperCase()}`;
-  }
-  const u = productOrItem.uom || productOrItem.product?.uom || productOrItem.inventoryItem?.unit || productOrItem.recipe?.yieldUnit || "";
-  if (typeof u === "string") return u.trim();
-  if (typeof u === "object" && u !== null) {
-    return (u.code || u.name || u.symbol || "").toString().trim();
-  }
-  return "";
+  return "Units";
+}
+
+function getProductOptionLabel(product: any): string {
+  if (!product) return "";
+  const packSize = getProductPackSize(product) || "Pack size not configured";
+  const sku = getProductSku(product);
+  return `${product.name} — ${packSize} — SKU: ${sku}`;
 }
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
@@ -157,6 +268,7 @@ export default function FranchiseOrdersPage() {
   const [orderItems, setOrderItems] = useState<Array<{ productId: string; quantity: number }>>([
     { productId: "", quantity: 1 },
   ]);
+  const [itemSearches, setItemSearches] = useState<Record<number, string>>({});
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -260,6 +372,7 @@ export default function FranchiseOrdersPage() {
 
       setShowCreate(false);
       setOrderItems([{ productId: "", quantity: 1 }]);
+      setItemSearches({});
       setNotes(""); setPreferredDelivery(""); setPriority("NORMAL");
       fetchAll();
     } catch (e: any) {
@@ -277,6 +390,7 @@ export default function FranchiseOrdersPage() {
   const [reviewCancelModalOrder, setReviewCancelModalOrder] = useState<any | null>(null);
   const [adminReviewNote, setAdminReviewNote] = useState("");
   const [reviewingCancel, setReviewingCancel] = useState(false);
+  const [advancingOrderId, setAdvancingOrderId] = useState<string | null>(null);
 
   const handleAdvanceStatus = async (orderId: string, nextStatus: string) => {
     try {
@@ -523,6 +637,15 @@ export default function FranchiseOrdersPage() {
   const openPayModal = async (order: any) => {
     setPayModalOrder(order);
     setPayHqError("");
+
+    const isFullySettled = order.hqReceived || (order.paymentStatus === "PAID" && !isSuperAdmin);
+    const isUnpaidForHq = isSuperAdmin && (!order.franchisePaid || order.paidAmount <= 0);
+
+    if (isFullySettled || isUnpaidForHq) {
+      setLoadingAccounts(false);
+      return;
+    }
+
     setLoadingAccounts(true);
     try {
       const res = await accountsApi.getAll();
@@ -543,14 +666,26 @@ export default function FranchiseOrdersPage() {
   };
 
   const handleConfirmPayHq = async () => {
-    if (!payModalOrder) return;
+    if (!payModalOrder || payingHq) return;
+
     if (!selectedAccountId) {
-      setPayHqError("Please select a payment account.");
+      setPayHqError(isSuperAdmin ? "Please select an HQ receiving account." : "Please select a franchise payment account.");
       return;
     }
+
     const selectedAcc = franchiseAccounts.find((a) => a.id === selectedAccountId);
-    const payAmount = Number(payModalOrder.totalAmount || 0);
-    if (selectedAcc && selectedAcc.balance < payAmount) {
+    const orderTotal = Number(payModalOrder.totalAmount || 0);
+    const paidByFranchise = Number(payModalOrder.paidAmount || 0);
+    const balanceDue = payModalOrder.balanceDue !== undefined ? Number(payModalOrder.balanceDue) : orderTotal;
+
+    const payAmount = isSuperAdmin ? paidByFranchise : balanceDue;
+
+    if (payAmount <= 0) {
+      setPayHqError(isSuperAdmin ? "No franchise payment available to receive." : "This order has no outstanding balance.");
+      return;
+    }
+
+    if (!isSuperAdmin && selectedAcc && selectedAcc.balance < payAmount) {
       setPayHqError(`Insufficient Franchise Account Balance. Available: ₹${selectedAcc.balance.toFixed(2)}, Required: ₹${payAmount.toFixed(2)}.`);
       return;
     }
@@ -562,7 +697,12 @@ export default function FranchiseOrdersPage() {
         amount: payAmount,
         accountId: selectedAccountId
       });
-      toast.success(`Payment of ₹${payAmount.toFixed(2)} recorded successfully!`, { duration: 6000 });
+      toast.success(
+        isSuperAdmin
+          ? `HQ Receipt of ₹${payAmount.toFixed(2)} confirmed successfully!`
+          : `Payment of ₹${payAmount.toFixed(2)} to HQ recorded successfully!`,
+        { duration: 6000 }
+      );
       setPayModalOrder(null);
       fetchAll();
     } catch (e: any) {
@@ -782,13 +922,21 @@ export default function FranchiseOrdersPage() {
                           <AlertTriangle size={10} /> Urgent
                         </span>
                       )}
-                      {order.paymentType === "CREDIT" ? (
+                      {order.paymentStatus === "PAID" ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                          <CheckCircle2 size={10} /> Paid
+                        </span>
+                      ) : order.paymentStatus === "PARTIAL" ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 text-[10px] font-bold uppercase tracking-wider">
+                          <Clock size={10} /> Partially Paid
+                        </span>
+                      ) : order.paymentType === "CREDIT" ? (
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 text-[10px] font-bold uppercase tracking-wider">
-                          Credit
+                          Credit (Unpaid)
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-                          Advance Paid
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 dark:bg-slate-900/20 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                          Unpaid
                         </span>
                       )}
                       {order.hasInvoice && (
@@ -829,17 +977,30 @@ export default function FranchiseOrdersPage() {
                   <div className="flex-1 space-y-4">
                     <div className="flex flex-wrap gap-2">
                       {order.items?.map((item: any) => {
-                        const unit = getProductUnit(item.product) || getProductUnit(item) || "";
+                        const prod = item.product || item;
+                        const packSize = getProductPackSize(prod);
+                        const sku = getProductSku(prod);
+                        const unit = getProductUnit(prod);
                         return (
                           <div key={item.id || item.productId} className={clsx(
-                            "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all",
+                            "inline-flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all",
                             item.productType === "MADE_TO_ORDER" || !isStockOrder
                               ? "bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400"
                               : "bg-white text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 shadow-sm"
                           )}>
-                            <span>{item.product?.name || item.name}</span>
-                            <span className="text-slate-400">×</span>
-                            <span>{item.quantity} Units</span>
+                            <div className="flex items-center gap-1.5">
+                              <span>{item.product?.name || item.name || item.productName}</span>
+                              {packSize && (
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-orange-100/70 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300 font-bold">
+                                  {packSize}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                              {sku !== "N/A" && <span className="font-mono text-[10px] text-slate-400">({sku})</span>}
+                              <span className="text-slate-400">×</span>
+                              <span className="font-bold text-slate-700 dark:text-slate-200">{item.quantity} {unit || "Units"}</span>
+                            </div>
                             {item.productType === "MADE_TO_ORDER" && <span className="text-[10px] font-bold uppercase opacity-60 ml-1">MTO</span>}
                           </div>
                         );
@@ -971,10 +1132,15 @@ export default function FranchiseOrdersPage() {
                             {order.status === "APPROVED" && (
                               isStockOrder ? (
                                 <button
+                                  disabled={advancingOrderId === order.id}
                                   onClick={() => handleAdvanceStatus(order.id, "DISPATCHED")}
-                                  className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
+                                  className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
                                 >
-                                  Mark Dispatched <Truck size={14} />
+                                  {advancingOrderId === order.id ? (
+                                    <>Dispatching... <Loader2 size={14} className="animate-spin" /></>
+                                  ) : (
+                                    <>Mark Dispatched <Truck size={14} /></>
+                                  )}
                                 </button>
                               ) : (
                                 needsProduction && !order.materialsReady ? (
@@ -1005,10 +1171,15 @@ export default function FranchiseOrdersPage() {
                               <div className="space-y-2 w-full">
                                 {order.hasInvoice ? (
                                   <button
+                                    disabled={advancingOrderId === order.id}
                                     onClick={() => handleAdvanceStatus(order.id, "DISPATCHED")}
-                                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
+                                    className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
                                   >
-                                    Mark Dispatched <Truck size={14} />
+                                    {advancingOrderId === order.id ? (
+                                      <>Dispatching... <Loader2 size={14} className="animate-spin" /></>
+                                    ) : (
+                                      <>Mark Dispatched <Truck size={14} /></>
+                                    )}
                                   </button>
                                 ) : (
                                   <button
@@ -1022,12 +1193,48 @@ export default function FranchiseOrdersPage() {
                             )}
 
                             {order.status === "DISPATCHED" && (
-                              <button
-                                onClick={() => handleAdvanceStatus(order.id, "DELIVERED")}
-                                className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
-                              >
-                                Mark Delivered <PackageCheck size={14} />
-                              </button>
+                              <div className="space-y-2 w-full">
+                                {isSuperAdmin && (
+                                  order.hqReceived ? (
+                                    <button
+                                      onClick={() => openPayModal(order)}
+                                      className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                                    >
+                                      <CheckCircle2 size={14} className="text-emerald-500" /> Payment Received
+                                    </button>
+                                  ) : order.franchisePaid ? (
+                                    <button
+                                      onClick={() => openPayModal(order)}
+                                      className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                                    >
+                                      <Banknote size={14} /> Mark Payment
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => openPayModal(order)}
+                                      className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                                    >
+                                      <Clock size={14} /> Franchise payment pending
+                                    </button>
+                                  )
+                                )}
+                                <button
+                                  disabled={advancingOrderId === order.id}
+                                  onClick={() => handleAdvanceStatus(order.id, "DELIVERED")}
+                                  className={clsx(
+                                    "w-full px-4 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed",
+                                    isSuperAdmin && !order.hqReceived
+                                      ? "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
+                                      : "bg-emerald-600 hover:bg-emerald-700 text-white hover:opacity-90"
+                                  )}
+                                >
+                                  {advancingOrderId === order.id ? (
+                                    <>Delivering... <Loader2 size={14} className="animate-spin" /></>
+                                  ) : (
+                                    <>Mark Delivered <PackageCheck size={14} /></>
+                                  )}
+                                </button>
+                              </div>
                             )}
                           </>
                         )}
@@ -1052,22 +1259,63 @@ export default function FranchiseOrdersPage() {
                       </>
                     )}
 
-                    {order.status === "DELIVERED" && order.paymentStatus !== "PAID" && (
-                      <button
-                        onClick={() => openPayModal(order)}
-                        className="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-                      >
-                        <Banknote size={14} /> {isSuperAdmin ? "Mark Paid" : "Pay HQ"}
-                      </button>
-                    )}
-                    
-                    {order.paymentStatus === "PAID" && (
-                      <button
-                        onClick={() => handleInvoice(order.id)}
-                        className="w-full px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
-                      >
-                        <Receipt size={14} /> View Invoice
-                      </button>
+                    {order.status === "DELIVERED" && (
+                      isSuperAdmin ? (
+                        order.hqReceived ? (
+                          <div className="space-y-1.5 w-full">
+                            <button
+                              onClick={() => handleInvoice(order.id)}
+                              className="w-full px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                            >
+                              <Receipt size={14} /> View Invoice
+                            </button>
+                            <button
+                              onClick={() => openPayModal(order)}
+                              className="w-full px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                            >
+                              <CheckCircle2 size={14} /> Payment Details
+                            </button>
+                          </div>
+                        ) : order.franchisePaid ? (
+                          <button
+                            onClick={() => openPayModal(order)}
+                            className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                          >
+                            <Banknote size={14} /> Mark Payment
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openPayModal(order)}
+                            className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+                          >
+                            <Clock size={14} /> Franchise payment pending
+                          </button>
+                        )
+                      ) : (
+                        order.paymentStatus === "PAID" || (order.balanceDue !== undefined && order.balanceDue <= 0.001) ? (
+                          <div className="space-y-1.5 w-full">
+                            <button
+                              onClick={() => handleInvoice(order.id)}
+                              className="w-full px-4 py-2 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                            >
+                              <Receipt size={14} /> View Invoice
+                            </button>
+                            <button
+                              onClick={() => openPayModal(order)}
+                              className="w-full px-4 py-2 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+                            >
+                              <CheckCircle2 size={14} /> Payment Details
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => openPayModal(order)}
+                            className="w-full px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-sm"
+                          >
+                            <Banknote size={14} /> {order.paymentStatus === "PARTIAL" ? "Pay Remaining to HQ" : "Pay HQ"}
+                          </button>
+                        )
+                      )
                     )}
                   </div>
                 </div>
@@ -1126,7 +1374,7 @@ export default function FranchiseOrdersPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    Products * {orderItems.length > 1 && `(${orderItems.length} lines)`}
+                    Products
                   </label>
                   <button
                     type="button"
@@ -1137,48 +1385,94 @@ export default function FranchiseOrdersPage() {
                   </button>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {orderItems.map((item, idx) => {
                     const isSelectedInOtherRow = (prodId: string) =>
                       orderItems.some((otherItem, oIdx) => oIdx !== idx && otherItem.productId === prodId);
 
-                    return (
-                      <div
-                        key={idx}
-                        className="p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2 transition-all"
-                      >
-                        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-                          {/* Product Dropdown */}
-                          <div className="flex-1 min-w-0">
-                            <select
-                              value={item.productId}
-                              onChange={e => {
-                                const updated = [...orderItems];
-                                updated[idx].productId = e.target.value;
-                                setOrderItems(updated);
+                    const selectedProduct = products.find(p => p.id === item.productId);
+                    const currentSearch = (itemSearches[idx] || "").toLowerCase().trim();
+                    const currentSearchNoSpace = currentSearch.replace(/\s+/g, "");
+
+                    const filteredProducts = products.filter(p => {
+                      if (!currentSearch) return true;
+                      const name = (p.name || "").toLowerCase();
+                      const sku = getProductSku(p).toLowerCase();
+                      const packSize = (getProductPackSize(p) || "").toLowerCase();
+                      const packSizeNoSpace = packSize.replace(/\s+/g, "");
+                      const code = (p.code || p.productCode || "").toLowerCase();
+                      const category = (p.category || "").toLowerCase();
+
+                      return (
+                        name.includes(currentSearch) ||
+                        sku.includes(currentSearch) ||
+                        sku.includes(currentSearchNoSpace) ||
+                        packSize.includes(currentSearch) ||
+                        packSizeNoSpace.includes(currentSearchNoSpace) ||
+                        code.includes(currentSearch) ||
+                        category.includes(currentSearch)
+                      );
+                    });
+
+                    // 1. When a product is selected: Show the Clean Product Card
+                    if (selectedProduct) {
+                      const packSize = getProductPackSize(selectedProduct);
+                      const sku = getProductSku(selectedProduct);
+
+                      return (
+                        <div
+                          key={idx}
+                          className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-orange-200 dark:border-orange-500/30 shadow-sm space-y-3 transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1.5 min-w-0">
+                              <h3 className="font-bold text-base text-slate-900 dark:text-white leading-tight">
+                                {selectedProduct.name}
+                              </h3>
+
+                              <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400 dark:text-slate-500 font-semibold">SKU:</span>
+                                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                    {sku}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400 dark:text-slate-500 font-semibold">Pack Size:</span>
+                                  <span className={clsx(
+                                    "font-bold",
+                                    packSize
+                                      ? "text-slate-800 dark:text-slate-100"
+                                      : "text-amber-600 dark:text-amber-400 italic font-normal"
+                                  )}>
+                                    {packSize || "Pack size not configured"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (orderItems.length > 1) {
+                                  setOrderItems(prev => prev.filter((_, i) => i !== idx));
+                                } else {
+                                  setOrderItems([{ productId: "", quantity: 1 }]);
+                                }
                               }}
-                              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none truncate"
+                              title="Remove line"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer shrink-0"
                             >
-                              <option value="">Select product...</option>
-                              {products.map(p => {
-                                const isDuplicate = isSelectedInOtherRow(p.id);
-                                const unit = getProductUnit(p);
-                                const displayName = unit ? `${p.name} — ${unit}` : p.name;
-                                return (
-                                  <option
-                                    key={p.id}
-                                    value={p.id}
-                                    disabled={isDuplicate}
-                                  >
-                                    {displayName}{isDuplicate ? " · [Already selected]" : ""}
-                                  </option>
-                                );
-                              })}
-                            </select>
+                              <Trash2 size={16} />
+                            </button>
                           </div>
 
-                          {/* Quantity & Remove */}
-                          <div className="flex items-center gap-2 justify-between sm:justify-end shrink-0">
+                          {/* Order Quantity Control */}
+                          <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-slate-800">
+                            <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                              Order Quantity
+                            </span>
                             <div className="flex items-center">
                               <input
                                 type="number"
@@ -1198,29 +1492,113 @@ export default function FranchiseOrdersPage() {
                                     setOrderItems(updated);
                                   }
                                 }}
-                                className="w-16 px-2.5 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-l-lg border-r-0 text-sm font-semibold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none text-center"
+                                className="w-20 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-l-lg border-r-0 text-sm font-bold text-slate-900 dark:text-white focus:ring-1 focus:ring-orange-500 outline-none text-center"
                                 placeholder="1"
                               />
-                              <span className="px-2.5 py-2 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-r-lg text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
+                              <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-r-lg text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
                                 Units
                               </span>
                             </div>
-
-                            {orderItems.length > 1 ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setOrderItems(prev => prev.filter((_, i) => i !== idx));
-                                }}
-                                title="Remove line"
-                                className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            ) : (
-                              <div className="w-8" />
-                            )}
                           </div>
+                        </div>
+                      );
+                    }
+
+                    // 2. When NO product is selected: Show the Searchable Product Selector
+                    return (
+                      <div
+                        key={idx}
+                        className="p-3.5 bg-slate-50/90 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-2.5 transition-all"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                            Select Product {orderItems.length > 1 && `(Line #${idx + 1})`}
+                          </span>
+                          {orderItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setOrderItems(prev => prev.filter((_, i) => i !== idx))}
+                              title="Remove line"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Search Input */}
+                        <div className="relative">
+                          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search by product name, SKU, pack size (e.g. 500G), or code..."
+                            value={itemSearches[idx] || ""}
+                            onChange={e => setItemSearches(prev => ({ ...prev, [idx]: e.target.value }))}
+                            className="w-full pl-9 pr-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-1 focus:ring-orange-500 outline-none"
+                          />
+                        </div>
+
+                        {/* Searchable Options List */}
+                        <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700/80 rounded-lg bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+                          {filteredProducts.length === 0 ? (
+                            <div className="p-3 text-center text-xs text-slate-400">
+                              No products match your search
+                            </div>
+                          ) : (
+                            filteredProducts.map(p => {
+                              const isDuplicate = isSelectedInOtherRow(p.id);
+                              const packSize = getProductPackSize(p);
+                              const sku = getProductSku(p);
+
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  disabled={isDuplicate}
+                                  onClick={() => {
+                                    const updated = [...orderItems];
+                                    updated[idx].productId = p.id;
+                                    setOrderItems(updated);
+                                    setItemSearches(prev => {
+                                      const copy = { ...prev };
+                                      delete copy[idx];
+                                      return copy;
+                                    });
+                                  }}
+                                  className={clsx(
+                                    "w-full text-left px-3 py-2.5 transition-colors flex items-center justify-between gap-3 text-xs",
+                                    isDuplicate
+                                      ? "opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-900"
+                                      : "hover:bg-orange-50 dark:hover:bg-orange-950/20 cursor-pointer"
+                                  )}
+                                >
+                                  <div className="min-w-0 space-y-0.5">
+                                    <div className="font-bold text-slate-900 dark:text-white truncate">
+                                      {p.name}
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-500 dark:text-slate-400">
+                                      <span className="font-mono text-slate-600 dark:text-slate-300">
+                                        SKU: {sku}
+                                      </span>
+                                      <span>·</span>
+                                      <span className={packSize ? "text-slate-700 dark:text-slate-200 font-semibold" : "italic text-slate-400"}>
+                                        {packSize || "Pack size not configured"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {isDuplicate ? (
+                                    <span className="shrink-0 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-900/40">
+                                      Selected
+                                    </span>
+                                  ) : (
+                                    <span className="shrink-0 text-orange-600 dark:text-orange-400 font-bold text-xs">
+                                      Select →
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
                         </div>
                       </div>
                     );
@@ -1231,7 +1609,7 @@ export default function FranchiseOrdersPage() {
                 <button
                   type="button"
                   onClick={() => setOrderItems(prev => [...prev, { productId: "", quantity: 1 }])}
-                  className="w-full py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50/50 dark:hover:bg-orange-500/10 text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
+                  className="w-full py-2.5 border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:bg-orange-50/50 dark:hover:bg-orange-500/10 text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer"
                 >
                   <Plus size={15} /> Add More
                 </button>
@@ -1283,9 +1661,17 @@ export default function FranchiseOrdersPage() {
                     <div className="flex flex-wrap items-center gap-2 justify-end">
                       {validItems.map((item, i) => {
                         const prod = products.find(p => p.id === item.productId);
+                        const packSize = getProductPackSize(prod);
                         return (
-                          <span key={i} className="inline-flex items-center px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200">
-                            {prod?.name || "Product"} × {item.quantity} Units
+                          <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-200">
+                            <span>{prod?.name || "Product"}</span>
+                            {packSize && (
+                              <span className="text-orange-600 dark:text-orange-400 font-semibold">
+                                ({packSize})
+                              </span>
+                            )}
+                            <span className="text-slate-400 font-normal">·</span>
+                            <span>{item.quantity} Units</span>
                           </span>
                         );
                       })}
@@ -1478,174 +1864,462 @@ export default function FranchiseOrdersPage() {
         document.body
       )}
 
-      {/* Pay HQ / Record Payment Modal */}
+      {/* Pay HQ / Record Payment / Payment Details Modal */}
       {payModalOrder && mounted && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md border border-slate-200 dark:border-slate-700 p-6 space-y-5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                  <Banknote size={22} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                    {isSuperAdmin ? "Record Order Payment" : "Pay HQ"}
-                  </h3>
-                  <p className="text-xs font-semibold text-slate-500">
-                    Order: {payModalOrder.orderNumber || `FO-${String(payModalOrder.id).slice(0, 6).toUpperCase()}`}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setPayModalOrder(null)}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 transition-colors"
-              >
-                <X size={18} />
-              </button>
-            </div>
+            {(() => {
+              const isAlreadyPaid = payModalOrder.paymentStatus === "PAID" || (payModalOrder.balanceDue !== undefined && payModalOrder.balanceDue <= 0.001);
+              const orderTotal = Number(payModalOrder.totalAmount || 0);
+              const alreadyPaid = Number(payModalOrder.paidAmount || (isAlreadyPaid ? orderTotal : 0));
+              const outstandingAmount = Math.max(0, payModalOrder.balanceDue !== undefined ? Number(payModalOrder.balanceDue) : (isAlreadyPaid ? 0 : orderTotal - alreadyPaid));
+              const paymentsList = Array.isArray(payModalOrder.payments) ? payModalOrder.payments : [];
 
-            {/* Payable Amount Summary */}
-            <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">Total Payable Amount</p>
-                <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight mt-0.5">
-                  ₹{(payModalOrder.totalAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </p>
-              </div>
-              <div className="text-right">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
-                  Delivered Order
-                </span>
-              </div>
-            </div>
+              const isSuperAdminMarkPayment = isSuperAdmin && payModalOrder.franchisePaid && !payModalOrder.hqReceived;
+              const isFranchisePayingHq = isFranchiseAdmin && !isAlreadyPaid;
 
-            {/* Error Message if any */}
-            {payHqError && (
-              <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 font-medium">
-                <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                <span>{payHqError}</span>
-              </div>
-            )}
-
-            {/* Account Selection */}
-            {loadingAccounts ? (
-              <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-400">
-                <RefreshCw size={24} className="animate-spin text-orange-500" />
-                <p className="text-xs font-medium">Fetching Franchise Accounts...</p>
-              </div>
-            ) : franchiseAccounts.length === 0 ? (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-3">
-                <div className="flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300 font-medium">
-                  <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
-                  <div>
-                    <p className="font-bold">No Franchise Accounts Configured</p>
-                    <p className="mt-0.5 text-amber-700 dark:text-amber-400 text-[11px]">
-                      You must add a Franchise Cash or Bank account before making payments to HQ.
-                    </p>
+              return (
+                <>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={clsx(
+                        "w-10 h-10 rounded-xl flex items-center justify-center",
+                        payModalOrder.hqReceived || isAlreadyPaid
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                          : isSuperAdminMarkPayment
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                          : "bg-orange-100 dark:bg-orange-500/20 text-orange-600 dark:text-orange-400"
+                      )}>
+                        {payModalOrder.hqReceived || isAlreadyPaid ? <CheckCircle2 size={22} /> : <Banknote size={22} />}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                          {isSuperAdminMarkPayment
+                            ? "Confirm Payment Received"
+                            : isFranchisePayingHq
+                            ? "Pay HQ"
+                            : "Payment Details"}
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500">
+                          {payModalOrder.franchise?.name
+                            ? `${payModalOrder.franchise.name} · ${payModalOrder.orderNumber || `FO-${String(payModalOrder.id).slice(0, 6).toUpperCase()}`}`
+                            : `Order: ${payModalOrder.orderNumber || `FO-${String(payModalOrder.id).slice(0, 6).toUpperCase()}`}`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setPayModalOrder(null)}
+                      className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-400 transition-colors"
+                    >
+                      <X size={18} />
+                    </button>
                   </div>
-                </div>
-                <Link
-                  href="/franchise/bank-accounts"
-                  className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
-                >
-                  <Plus size={14} /> Configure Bank Accounts
-                </Link>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                    Select Payment Account (Franchise Source)
-                  </label>
-                  <select
-                    value={selectedAccountId}
-                    onChange={(e) => {
-                      setSelectedAccountId(e.target.value);
-                      setPayHqError("");
-                    }}
-                    className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  >
-                    {franchiseAccounts.map((acc: any) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} ({acc.type}) — Balance: ₹{Number(acc.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                {/* Live Balance Preview */}
-                {(() => {
-                  const sel = franchiseAccounts.find((a: any) => a.id === selectedAccountId);
-                  if (!sel) return null;
-                  const currentBal = Number(sel.balance || 0);
-                  const payAmt = Number(payModalOrder.totalAmount || 0);
-                  const remBal = currentBal - payAmt;
-                  const isInsufficient = remBal < 0;
+                  {/* ── STATE 1: SUPER ADMIN CONFIRMS HQ RECEIPT OF FRANCHISE'S EXISTING PAYMENT ── */}
+                  {isSuperAdminMarkPayment ? (
+                    <div className="space-y-5">
+                      {/* Franchise Paid Source Info Card */}
+                      <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+                            Amount Paid by Franchise
+                          </p>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                            <CheckCircle2 size={12} /> PAID BY FRANCHISE
+                          </span>
+                        </div>
+                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                          ₹{alreadyPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </p>
+                        <div className="flex justify-between items-center pt-2 border-t border-emerald-200/60 dark:border-emerald-800/30 text-xs text-slate-500 dark:text-slate-400">
+                          <span>Order: {payModalOrder.orderNumber}</span>
+                          {payModalOrder.invoiceNum && (
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">Invoice: {payModalOrder.invoiceNum}</span>
+                          )}
+                        </div>
+                      </div>
 
-                  return (
-                    <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-2 text-xs">
-                      <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
-                        <span>Current Account Balance:</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">
-                          ₹{currentBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
-                        <span>Payment Deduction:</span>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">
-                          -₹{payAmt.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex justify-between items-center">
-                        <span className="font-bold text-slate-700 dark:text-slate-300">Estimated Balance After:</span>
-                        <span className={clsx("font-extrabold text-sm", isInsufficient ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
-                          ₹{remBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      {isInsufficient && (
-                        <div className="mt-2 p-2 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/50 rounded-lg text-rose-600 dark:text-rose-400 text-[11px] font-bold flex items-center gap-1.5">
-                          <AlertTriangle size={14} className="shrink-0" />
-                          <span>Insufficient Franchise Account Balance. Please fund account or pick another source.</span>
+                      {/* Error Message if any */}
+                      {payHqError && (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                          <span>{payHqError}</span>
                         </div>
                       )}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setPayModalOrder(null)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={
-                  payingHq ||
-                  loadingAccounts ||
-                  franchiseAccounts.length === 0 ||
-                  !selectedAccountId ||
-                  Boolean(franchiseAccounts.find((a: any) => a.id === selectedAccountId)?.balance < (payModalOrder?.totalAmount || 0))
-                }
-                onClick={handleConfirmPayHq}
-                className="flex-[1.5] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {payingHq ? (
-                  <>
-                    <RefreshCw size={16} className="animate-spin" /> Processing...
-                  </>
-                ) : (
-                  <>
-                    <Check size={16} /> Confirm & Pay HQ
-                  </>
-                )}
-              </button>
-            </div>
+                      {/* HQ Account Selection */}
+                      {loadingAccounts ? (
+                        <div className="py-6 flex flex-col items-center justify-center gap-2 text-slate-400">
+                          <RefreshCw size={24} className="animate-spin text-orange-500" />
+                          <p className="text-xs font-medium">Fetching HQ Accounts...</p>
+                        </div>
+                      ) : franchiseAccounts.length === 0 ? (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-3">
+                          <div className="flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                            <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
+                            <div>
+                              <p className="font-bold">No HQ Accounts Configured</p>
+                              <p className="mt-0.5 text-amber-700 dark:text-amber-400 text-[11px]">
+                                Please configure an HQ Cash or Bank account in Banking & Accounts to receive payments.
+                              </p>
+                            </div>
+                          </div>
+                          <Link
+                            href="/accounting/accounts"
+                            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                          >
+                            <Plus size={14} /> Configure Bank Accounts
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                              Select HQ Receiving Account (Cash / Bank / UPI)
+                            </label>
+                            <select
+                              value={selectedAccountId}
+                              onChange={(e) => {
+                                setSelectedAccountId(e.target.value);
+                                setPayHqError("");
+                              }}
+                              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            >
+                              {franchiseAccounts.map((acc: any) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name} ({acc.type}) — Balance: ₹{Number(acc.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Live Balance Preview */}
+                          {(() => {
+                            const sel = franchiseAccounts.find((a: any) => a.id === selectedAccountId);
+                            if (!sel) return null;
+                            const currentBal = Number(sel.balance || 0);
+                            const balanceAfter = currentBal + alreadyPaid;
+                            return (
+                              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-2 text-xs">
+                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                  <span>HQ Account Balance:</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    ₹{currentBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                  <span>Amount Received (+):</span>
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                    +₹{alreadyPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex justify-between items-center">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">Estimated Balance After (+):</span>
+                                  <span className="font-extrabold text-sm text-emerald-600 dark:text-emerald-400">
+                                    ₹{balanceAfter.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOrder(null)}
+                          className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={payingHq || loadingAccounts || franchiseAccounts.length === 0 || !selectedAccountId}
+                          onClick={handleConfirmPayHq}
+                          className="flex-[1.5] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {payingHq ? (
+                            <>
+                              <RefreshCw size={16} className="animate-spin" /> Confirming...
+                            </>
+                          ) : (
+                            <>
+                              <Check size={16} /> Confirm Payment Received (₹{alreadyPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })})
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : isFranchisePayingHq ? (
+                    /* ── STATE 2: FRANCHISE ADMIN PAYS HQ ── */
+                    <div className="space-y-5">
+                      <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400">
+                            Outstanding Amount Due
+                          </p>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300">
+                            {alreadyPaid > 0 ? "PARTIAL DUE" : "UNPAID DUE"}
+                          </span>
+                        </div>
+                        <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 tracking-tight">
+                          ₹{outstandingAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </p>
+                        {alreadyPaid > 0 && (
+                          <div className="flex justify-between items-center pt-2 border-t border-emerald-200/60 dark:border-emerald-800/30 text-xs text-slate-500 dark:text-slate-400">
+                            <span>Order Total: ₹{orderTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Already Paid: ₹{alreadyPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Error Message if any */}
+                      {payHqError && (
+                        <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                          <span>{payHqError}</span>
+                        </div>
+                      )}
+
+                      {/* Account Selection */}
+                      {loadingAccounts ? (
+                        <div className="py-8 flex flex-col items-center justify-center gap-2 text-slate-400">
+                          <RefreshCw size={24} className="animate-spin text-orange-500" />
+                          <p className="text-xs font-medium">Fetching Franchise Accounts...</p>
+                        </div>
+                      ) : franchiseAccounts.length === 0 ? (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl space-y-3">
+                          <div className="flex items-start gap-2.5 text-xs text-amber-800 dark:text-amber-300 font-medium">
+                            <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-600" />
+                            <div>
+                              <p className="font-bold">No Franchise Accounts Configured</p>
+                              <p className="mt-0.5 text-amber-700 dark:text-amber-400 text-[11px]">
+                                You must add a Franchise Cash or Bank account before making payments to HQ.
+                              </p>
+                            </div>
+                          </div>
+                          <Link
+                            href="/franchise/bank-accounts"
+                            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                          >
+                            <Plus size={14} /> Configure Bank Accounts
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                              Select Payment Account (Franchise Source)
+                            </label>
+                            <select
+                              value={selectedAccountId}
+                              onChange={(e) => {
+                                setSelectedAccountId(e.target.value);
+                                setPayHqError("");
+                              }}
+                              className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            >
+                              {franchiseAccounts.map((acc: any) => (
+                                <option key={acc.id} value={acc.id}>
+                                  {acc.name} ({acc.type}) — Balance: ₹{Number(acc.balance || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Live Balance Preview */}
+                          {(() => {
+                            const sel = franchiseAccounts.find((a: any) => a.id === selectedAccountId);
+                            if (!sel) return null;
+                            const currentBal = Number(sel.balance || 0);
+                            const remBal = currentBal - outstandingAmount;
+                            const isInsufficient = remBal < 0;
+
+                            return (
+                              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-2 text-xs">
+                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                  <span>Current Account Balance:</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    ₹{currentBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-slate-500 dark:text-slate-400">
+                                  <span>Payment Deduction:</span>
+                                  <span className="font-bold text-rose-600 dark:text-rose-400">
+                                    -₹{outstandingAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex justify-between items-center">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">Estimated Balance After:</span>
+                                  <span className={clsx("font-extrabold text-sm", isInsufficient ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
+                                    ₹{remBal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                {isInsufficient && (
+                                  <div className="mt-2 p-2 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/50 rounded-lg text-rose-600 dark:text-rose-400 text-[11px] font-bold flex items-center gap-1.5">
+                                    <AlertTriangle size={14} className="shrink-0" />
+                                    <span>Insufficient Franchise Account Balance. Please fund account or pick another source.</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOrder(null)}
+                          className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-xl text-sm font-bold transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            payingHq ||
+                            loadingAccounts ||
+                            franchiseAccounts.length === 0 ||
+                            !selectedAccountId ||
+                            Boolean(franchiseAccounts.find((a: any) => a.id === selectedAccountId)?.balance < outstandingAmount)
+                          }
+                          onClick={handleConfirmPayHq}
+                          className="flex-[1.5] py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          {payingHq ? (
+                            <>
+                              <RefreshCw size={16} className="animate-spin" /> Processing...
+                            </>
+                          ) : (
+                            <>
+                              <Check size={16} /> Confirm & Pay HQ (₹{outstandingAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })})
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── STATE 3: READ-ONLY PAYMENT DETAILS & STATUS SUMMARY ── */
+                    <div className="space-y-4">
+                      <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700/60 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                            Payment Status
+                          </span>
+                          {payModalOrder.hqReceived ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                              <CheckCircle2 size={12} /> PAYMENT RECEIVED
+                            </span>
+                          ) : isAlreadyPaid || alreadyPaid > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300">
+                              <Clock size={12} /> PAID BY FRANCHISE
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
+                              <Clock size={12} /> AWAITING FRANCHISE PAYMENT
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-200 dark:border-slate-700/60 text-xs">
+                          <div className="space-y-0.5">
+                            <p className="text-slate-500 dark:text-slate-400 text-[11px]">Total Amount</p>
+                            <p className="font-extrabold text-sm text-slate-900 dark:text-white">
+                              ₹{orderTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-slate-500 dark:text-slate-400 text-[11px]">Total Received</p>
+                            <p className={clsx(
+                              "font-extrabold text-sm",
+                              alreadyPaid > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-700 dark:text-slate-300"
+                            )}>
+                              ₹{alreadyPaid.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="space-y-0.5">
+                            <p className="text-slate-500 dark:text-slate-400 text-[11px]">Balance Due</p>
+                            <p className={clsx(
+                              "font-extrabold text-sm",
+                              outstandingAmount > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                            )}>
+                              ₹{outstandingAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Payment Transactions Record */}
+                      {paymentsList.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Payment History ({paymentsList.length} transaction{paymentsList.length > 1 ? "s" : ""})
+                          </p>
+                          <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                            {paymentsList.map((p: any, idx: number) => (
+                              <div key={p.id || idx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs space-y-1">
+                                <div className="flex justify-between items-center font-bold">
+                                  <span className="text-slate-800 dark:text-slate-200">
+                                    {p.paymentMode || "PAYMENT"}
+                                  </span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">
+                                    ₹{Number(p.paidAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
+                                  <span>{p.accountName ? `Account: ${p.accountName}` : (p.createdBy ? `Recorded by: ${p.createdBy}` : "Received at HQ")}</span>
+                                  <span>{formatDate(p.createdAt)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="p-3 bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-700/60 rounded-xl flex items-start gap-2.5 text-xs text-slate-600 dark:text-slate-400">
+                        {payModalOrder.hqReceived ? (
+                          <>
+                            <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-emerald-600" />
+                            <span>
+                              Payment receipt has been confirmed into HQ account. No further actions needed.
+                            </span>
+                          </>
+                        ) : alreadyPaid > 0 ? (
+                          <>
+                            <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-blue-600" />
+                            <span>
+                              Payment has been made by the franchise. HQ Super Admin can confirm receipt into an HQ account using the &ldquo;Mark Payment&rdquo; action.
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle size={16} className="shrink-0 mt-0.5 text-amber-600" />
+                            <span>
+                              Franchise payment has not been received yet. The franchise must pay the order amount before HQ can confirm receipt.
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setPayModalOrder(null)}
+                          className="w-full py-2.5 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl text-sm font-bold transition-all shadow-sm"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>,
         document.body

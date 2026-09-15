@@ -542,7 +542,7 @@ export default function FranchisePage() {
                           ? "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
                           : "text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                       )}
-                      title={isActive ? "Deactivate" : "Activate"}
+                      title={isActive ? "Set Inactive" : "Set Active"}
                     >
                       <Power size={14} />
                     </button>
@@ -1123,15 +1123,15 @@ export default function FranchisePage() {
             </div>
 
             <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white tracking-tight">
-              {confirmToggle.status === "ACTIVE" ? "Deactivate Franchise" : "Activate Franchise"}
+              {confirmToggle.status === "ACTIVE" ? "Set Franchise Inactive" : "Set Franchise Active"}
             </h2>
 
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-2 mb-6 leading-relaxed">
-              Are you sure you want to {confirmToggle.status === "ACTIVE" ? "deactivate" : "activate"}{" "}
+              Are you sure you want to set{" "}
               <span className="font-bold text-slate-900 dark:text-white">
                 "{confirmToggle.name}"
-              </span>
-              ?
+              </span>{" "}
+              to {confirmToggle.status === "ACTIVE" ? "inactive" : "active"}?
             </p>
 
             <div className="grid grid-cols-2 gap-3 w-full">
@@ -1152,7 +1152,7 @@ export default function FranchisePage() {
                     : "bg-emerald-600 hover:bg-emerald-700"
                 )}
               >
-                Confirm
+                {confirmToggle.status === "ACTIVE" ? "Set Inactive" : "Set Active"}
               </button>
             </div>
           </div>
