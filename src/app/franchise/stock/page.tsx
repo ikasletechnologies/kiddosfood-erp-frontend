@@ -1,20 +1,51 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import {
   X, Package, RefreshCw, Clock,
-  Plus, Search, Truck, ArrowRight, Send
+  Plus, Search, Truck, ArrowRight, Send,
+  Layers, CheckCircle2, AlertTriangle, LayoutGrid, List
 } from "lucide-react";
 import { clsx } from "clsx";
 import {
   productBatchesApi, productsFullApi,
-  franchiseProductRequestsApi, franchiseOrdersApi
+  franchiseProductRequestsApi, franchiseOrdersApi,
+  inventoryApi, salesApi
 } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
+import InventoryMetricCard from "@/components/modules/inventory/InventoryMetricCard";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
+
+function formatPackSize(packSize: any, sku?: string): string | undefined {
+  if (packSize) {
+    if (typeof packSize === "string") return packSize;
+    if (typeof packSize === "object") {
+      const qty = packSize.qty ?? packSize.quantity ?? "";
+      const unit = packSize.unit ?? "";
+      const res = `${qty}${unit}`.trim();
+      if (res) return res;
+    }
+  }
+  if (sku && sku.includes("-")) {
+    const part = sku.split("-").pop()?.trim();
+    if (part && !["APPAM", "FG", "RM"].includes(part.toUpperCase())) {
+      return part;
+    }
+  }
+  return undefined;
+}
+
+function formatUnit(unit: any): string {
+  if (!unit) return "PC";
+  if (typeof unit === "string") return unit;
+  if (typeof unit === "object") {
+    return unit.unit || unit.name || unit.symbol || "PC";
+  }
+  return String(unit);
+}
 
 const FILTER_TABS: Array<{ key: string; label: string }> = [
   { key: "ALL",           label: "All"          },
@@ -23,19 +54,39 @@ const FILTER_TABS: Array<{ key: string; label: string }> = [
   { key: "EXPIRED",       label: "Expired"      },
 ];
 
+export interface UnifiedFranchiseProduct {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  packSize?: string;
+  availableStock: number;
+  reservedStock: number;
+  inTransitStock: number;
+  pendingDemand: number;
+  minimumStock: number;
+  rawProduct: any | null;
+  inventoryItem: any | null;
+}
+
 export default function FranchiseStockPage() {
   const { user } = useAuth();
   const branchId = user?.franchiseId;
 
   const [viewTab, setViewTab] = useState<"CATALOG" | "BATCHES">("CATALOG");
+  const [viewMode, setViewMode] = useState<"TABLE" | "GRID">("TABLE");
 
-  const [batches, setBatches]           = useState<any[]>([]);
-  const [products, setProducts]         = useState<any[]>([]);
+  const [batches, setBatches] = useState<any[]>([]);
+  const [unifiedProducts, setUnifiedProducts] = useState<UnifiedFranchiseProduct[]>([]);
   const [branchOrders, setBranchOrders] = useState<any[]>([]);
-  const [loading, setLoading]           = useState(true);
+  const [loading, setLoading] = useState(true);
   const [productFilter, setProductFilter] = useState("");
-  const [expiryFilter, setExpiryFilter]   = useState("ALL");
-  const [searchTerm, setSearchTerm]       = useState("");
+  const [expiryFilter, setExpiryFilter] = useState("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [stockFilter, setStockFilter] = useState<
+    "ALL" | "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK" | "IN_TRANSIT" | "PENDING_DEMAND"
+  >("ALL");
 
   // Request Stock Modal State
   const [requestModalProduct, setRequestModalProduct] = useState<any | null>(null);
@@ -51,61 +102,292 @@ export default function FranchiseStockPage() {
       const parsedUser = userStr ? JSON.parse(userStr) : null;
       const effectiveBranchId = branchId || parsedUser?.franchiseId;
 
-      const [bRes, pRes, ordRes] = await Promise.all([
-        productBatchesApi.getAll({ productId: pid || undefined }),
-        productsFullApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}),
-        franchiseOrdersApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}),
+      const [invRes, pRes, ordRes, reqRes, soRes, bRes] = await Promise.all([
+        inventoryApi.getInventory(effectiveBranchId, "FINISHED_GOOD").catch(() => ({ data: [] })),
+        productsFullApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}).catch(() => ({ data: [] })),
+        franchiseOrdersApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}).catch(() => ({ data: [] })),
+        franchiseProductRequestsApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}).catch(() => ({ data: [] })),
+        salesApi.getSalesOrders(effectiveBranchId ? { franchiseId: effectiveBranchId } : {}).catch(() => ({ data: [] })),
+        productBatchesApi.getAll({ productId: pid || undefined }).catch(() => ({ data: [] })),
       ]);
 
+      const invItems: any[] = Array.isArray(invRes?.data) ? invRes.data : [];
+      const catProducts: any[] = Array.isArray(pRes?.data) ? pRes.data : Array.isArray(pRes?.data?.data) ? pRes.data.data : [];
+      const ordData: any[] = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
+      const reqData: any[] = Array.isArray(reqRes?.data) ? reqRes.data : [];
+      const soData: any[] = Array.isArray(soRes?.data) ? soRes.data : [];
       const allBatches: any[] = Array.isArray(bRes?.data) ? bRes.data : Array.isArray(bRes?.data?.data) ? bRes.data.data : [];
-      // Scope batches strictly to this franchise if franchise user
+
       const scopedBatches = effectiveBranchId
         ? allBatches.filter((b) => b.franchiseId === effectiveBranchId)
         : allBatches;
 
-      const prodData = Array.isArray(pRes?.data) ? pRes.data : Array.isArray(pRes?.data?.data) ? pRes.data.data : [];
-      const ordData = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
+      // Filter catalog for finished goods
+      const finishedCatProducts = catProducts.filter(
+        (p: any) =>
+          p.category === "FINISHED_GOOD" ||
+          p.category === "FINISHED_PRODUCT" ||
+          p.category === "FINISHED" ||
+          !p.category?.startsWith("RAW_")
+      );
+
+      // Build unified franchise finished goods strictly by SKU
+      const matchedSkuSet = new Set<string>();
+
+      const catalogItems: UnifiedFranchiseProduct[] = finishedCatProducts.map((p: any) => {
+        const skuNorm = (p.sku || "").trim().toUpperCase();
+        if (skuNorm) matchedSkuSet.add(skuNorm);
+
+        // Match inventory item strictly by SKU to keep variants (e.g. 450G vs 900G) strictly independent
+        const inv = skuNorm
+          ? invItems.find((i) => (i.sku || "").trim().toUpperCase() === skuNorm)
+          : invItems.find((i) => (i.name || "").trim().toLowerCase() === (p.name || "").trim().toLowerCase());
+
+        const availableStock = inv ? Number(inv.currentStock || 0) : Number(p.currentStock || 0);
+        const unit = formatUnit(inv?.unit || p.unit);
+        const minimumStock = inv?.minimumStock ?? 10;
+        const packSize = formatPackSize(p.packSize || p.size, skuNorm);
+
+        // In-transit stock heading to this branch (orders with status DISPATCHED)
+        let inTransitStock = 0;
+        ordData.forEach((o: any) => {
+          if (o.status === "DISPATCHED") {
+            const items = o.items ?? [];
+            items.forEach((it: any) => {
+              const itSku = (it.product?.sku || it.sku || "").trim().toUpperCase();
+              if (
+                it.productId === p.id ||
+                (itSku && itSku === skuNorm) ||
+                (!skuNorm && it.product?.name?.toLowerCase() === p.name?.toLowerCase())
+              ) {
+                inTransitStock += Number(it.quantity || it.dispatchedQuantity || 0);
+              }
+            });
+          }
+        });
+
+        // Pending demand awaiting fulfillment from HQ
+        let pendingDemand = 0;
+        ordData.forEach((o: any) => {
+          if (o.status === "PENDING" || o.status === "APPROVED") {
+            const items = o.items ?? [];
+            items.forEach((it: any) => {
+              const itSku = (it.product?.sku || it.sku || "").trim().toUpperCase();
+              if (
+                it.productId === p.id ||
+                (itSku && itSku === skuNorm) ||
+                (!skuNorm && it.product?.name?.toLowerCase() === p.name?.toLowerCase())
+              ) {
+                pendingDemand += Number(it.quantity || 0);
+              }
+            });
+          }
+        });
+        reqData.forEach((r: any) => {
+          if (r.status === "PENDING") {
+            const prods = r.products ?? (r.details as any)?.products ?? [];
+            prods.forEach((it: any) => {
+              if (it.productId === p.id || it.productName?.toLowerCase() === p.name?.toLowerCase()) {
+                pendingDemand += Number(it.requestedQuantity || 0);
+              }
+            });
+          }
+        });
+
+        // Reserved stock for confirmed/processing customer/dealer orders
+        let reservedStock = 0;
+        soData.forEach((so: any) => {
+          if (["CONFIRMED", "PROCESSING", "PENDING"].includes(so.status)) {
+            const items = so.items ?? so.orderItems ?? [];
+            items.forEach((it: any) => {
+              const itSku = (it.sku || "").trim().toUpperCase();
+              if (
+                it.productId === p.id ||
+                (itSku && itSku === skuNorm) ||
+                (!skuNorm && it.productName?.toLowerCase() === p.name?.toLowerCase())
+              ) {
+                reservedStock += Number(it.quantity || 0);
+              }
+            });
+          }
+        });
+
+        return {
+          id: p.id,
+          name: p.name,
+          sku: p.sku || "N/A",
+          category: p.category || "Finished Good",
+          unit,
+          packSize,
+          availableStock,
+          reservedStock,
+          inTransitStock,
+          pendingDemand,
+          minimumStock,
+          rawProduct: p,
+          inventoryItem: inv || null,
+        };
+      });
+
+      // Unclaimed InventoryItems at this branch that have no matching Product catalog row
+      const unclaimedInvItems: UnifiedFranchiseProduct[] = invItems
+        .filter((it) => it.sku && !matchedSkuSet.has(it.sku.trim().toUpperCase()))
+        .map((it) => {
+          const skuNorm = (it.sku || "").trim().toUpperCase();
+          let inTransitStock = 0;
+          ordData.forEach((o: any) => {
+            if (o.status === "DISPATCHED") {
+              const items = o.items ?? [];
+              items.forEach((item: any) => {
+                const itSku = (item.product?.sku || item.sku || "").trim().toUpperCase();
+                if (itSku === skuNorm) {
+                  inTransitStock += Number(item.quantity || item.dispatchedQuantity || 0);
+                }
+              });
+            }
+          });
+
+          return {
+            id: `inv:${it.id}`,
+            name: it.name,
+            sku: it.sku,
+            category: "Finished Good",
+            unit: formatUnit(it.unit),
+            packSize: formatPackSize(it.packSize, skuNorm),
+            availableStock: Number(it.currentStock || 0),
+            reservedStock: 0,
+            inTransitStock,
+            pendingDemand: 0,
+            minimumStock: it.minimumStock ?? 10,
+            rawProduct: null,
+            inventoryItem: it,
+          };
+        });
 
       setBatches(scopedBatches);
-      setProducts(prodData);
+      setUnifiedProducts([...catalogItems, ...unclaimedInvItems]);
       setBranchOrders(ordData);
     } catch (e) {
       console.error("Failed to load franchise stock data:", e);
+      toast.error("Failed to load franchise inventory");
     } finally {
       setLoading(false);
     }
   }, [branchId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Real-time event listeners for seamless sync
+  useEffect(() => {
+    const handleRefresh = () => fetchData();
+    window.addEventListener("erp:refresh-product-requests", handleRefresh);
+    window.addEventListener("erp:refresh-franchise-orders", handleRefresh);
+    window.addEventListener("erp:refresh-inventory", handleRefresh);
+    window.addEventListener("focus", handleRefresh);
+    return () => {
+      window.removeEventListener("erp:refresh-product-requests", handleRefresh);
+      window.removeEventListener("erp:refresh-franchise-orders", handleRefresh);
+      window.removeEventListener("erp:refresh-inventory", handleRefresh);
+      window.removeEventListener("focus", handleRefresh);
+    };
+  }, [fetchData]);
 
   const handleProductFilter = (pid: string) => {
     setProductFilter(pid);
     fetchData(pid || undefined);
   };
 
-  const filteredBatches = batches.filter((b) => {
-    const status = b.expiryStatus ?? "VALID";
-    const matchExpiry  = expiryFilter === "ALL" || status === expiryFilter;
-    const matchSearch  = !searchTerm || (b.product?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
-    return matchExpiry && matchSearch;
-  });
+  // ── Multi-Unit Calculations ──────────────────────────────────────────
+  // Accurately aggregates per-unit buckets (e.g. "27 PC" and "196 PKT")
+  // without blindly combining different units together into a single number.
+  const sumByUnit = (getQty: (item: UnifiedFranchiseProduct) => number): Map<string, number> => {
+    const map = new Map<string, number>();
+    unifiedProducts.forEach((item) => {
+      const qty = getQty(item);
+      if (!qty || qty <= 0) return;
+      const unit = formatUnit(item.unit).toUpperCase();
+      map.set(unit, (map.get(unit) || 0) + qty);
+    });
+    return map;
+  };
 
-  const filteredProducts = products.filter((p) => {
-    if (!searchTerm) return true;
-    const q = searchTerm.toLowerCase();
+  const renderByUnit = (map: Map<string, number>): React.ReactNode => {
+    if (map.size === 0) return <span className="text-xl font-bold">0</span>;
+    const stacked = map.size > 1;
     return (
-      (p.name ?? "").toLowerCase().includes(q) ||
-      (p.sku ?? "").toLowerCase().includes(q) ||
-      (p.category ?? "").toLowerCase().includes(q)
+      <div className="space-y-0.5">
+        {Array.from(map.entries()).map(([unit, qty]) => (
+          <div key={unit} className={clsx("font-bold", stacked ? "text-base leading-tight" : "text-2xl")}>
+            {qty.toLocaleString("en-IN")}{" "}
+            <span className="text-xs font-semibold opacity-70 uppercase">{unit}</span>
+          </div>
+        ))}
+      </div>
     );
-  });
+  };
 
-  // Calculate stats for current branch
+  // Filtered Products for Catalog View
+  const filteredProducts = useMemo(() => {
+    return unifiedProducts.filter((p) => {
+      const q = searchTerm.toLowerCase();
+      const matchSearch =
+        !searchTerm ||
+        p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q);
+
+      let matchStock = true;
+      if (stockFilter === "IN_STOCK") {
+        matchStock = p.availableStock > 0;
+      } else if (stockFilter === "OUT_OF_STOCK") {
+        matchStock = p.availableStock <= 0;
+      } else if (stockFilter === "LOW_STOCK") {
+        matchStock = p.availableStock > 0 && p.availableStock <= p.minimumStock;
+      } else if (stockFilter === "IN_TRANSIT") {
+        matchStock = p.inTransitStock > 0;
+      } else if (stockFilter === "PENDING_DEMAND") {
+        matchStock = p.pendingDemand > 0;
+      }
+
+      return matchSearch && matchStock;
+    });
+  }, [unifiedProducts, searchTerm, stockFilter]);
+
+  // Filtered Batches for Expiry Ledger View
+  const filteredBatches = useMemo(() => {
+    return batches.filter((b) => {
+      const status = b.expiryStatus ?? "VALID";
+      const matchExpiry = expiryFilter === "ALL" || status === expiryFilter;
+      const matchSearch =
+        !searchTerm || (b.product?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
+      return matchExpiry && matchSearch;
+    });
+  }, [batches, expiryFilter, searchTerm]);
+
+  // ── Dashboard Metrics Stats ──────────────────────────────────────────
+  const inStockSkus = unifiedProducts.filter((p) => p.availableStock > 0).length;
+  const lowOrOutSkus = unifiedProducts.filter((p) => p.availableStock <= p.minimumStock).length;
+  const deliveredOrdersCount = branchOrders.filter((o) => o.status === "DELIVERED").length;
+  const pendingOrdersCount = branchOrders.filter((o) => o.status === "PENDING" || o.status === "APPROVED").length;
+
+  const availableByUnit = sumByUnit((i) => i.availableStock);
+  const reservedByUnit = sumByUnit((i) => i.reservedStock);
+  const inTransitByUnit = sumByUnit((i) => i.inTransitStock);
+  const pendingDemandByUnit = sumByUnit((i) => i.pendingDemand);
+
   const stats = {
-    totalProducts: products.length,
-    totalBatches: batches.length,
-    safeStockBatches: batches.filter((b) => (b.expiryStatus ?? "VALID") === "VALID").length,
-    damagedOrExpired: batches.filter((b) => b.expiryStatus === "EXPIRED").length,
+    totalProducts: unifiedProducts.length,
+    inStockSkus,
+    lowOrOutSkus,
+    availableStockNode: renderByUnit(availableByUnit),
+    reservedStockNode: renderByUnit(reservedByUnit),
+    inTransitStockNode: renderByUnit(inTransitByUnit),
+    pendingDemandNode: renderByUnit(pendingDemandByUnit),
+    hasPendingDemand: pendingDemandByUnit.size > 0 || pendingOrdersCount > 0,
+    deliveredOrdersCount,
+    pendingOrdersCount,
   };
 
   // Submit Demand Request from Catalog strictly using Product Master ID
@@ -135,7 +417,7 @@ export default function FranchiseStockPage() {
           {
             productId: requestModalProduct.id,
             productName: requestModalProduct.name,
-            unit: requestModalProduct.unit || "KG",
+            unit: requestModalProduct.unit || "PC",
             requestedQuantity: Number(requestQty),
           },
         ],
@@ -156,14 +438,14 @@ export default function FranchiseStockPage() {
               {
                 productName: requestModalProduct.name,
                 requestedQuantity: Number(requestQty),
-                unit: requestModalProduct.unit || "KG",
+                unit: requestModalProduct.unit || "PC",
               },
             ],
           },
         })
       );
 
-      toast.success(`Request for ${requestQty} ${requestModalProduct.unit || "KG"} submitted to Central HQ!`);
+      toast.success(`Request for ${requestQty} ${requestModalProduct.unit || "PC"} submitted to Central HQ!`);
       setRequestModalProduct(null);
       setRequestQty(10);
       setRequestRequiredBy("");
@@ -178,21 +460,37 @@ export default function FranchiseStockPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 py-8 px-4">
-      {/* ── Header Toolbar ── */}
-      <div className="flex items-center justify-end gap-6 pb-2 border-b border-slate-200 dark:border-white/10">
-        <div className="flex items-center gap-2.5 shrink-0">
+    <div className="max-w-[1600px] mx-auto space-y-6 sm:space-y-8 animate-in fade-in duration-500 py-6 px-4 sm:px-6 lg:px-8">
+      
+      {/* ── Top Section Header ── */}
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 pb-2 w-full min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight truncate">
+            Product Inventory
+          </h1>
+        </div>
+
+        {/* Quick Header Actions */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full lg:w-auto shrink-0 min-w-0">
           <button
             onClick={() => fetchData(productFilter || undefined)}
-            className="h-10 w-10 flex items-center justify-center rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-slate-400 hover:text-orange-500"
-            title="Refresh Data"
+            className="p-2.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-xl text-slate-400 hover:text-orange-500 hover:border-orange-500/30 transition-all shrink-0 shadow-sm"
+            title="Refresh Inventory Data"
           >
             <RefreshCw size={16} className={clsx(loading && "animate-spin text-orange-500")} />
           </button>
 
           <Link
+            href="/purchases/inward"
+            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap border border-slate-200 dark:border-white/10 shadow-sm"
+          >
+            <Plus size={14} className="text-orange-500" />
+            <span>Receive Stock</span>
+          </Link>
+
+          <Link
             href="/franchise-orders"
-            className="h-10 px-4 flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+            className="px-4 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-md shadow-orange-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 whitespace-nowrap"
           >
             <Truck size={14} />
             <span>Incoming Orders</span>
@@ -203,195 +501,427 @@ export default function FranchiseStockPage() {
         </div>
       </div>
 
-      {/* ── View Switcher & Stats Strip ── */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-2xl border border-slate-200 dark:border-white/10">
+      {/* ── Summary Metric Cards Strip (6 Franchise-Scoped Cards) ── */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full min-w-0">
+        <InventoryMetricCard
+          label="Total Products"
+          value={`${stats.totalProducts} SKU${stats.totalProducts === 1 ? "" : "s"}`}
+          subtext={`${stats.inStockSkus} in stock · ${stats.lowOrOutSkus} low/out`}
+          icon={Package}
+          colorTheme="slate"
+        />
+        <InventoryMetricCard
+          label="Available Stock"
+          value={stats.availableStockNode}
+          subtext={`${stats.inStockSkus} SKUs ready to sell`}
+          icon={Layers}
+          colorTheme="emerald"
+        />
+        <InventoryMetricCard
+          label="Reserved Stock"
+          value={stats.reservedStockNode}
+          subtext="Allocated for customer orders"
+          icon={Clock}
+          colorTheme="purple"
+        />
+        <InventoryMetricCard
+          label="In-Transit Stock"
+          value={stats.inTransitStockNode}
+          subtext="Dispatched from HQ"
+          icon={Truck}
+          colorTheme="indigo"
+        />
+        <InventoryMetricCard
+          label="Pending Demand"
+          value={stats.pendingDemandNode}
+          subtext={`${stats.pendingOrdersCount} orders awaiting HQ`}
+          icon={Send}
+          colorTheme="amber"
+          badge={stats.hasPendingDemand ? "Active Demand" : undefined}
+        />
+        <InventoryMetricCard
+          label="Received Orders"
+          value={`${stats.deliveredOrdersCount} Orders`}
+          subtext="Inwarded to branch stock"
+          icon={CheckCircle2}
+          colorTheme="blue"
+        />
+      </div>
+
+      {/* ── View Switcher, Search & Filter Toolbar ── */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 bg-white dark:bg-[#0A0D14] p-3.5 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm w-full min-w-0">
+        {/* Left: Tab Switcher */}
+        <div className="flex bg-slate-100 dark:bg-white/5 p-1 rounded-xl border border-slate-200 dark:border-white/10 shrink-0">
           <button
             onClick={() => setViewTab("CATALOG")}
             className={clsx(
-              "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2",
+              "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap",
               viewTab === "CATALOG"
-                ? "bg-white dark:bg-[#1a1d28] text-orange-500 shadow-sm border border-slate-200/60 dark:border-white/10"
+                ? "bg-white dark:bg-card text-orange-500 shadow-sm"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
             )}
           >
-            <Package size={14} /> Finished Product Catalog ({products.length})
+            <Package size={14} /> Finished Goods ({unifiedProducts.length})
           </button>
           <button
             onClick={() => setViewTab("BATCHES")}
             className={clsx(
-              "px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2",
+              "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 whitespace-nowrap",
               viewTab === "BATCHES"
-                ? "bg-white dark:bg-[#1a1d28] text-orange-500 shadow-sm border border-slate-200/60 dark:border-white/10"
+                ? "bg-white dark:bg-card text-orange-500 shadow-sm"
                 : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
             )}
           >
-            <Clock size={14} /> Branch Batch Expiry Ledger ({batches.length})
+            <Clock size={14} /> Batch Expiry Ledger ({batches.length})
           </button>
         </div>
 
-        {/* Branch Mini Stats */}
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 text-xs">
-            <span className="text-gray-400 font-bold">Safe Stock Batches:</span>{" "}
-            <span className="font-black text-emerald-600">{stats.safeStockBatches}</span>
-          </div>
-          <div className="px-4 py-2 bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 text-xs">
-            <span className="text-gray-400 font-bold">Damaged / Expired:</span>{" "}
-            <span className="font-black text-rose-500">{stats.damagedOrExpired}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Search Bar ── */}
-      <div className="bg-white dark:bg-card border border-slate-100 dark:border-white/5 rounded-[2rem] p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="relative flex items-center gap-3 px-4 py-2.5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-transparent w-full sm:w-80">
-          <Search size={16} className="text-slate-400" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search by product name, SKU, or category..."
-            className="bg-transparent text-xs font-bold text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-gray-400"
-          />
-          {searchTerm && (
-            <X 
-              size={14} 
-              className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-              onClick={() => setSearchTerm("")} 
+        {/* Right: Search, Filter chips, and View toggle */}
+        <div className="flex items-center gap-2.5 flex-wrap flex-1 justify-end min-w-0">
+          {/* Search Bar */}
+          <div className="relative flex items-center gap-2.5 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full sm:w-64 md:w-72 shadow-sm">
+            <Search size={14} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search product, SKU..."
+              className="bg-transparent text-xs font-medium text-slate-700 dark:text-zinc-300 outline-none w-full placeholder:text-slate-400"
             />
+            {searchTerm && (
+              <X
+                size={14}
+                className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                onClick={() => setSearchTerm("")}
+              />
+            )}
+          </div>
+
+          {viewTab === "CATALOG" && (
+            <>
+              {/* Demand / Status Filter Pills */}
+              <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto custom-scrollbar max-w-full">
+                {[
+                  { id: "ALL", label: "All" },
+                  { id: "IN_STOCK", label: "In Stock" },
+                  { id: "LOW_STOCK", label: "Low Stock" },
+                  { id: "OUT_OF_STOCK", label: "Out of Stock" },
+                  { id: "IN_TRANSIT", label: "In Transit" },
+                  { id: "PENDING_DEMAND", label: "Pending" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setStockFilter(f.id as any)}
+                    className={clsx(
+                      "px-3 py-1.5 rounded-md text-[11px] font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0",
+                      stockFilter === f.id
+                        ? "bg-white dark:bg-card text-orange-500 shadow-sm"
+                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* View Mode Switcher (Grid vs Table) */}
+              <div className="flex bg-slate-50 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 shrink-0">
+                <button
+                  onClick={() => setViewMode("TABLE")}
+                  className={clsx(
+                    "p-1.5 rounded-md transition-all",
+                    viewMode === "TABLE" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="Dense Ledger Table View"
+                >
+                  <List size={16} />
+                </button>
+                <button
+                  onClick={() => setViewMode("GRID")}
+                  className={clsx(
+                    "p-1.5 rounded-md transition-all",
+                    viewMode === "GRID" ? "bg-white dark:bg-card text-orange-500 shadow-sm" : "text-slate-400 hover:text-slate-600"
+                  )}
+                  title="Cards Grid View"
+                >
+                  <LayoutGrid size={16} />
+                </button>
+              </div>
+            </>
+          )}
+
+          {viewTab === "BATCHES" && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <select
+                value={productFilter}
+                onChange={(e) => handleProductFilter(e.target.value)}
+                className="px-3 py-2 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-zinc-400 outline-none shadow-sm"
+              >
+                <option value="">All Products</option>
+                {unifiedProducts.map((p) => (
+                  <option key={p.sku || p.id} value={p.id}>{p.name} {p.sku && p.sku !== "N/A" ? `(${p.sku})` : ""}</option>
+                ))}
+              </select>
+
+              <div className="flex gap-1 bg-slate-50 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                {FILTER_TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setExpiryFilter(t.key)}
+                    className={clsx(
+                      "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all",
+                      expiryFilter === t.key
+                        ? "bg-white dark:bg-card text-orange-500 shadow-sm"
+                        : "text-slate-400 hover:text-slate-600"
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
-
-        {viewTab === "BATCHES" && (
-          <div className="flex items-center gap-3 flex-wrap">
-            <select
-              value={productFilter}
-              onChange={(e) => handleProductFilter(e.target.value)}
-              className="px-4 py-2 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-100 dark:border-transparent text-xs font-bold text-slate-600 dark:text-zinc-400 outline-none"
-            >
-              <option value="">All Products</option>
-              {products.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-
-            <div className="flex gap-1 bg-slate-50 dark:bg-white/5 p-1 rounded-2xl border border-slate-100 dark:border-transparent">
-              {FILTER_TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setExpiryFilter(t.key)}
-                  className={clsx(
-                    "px-3.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all",
-                    expiryFilter === t.key
-                      ? "bg-white dark:bg-card text-orange-500 shadow-sm"
-                      : "text-slate-400 hover:text-slate-600"
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* ── View 1: Franchise Finished Goods Product Cards ── */}
+      {/* ── View 1: Catalog View (Dense Table or Cards Grid) ── */}
       {viewTab === "CATALOG" && (
         <div className="space-y-6">
           {loading ? (
             <div className="py-24 text-center text-slate-400 font-bold text-xs animate-pulse">
-              Loading Branch Finished Goods Catalog...
+              Syncing Branch Finished Goods Inventory...
             </div>
           ) : filteredProducts.length === 0 ? (
-            <div className="py-20 text-center bg-white dark:bg-card rounded-[2.5rem] border border-gray-100 dark:border-white/5 p-8 space-y-3">
+            <div className="py-20 text-center bg-white dark:bg-card rounded-[2.5rem] border border-gray-100 dark:border-white/5 p-8 space-y-3 shadow-sm">
               <Package size={48} strokeWidth={1} className="mx-auto text-slate-300" />
-              <p className="text-sm font-bold text-gray-700 dark:text-slate-300">No products found in franchise inventory</p>
-              <p className="text-xs text-gray-400">Products will appear here once dispatched from HQ and inwarded by your branch.</p>
+              <p className="text-sm font-bold text-gray-700 dark:text-slate-300">No products found matching filters</p>
+              <p className="text-xs text-gray-400">Products inwarded by your branch or available in the catalog will appear here.</p>
+              {(searchTerm || stockFilter !== "ALL") && (
+                <button
+                  onClick={() => { setSearchTerm(""); setStockFilter("ALL"); }}
+                  className="mt-2 text-xs font-bold text-orange-500 underline uppercase tracking-wider"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
+          ) : viewMode === "TABLE" ? (
+            /* ── DENSE LEDGER TABLE VIEW ── */
+            <div className="bg-white dark:bg-card border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-left table-auto min-w-[800px]">
+                  <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] font-semibold uppercase tracking-wider whitespace-nowrap">
+                    <tr>
+                      <th className="px-5 py-3.5">Finished Product Specification</th>
+                      <th className="px-4 py-3.5 text-center">Available Stock</th>
+                      <th className="px-4 py-3.5 text-center">Reserved</th>
+                      <th className="px-4 py-3.5 text-center">In-Transit</th>
+                      <th className="px-4 py-3.5 text-center">Pending Demand</th>
+                      <th className="px-4 py-3.5 text-center">Stock Status</th>
+                      <th className="w-[140px] px-5 py-3.5 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
+                    {filteredProducts.map((item) => {
+                      const isOutOfStock = item.availableStock <= 0;
+                      const isLowStock = item.availableStock > 0 && item.availableStock <= item.minimumStock;
+                      const isInTransitOnly = isOutOfStock && item.inTransitStock > 0;
+
+                      return (
+                        <tr key={item.id} className="group hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-all">
+                          {/* Product Spec */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold text-xs shrink-0">
+                                <Package size={18} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">
+                                  {item.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                                    SKU: {item.sku}
+                                  </span>
+                                  {item.packSize && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-white/5 text-slate-500 uppercase">
+                                      {item.packSize}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-semibold text-slate-400">
+                                    · Unit: {item.unit}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Available Stock */}
+                          <td className="px-4 py-4 text-center font-bold">
+                            <span className={clsx(
+                              "text-sm font-black",
+                              item.availableStock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                            )}>
+                              {item.availableStock}{" "}
+                              <span className="text-[10px] font-semibold opacity-70 uppercase">{item.unit}</span>
+                            </span>
+                          </td>
+
+                          {/* Reserved */}
+                          <td className="px-4 py-4 text-center">
+                            <span className={clsx(
+                              "font-bold text-xs",
+                              item.reservedStock > 0 ? "text-purple-600 dark:text-purple-400" : "text-slate-400"
+                            )}>
+                              {item.reservedStock}{" "}
+                              <span className="text-[10px] font-normal opacity-70 uppercase">{item.unit}</span>
+                            </span>
+                          </td>
+
+                          {/* In-Transit */}
+                          <td className="px-4 py-4 text-center">
+                            <span className={clsx(
+                              "font-bold text-xs",
+                              item.inTransitStock > 0 ? "text-indigo-600 dark:text-indigo-400" : "text-slate-400"
+                            )}>
+                              {item.inTransitStock}{" "}
+                              <span className="text-[10px] font-normal opacity-70 uppercase">{item.unit}</span>
+                            </span>
+                          </td>
+
+                          {/* Pending Demand */}
+                          <td className="px-4 py-4 text-center">
+                            <span className={clsx(
+                              "font-bold text-xs",
+                              item.pendingDemand > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400"
+                            )}>
+                              {item.pendingDemand}{" "}
+                              <span className="text-[10px] font-normal opacity-70 uppercase">{item.unit}</span>
+                            </span>
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="px-4 py-4 text-center">
+                            {isInTransitOnly ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50">
+                                In Transit
+                              </span>
+                            ) : isOutOfStock ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-slate-100 dark:bg-white/5 text-slate-500 border border-slate-200 dark:border-white/10">
+                                Out of Stock
+                              </span>
+                            ) : isLowStock ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/50">
+                                Low Stock
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/50">
+                                In Stock
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="px-5 py-4 text-right">
+                            <button
+                              onClick={() => {
+                                setRequestModalProduct(item.rawProduct || item);
+                                setRequestQty(10);
+                                setRequestRequiredBy("");
+                                setRequestNote("");
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-xs font-bold shadow-sm shadow-orange-500/20 transition-all active:scale-95 whitespace-nowrap"
+                            >
+                              <Plus size={13} strokeWidth={2.5} /> Request HQ
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProducts.map((prod: any) => {
-                // 1. Branch Available & Damaged Stock
-                const prodBatches = batches.filter((b) => b.productId === prod.id);
-                const batchSum = prodBatches
-                  .filter((b) => (b.expiryStatus ?? "VALID") !== "EXPIRED")
-                  .reduce((acc, b) => acc + Number(b.quantity || 0), 0);
-                const branchDamaged = prodBatches
-                  .filter((b) => b.expiryStatus === "EXPIRED")
-                  .reduce((acc, b) => acc + Number(b.quantity || 0), 0);
-
-                const branchAvailable = prodBatches.length > 0 ? batchSum : Number(prod.currentStock || 0);
-
-                // 2. In-Transit Quantity heading to this branch
-                let inTransitQty = 0;
-                branchOrders.forEach((o) => {
-                  if (o.status === "DISPATCHED") {
-                    const itemsList = o.items ?? [];
-                    const m = itemsList.find((it: any) => it.productId === prod.id || it.product?.name?.toLowerCase() === prod.name?.toLowerCase());
-                    if (m) inTransitQty += Number(m.quantity || 0);
-                  }
-                });
+            /* ── GRID CARDS VIEW ── */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+              {filteredProducts.map((prod) => {
+                const isOutOfStock = prod.availableStock <= 0;
+                const isLowStock = prod.availableStock > 0 && prod.availableStock <= prod.minimumStock;
 
                 return (
                   <div
                     key={prod.id}
-                    className="group bg-white dark:bg-card border border-slate-100 dark:border-white/5 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5"
+                    className="group bg-white dark:bg-card border border-slate-200/80 dark:border-white/5 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5"
                   >
                     <div>
-                      {/* Product Header */}
-                      <div className="flex items-start justify-between gap-3 mb-4">
-                        <div className="w-14 h-14 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-black text-lg shrink-0">
-                          <Package size={26} />
+                      {/* Product Card Header */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="w-13 h-13 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-black text-lg shrink-0">
+                          <Package size={24} />
                         </div>
-                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300">
+                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300">
                           {prod.category || "Finished Good"}
                         </span>
                       </div>
 
                       {/* Product Name & SKU */}
                       <div>
-                        <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight">
+                        <h3 className="text-base font-black text-slate-900 dark:text-white leading-tight">
                           {prod.name}
                         </h3>
-                        <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-wider">
-                          SKU: {prod.sku || "N/A"} · Unit: <strong>{prod.unit || "KG"}</strong>
+                        <p className="text-xs font-mono text-slate-400 mt-1 uppercase tracking-wider">
+                          SKU: {prod.sku} · Unit: <strong>{prod.unit}</strong>
+                          {prod.packSize && ` · ${prod.packSize}`}
                         </p>
                       </div>
 
-                      {/* Branch Stock Breakdown */}
-                      <div className="mt-5 space-y-2 pt-4 border-t border-gray-100 dark:border-white/5">
+                      {/* Stock Breakdown */}
+                      <div className="mt-5 space-y-2 pt-4 border-t border-slate-100 dark:border-white/5">
                         <div className="flex items-center justify-between text-xs py-1">
-                          <span className="text-gray-400 font-bold">Your Branch Available Stock:</span>
-                          <span className={clsx("font-black text-sm", branchAvailable > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400")}>
-                            {branchAvailable} {prod.unit || "KG"}
+                          <span className="text-slate-400 font-bold">Branch Available Stock:</span>
+                          <span className={clsx(
+                            "font-black text-sm",
+                            prod.availableStock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"
+                          )}>
+                            {prod.availableStock} {prod.unit}
                           </span>
                         </div>
 
-                        {branchDamaged > 0 && (
+                        {prod.reservedStock > 0 && (
                           <div className="flex items-center justify-between text-xs py-1">
-                            <span className="text-rose-500 font-bold">Your Branch Damaged Stock:</span>
-                            <span className="font-black text-rose-500">
-                              {branchDamaged} {prod.unit || "KG"}
+                            <span className="text-purple-500 font-bold">Reserved for Orders:</span>
+                            <span className="font-black text-purple-600 dark:text-purple-400">
+                              {prod.reservedStock} {prod.unit}
                             </span>
                           </div>
                         )}
 
-                        <div className="pt-1 text-center">
-                          <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+                        {prod.inTransitStock > 0 && (
+                          <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 text-center">
                             <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase">In-Transit Supply from HQ</p>
                             <p className="text-xs font-black text-indigo-600 dark:text-indigo-400 mt-0.5">
-                              {inTransitQty} {prod.unit || "KG"}
+                              {prod.inTransitStock} {prod.unit}
                             </p>
                           </div>
-                        </div>
+                        )}
+
+                        {prod.pendingDemand > 0 && (
+                          <div className="flex items-center justify-between text-xs py-1">
+                            <span className="text-amber-500 font-bold">Pending HQ Demand:</span>
+                            <span className="font-black text-amber-600 dark:text-amber-400">
+                              {prod.pendingDemand} {prod.unit}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="pt-4 border-t border-gray-100 dark:border-white/5 space-y-2">
+                    <div className="pt-4 border-t border-slate-100 dark:border-white/5 space-y-2">
                       <button
                         onClick={() => {
-                          setRequestModalProduct(prod);
+                          setRequestModalProduct(prod.rawProduct || prod);
                           setRequestQty(10);
                           setRequestRequiredBy("");
                           setRequestNote("");
@@ -477,7 +1007,7 @@ export default function FranchiseStockPage() {
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Available</p>
                         <p className={clsx("text-xl font-black tracking-tight", isLow ? "text-amber-500" : "text-slate-900 dark:text-white")}>
                           {batch.quantity}
-                          <span className="text-[10px] font-bold text-slate-400 ml-1.5 uppercase">{batch.product?.unit}</span>
+                          <span className="text-[10px] font-bold text-slate-400 ml-1.5 uppercase">{formatUnit(batch.product?.unit)}</span>
                         </p>
                       </div>
                       <div className="bg-slate-50 dark:bg-white/[0.02] rounded-2xl p-3.5 border border-slate-100 dark:border-transparent">
@@ -532,14 +1062,14 @@ export default function FranchiseStockPage() {
                 </div>
               </div>
               <span className="text-xs font-black px-3 py-1 bg-white dark:bg-card rounded-xl border border-orange-200 dark:border-orange-800/40 text-orange-600">
-                Unit: {requestModalProduct.unit || "KG"}
+                Unit: {formatUnit(requestModalProduct.unit)}
               </span>
             </div>
 
             {/* Quantity Input */}
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1.5">
-                Required Quantity ({requestModalProduct.unit || "KG"}) *
+                Required Quantity ({formatUnit(requestModalProduct.unit)}) *
               </label>
               <input
                 type="number"

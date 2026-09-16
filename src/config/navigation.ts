@@ -661,12 +661,12 @@ export const franchiseMenuSections: MenuSection[] = [
         href: "/purchases/inward",
         roles: FRANCHISE_ONLY,
       },
-      {
-        icon: Landmark,
-        label: "Supplier Ledger",
-        href: "/franchise/supplier-ledger",
-        roles: FRANCHISE_ONLY,
-      },
+      // {
+      //   icon: Landmark,
+      //   label: "Supplier Ledger",
+      //   href: "/franchise/supplier-ledger",
+      //   roles: FRANCHISE_ONLY,
+      // },
     ],
   },
   {

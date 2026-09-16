@@ -767,24 +767,7 @@ export default function FranchiseOrdersPage() {
       {/* Header Toolbar */}
       <div className="flex flex-col sm:flex-row gap-4 justify-end items-start sm:items-center print:hidden border-b border-slate-200 dark:border-slate-800 pb-4 w-full min-w-0">
 
-        {isFranchiseAdmin && franchiseData && (
-          <div className="hidden lg:flex items-center gap-4 text-xs font-semibold px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-            <div className="flex flex-col">
-              <span className="text-slate-500">Outstanding</span>
-              <span className="text-red-600">₹{(franchiseData.outstandingAmount || 0).toLocaleString("en-IN")}</span>
-            </div>
-            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
-            <div className="flex flex-col">
-              <span className="text-slate-500">Credit Limit</span>
-              <span className="text-slate-700 dark:text-slate-300">₹{(franchiseData.creditLimit || 0).toLocaleString("en-IN")}</span>
-            </div>
-            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
-            <div className="flex flex-col">
-              <span className="text-slate-500">Balance</span>
-              <span className="text-emerald-600">₹{(franchiseData.balanceLimit || 0).toLocaleString("en-IN")}</span>
-            </div>
-          </div>
-        )}
+
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <button
@@ -803,29 +786,6 @@ export default function FranchiseOrdersPage() {
         </div>
       </div>
 
-      {/* Guide Banner for Franchise Admins */}
-      {isFranchiseAdmin && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/20 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <div className="p-1.5 bg-emerald-500 text-white rounded-lg shrink-0 mt-0.5">
-              <CreditCard size={16} />
-            </div>
-            <div className="space-y-0.5">
-              <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-400">Monitor Payments</h4>
-              <p className="text-sm font-medium text-emerald-700/80 dark:text-emerald-500/80 leading-relaxed">
-                Every payment made to HQ is instantly logged. Monitor transactions in{" "}
-                <Link href="/accounting/payments" className="font-bold underline">
-                  Finance &rarr; Collections
-                </Link>{" "}
-                or review your{" "}
-                <Link href="/franchise/supplier-ledger" className="font-bold underline">
-                  Supplier Ledger
-                </Link>.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Stats Summary Row */}
       <div className="flex flex-col lg:flex-row gap-4 print:hidden w-full min-w-0">

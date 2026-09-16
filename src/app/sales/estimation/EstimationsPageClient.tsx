@@ -9,7 +9,8 @@ import {
   FileSpreadsheet, Copy, Filter, MoreVertical
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, dealersApi, franchiseApi, rawMaterialsApi, settingsApi, salesApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { customersApi, dealersApi, franchiseApi, productsApi, rawMaterialsApi, settingsApi, salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { exportToCsv } from "@/lib/export/exportHelpers";
 import api from "@/lib/api/base";
@@ -131,16 +132,39 @@ const DOC_LABELS: Record<DocumentType, {
   },
 };
 
-const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
+const ALL_PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
   { value: "CUSTOMER", label: "Customer" },
   { value: "DEALER", label: "Dealer" },
   { value: "FRANCHISE", label: "Franchise" },
 ];
 
+const FRANCHISE_USER_PARTY_TYPES: { value: "CUSTOMER" | "DEALER"; label: string }[] = [
+  { value: "CUSTOMER", label: "Customer" },
+  { value: "DEALER", label: "Dealer" },
+];
+
+const PARTY_TYPES = ALL_PARTY_TYPES;
+
 // Normalizes Customer / Dealer / Franchise master rows (different shapes)
 // into the one shape the party dropdown + auto-fill logic needs. Dealer has
 // no `state`/GSTIN field at all; Franchise has neither — those just come
 // back undefined, and the caller only auto-fills whatever is present.
+function getProductPackSize(p: any): string | null {
+  if (p?.packSize) {
+    if (typeof p.packSize === "string") return p.packSize;
+    if (typeof p.packSize === "object") {
+      const q = p.packSize.qty ?? p.packSize.quantity;
+      const u = p.packSize.unit ?? "";
+      if (q) return `${q} ${u}`.trim();
+    }
+  }
+  if (p?.sku && p.sku.includes("-")) {
+    const match = p.sku.match(/-(\d+(?:\.\d+)?)(KG|G|ML|L|PCS|PC|PKT)$/i);
+    if (match) return `${match[1]} ${match[2].toUpperCase()}`;
+  }
+  return null;
+}
+
 function normalizeParty(partyType: "CUSTOMER" | "DEALER" | "FRANCHISE", raw: any) {
   if (partyType === "FRANCHISE") {
     return {
@@ -391,6 +415,12 @@ export default function EstimationsPageClient({
   initialDraftData = null,
   onCancel,
 }: EstimationsPageClientProps) {
+  const { user } = useAuth();
+  const userRole = String((user as any)?.role?.name || user?.role || "").toUpperCase();
+  const isSuperAdmin = userRole === "SUPER_ADMIN" || userRole === "ADMIN" || userRole === "HQ";
+  const isFranchiseUser = userRole === "FRANCHISE_ADMIN" || (!isSuperAdmin && Boolean(user?.franchiseId));
+  const allowedPartyTypes = isFranchiseUser ? FRANCHISE_USER_PARTY_TYPES : ALL_PARTY_TYPES;
+
   const { showToast } = useToast();
   const router = useRouter();
   const L = DOC_LABELS[documentType];
@@ -524,13 +554,10 @@ export default function EstimationsPageClient({
       const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
         api.get(apiUrl, { params }).catch(() => ({ data: [] })),
         customersApi.getAll(),
-        // Estimates sell finished goods, not raw materials/semi-finished/packaging —
-        // exclude those categories to get the sellable Finished Goods catalog
-        // (real InventoryItem rows, with a real `unit`, unlike the old Product
-        // source this used to read from).
-        rawMaterialsApi.getAll(false, undefined, "RAW_MATERIAL,SEMI_FINISHED,PACKAGING"),
+        // Fetch finished goods catalog scoped to the franchise's real inventory stock & channel pricing
+        productsApi.getAll({ allProducts: "true", franchiseId: user?.franchiseId }),
         dealersApi.getAll(),
-        franchiseApi.getAll(),
+        isFranchiseUser ? Promise.resolve({ data: [] }) : franchiseApi.getAll(),
       ]);
 
       let apiEstimations = eRes.status === "fulfilled" ? (eRes.value as any).data || [] : [];
@@ -539,7 +566,11 @@ export default function EstimationsPageClient({
       // normal /api/sales/quotations endpoint below — no separate local draft store.
       setEstimations(apiEstimations);
       if (cRes.status === "fulfilled") setCustomers((cRes.value as any).data || []);
-      if (pRes.status === "fulfilled") setProducts((pRes.value as any).data || []);
+      if (pRes.status === "fulfilled") {
+        const rawP = (pRes.value as any)?.data;
+        const pList = Array.isArray(rawP) ? rawP : (Array.isArray(rawP?.data) ? rawP.data : []);
+        setProducts(pList);
+      }
       if (dRes.status === "fulfilled") setDealers((dRes.value as any).data || []);
       if (fRes.status === "fulfilled") setFranchises((fRes.value as any).data || []);
       return apiEstimations;
@@ -594,7 +625,7 @@ export default function EstimationsPageClient({
       const activeEl = document.activeElement as HTMLElement;
       if (activeEl && activeEl.tagName === "INPUT" && (activeEl as HTMLInputElement).placeholder === "Search item...") {
         const rect = activeEl.getBoundingClientRect();
-        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(420, rect.width) });
       }
     };
     window.addEventListener("scroll", updatePosition, true);
@@ -656,10 +687,18 @@ export default function EstimationsPageClient({
     setLoadedStatus(draft._rawState ? "DRAFT" : (draft.status || null));
     const raw = draft._rawState || {};
     if (draft._rawState) {
-      setPartyType(raw.partyType || "CUSTOMER");
-      setSelectedCustomer(raw.selectedCustomer || null);
-      setCustomerSearch(raw.customerSearch || "");
-      setCustomerPhone(raw.customerPhone || "");
+      let loadedPartyType = raw.partyType || "CUSTOMER";
+      if (isFranchiseUser && loadedPartyType === "FRANCHISE") {
+        loadedPartyType = "CUSTOMER";
+        setSelectedCustomer(null);
+        setCustomerSearch("");
+        setCustomerPhone("");
+      } else {
+        setSelectedCustomer(raw.selectedCustomer || null);
+        setCustomerSearch(raw.customerSearch || "");
+        setCustomerPhone(raw.customerPhone || "");
+      }
+      setPartyType(loadedPartyType);
       setInvoiceDate(raw.invoiceDate || new Date().toISOString().split("T")[0]);
       setStateOfSupply(raw.stateOfSupply || "");
       setRefNo(raw.refNo || "");
@@ -674,19 +713,25 @@ export default function EstimationsPageClient({
       // Legacy rows saved before partyType/partyId existed are always a
       // real Customer (that used to be the only option) — everything else
       // trusts the stored value.
-      const draftPartyType: "CUSTOMER" | "DEALER" | "FRANCHISE" = draft.partyType || "CUSTOMER";
-      const draftPartyId = draft.partyId || (draftPartyType === "CUSTOMER" ? draft.customerId : undefined);
+      let draftPartyType: "CUSTOMER" | "DEALER" | "FRANCHISE" = draft.partyType || "CUSTOMER";
+      const wasFranchiseLegacy = isFranchiseUser && draftPartyType === "FRANCHISE";
+      if (wasFranchiseLegacy) {
+        draftPartyType = "CUSTOMER";
+      }
+      const draftPartyId = wasFranchiseLegacy ? undefined : (draft.partyId || (draftPartyType === "CUSTOMER" ? draft.customerId : undefined));
       setPartyType(draftPartyType);
 
       const list = draftPartyType === "DEALER" ? dealers : draftPartyType === "FRANCHISE" ? franchises : customers;
-      const rawParty = draft.customer || list.find((p: any) => p.id === draftPartyId) || null;
-      const party = rawParty
-        ? normalizeParty(draftPartyType, rawParty)
-        : (draftPartyId ? { id: draftPartyId, name: draft.customerName || "", phone: draft.customerPhone || "", state: undefined as string | undefined } : null);
+      const rawParty = wasFranchiseLegacy ? null : (draft.customer || list.find((p: any) => p.id === draftPartyId) || null);
+      const party = wasFranchiseLegacy
+        ? null
+        : (rawParty
+          ? normalizeParty(draftPartyType, rawParty)
+          : (draftPartyId ? { id: draftPartyId, name: draft.customerName || "", phone: draft.customerPhone || "", state: undefined as string | undefined } : null));
 
       setSelectedCustomer(party);
-      setCustomerSearch((party ? party.name : "") || draft.customerName || "");
-      setCustomerPhone(draft.customerPhone || party?.phone || "");
+      setCustomerSearch((party ? party.name : "") || (wasFranchiseLegacy ? "" : (draft.customerName || "")));
+      setCustomerPhone(wasFranchiseLegacy ? "" : (draft.customerPhone || party?.phone || ""));
       setInvoiceDate(draft.validUntil ? new Date(draft.validUntil).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
       // Prefer the quotation's own persisted stateOfSupply — falling back to
       // the customer's current state only for legacy rows saved before this
@@ -764,7 +809,19 @@ export default function EstimationsPageClient({
   // Switching Party Type must never leave a Dealer/Franchise selection
   // showing while the field label still says the old type — clear the
   // whole party selection so the next pick is unambiguous.
+  // Safety guard: Franchise users can never have FRANCHISE partyType
+  useEffect(() => {
+    if (isFranchiseUser && partyType === "FRANCHISE") {
+      setPartyType("CUSTOMER");
+      setSelectedCustomer(null);
+      setCustomerSearch("");
+      setCustomerPhone("");
+      setStateOfSupply("");
+    }
+  }, [isFranchiseUser, partyType]);
+
   const handlePartyTypeChange = (next: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (isFranchiseUser && next === "FRANCHISE") return;
     if (next === partyType) return;
     setPartyType(next);
     setSelectedCustomer(null);
@@ -805,11 +862,16 @@ export default function EstimationsPageClient({
     const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
     const rate = getChannelPrice(p, partyType);
     const { discountPct, discountAmount } = getAutoDiscount(p, rate, partyType);
+    const packSize = getProductPackSize(p);
+    const displayName = packSize && !p.name.includes(packSize)
+      ? `${p.name} (${packSize})`
+      : p.name;
+
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
-        itemSearch: p.name,
+        itemSearch: displayName,
         rate,
         discountPct,
         discountAmount,
@@ -904,6 +966,10 @@ export default function EstimationsPageClient({
     const hasAnyData = !!selectedCustomer || !!customerSearch.trim() || items.some(i => i.productId || i.itemSearch.trim());
     if (isDraft && !hasAnyData) {
       setView("list");
+      return;
+    }
+    if (isFranchiseUser && partyType === "FRANCHISE") {
+      showToast("Franchise estimates can only be created for Customers or Dealers", "error");
       return;
     }
     if (!isDraft && !selectedCustomer) { showToast("Please select a party", "error"); return; }
@@ -1232,7 +1298,7 @@ export default function EstimationsPageClient({
   const totalConverted = filtered.filter(i => i.status === "CONVERTED").reduce((s, i) => s + (i.totalAmount || 0), 0);
   const totalOpen = filtered.filter(i => i.status === "SENT").reduce((s, i) => s + (i.totalAmount || 0), 0);
 
-  const partySourceList = partyType === "DEALER" ? dealers : partyType === "FRANCHISE" ? franchises : customers;
+  const partySourceList = partyType === "DEALER" ? dealers : (partyType === "FRANCHISE" && !isFranchiseUser) ? franchises : customers;
   const filteredCustomers = partySourceList.filter((c: any) =>
     !customerSearch ||
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -1507,7 +1573,7 @@ export default function EstimationsPageClient({
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party Type</label>
                   <div className="flex flex-wrap items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-card w-fit p-0.5">
-                    {PARTY_TYPES.map(pt => (
+                    {allowedPartyTypes.map(pt => (
                       <button
                         key={pt.value}
                         type="button"
@@ -1681,11 +1747,18 @@ export default function EstimationsPageClient({
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((item, idx) => {
                     const { taxAmt, amount } = computeRow(item, priceMode === "with_tax");
-                    const filtProd = products.filter(p =>
-                      !item.itemSearch ||
-                      p.name?.toLowerCase().includes(item.itemSearch.toLowerCase()) ||
-                      p.sku?.toLowerCase().includes(item.itemSearch.toLowerCase())
-                    ).slice(0, 200);
+                    const qRaw = (item.itemSearch || "").trim().toLowerCase();
+                    const cleanQ = qRaw.replace(/\([^)]*\)/g, "").trim();
+                    const q = cleanQ || qRaw;
+                    const filtProd = products.filter(p => {
+                      if (!qRaw) return true;
+                      if (item.productId && p.id === item.productId) return true;
+                      const nameMatch = p.name?.toLowerCase().includes(q) || qRaw.includes(p.name?.toLowerCase());
+                      const skuMatch = p.sku?.toLowerCase().includes(qRaw) || (cleanQ && p.sku?.toLowerCase().includes(cleanQ));
+                      const packSize = getProductPackSize(p);
+                      const packMatch = packSize && (qRaw.includes(packSize.toLowerCase()) || packSize.toLowerCase().includes(qRaw));
+                      return Boolean(nameMatch || skuMatch || packMatch);
+                    }).slice(0, 200);
                     const isItemDropOpen = openItemDrop === item.id;
                     return (
                       <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
@@ -1704,12 +1777,12 @@ export default function EstimationsPageClient({
                               updateItem(idx, "productId", "");
                               setOpenItemDrop(item.id);
                               const rect = e.target.getBoundingClientRect();
-                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(420, rect.width) });
                             }}
                             onFocus={e => {
                               setOpenItemDrop(item.id);
                               const rect = e.target.getBoundingClientRect();
-                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
+                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(420, rect.width) });
                             }}
                           />
                           {item.itemSearch && (
@@ -1741,35 +1814,88 @@ export default function EstimationsPageClient({
                                   }
                               }
                             >
-                              <button
-                                type="button"
-                                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
-                                onMouseDown={(e) => {
-                                  e.preventDefault();
-                                  setActiveItemIdx(idx);
-                                  setShowAddProduct(true);
-                                  setOpenItemDrop(null);
-                                }}
-                              >
-                                <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
-                                Add New Product
-                              </button>
-                              <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                                {filtProd.length === 0 ? (
-                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No products found</div>
+                              {isSuperAdmin && (
+                                <button
+                                  type="button"
+                                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 font-semibold shrink-0"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setActiveItemIdx(idx);
+                                    setShowAddProduct(true);
+                                    setOpenItemDrop(null);
+                                  }}
+                                >
+                                  <span className="w-4 h-4 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-xs leading-none">+</span>
+                                  Add New Product
+                                </button>
+                              )}
+                              <div className="max-h-60 overflow-y-auto custom-scrollbar">
+                                {loading && products.length === 0 ? (
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center flex items-center justify-center gap-2">
+                                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#f58220]" />
+                                    Loading products...
+                                  </div>
+                                ) : filtProd.length === 0 ? (
+                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">
+                                    No products found{item.itemSearch ? ` matching "${item.itemSearch}"` : ""}
+                                  </div>
                                 ) : (
-                                  filtProd.map(p => (
-                                    <button
-                                      key={p.id}
-                                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                                      onMouseDown={() => selectProduct(idx, p)}
-                                    >
-                                      <div>
-                                        <div className="text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">{p.sku ? `${p.sku} · ` : ""}₹{getChannelPrice(p, partyType)}</div>
-                                      </div>
-                                    </button>
-                                  ))
+                                  filtProd.map(p => {
+                                    const packSizeText = getProductPackSize(p);
+                                    const stockQty = Number(p.currentStock ?? 0);
+                                    const unitText = p.unit || "Units";
+                                    const price = getChannelPrice(p, partyType);
+                                    const isSelected = item.productId === p.id;
+
+                                    return (
+                                      <button
+                                        key={p.id || p.sku}
+                                        type="button"
+                                        className={clsx(
+                                          "w-full flex items-center justify-between px-3.5 py-2.5 text-left border-b border-gray-100 dark:border-white/5 last:border-0 transition-colors group",
+                                          isSelected ? "bg-orange-50/70 dark:bg-orange-500/10" : "hover:bg-orange-50/40 dark:hover:bg-white/5"
+                                        )}
+                                        onMouseDown={() => selectProduct(idx, p)}
+                                      >
+                                        <div className="flex-1 min-w-0 pr-3">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-semibold text-gray-800 dark:text-white group-hover:text-[#f58220] transition-colors">
+                                              {p.name}
+                                            </span>
+                                            {packSizeText && (
+                                              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 rounded border border-amber-200/70 dark:border-amber-500/20">
+                                                {packSizeText}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
+                                            {p.sku && (
+                                              <span className="font-mono text-[11px] text-gray-500 dark:text-slate-400 font-medium">
+                                                SKU: {p.sku}
+                                              </span>
+                                            )}
+                                            <span className="text-gray-300 dark:text-slate-600">•</span>
+                                            <span className={clsx(
+                                              "text-[11px] font-medium px-1.5 py-0.2 rounded",
+                                              stockQty > 0
+                                                ? "text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10"
+                                                : "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5"
+                                            )}>
+                                              Available: {stockQty} {unitText}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                          <div className="text-sm font-bold text-gray-900 dark:text-white">
+                                            ₹{Number(price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          </div>
+                                          <div className="text-[10px] text-gray-400 dark:text-slate-500 uppercase tracking-wider">
+                                            per {unitText}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    );
+                                  })
                                 )}
                               </div>
                             </div>
