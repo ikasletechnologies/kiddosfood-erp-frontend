@@ -289,7 +289,7 @@ export default function PurchaseBillsPage() {
   const [description, setDescription] = useState("");
   const [discount, setDiscount] = useState<number>(0);
   const [freight, setFreight] = useState<number>(0);
-  const [roundOffEnabled, setRoundOffEnabled] = useState(true);
+  const [roundOffEnabled, setRoundOffEnabled] = useState(false);
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [sourcePoId, setSourcePoId] = useState<string | null>(null);
@@ -514,6 +514,11 @@ export default function PurchaseBillsPage() {
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // A bill generated from an approved GRN must mirror it exactly — letting
+  // someone edit vendor/items/price here after the fact would desync the
+  // bill from the GRN it's supposed to reconcile against.
+  const isLockedFromGrn = Boolean(sourceGrnId);
 
   // Computed
   const rowData = items.map(item => ({ item, ...computeRow(item, priceMode) }));
@@ -840,33 +845,35 @@ export default function PurchaseBillsPage() {
                   <div className="relative" ref={vendorDropRef}>
                     <div
                       className={clsx(
-                        "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-white/5 transition-colors",
+                        "flex items-center gap-2 border rounded-lg px-3 py-2 bg-white dark:bg-white/5 transition-colors",
+                        isLockedFromGrn ? "cursor-not-allowed opacity-70" : "cursor-pointer",
                         showVendorDrop ? "border-orange-400 ring-1 ring-orange-100 dark:ring-orange-950/40" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
                       )}
-                      onClick={() => setShowVendorDrop(v => !v)}
+                      onClick={() => { if (!isLockedFromGrn) setShowVendorDrop(v => !v); }}
                     >
                       <input
-                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 disabled:cursor-not-allowed"
                         placeholder="Search by vendor name..."
                         value={vendorSearch}
+                        disabled={isLockedFromGrn}
                         onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
                         onClick={e => { e.stopPropagation(); setShowVendorDrop(true); }}
                       />
-                      {(vendorSearch || selectedVendor) && (
-                        <X 
-                          size={14} 
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setVendorSearch(""); 
-                            setSelectedVendor(null); 
+                      {!isLockedFromGrn && (vendorSearch || selectedVendor) && (
+                        <X
+                          size={14}
+                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setVendorSearch("");
+                            setSelectedVendor(null);
                             setVendorPhone("");
-                          }} 
+                          }}
                         />
                       )}
-                      <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                      {!isLockedFromGrn && <ChevronDown size={13} className="text-gray-400 shrink-0" />}
                     </div>
-                    {showVendorDrop && (
+                    {!isLockedFromGrn && showVendorDrop && (
                       <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
                         <div className="max-h-48 overflow-y-auto custom-scrollbar">
                           {filteredVendors.length === 0 ? (
@@ -980,15 +987,26 @@ export default function PurchaseBillsPage() {
           {/* Items Table */}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">
+                Items
+                {isLockedFromGrn && (
+                  <span className="ml-2 inline-flex items-center gap-1 normal-case text-[10px] font-semibold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-900/40 rounded-full px-2 py-0.5">
+                    Locked — matches approved GRN
+                  </span>
+                )}
+              </span>
               <div className="relative" ref={priceDropRef}>
-                <button onClick={() => setShowPriceDrop(v => !v)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-white/5 hover:border-gray-400 dark:hover:border-white/20 transition-colors"
+                <button onClick={() => { if (!isLockedFromGrn) setShowPriceDrop(v => !v); }}
+                  disabled={isLockedFromGrn}
+                  className={clsx(
+                    "flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-white/5 transition-colors",
+                    isLockedFromGrn ? "cursor-not-allowed opacity-70" : "hover:border-gray-400 dark:hover:border-white/20"
+                  )}
                 >
                   Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
-                  <ChevronDown size={11} />
+                  {!isLockedFromGrn && <ChevronDown size={11} />}
                 </button>
-                {showPriceDrop && (
+                {!isLockedFromGrn && showPriceDrop && (
                   <div className="absolute top-full right-0 mt-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg text-xs w-44 z-50 overflow-hidden">
                     <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("without_tax"); setShowPriceDrop(false); }}>Excl. Tax (Without Tax)</button>
                     <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200" onClick={() => { setPriceMode("with_tax"); setShowPriceDrop(false); }}>Incl. Tax (With Tax)</button>
@@ -1019,9 +1037,10 @@ export default function PurchaseBillsPage() {
                         <td className="px-3 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                         <td className="px-3 py-2">
                           <input
-                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 disabled:cursor-not-allowed disabled:opacity-70"
                             placeholder="Enter item name..."
                             value={item.name}
+                            disabled={isLockedFromGrn}
                             onChange={e => updateItem(idx, "name", e.target.value)}
                           />
                         </td>
@@ -1029,13 +1048,18 @@ export default function PurchaseBillsPage() {
                           <input
                             type="number" min={0}
                             value={item.qty}
+                            disabled={isLockedFromGrn}
                             onChange={e => updateItem(idx, "qty", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-center outline-none bg-transparent disabled:cursor-not-allowed disabled:opacity-70"
                           />
                         </td>
                         <td style={{ position: "relative", overflow: "visible" }} className="unit-dropdown-container">
                           <button
-                            className="w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
+                            disabled={isLockedFromGrn}
+                            className={clsx(
+                              "w-full flex items-center justify-center gap-0.5 px-2 py-2.5 text-xs text-gray-700 dark:text-slate-300",
+                              isLockedFromGrn ? "cursor-not-allowed opacity-70" : "hover:bg-gray-50 dark:hover:bg-white/5"
+                            )}
                             onClick={e => {
                               const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                               setUnitDropRect({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
@@ -1043,9 +1067,9 @@ export default function PurchaseBillsPage() {
                             }}
                           >
                             <span>{UNITS.find(u => u.code === item.unit)?.short ?? item.unit}</span>
-                            <ChevronDown size={9} className="text-gray-400 shrink-0" />
+                            {!isLockedFromGrn && <ChevronDown size={9} className="text-gray-400 shrink-0" />}
                           </button>
-                          {openUnitDrop === item.id && unitDropRect && (
+                          {!isLockedFromGrn && openUnitDrop === item.id && unitDropRect && (
                             <div className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-y-auto"
                               style={{ position: "fixed", top: unitDropRect.top + 2, left: unitDropRect.left, width: 180, maxHeight: 220, zIndex: 9999 }}
                             >
@@ -1068,20 +1092,22 @@ export default function PurchaseBillsPage() {
                             type="number" min={0}
                             value={item.rate || ""}
                             placeholder="0"
+                            disabled={isLockedFromGrn}
                             onChange={e => updateItem(idx, "rate", Number(e.target.value))}
-                            className="w-full text-sm text-gray-700 dark:text-white text-right outline-none bg-transparent"
+                            className="w-full text-sm text-gray-700 dark:text-white text-right outline-none bg-transparent disabled:cursor-not-allowed disabled:opacity-70"
                           />
                         </td>
                         <td className="px-2 py-2.5">
                           <select
                             value={item.taxLabel}
+                            disabled={isLockedFromGrn}
                             onChange={e => {
                               const label = e.target.value;
                               const opt = TAX_OPTIONS.find(o => o.label === label);
                               updateItem(idx, "taxLabel", label);
                               updateItem(idx, "taxPct", opt?.value ?? 0);
                             }}
-                            className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer"
+                            className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
                           >
                             {TAX_OPTIONS.map((t, i) => <option key={i} value={t.label} className="dark:bg-[#13151f]">{t.label}</option>)}
                           </select>
@@ -1090,11 +1116,13 @@ export default function PurchaseBillsPage() {
                           {amount > 0 ? amount.toFixed(2) : "—"}
                         </td>
                         <td className="pr-2">
-                          <button onClick={() => removeRow(idx)}
-                            className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {!isLockedFromGrn && (
+                            <button onClick={() => removeRow(idx)}
+                              className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity p-1"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -1104,11 +1132,13 @@ export default function PurchaseBillsPage() {
             </div>
 
             <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.01]">
-              <button onClick={addRow}
-                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-900/40 px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Plus size={13} /> Add Row
-              </button>
+              {isLockedFromGrn ? <span /> : (
+                <button onClick={addRow}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-900/40 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <Plus size={13} /> Add Row
+                </button>
+              )}
               <span className="text-xs text-gray-500 dark:text-slate-400">
                 Total Tax: <span className="font-semibold text-gray-700 dark:text-slate-200">₹ {totalTax.toFixed(2)}</span>
               </span>

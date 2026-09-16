@@ -133,10 +133,14 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
         ? true
         : vendorState.includes(companyState) || companyState.includes(vendorState);
 
+  // Purchase-side documents don't round to the nearest rupee — only sales
+  // documents (which expose their own "Round Off" checkbox) do that, and
+  // even they only when the caller explicitly opts in.
+  const isPurchaseSideDoc = documentType === "PURCHASE_ORDER" || documentType === "GRN" || documentType === "PURCHASE_INVOICE";
   const calcResult = calculateSalesDocumentTotals(
     items,
     order.priceMode || "without_tax",
-    order.roundOffEnabled ?? true,
+    order.roundOffEnabled ?? !isPurchaseSideDoc,
     safe(order.discount ?? order.discountAmount ?? 0)
   );
 

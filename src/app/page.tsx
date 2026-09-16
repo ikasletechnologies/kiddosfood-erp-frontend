@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
+import {
   Package,
   TrendingUp,
   AlertTriangle,
@@ -506,13 +506,13 @@ export default function Dashboard() {
                     onChange={(e) => setOutletSearch(e.target.value)}
                     className="w-full px-3 py-2 sm:py-1.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-xs outline-none focus:border-[#F58220] text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
-            {outletSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setOutletSearch("")} 
-              />
-            )}
+                  {outletSearch && (
+                    <X
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setOutletSearch("")}
+                    />
+                  )}
                 </div>
 
                 <div className="max-h-56 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
@@ -698,7 +698,7 @@ export default function Dashboard() {
             }))}
             emptyTitle="No Recent Purchase Orders"
             actionText="+ Create Purchase Order"
-            actionHref="/purchases/new"
+            actionHref="/purchases/orders"
           />
 
           {/* Table 2: Recent B2B Sales Details */}

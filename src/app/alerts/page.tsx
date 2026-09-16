@@ -110,7 +110,9 @@ export default function AlertsPage() {
           time: "Just now",
           read: currentReadIds.has(item.id ?? `inv-${i}`),
           actionLabel: isFranchise ? "Order from HQ" : "Reorder",
-          actionHref: isFranchise ? "/franchise-orders" : "/purchases/new",
+          actionHref: isFranchise
+            ? "/franchise-orders"
+            : `/purchases/new?materialId=${encodeURIComponent(item.id ?? "")}&qty=${encodeURIComponent(minVal)}`,
         };
       });
 

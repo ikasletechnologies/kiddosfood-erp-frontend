@@ -1130,7 +1130,7 @@ export default function PurchaseOrdersClient() {
                         const gRate = Number(item.gstRate) || 0;
                         return (
                           <tr key={idx} className="hover:bg-slate-100/50 dark:hover:bg-white/[0.02]">
-                            <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.itemCode || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
+                            <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{item.inventoryItem?.sku || item.inventoryItem?.id?.slice(0, 8) || "—"}</td>
                             <td className="px-4 py-3 text-xs font-bold text-slate-800 dark:text-white">{item.inventoryItem?.name}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-slate-700 dark:text-slate-300">{formatQuantity(item.quantity, item.inventoryItem?.unit)}</td>
                             <td className="px-4 py-3 text-xs text-right font-semibold text-emerald-600 dark:text-emerald-400">{formatQuantity(rQty, item.inventoryItem?.unit)}</td>

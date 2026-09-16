@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2, Info } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import { vendorsApi, customersApi, gstApi } from "@/lib/api";
+import { INDIAN_STATES } from "@/lib/sales-ui";
 
 export interface AddPartyModalProps {
   isOpen: boolean;
@@ -627,12 +628,16 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">State</label>
-                    <input
-                      placeholder="State"
+                    <select
                       value={form.state}
                       onChange={(e) => setForm({...form, state: e.target.value})}
                       className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
-                    />
+                    >
+                      <option value="">Select State</option>
+                      {INDIAN_STATES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">City</label>
@@ -720,35 +725,6 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       />
                       <span className="text-sm font-medium text-gray-700 dark:text-slate-300">To Receive</span>
                     </label>
-                  </div>
-
-                  <div className="border border-gray-200 dark:border-white/10 rounded-xl p-4 space-y-2 bg-slate-50/50 dark:bg-white/[0.02]">
-                    <div className="flex items-center gap-1">
-                      <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Credit Limit</label>
-                      <Info size={12} className="text-gray-400" />
-                    </div>
-                    <div className="flex items-center gap-3 pt-1">
-                      <span className={clsx("text-sm transition-colors", form.noCreditLimit ? "text-blue-500 font-medium" : "text-gray-400")}>No Limit</span>
-                      <button
-                        onClick={() => setForm({...form, noCreditLimit: !form.noCreditLimit})}
-                        className={clsx("w-9 h-5 rounded-full relative transition-colors", form.noCreditLimit ? "bg-blue-500" : "bg-gray-300 dark:bg-white/20")}
-                      >
-                        <div className={clsx("w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-all shadow-sm", form.noCreditLimit ? "left-5" : "left-1")} />
-                      </button>
-                      <span className={clsx("text-sm transition-colors", !form.noCreditLimit ? "text-gray-700 dark:text-slate-300 font-medium" : "text-gray-400")}>Custom Limit</span>
-                    </div>
-
-                    {!form.noCreditLimit && (
-                      <div className="pt-2 animate-in fade-in slide-in-from-top-2">
-                        <input
-                          type="number"
-                          placeholder="Enter limit amount..."
-                          value={form.customCreditLimit}
-                          onChange={(e) => setForm({...form, customCreditLimit: e.target.value})}
-                          className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
