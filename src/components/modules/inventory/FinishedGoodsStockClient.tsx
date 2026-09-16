@@ -428,13 +428,13 @@ export default function FinishedGoodsStockClient() {
         // 2. Product Requests (FPR)
         const prodFprs = fprs.filter((r: any) => {
           const prods = r.products ?? (r.details as any)?.products ?? [];
-          return prods.some((p: any) => p.productId === pid || p.productName?.toLowerCase() === prod.name?.toLowerCase());
+          return prods.some((p: any) => p.productId === pid || (!p.productId && !prod.sku && p.productName?.toLowerCase() === prod.name?.toLowerCase()));
         });
 
         // 3. Supply Orders (FO)
         const prodFos = fos.filter((o: any) => {
           const itemsList = o.items ?? [];
-          return itemsList.some((it: any) => it.productId === pid || it.product?.name?.toLowerCase() === prod.name?.toLowerCase());
+          return itemsList.some((it: any) => it.productId === pid || (!it.productId && !prod.sku && it.product?.name?.toLowerCase() === prod.name?.toLowerCase()));
         });
 
         // Calculate Demand Buckets without double-counting (using sourceRequestId link)
@@ -450,7 +450,7 @@ export default function FinishedGoodsStockClient() {
         // FPR records
         prodFprs.forEach((fpr: any) => {
           const prods = fpr.products ?? (fpr.details as any)?.products ?? [];
-          const match = prods.find((p: any) => p.productId === pid || p.productName?.toLowerCase() === prod.name?.toLowerCase());
+          const match = prods.find((p: any) => p.productId === pid || (!p.productId && !prod.sku && p.productName?.toLowerCase() === prod.name?.toLowerCase()));
           if (!match) return;
 
           const reqQty = Number(match.requestedQuantity || 0);
@@ -479,7 +479,7 @@ export default function FinishedGoodsStockClient() {
         // FO records (Execution / Supply orders)
         prodFos.forEach((fo: any) => {
           const itemsList = fo.items ?? [];
-          const match = itemsList.find((it: any) => it.productId === pid || it.product?.name?.toLowerCase() === prod.name?.toLowerCase());
+          const match = itemsList.find((it: any) => it.productId === pid || (!it.productId && !prod.sku && it.product?.name?.toLowerCase() === prod.name?.toLowerCase()));
           if (!match) return;
 
           const qty = Number(match.quantity || 0);

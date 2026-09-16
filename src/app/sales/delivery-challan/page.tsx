@@ -1,16 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Truck, Plus, Search, RefreshCw, X, FileText,
   User, Check, Package, Calendar,
   MapPin, Hash, ArrowRight,
   ChevronDown, Trash2, MoreVertical,
-  ArrowLeft, Download, FileSpreadsheet, Printer, Pencil
+  ArrowLeft, Download, FileSpreadsheet, Printer, Pencil,
+  Loader2
 } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi, posApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
@@ -213,6 +216,10 @@ const isValidPhone = (v: string) => v === "" || /^\d{10}$/.test(v);
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function DeliveryChallanPage() {
+  const { user } = useAuth();
+  const isFranchiseUser = user?.role === "FRANCHISE_ADMIN" || Boolean(user?.franchiseId);
+  const franchiseBranchId = user?.franchiseId || "";
+
   const { showToast } = useToast();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -253,8 +260,7 @@ export default function DeliveryChallanPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
-  // Empty until resolved to the real HQ franchise once `franchises` loads
-  // (see the effect below) — there's no fixed literal id to default to.
+  // Scoped to the logged-in franchise branch for franchise users, or HQ for super admins
   const [sourceFranchiseId, setSourceFranchiseId] = useState("");
   const [vehicleNo, setVehicleNo] = useState("");
   const [driverName, setDriverName] = useState("");
@@ -267,27 +273,77 @@ export default function DeliveryChallanPage() {
   const [showPriceDrop, setShowPriceDrop] = useState(false);
   
   // Dialog drop/floating states
-  const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
-  const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+  const [activeInputEl, setActiveInputEl] = useState<HTMLInputElement | null>(null);
+  const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+  const dropdownPortalRef = useRef<HTMLDivElement>(null);
+
+  const calculateDropdownPosition = useCallback((el: HTMLElement) => {
+    const rect = el.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const dropWidth = Math.min(Math.max(rect.width, 380), viewportWidth - 24);
+
+    let left = rect.left;
+    if (left + dropWidth > viewportWidth - 12) {
+      left = Math.max(12, viewportWidth - dropWidth - 12);
+    }
+    if (left < 12) left = 12;
+
+    const spaceBelow = viewportHeight - rect.bottom;
+    let top = rect.bottom + 6;
+    let maxHeight = Math.min(340, spaceBelow - 16);
+
+    // If tight below but plenty above, flip upwards
+    if (spaceBelow < 220 && rect.top > 240) {
+      maxHeight = Math.min(340, rect.top - 20);
+      top = Math.max(10, rect.top - maxHeight - 6);
+    } else {
+      maxHeight = Math.max(160, maxHeight);
+    }
+
+    return { top, left, width: dropWidth, maxHeight };
+  }, []);
+
+  // Sync portal position on scroll and resize
+  useEffect(() => {
+    if (activeItemIndex === null || !activeInputEl) return;
+    const updatePos = () => {
+      const rect = activeInputEl.getBoundingClientRect();
+      if (rect.bottom < 40 || rect.top > window.innerHeight - 40) {
+        // Scrolled out of view
+        setActiveItemIndex(null);
+        return;
+      }
+      setDropdownRect(calculateDropdownPosition(activeInputEl));
+    };
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [activeItemIndex, activeInputEl, calculateDropdownPosition]);
+
+  // Close portal dropdown on click outside
+  useEffect(() => {
+    const handlePointerDown = (e: MouseEvent) => {
+      if (activeItemIndex === null) return;
+      if (activeInputEl && activeInputEl.contains(e.target as Node)) return;
+      if (dropdownPortalRef.current && dropdownPortalRef.current.contains(e.target as Node)) return;
+      setActiveItemIndex(null);
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [activeItemIndex, activeInputEl]);
+
   const [openUnitDrop, setOpenUnitDrop] = useState<string | null>(null);
   const [openTaxDrop, setOpenTaxDrop] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!openItemDrop) return;
-    const updatePosition = () => {
-      const activeEl = document.activeElement as HTMLElement;
-      if (activeEl && activeEl.tagName === "INPUT" && (activeEl as HTMLInputElement).placeholder === "Search product...") {
-        const rect = activeEl.getBoundingClientRect();
-        setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
-      }
-    };
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
-    return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
-    };
-  }, [openItemDrop]);
   
   // Custom Notes / Terms Fields
   const [termsText, setTermsText] = useState("");
@@ -298,11 +354,6 @@ export default function DeliveryChallanPage() {
   const [showShareDrop, setShowShareDrop] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(null);
-  // One key per "New Challan" form session — a retry/double-click on Save/
-  // Dispatch that races past disabled={saving} hits SalesService.
-  // createDeliveryChallan's idempotency check server-side and returns the
-  // already-created challan (and its already-deducted stock) instead of
-  // dispatching a second time.
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
   const [previewingChallan, setPreviewingChallan] = useState<any>(null);
@@ -331,6 +382,15 @@ export default function DeliveryChallanPage() {
     return () => document.removeEventListener("mousedown", handleDocClick);
   }, []);
 
+  // Guarantee franchise user cannot have destination = FRANCHISE
+  useEffect(() => {
+    if (isFranchiseUser && destType === "FRANCHISE") {
+      setDestType("CUSTOMER");
+      setSelectedFranchise(null);
+      setCustomerSearch("");
+    }
+  }, [isFranchiseUser, destType]);
+
   // ── Data Fetching ────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
@@ -339,7 +399,7 @@ export default function DeliveryChallanPage() {
       const [cRes, dlRes, pRes, fRes, wRes, dcRes, cpRes] = await Promise.allSettled([
         customersApi.getAll(),
         dealersApi.getAll(),
-        productsFullApi.getAll(),
+        productsFullApi.getAll({ includeAll: true }),
         franchiseApi.getAll(),
         inventoryApi.getWarehouses(),
         salesApi.getDeliveryChallans(),
@@ -733,7 +793,7 @@ export default function DeliveryChallanPage() {
         conversions: p.unitConversions || p.conversions || [],
       } : it
     ));
-    setOpenItemDrop(null);
+    setActiveItemIndex(null);
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
@@ -791,23 +851,25 @@ export default function DeliveryChallanPage() {
     }
   };
 
-  // Prefer the real HQ franchise (see FranchiseService.getHqFranchise) —
-  // never a hardcoded literal id, which silently breaks the moment that id
-  // stops being a real Franchise row. Falls back to the first franchise in
-  // the list only when no franchise is flagged isHQ yet, so the field
-  // still has something usable rather than staying stuck empty.
-  const defaultSourceFranchiseId = () => franchises.find((f: any) => f.isHQ)?.id || franchises[0]?.id || "";
+  // For franchise users, lock to their own franchise ID.
+  // For Super Admins, prefer the real HQ franchise.
+  const defaultSourceFranchiseId = useCallback(() => {
+    if (isFranchiseUser && franchiseBranchId) {
+      return franchiseBranchId;
+    }
+    return franchises.find((f: any) => f.isHQ)?.id || franchises[0]?.id || "";
+  }, [isFranchiseUser, franchiseBranchId, franchises]);
 
-  // Same resolution, applied once the franchise list actually loads — the
-  // initial useState("") and the quick-add-restore path both run before
-  // `franchises` is populated, so they can't call defaultSourceFranchiseId()
-  // synchronously. Never overrides a value the user (or a resumed draft)
-  // already set.
+  // Sync source warehouse to branch for franchise users or default for super admins
   useEffect(() => {
-    if (!sourceFranchiseId && franchises.length > 0) {
+    if (isFranchiseUser && franchiseBranchId) {
+      if (sourceFranchiseId !== franchiseBranchId) {
+        setSourceFranchiseId(franchiseBranchId);
+      }
+    } else if (!sourceFranchiseId && franchises.length > 0) {
       setSourceFranchiseId(defaultSourceFranchiseId());
     }
-  }, [franchises]);
+  }, [isFranchiseUser, franchiseBranchId, franchises, sourceFranchiseId, defaultSourceFranchiseId]);
 
   const resetForm = () => {
     setDraftId(null);
@@ -834,6 +896,12 @@ export default function DeliveryChallanPage() {
   };
 
   const handleSave = async (status: "DRAFT" | "IN_TRANSIT") => {
+    // Security check: Franchise users cannot create Delivery Challans for Franchise destinations
+    if (isFranchiseUser && destType === "FRANCHISE") {
+      showToast("Franchise destination is not permitted for Franchise portal.", "error");
+      return;
+    }
+
     // Applies to both Save Draft and Save Challan, and whether the number was typed
     // or auto-filled from the selected customer/franchise record.
     if (!isValidPhone(customerPhone)) {
@@ -858,29 +926,6 @@ export default function DeliveryChallanPage() {
       return;
     }
 
-    if (status === "IN_TRANSIT") {
-      for (const it of validItems) {
-        if (!isBatchControlled(it.productId)) continue;
-        const valid = getValidBatches(it.productId);
-        if (valid.length === 0) {
-          showToast("No available batch found for this product in the selected warehouse.", "error");
-          return;
-        }
-        if (!it.batchNumber) {
-          showToast(`Select a batch for ${it.itemSearch}`, "error");
-          return;
-        }
-        const chosen = valid.find(b => (b.batchCode || b.id) === it.batchNumber);
-        if (!chosen) {
-          showToast(`Selected batch for ${it.itemSearch} is no longer available. Please reselect.`, "error");
-          return;
-        }
-        if (it.qty > (chosen.availableQuantity || 0)) {
-          showToast(`Quantity for ${it.itemSearch} exceeds available batch stock (${chosen.availableQuantity}).`, "error");
-          return;
-        }
-      }
-    }
 
     setSaving(true);
     const apiPayload = {
@@ -1221,356 +1266,771 @@ export default function DeliveryChallanPage() {
   // ════════════════════════════════════════════════════════════════════════════
   if (view === "create" || view === "edit") {
     return (
-      <div className="flex flex-col bg-gray-50 dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0" style={{ minHeight: "calc(100vh - 80px)" }}>
+      <div className="flex flex-col bg-gray-50 dark:bg-background -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0 overflow-x-hidden" style={{ minHeight: "calc(100vh - 80px)" }}>
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0 sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => {
                 setView("list");
                 resetForm();
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              title="Back to Challans"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="text-base font-bold text-gray-800 dark:text-white truncate">
-              {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
-            </h2>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
+                {view === "create" ? "Add Delivery Challan" : `Edit Challan #${challanNo}`}
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                {isFranchiseUser ? "Create challan for Customer or Dealer dispatch" : "Issue and dispatch goods to recipient"}
+              </p>
+            </div>
           </div>
-          <span className="text-xs text-gray-400 dark:text-slate-500 shrink-0">Challan No: <span className="text-orange-500 font-semibold">{challanNo}</span></span>
+          <div className="flex items-center gap-2 shrink-0">
+            {isFranchiseUser && (
+              <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg text-xs font-semibold bg-orange-50 text-orange-700 dark:bg-orange-500/10 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20">
+                Franchise Portal
+              </span>
+            )}
+            <span className="text-xs font-mono text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-white/5 px-2.5 py-1 rounded-lg border border-gray-200 dark:border-white/10">
+              DC #{challanNo}
+            </span>
+          </div>
         </div>
 
         {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 custom-scrollbar w-full min-w-0">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 space-y-5 custom-scrollbar w-full max-w-7xl mx-auto min-w-0">
 
-          {/* Customer + Details card */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
-              <div className="space-y-3 min-w-0">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 mb-1.5">
-                    <label className="text-xs font-semibold text-gray-500 dark:text-slate-400">Destination *</label>
-                    <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-gray-700 dark:text-slate-300">
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "CUSTOMER"} onChange={() => { setDestType("CUSTOMER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Customer
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "DEALER"} onChange={() => { setDestType("DEALER"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Dealer
-                      </label>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input type="radio" checked={destType === "FRANCHISE"} onChange={() => { setDestType("FRANCHISE"); setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }} className="accent-orange-500" /> Franchise
-                      </label>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1" ref={customerDropRef}>
-                      <div
-                        className={clsx(
-                          "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-colors",
-                          showCustomerDrop ? "border-orange-400 ring-1 ring-orange-100" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
-                        )}
-                        onClick={() => setShowCustomerDrop(v => !v)}
-                      >
-                        <input
-                          className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                          placeholder={`Select / Search ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
-                          value={customerSearch}
-                          onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                          onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                        />
-                          {customerSearch && (
-                            <X
-                              size={14}
-                              className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCustomerSearch("");
-                                setSelectedCustomer(null);
-                                setSelectedDealer(null);
-                                setSelectedFranchise(null);
-                              }}
-                            />
-                          )}
-                          <ChevronDown size={13} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                      </div>
-                      {showCustomerDrop && (
-                        <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                          <div className="max-h-56 overflow-y-auto custom-scrollbar">
-                            {destinationOptions.length === 0 ? (
-                              <div className="px-4 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No results found</div>
-                            ) : destinationOptions.map(c => (
-                              <button key={c.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors" onClick={() => selectCustomer(c)}>
-                                <div className="text-left">
-                                  <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.email || "—"}</div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+          {/* 1. DESTINATION SECTION */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold shrink-0">1</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-slate-200">Destination &amp; Recipient</span>
+              </div>
+              <span className="text-[11px] text-gray-400 dark:text-slate-500">* Required</span>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-2">
+                  Destination Type <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestType("CUSTOMER");
+                      setCustomerSearch("");
+                      setSelectedCustomer(null);
+                      setSelectedDealer(null);
+                      setSelectedFranchise(null);
+                    }}
+                    className={clsx(
+                      "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border",
+                      destType === "CUSTOMER"
+                        ? "bg-orange-50 border-orange-400 text-orange-700 dark:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-300 shadow-2xs"
+                        : "bg-white dark:bg-[#13151f] border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-400 hover:border-gray-300"
+                    )}
+                  >
+                    <span className={clsx("w-2 h-2 rounded-full", destType === "CUSTOMER" ? "bg-orange-500" : "bg-gray-300 dark:bg-gray-600")} />
+                    Customer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestType("DEALER");
+                      setCustomerSearch("");
+                      setSelectedCustomer(null);
+                      setSelectedDealer(null);
+                      setSelectedFranchise(null);
+                    }}
+                    className={clsx(
+                      "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border",
+                      destType === "DEALER"
+                        ? "bg-orange-50 border-orange-400 text-orange-700 dark:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-300 shadow-2xs"
+                        : "bg-white dark:bg-[#13151f] border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-400 hover:border-gray-300"
+                    )}
+                  >
+                    <span className={clsx("w-2 h-2 rounded-full", destType === "DEALER" ? "bg-orange-500" : "bg-gray-300 dark:bg-gray-600")} />
+                    Dealer
+                  </button>
+                  {!isFranchiseUser && (
                     <button
                       type="button"
-                      onClick={() => openQuickAdd(destType)}
-                      title={`Create new ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
-                      className="shrink-0 p-2 border border-gray-300 dark:border-white/10 hover:border-orange-400 rounded-lg text-gray-500 dark:text-slate-400 hover:text-orange-500 transition-colors"
+                      onClick={() => {
+                        setDestType("FRANCHISE");
+                        setCustomerSearch("");
+                        setSelectedCustomer(null);
+                        setSelectedDealer(null);
+                        setSelectedFranchise(null);
+                      }}
+                      className={clsx(
+                        "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 border",
+                        destType === "FRANCHISE"
+                          ? "bg-orange-50 border-orange-400 text-orange-700 dark:bg-orange-500/10 dark:border-orange-500/30 dark:text-orange-300 shadow-2xs"
+                          : "bg-white dark:bg-[#13151f] border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-400 hover:border-gray-300"
+                      )}
                     >
-                      <Plus size={16} />
+                      <span className={clsx("w-2 h-2 rounded-full", destType === "FRANCHISE" ? "bg-orange-500" : "bg-gray-300 dark:bg-gray-600")} />
+                      Franchise
                     </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
-                    <input
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
-                      placeholder="10-digit phone number"
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={customerPhone}
-                      onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    />
-                    {customerPhone && !isValidPhone(customerPhone) && (
-                      <p className="text-[11px] text-red-500 mt-1">Enter a valid 10-digit mobile number.</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Source Warehouse</label>
-                    <select value={sourceFranchiseId} onChange={e => setSourceFranchiseId(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]">
-                      {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
-                      {franchises.map((f: any) => {
-                        const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
-                        return (
-                          <option key={f.id} value={f.id}>
-                            {primaryWarehouse ? `${primaryWarehouse.name} — ${f.name}` : f.name}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
+                  )}
                 </div>
               </div>
-              <div className="space-y-3 min-w-0">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Vehicle Number</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="e.g. MH 12 AB 1234" value={vehicleNo} onChange={e => setVehicleNo(e.target.value)} />
+
+              {/* Recipient Search Input */}
+              <div className="relative" ref={customerDropRef}>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">
+                  {destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise Branch"} <span className="text-red-500">*</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={clsx(
+                      "flex-1 flex items-center gap-2 border rounded-xl px-3.5 py-2.5 bg-white dark:bg-[#13151f] transition-all cursor-pointer",
+                      showCustomerDrop ? "border-orange-400 ring-2 ring-orange-100 dark:ring-orange-500/10" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
+                    )}
+                    onClick={() => setShowCustomerDrop(v => !v)}
+                  >
+                    <Search size={16} className="text-gray-400 dark:text-slate-500 shrink-0" />
+                    <input
+                      className="flex-1 text-xs sm:text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
+                      placeholder={`Search / select ${destType === "CUSTOMER" ? "customer" : destType === "DEALER" ? "dealer" : "franchise"}...`}
+                      value={customerSearch}
+                      onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
+                      onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
+                    />
+                    {customerSearch && (
+                      <X
+                        size={15}
+                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCustomerSearch("");
+                          setSelectedCustomer(null);
+                          setSelectedDealer(null);
+                          setSelectedFranchise(null);
+                        }}
+                      />
+                    )}
+                    <ChevronDown size={15} className="text-gray-400 dark:text-slate-500 shrink-0" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Driver Name</label>
-                    <input className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500" placeholder="Driver Name" value={driverName} onChange={e => setDriverName(e.target.value)} />
+                  <button
+                    type="button"
+                    onClick={() => openQuickAdd(destType)}
+                    title={`Create new ${destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}`}
+                    className="shrink-0 px-3.5 py-2.5 border border-gray-300 dark:border-white/10 hover:border-orange-400 rounded-xl text-gray-600 dark:text-slate-300 hover:text-orange-500 bg-white dark:bg-[#13151f] transition-colors flex items-center gap-1.5 text-xs sm:text-sm font-semibold"
+                  >
+                    <Plus size={16} />
+                    <span className="hidden sm:inline">Add {destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise"}</span>
+                  </button>
+                </div>
+
+                {showCustomerDrop && (
+                  <div className="absolute top-full left-0 z-50 mt-1.5 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                    <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-gray-50 dark:divide-white/5">
+                      {destinationOptions.length === 0 ? (
+                        <div className="px-4 py-5 text-xs text-gray-400 dark:text-slate-500 text-center">
+                          No {destType.toLowerCase()}s found matching &quot;{customerSearch}&quot;
+                        </div>
+                      ) : destinationOptions.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-orange-50/70 dark:hover:bg-white/5 text-left transition-colors"
+                          onClick={() => selectCustomer(c)}
+                        >
+                          <div>
+                            <div className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{c.name}</div>
+                            <div className="text-[11px] text-gray-400 dark:text-slate-400 mt-0.5 flex items-center gap-3">
+                              {c.phone && <span>Phone: <strong className="font-mono text-gray-600 dark:text-slate-300">{c.phone}</strong></span>}
+                              {c.email && <span>{c.email}</span>}
+                              {c.state && <span>State: {c.state}</span>}
+                            </div>
+                          </div>
+                          <div className="text-xs text-orange-500 font-semibold shrink-0">Select</div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center justify-between gap-2 mt-1">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Challan Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Due Date</span>
-                  <input type="date" className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">State of Supply</span>
-                  <select value={stateOfSupply} onChange={e => setStateOfSupply(e.target.value)} className="border border-gray-300 dark:border-white/10 rounded-lg px-3 py-1.5 bg-white dark:bg-[#13151f] text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 w-44">
-                    <option value="">Select state</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Items Table */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
-              <button type="button" onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")} className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-slate-300 border border-gray-300 dark:border-white/10 rounded-lg px-2.5 py-1 bg-white dark:bg-[#13151f] hover:border-gray-400 transition-colors">
-                Price: {priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}
+          {/* 2. DELIVERY DETAILS SECTION */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-6 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold shrink-0">2</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-slate-200">Delivery Details</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Phone</label>
+                <input
+                  className={clsx(
+                    "w-full border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500 transition-colors",
+                    customerPhone && !isValidPhone(customerPhone) ? "border-red-400 focus:border-red-500" : "border-gray-300 dark:border-white/10 focus:border-orange-400"
+                  )}
+                  placeholder="10-digit phone number"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={customerPhone}
+                  onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                />
+                {customerPhone && !isValidPhone(customerPhone) && (
+                  <p className="text-[11px] text-red-500 mt-1">Enter a valid 10-digit mobile number.</p>
+                )}
+              </div>
+
+              {/* Source Warehouse */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Source Warehouse</label>
+                {isFranchiseUser ? (
+                  <div className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm bg-gray-50 dark:bg-white/[0.03] text-gray-700 dark:text-slate-200 flex items-center justify-between">
+                    <span className="truncate font-medium">
+                      {franchises.find((f: any) => f.id === sourceFranchiseId)?.name || "Current Branch"}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 px-2 py-0.5 rounded shrink-0">
+                      Branch
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={sourceFranchiseId}
+                    onChange={e => setSourceFranchiseId(e.target.value)}
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                  >
+                    {franchises.length === 0 && <option value="" disabled>Loading warehouses…</option>}
+                    {franchises.map((f: any) => {
+                      const primaryWarehouse = warehouses.find((w: any) => w.id === f.primaryWarehouseId);
+                      return (
+                        <option key={f.id} value={f.id}>
+                          {primaryWarehouse ? `${primaryWarehouse.name} — ${f.name}` : f.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+
+              {/* Challan Date */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Challan Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                  value={invoiceDate}
+                  onChange={e => setInvoiceDate(e.target.value)}
+                />
+              </div>
+
+              {/* Due Date */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Due Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                  value={dueDate}
+                  onChange={e => setDueDate(e.target.value)}
+                />
+              </div>
+
+              {/* State of Supply */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">State of Supply</label>
+                <select
+                  value={stateOfSupply}
+                  onChange={e => setStateOfSupply(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]"
+                >
+                  <option value="">Select state...</option>
+                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+
+              {/* Vehicle Number */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Vehicle Number</label>
+                <input
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                  placeholder="e.g. MH 12 AB 1234"
+                  value={vehicleNo}
+                  onChange={e => setVehicleNo(e.target.value)}
+                />
+              </div>
+
+              {/* Driver Name */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">Driver Name</label>
+                <input
+                  className="w-full border border-gray-300 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder-slate-500"
+                  placeholder="Driver Name"
+                  value={driverName}
+                  onChange={e => setDriverName(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 3. ITEMS SECTION */}
+          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs space-y-0">
+            <div className="flex flex-wrap items-center justify-between px-4 sm:px-6 py-3.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02] gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-6 h-6 rounded-full bg-orange-500 text-white flex items-center justify-center text-xs font-bold shrink-0">3</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-800 dark:text-slate-200">Items &amp; Dispatch</span>
+                <span className="text-xs text-gray-400 dark:text-slate-500 font-mono">({items.length} line{items.length === 1 ? "" : "s"})</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPriceMode(priceMode === "without_tax" ? "with_tax" : "without_tax")}
+                className="flex items-center gap-1.5 text-xs font-semibold text-gray-700 dark:text-slate-200 border border-gray-300 dark:border-white/10 rounded-xl px-3 py-1.5 bg-white dark:bg-[#13151f] hover:border-gray-400 transition-colors shadow-2xs"
+              >
+                Price: <span className="text-orange-600 dark:text-orange-400">{priceMode === "without_tax" ? "Excl. Tax" : "Incl. Tax"}</span>
               </button>
             </div>
+
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[700px]">
+              <table className="w-full text-sm min-w-[940px]">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th rowSpan={2} className="text-left px-4 py-2.5 w-10 align-middle">#</th>
-                    <th rowSpan={2} className="text-left px-4 py-2.5 align-middle">Item</th>
-                    <th rowSpan={2} className="text-left px-3 py-2.5 w-32 align-middle">Batch No</th>
-                    <th rowSpan={2} className="text-center px-2 py-2.5 w-16 align-middle">Qty</th>
-                    <th rowSpan={2} className="text-center px-2 py-2.5 w-20 align-middle">Unit</th>
-                    <th rowSpan={2} className="text-right px-3 py-2.5 w-24 align-middle">Price/Unit</th>
-                    <th colSpan={2} className="text-center px-2 py-1 border-b border-gray-200 dark:border-white/5">Discount</th>
-                    <th rowSpan={2} className="text-center px-3 py-2.5 w-24 align-middle">Tax</th>
-                    <th rowSpan={2} className="text-right px-3 py-2.5 w-28 align-middle">Amount</th>
-                    <th rowSpan={2} className="w-8 align-middle"></th>
+                  <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-xs border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th rowSpan={2} className="text-center px-3 py-2.5 w-10 align-middle">#</th>
+                    <th rowSpan={2} className="text-left px-3 py-2.5 align-middle min-w-[280px]">Product</th>
+
+                    <th rowSpan={2} className="text-center px-2 py-2.5 min-w-[75px] w-[80px] align-middle">Quantity</th>
+                    <th rowSpan={2} className="text-center px-2 py-2.5 min-w-[85px] w-[95px] align-middle">Unit</th>
+                    <th rowSpan={2} className="text-right px-2 py-2.5 min-w-[95px] w-[105px] align-middle">Price</th>
+                    <th colSpan={2} className="text-center px-2 py-1.5 border-b border-gray-200 dark:border-white/5">Discount</th>
+                    <th rowSpan={2} className="text-center px-2 py-2.5 min-w-[100px] w-[105px] align-middle">Tax</th>
+                    <th rowSpan={2} className="text-right px-3 py-2.5 min-w-[105px] w-[115px] align-middle">Amount</th>
+                    <th rowSpan={2} className="w-10 align-middle"></th>
                   </tr>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="text-center px-1.5 py-1.5 w-16">
-                      <span className="inline-block text-[10px] text-gray-500 dark:text-slate-400">%</span>
-                    </th>
-                    <th className="text-right px-2 py-1.5 w-20">Amount</th>
+                  <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 font-semibold text-[10px] border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="text-center px-1.5 py-1 min-w-[60px] w-[65px]">%</th>
+                    <th className="text-right px-2 py-1 min-w-[85px] w-[90px]">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((it, idx) => {
                     const comp = computeRow(it, withTax);
-                    const isItemDropOpen = openItemDrop === it.id;
+                    const isCurrentActiveRow = activeItemIndex === idx;
+
                     return (
-                      <tr key={it.id} className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 group" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                        <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                        <td className="px-4 py-2" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                          <input
-                            value={it.itemSearch}
-                            onChange={e => {
-                              updateItem(idx, "itemSearch", e.target.value);
-                              setOpenItemDrop(it.id);
-                              const rect = e.target.getBoundingClientRect();
-                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
-                            }}
-                            onFocus={e => {
-                              setOpenItemDrop(it.id);
-                              const rect = e.target.getBoundingClientRect();
-                              setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
-                            }}
-                            placeholder="Search product..."
-                            className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                          />
-            {it.itemSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setOpenItemDrop("")} 
-              />
-            )}
-                          {isItemDropOpen && (
-                            <div
-                              className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-48 overflow-y-auto custom-scrollbar item-dropdown-container"
-                              style={
-                                itemDropRect
-                                  ? {
-                                      position: "fixed",
-                                      top: itemDropRect.top + 4,
-                                      left: itemDropRect.left,
-                                      width: itemDropRect.width,
-                                      zIndex: 9999,
-                                    }
-                                  : {
-                                      position: "absolute",
-                                      left: 0,
-                                      top: "100%",
-                                      marginTop: "4px",
-                                      width: "320px",
-                                      zIndex: 9999,
-                                    }
-                              }
-                            >
-                              {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).length === 0 ? (
-                                <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">
-                                  {products.some(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()))
-                                    ? "No dispatchable stock for this item at the selected warehouse"
-                                    : "No items matched"}
-                                </div>
-                              ) : products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase()) && isDispatchableHere(p.id)).map(p => (
-                                <button key={p.id} type="button" className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 text-xs" onClick={() => selectProduct(idx, p)}>
-                                  <div><strong className="text-gray-800 dark:text-white font-medium">{p.name}</strong><div className="text-[10px] text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div></div>
-                                  <div className="text-orange-500 font-semibold">₹{getChannelPrice(p, destType)}</div>
-                                </button>
-                              ))}
+                      <tr key={it.id} className={clsx("transition-colors group", isCurrentActiveRow ? "bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-gray-50/40 dark:hover:bg-white/[0.02]")}>
+                        {/* Row Index */}
+                        <td className="px-3 py-3 text-center text-xs text-gray-400 dark:text-slate-500 align-top font-medium">
+                          {idx + 1}
+                        </td>
+
+                        {/* Product Column */}
+                        <td className="px-3 py-2.5 align-top min-w-[280px]">
+                          <div className="relative">
+                            <input
+                              value={it.itemSearch}
+                              onFocus={(e) => {
+                                setActiveItemIndex(idx);
+                                setActiveInputEl(e.currentTarget);
+                                setDropdownRect(calculateDropdownPosition(e.currentTarget));
+                              }}
+                              onClick={(e) => {
+                                setActiveItemIndex(idx);
+                                setActiveInputEl(e.currentTarget);
+                                setDropdownRect(calculateDropdownPosition(e.currentTarget));
+                              }}
+                              onChange={(e) => {
+                                updateItem(idx, "itemSearch", e.target.value);
+                                if (!e.target.value) {
+                                  updateItem(idx, "productId", "");
+                                }
+                                setActiveItemIndex(idx);
+                                setActiveInputEl(e.currentTarget);
+                                setDropdownRect(calculateDropdownPosition(e.currentTarget));
+                              }}
+                              placeholder="Search product by name or SKU..."
+                              className="w-full text-xs sm:text-sm text-gray-800 dark:text-white outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2.5 py-1.5 focus:border-orange-500 placeholder-gray-400 dark:placeholder-slate-500 pr-7 transition-colors shadow-2xs"
+                            />
+                            {it.itemSearch && (
+                              <X 
+                                size={14} 
+                                className="absolute right-2 top-2.5 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
+                                onClick={() => {
+                                  updateItem(idx, "itemSearch", "");
+                                  updateItem(idx, "productId", "");
+                                  setActiveItemIndex(null);
+                                }} 
+                              />
+                            )}
+                          </div>
+
+                          {it.productId && (
+                            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+                              <span className="font-mono bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-[10px] text-gray-600 dark:text-slate-300 font-medium">
+                                SKU: {products.find(p => p.id === it.productId)?.sku || "—"}
+                              </span>
                             </div>
                           )}
-                          <input value={it.remarks} onChange={e => updateItem(idx, "remarks", e.target.value)} placeholder="Add brief details..." className="w-full text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-600 dark:focus:text-slate-200" />
+
+                          <input
+                            value={it.remarks}
+                            onChange={e => updateItem(idx, "remarks", e.target.value)}
+                            placeholder="Optional line notes..."
+                            className="w-full text-[11px] text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
+                          />
                         </td>
-                        <td className="px-3 py-2.5">
-{(() => {
-  const validBatches = getValidBatches(it.productId);
-  return (
-    <>
-      <select value={it.batchNumber} onChange={e => updateItem(idx, "batchNumber", e.target.value)} className="w-full text-xs sm:text-sm outline-none bg-transparent text-gray-700 dark:text-white cursor-pointer">
-        <option value="" className="dark:bg-card">Select...</option>
-        {validBatches.map(b => (
-          <option key={b.id} value={b.batchCode || b.id} className="dark:bg-card">{b.batchCode || 'No Code'} (Qty: {b.availableQuantity})</option>
-        ))}
-      </select>
-      {it.productId && isBatchControlled(it.productId) && validBatches.length === 0 && (
-        <div className="text-[10px] text-red-500 mt-1 leading-tight">No available batch found for this product in the selected warehouse.</div>
-      )}
-    </>
-  );
-})()}
-</td>
-                        <td className="px-3 py-2.5">
-<input type="number" min={0} value={it.qty} onChange={e => {
-  const val = Number(e.target.value) || 0;
-  const batch = getValidBatches(it.productId).find(b => (b.batchCode || b.id) === it.batchNumber);
-  if (batch && val > (batch.availableQuantity || 0)) {
-    updateItem(idx, "qty", batch.availableQuantity || 0);
-  } else {
-    updateItem(idx, "qty", val);
-  }
-}} className="w-full text-xs sm:text-sm text-center outline-none bg-transparent text-gray-700 dark:text-white" />
-</td>
-                        <td className="px-3 py-2.5"><select value={it.unit} onChange={e => updateItem(idx, "unit", e.target.value)} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">{getUnitOptions(it).map(u => <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>)}</select></td>
-                        <td className="px-3 py-2.5"><input type="number" min={0} value={it.rate || ""} onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)} className="w-full text-xs sm:text-sm text-right outline-none bg-transparent text-gray-700 dark:text-white" placeholder="0.00" /></td>
-                        <td className="px-1.5 py-2.5">
-                          <input type="number" min={0} max={100} value={it.discountPct || ""} onChange={e => updateItem(idx, "discountPct", Number(e.target.value))} placeholder="0" className="w-full text-xs text-center outline-none bg-transparent text-gray-700 dark:text-white" />
+
+
+                        {/* Quantity */}
+                        <td className="px-2 py-2.5 align-top min-w-[75px]">
+                          <input
+                            type="number"
+                            min={0}
+                            value={it.qty}
+                            onChange={e => updateItem(idx, "qty", Number(e.target.value) || 0)}
+                            className="w-full text-xs sm:text-sm text-center outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 focus:border-orange-500 text-gray-800 dark:text-white font-mono shadow-2xs"
+                          />
                         </td>
-                        <td className="px-2 py-2.5">
-                          <input type="number" min={0} value={it.discountAmount || ""} onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))} placeholder="0.00" className="w-full text-xs text-right outline-none bg-transparent text-gray-700 dark:text-white" />
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <select value={it.taxPct} onChange={e => { const val = Number(e.target.value); const opt = TAX_OPTIONS.find(x => x.value === val); updateItem(idx, "taxPct", val); updateItem(idx, "taxLabel", opt?.label || "NONE"); }} className="w-full text-xs text-gray-700 dark:text-white outline-none bg-transparent cursor-pointer">
-                            {TAX_OPTIONS.map(t => <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>)}
+
+                        {/* Unit */}
+                        <td className="px-2 py-2.5 align-top min-w-[85px]">
+                          <select
+                            value={it.unit}
+                            onChange={e => updateItem(idx, "unit", e.target.value)}
+                            className="w-full text-xs text-gray-700 dark:text-white bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-1.5 py-1.5 outline-none focus:border-orange-500 cursor-pointer text-center shadow-2xs"
+                          >
+                            {getUnitOptions(it).map(u => (
+                              <option key={u.code} value={u.code} className="dark:bg-card">{u.short}</option>
+                            ))}
                           </select>
                         </td>
-                        <td className="px-3 py-2.5 text-right text-xs sm:text-sm font-medium text-gray-800 dark:text-white">₹{comp.amount.toFixed(2)}</td>
-                        <td className="pr-2"><button type="button" onClick={() => removeRow(idx)} className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-opacity"><Trash2 className="h-4 w-4" /></button></td>
+
+                        {/* Price */}
+                        <td className="px-2 py-2.5 align-top min-w-[95px]">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={it.rate || ""}
+                            onChange={e => updateItem(idx, "rate", Number(e.target.value) || 0)}
+                            className="w-full text-xs sm:text-sm text-right outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 focus:border-orange-500 text-gray-800 dark:text-white font-mono shadow-2xs"
+                            placeholder="0.00"
+                          />
+                        </td>
+
+                        {/* Discount */}
+                        <td className="px-1.5 py-2.5 align-top min-w-[60px]">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={it.discountPct || ""}
+                            onChange={e => updateItem(idx, "discountPct", Number(e.target.value))}
+                            placeholder="0"
+                            className="w-full text-xs text-center outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-1 py-1.5 focus:border-orange-500 text-gray-700 dark:text-white font-mono shadow-2xs"
+                          />
+                        </td>
+                        <td className="px-2 py-2.5 align-top min-w-[85px]">
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            value={it.discountAmount || ""}
+                            onChange={e => updateItem(idx, "discountAmount", Number(e.target.value))}
+                            placeholder="0.00"
+                            className="w-full text-xs text-right outline-none bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 focus:border-orange-500 text-gray-700 dark:text-white font-mono shadow-2xs"
+                          />
+                        </td>
+
+                        {/* Tax */}
+                        <td className="px-2 py-2.5 align-top min-w-[100px]">
+                          <select
+                            value={it.taxPct}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              const opt = TAX_OPTIONS.find(x => x.value === val);
+                              updateItem(idx, "taxPct", val);
+                              updateItem(idx, "taxLabel", opt?.label || "NONE");
+                            }}
+                            className="w-full text-xs text-gray-700 dark:text-white bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-1.5 py-1.5 outline-none focus:border-orange-500 cursor-pointer text-center shadow-2xs"
+                          >
+                            {TAX_OPTIONS.map(t => (
+                              <option key={t.label} value={t.value} className="dark:bg-card">{t.label}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Amount */}
+                        <td className="px-3 py-3 align-top text-right text-xs sm:text-sm font-bold text-gray-900 dark:text-white font-mono whitespace-nowrap min-w-[105px]">
+                          ₹{comp.amount.toFixed(2)}
+                        </td>
+
+                        {/* Delete action */}
+                        <td className="px-2 py-3 text-center align-top w-10">
+                          <button
+                            type="button"
+                            onClick={() => removeRow(idx)}
+                            className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
+                            title="Remove row"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-            <div className="px-4 py-2.5 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
-              <button type="button" onClick={addRow} className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-3 py-1.5 rounded-lg transition-colors"><Plus className="h-4 w-4" /> Add Row</button>
-              <span className="text-xs text-gray-500 dark:text-slate-400">Total Qty: <span className="font-semibold text-gray-700 dark:text-slate-200">{totalQty}</span></span>
+
+            <div className="px-4 sm:px-6 py-3 border-t border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/40 dark:bg-white/[0.02]">
+              <button
+                type="button"
+                onClick={addRow}
+                className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 dark:text-orange-400 hover:text-orange-700 border border-orange-200 dark:border-orange-500/20 hover:border-orange-300 px-3.5 py-2 rounded-xl transition-colors bg-white dark:bg-[#13151f] shadow-2xs"
+              >
+                <Plus className="h-4 w-4" /> Add Row
+              </button>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                Total Qty: <span className="font-bold text-gray-800 dark:text-slate-200 font-mono text-sm">{totalQty}</span>
+              </span>
             </div>
           </div>
 
-          {/* Notes + Summary */}
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start pb-2 w-full min-w-0">
-            <div className="flex-1 space-y-2 min-w-0">
-              <button type="button" onClick={() => setShowTerms(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showTerms ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions</button>
-              <button type="button" onClick={() => setShowDesc(v => !v)} className={clsx("flex items-center gap-2 text-xs font-medium border rounded-lg px-3 py-2 transition-colors", showDesc ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200")}><FileText className="h-3.5 w-3.5" /> Add Description</button>
-              {showTerms && <textarea rows={3} value={termsText} onChange={e => setTermsText(e.target.value)} placeholder="Enter terms..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
-              {showDesc && <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Enter description..." className="w-full text-xs text-gray-700 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-lg px-3 py-2 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500" />}
-            </div>
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Subtotal</span><span className="text-gray-800 dark:text-white font-mono">₹ {subTotal.toFixed(2)}</span></div>
-              {totalTax > 0 && <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400"><span>Tax</span><span className="text-gray-800 dark:text-white font-mono">+ ₹ {totalTax.toFixed(2)}</span></div>}
-              <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2">
-                <label className="flex items-center gap-1.5 cursor-pointer"><input type="checkbox" id="roundoff" checked={roundOffEnabled} onChange={e => setRoundOffEnabled(e.target.checked)} className="w-3.5 h-3.5 accent-orange-500" /><span className="text-xs">Round Off</span></label>
-                <span className="text-xs font-mono">{roundOff >= 0 ? "+" : ""}{roundOff.toFixed(2)}</span>
+          {/* 4. TERMS & SUMMARY SECTION */}
+          <div className="flex flex-col lg:flex-row gap-5 items-stretch lg:items-start pb-4 w-full min-w-0">
+            {/* Notes & Terms */}
+            <div className="flex-1 space-y-3 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTerms(v => !v)}
+                  className={clsx(
+                    "flex items-center gap-2 text-xs font-semibold border rounded-xl px-3.5 py-2 transition-colors",
+                    showTerms
+                      ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                      : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Terms &amp; Conditions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDesc(v => !v)}
+                  className={clsx(
+                    "flex items-center gap-2 text-xs font-semibold border rounded-xl px-3.5 py-2 transition-colors",
+                    showDesc
+                      ? "border-orange-300 bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400"
+                      : "border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200"
+                  )}
+                >
+                  <FileText className="h-3.5 w-3.5" /> Remarks / Description
+                </button>
               </div>
-              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/5 pt-2">
-                <span className="text-xs sm:text-sm font-semibold text-gray-800 dark:text-white">Total</span>
-                <span className="text-base sm:text-lg font-bold text-orange-500 font-mono">₹ {finalTotal.toFixed(2)}</span>
+
+              {showTerms && (
+                <div className="space-y-1.5 animate-in fade-in duration-150">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Terms &amp; Conditions</label>
+                  <textarea
+                    rows={3}
+                    value={termsText}
+                    onChange={e => setTermsText(e.target.value)}
+                    placeholder="Enter delivery terms &amp; conditions..."
+                    className="w-full text-xs text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-xl px-3.5 py-2.5 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-orange-400"
+                  />
+                </div>
+              )}
+
+              {showDesc && (
+                <div className="space-y-1.5 animate-in fade-in duration-150">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Remarks / Notes</label>
+                  <textarea
+                    rows={3}
+                    value={description}
+                    onChange={e => setDescription(e.target.value)}
+                    placeholder="Enter any additional notes..."
+                    className="w-full text-xs text-gray-800 dark:text-white border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] rounded-xl px-3.5 py-2.5 outline-none resize-none placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-orange-400"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Totals Summary */}
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-5 w-full lg:w-80 shrink-0 space-y-3 shadow-2xs">
+              <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                <span>Subtotal</span>
+                <span className="text-gray-800 dark:text-white font-mono font-semibold">₹ {subTotal.toFixed(2)}</span>
+              </div>
+              {totalDisc > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm text-emerald-600 dark:text-emerald-400">
+                  <span>Discount</span>
+                  <span className="font-mono font-semibold">- ₹ {totalDisc.toFixed(2)}</span>
+                </div>
+              )}
+              {totalTax > 0 && (
+                <div className="flex justify-between text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+                  <span>Total Tax</span>
+                  <span className="text-gray-800 dark:text-white font-mono font-semibold">+ ₹ {totalTax.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center text-xs sm:text-sm text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-white/5 pt-2.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="roundoff"
+                    checked={roundOffEnabled}
+                    onChange={e => setRoundOffEnabled(e.target.checked)}
+                    className="w-4 h-4 accent-orange-500 rounded"
+                  />
+                  <span className="text-xs font-medium">Round Off</span>
+                </label>
+                <span className="text-xs font-mono font-semibold text-gray-700 dark:text-slate-300">
+                  {roundOff >= 0 ? "+" : ""}₹ {roundOff.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center border-t border-gray-200 dark:border-white/10 pt-3">
+                <span className="text-xs sm:text-sm font-bold text-gray-900 dark:text-white uppercase tracking-wider">Grand Total</span>
+                <span className="text-lg sm:text-xl font-black text-orange-500 font-mono">
+                  ₹ {finalTotal.toFixed(2)}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Action bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0">
-          <button type="button" onClick={() => { setView("list"); resetForm(); }} className="px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-lg">Cancel</button>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button type="button" onClick={() => handleSave("DRAFT")} disabled={saving} className="px-3 sm:px-4 py-2 text-xs sm:text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200 disabled:opacity-60">Save Draft</button>
-            <button type="button" onClick={() => handleSave("IN_TRANSIT")} disabled={saving} className="flex items-center gap-2 px-4 sm:px-6 py-2 text-xs sm:text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg disabled:opacity-50 transition-colors shadow-sm">
+        {/* 5. ACTION BAR */}
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 flex items-center justify-between shrink-0 shadow-2xs w-full min-w-0 sticky bottom-0 z-30">
+          <button
+            type="button"
+            onClick={() => { setView("list"); resetForm(); }}
+            className="px-4 py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+          >
+            Cancel
+          </button>
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => handleSave("DRAFT")}
+              disabled={saving}
+              className="px-4 py-2 text-xs sm:text-sm font-semibold text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-white/10 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60"
+            >
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave("IN_TRANSIT")}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-xl disabled:opacity-50 transition-all shadow-sm active:scale-95"
+            >
               <Check className="h-4 w-4" /> {saving ? "Saving..." : "Save Challan"}
             </button>
           </div>
         </div>
+
+        {/* VIEWPORT-SAFE PORTAL PRODUCT DROPDOWN */}
+        {mounted && activeItemIndex !== null && dropdownRect && createPortal(
+          <div
+            ref={dropdownPortalRef}
+            className="bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-100"
+            style={{
+              position: "fixed",
+              top: dropdownRect.top,
+              left: dropdownRect.left,
+              width: dropdownRect.width,
+              maxHeight: dropdownRect.maxHeight,
+              zIndex: 999999,
+            }}
+          >
+            {loading ? (
+              <div className="flex items-center justify-center gap-2 py-8 text-xs text-gray-500 dark:text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                <span>Loading products...</span>
+              </div>
+            ) : (() => {
+              const activeSearch = (items[activeItemIndex]?.itemSearch || "").toLowerCase().trim();
+              const matchingProducts = products.filter(p => {
+                if (!activeSearch) return true;
+                const nameMatch = p.name?.toLowerCase().includes(activeSearch);
+                const skuMatch = p.sku && p.sku.toLowerCase().includes(activeSearch);
+                const barcodeMatch = p.barcode && p.barcode.toLowerCase().includes(activeSearch);
+                return Boolean(nameMatch || skuMatch || barcodeMatch);
+              });
+
+              if (matchingProducts.length === 0) {
+                return (
+                  <div className="px-4 py-8 text-center text-xs text-gray-400 dark:text-slate-500">
+                    No products found matching <span className="font-semibold text-gray-600 dark:text-slate-300">&quot;{items[activeItemIndex]?.itemSearch}&quot;</span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="divide-y divide-gray-100 dark:divide-white/5">
+                  {matchingProducts.map(p => {
+                    const price = getChannelPrice(p, destType);
+                    const stock = p.currentStock ?? 0;
+                    const isCurrentSelected = items[activeItemIndex]?.productId === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectProduct(activeItemIndex, p);
+                        }}
+                        className={clsx(
+                          "w-full flex items-start sm:items-center justify-between px-4 py-3 text-left transition-colors gap-3 group cursor-pointer",
+                          isCurrentSelected
+                            ? "bg-orange-50/90 dark:bg-orange-500/15"
+                            : "hover:bg-orange-50/60 dark:hover:bg-white/5"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors leading-snug break-words">
+                              {p.name}
+                            </span>
+                            {p.unit && p.unit !== "NONE" && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-100/80 dark:bg-orange-500/20 text-orange-700 dark:text-orange-300 font-semibold uppercase tracking-wider shrink-0">
+                                {p.unit}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-gray-500 dark:text-slate-400 mt-1 flex-wrap">
+                            <span>
+                              SKU: <strong className="font-mono text-gray-700 dark:text-slate-300 font-semibold">{p.sku || "—"}</strong>
+                            </span>
+                            <span className="flex items-center gap-1">
+                              Stock:{" "}
+                              <strong className={clsx("font-mono font-semibold", stock > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-gray-400")}>
+                                {stock}
+                              </strong>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 pt-0.5 sm:pt-0">
+                          <div className="text-xs sm:text-sm text-orange-600 dark:text-orange-400 font-bold font-mono">
+                            ₹{Number(price).toFixed(2)}
+                          </div>
+                          <div className="text-[10px] text-gray-400 dark:text-slate-500 uppercase font-medium">
+                            {destType} Rate
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>,
+          document.body
+        )}
       </div>
     );
   }
@@ -2000,19 +2460,12 @@ export default function DeliveryChallanPage() {
 
 // ── Mark Delivered modal ─────────────────────────────────────────────────────
 function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { challan: any; onClose: () => void; onDelivered: () => void; showToast: (msg: string, type?: any) => void }) {
-  const [receivedBy, setReceivedBy] = useState("");
-  const [deliveredAt, setDeliveredAt] = useState(new Date().toISOString().slice(0, 16));
-  const [podReference, setPodReference] = useState("");
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     setSaving(true);
     try {
-      await salesApi.markDeliveryChallanDelivered(challan.id, {
-        receivedBy: receivedBy || undefined,
-        deliveredAt: deliveredAt ? new Date(deliveredAt).toISOString() : undefined,
-        podReference: podReference || undefined,
-      });
+      await salesApi.markDeliveryChallanDelivered(challan.id, {});
       showToast("Delivery confirmed", "success");
       onDelivered();
     } catch (e: any) {
@@ -2022,29 +2475,101 @@ function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { chal
     }
   };
 
+  const recipientName = challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchise?.name || challan.partyName || "—";
+  const firstItem = challan.items?.[0] || challan.lineItems?.[0];
+  const totalItemsCount = challan.items?.length || challan.lineItems?.length || 0;
+
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-card rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 border border-gray-200 dark:border-white/10" onClick={e => e.stopPropagation()}>
-        <div>
-          <h3 className="text-base font-bold text-gray-800 dark:text-white">Mark Delivered</h3>
-          <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{challan.challanNo || challan.challanNumber}</p>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => { if (!saving) onClose(); }}>
+      <div className="bg-white dark:bg-card rounded-2xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-white/10 overflow-hidden animate-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <Check className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white leading-tight">Mark as Delivered</h3>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Confirm Delivery</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => { if (!saving) onClose(); }}
+            disabled={saving}
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Received By</label>
-          <input value={receivedBy} onChange={e => setReceivedBy(e.target.value)} placeholder="Name of person who received goods" className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500" />
+
+        {/* Modal Body */}
+        <div className="p-5 space-y-4">
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-slate-300">
+            Are you sure you want to mark this delivery challan as delivered?
+          </p>
+
+          {/* Dynamic Challan Details Card */}
+          <div className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 dark:text-slate-400 font-medium">Challan:</span>
+              <span className="font-mono font-bold text-orange-600 dark:text-orange-400">{challan.challanNo || challan.challanNumber}</span>
+            </div>
+            {firstItem && (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-gray-500 dark:text-slate-400 font-medium shrink-0">Product:</span>
+                  <span className="font-semibold text-gray-800 dark:text-slate-200 text-right leading-snug break-words">
+                    {firstItem.productName || firstItem.product?.name || "Product"}
+                    {totalItemsCount > 1 && ` (+${totalItemsCount - 1} more)`}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-slate-400 font-medium">Quantity:</span>
+                  <span className="font-bold text-gray-900 dark:text-white font-mono">
+                    {firstItem.quantity || firstItem.qty} <span className="font-normal text-gray-500 dark:text-slate-400">{firstItem.unit}</span>
+                  </span>
+                </div>
+              </>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-gray-500 dark:text-slate-400 font-medium">Recipient:</span>
+              <span className="font-medium text-gray-800 dark:text-slate-200">{recipientName}</span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-gray-500 dark:text-slate-400 leading-relaxed bg-blue-50/60 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/10 rounded-lg p-2.5">
+            ℹ️ This will close the transit quantity and update the challan status to <span className="font-semibold text-emerald-600 dark:text-emerald-400">Delivered</span>.
+          </p>
         </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">Delivered At</label>
-          <input type="datetime-local" value={deliveredAt} onChange={e => setDeliveredAt(e.target.value)} className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f]" />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1">POD / Note Reference (optional)</label>
-          <input value={podReference} onChange={e => setPodReference(e.target.value)} placeholder="Proof-of-delivery reference" className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder:text-gray-400 dark:placeholder:text-slate-500" />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">Cancel</button>
-          <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50 shadow-sm">
-            {saving ? "Confirming..." : "Confirm Delivery"}
+
+        {/* Modal Actions */}
+        <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02]">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 hover:text-gray-800 dark:hover:text-slate-200 border border-gray-200 dark:border-white/10 rounded-xl hover:bg-white dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 rounded-xl transition-all shadow-sm disabled:opacity-60"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Updating...</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                <span>Mark Delivered</span>
+              </>
+            )}
           </button>
         </div>
       </div>
