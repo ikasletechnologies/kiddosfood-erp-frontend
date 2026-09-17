@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
@@ -18,6 +18,13 @@ const getFranchiseOrdersMock = vi.fn();
 vi.mock("@/lib/api", () => ({
   inventoryApi: { getAlerts: (...args: any[]) => getAlertsMock(...args) },
   franchiseOrdersApi: { getAll: (...args: any[]) => getFranchiseOrdersMock(...args) },
+  alertsApi: {
+    getAlerts: () => Promise.resolve({ data: [] }),
+    getSummary: () => Promise.resolve({ data: null }),
+    markAsRead: () => Promise.resolve({ success: true }),
+    markAllAsRead: () => Promise.resolve({ success: true }),
+    reconcile: () => Promise.resolve({ success: true }),
+  },
 }));
 
 let mockUser: any = { id: "super-1", role: "SUPER_ADMIN" };
@@ -92,54 +99,50 @@ describe("Inventory Alerts page", () => {
     });
   });
 
-  it("2. Type filter returns only matching type", async () => {
-    setAuthUser({ id: "f-admin", role: "FRANCHISE_ADMIN", franchiseId: "fr-1" });
-    getAlertsMock.mockResolvedValue({ data: makeInventoryItems(2) });
-    getFranchiseOrdersMock.mockResolvedValue({
-      data: [{ id: "o1", orderNumber: "FO-1", status: "PENDING", totalAmount: 500 }],
-    });
-
-    const user = userEvent.setup();
-    await renderAndLoad();
-    // 2 inventory alerts + 1 order alert = 3 unread rows.
-    await waitFor(() => expect(screen.getAllByText("Mark Read").length).toBe(3));
-
-    await user.click(screen.getByRole("button", { name: "Order" }));
-
-    await waitFor(() => {
-      expect(screen.getAllByText("Mark Read").length).toBe(1);
-      expect(screen.getByText(/FO-1/)).toBeInTheDocument();
-    });
-  });
-
-  it("3. Severity filter returns only matching severity", async () => {
+  it("2. Category filter returns only matching category", async () => {
     getAlertsMock.mockResolvedValue({
       data: [
-        { id: "critical-1", name: "ZeroStockItem", currentStock: 0, minimumStock: 10 },
-        { id: "warning-1", name: "LowStockItem", currentStock: 5, minimumStock: 10 },
+        { id: "rm-1", name: "Raw Material Item", currentStock: 0, minimumStock: 10, category: "RAW_MATERIAL" },
+        { id: "fg-1", name: "Finished Good Item", currentStock: 0, minimumStock: 10, category: "FINISHED_GOOD" },
       ],
     });
-    const user = userEvent.setup();
+
     await renderAndLoad();
     await waitFor(() => expect(screen.getAllByText("Mark Read").length).toBe(2));
 
-    await user.click(screen.getByRole("button", { name: "warning" }));
+    fireEvent.click(screen.getByRole("button", { name: "Raw Material" }));
 
     await waitFor(() => {
       expect(screen.getAllByText("Mark Read").length).toBe(1);
-      expect(screen.queryAllByText(/ZeroStockItem/).length).toBe(0);
-      expect(screen.getAllByText(/LowStockItem/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Raw Material Item/).length).toBeGreaterThan(0);
     });
   });
 
-  it("4. Type=System + Severity=Success with existing alerts shows 'No Alerts Match Your Filters', not the all-clear state", async () => {
+  it("3. Read status filter returns only matching read status", async () => {
+    getAlertsMock.mockResolvedValue({
+      data: [
+        { id: "item-1", name: "ZeroStockItem", currentStock: 0, minimumStock: 10 },
+        { id: "item-2", name: "LowStockItem", currentStock: 5, minimumStock: 10 },
+      ],
+    });
+    await renderAndLoad();
+    await waitFor(() => expect(screen.getAllByText("Mark Read").length).toBe(2));
+
+    fireEvent.click(screen.getAllByText("Mark Read")[0]); // mark item-1 read
+
+    fireEvent.click(screen.getByRole("button", { name: "Unread" }));
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Mark Read").length).toBe(1);
+    });
+  });
+
+  it("4. Status=Read with zero read alerts shows 'No Alerts Match Your Filters', not the all-clear state", async () => {
     getAlertsMock.mockResolvedValue({ data: makeInventoryItems(310) });
-    const user = userEvent.setup();
     await renderAndLoad();
     await waitFor(() => expect(getSummaryCardValue("UNREAD ALERTS")).toBe("310"));
 
-    await user.click(screen.getByRole("button", { name: "System" }));
-    await user.click(screen.getByRole("button", { name: "success" }));
+    fireEvent.click(screen.getByRole("button", { name: "Read" }));
 
     await waitFor(() => {
       expect(screen.getByText("No Alerts Match Your Filters")).toBeInTheDocument();

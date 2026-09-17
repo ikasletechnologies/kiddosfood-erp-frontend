@@ -69,7 +69,7 @@ export const inventoryApi = {
   // franchiseId/franchiseName if it's some franchise's primary warehouse,
   // both null otherwise); FRANCHISE_ADMIN gets only their own franchise's
   // primary warehouse (empty array if none is set). Enforced server-side.
-  getWarehouses: (params?: { includeInactive?: boolean; all?: boolean; status?: string }) => 
+  getWarehouses: (params?: { includeInactive?: boolean; all?: boolean; status?: string; scope?: string; forGRN?: boolean }) => 
     api.get('/api/warehouses', { params }),
   getNextWarehouseCode: () => api.get<{ code: string }>('/api/warehouses/next-code'),
   createWarehouse: (data: { name: string, location?: string, type?: string, code?: string, status?: string, franchiseId?: string }) => 

@@ -732,6 +732,8 @@ export default function PartiesPage() {
                           onClick={() => {
                             setIsMoreMenuOpen(false);
                             const params = new URLSearchParams({ parent: "franchise", report: "Party Statement" });
+                            if (selectedCustomer?.id) params.set("partyId", selectedCustomer.id);
+                            params.set("partyType", "CUSTOMER");
                             if (selectedCustomer?.name) params.set("partyName", selectedCustomer.name);
                             router.push(`/reports?${params.toString()}`);
                           }}

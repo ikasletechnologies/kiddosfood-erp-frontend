@@ -1,550 +1,359 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { inventoryApi, franchiseOrdersApi } from "@/lib/api";
+import { alertsApi, inventoryApi, franchiseOrdersApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import {
   Bell,
-  AlertTriangle,
   CheckCircle2,
-  TrendingUp,
-  ShoppingCart,
   Package,
-  X,
-  Eye,
-  EyeOff,
+  ShoppingCart,
   RefreshCw,
-  Shield,
   Clock,
   ChevronRight,
+  Search,
+  X,
+  AlertTriangle,
+  Building2,
+  ArrowRight
 } from "lucide-react";
 import { clsx } from "clsx";
 
-type AlertType = "inventory" | "order" | "payment" | "dispatch" | "system";
-type AlertSeverity = "critical" | "warning" | "info" | "success";
-
-interface Alert {
+interface AlertItem {
   id: string;
-  type: AlertType;
-  severity: AlertSeverity;
+  type: "inventory" | "order" | "payment" | "dispatch" | "system";
+  severity: "critical" | "warning" | "info" | "success";
   title: string;
   message: string;
   time: string;
   read: boolean;
   actionLabel?: string;
   actionHref?: string;
+  itemName?: string;
+  category?: string;
+  franchiseId?: string;
 }
 
-const TYPE_CONFIG: Record<AlertType, { label: string; icon: any; color: string; bg: string; border: string }> = {
-  inventory: { label: "Inventory", icon: Package,      color: "text-[#F58220]",  bg: "bg-orange-50 dark:bg-orange-950/30",  border: "border-orange-200/60 dark:border-orange-500/20" },
-  order:     { label: "Order",     icon: ShoppingCart, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200/60 dark:border-emerald-500/20" },
-  payment:   { label: "Payment",   icon: Shield,       color: "text-purple-600",  bg: "bg-purple-50 dark:bg-purple-950/30",  border: "border-purple-200/60 dark:border-purple-500/20" },
-  dispatch:  { label: "Dispatch",  icon: TrendingUp,   color: "text-blue-600",    bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200/60 dark:border-blue-500/20" },
-  system:    { label: "System",    icon: RefreshCw,    color: "text-slate-600",   bg: "bg-slate-50 dark:bg-white/5",         border: "border-slate-200 dark:border-white/10" },
-};
+const AlertCard = React.memo(({ alert, onMarkRead }: { alert: AlertItem; onMarkRead: (id: string) => void }) => {
+  const isOutOfStock = alert.severity === "critical" || alert.title.toLowerCase().includes("out of stock");
+  const isRunningLow = alert.severity === "warning" && alert.type === "inventory";
+  const isShipment = alert.title.toLowerCase().includes("shipment") || alert.title.toLowerCase().includes("transit");
+  const isOrderPending = alert.type === "order" && !isShipment;
 
-const SEVERITY_BADGE: Record<AlertSeverity, string> = {
-  critical: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-500/20",
-  warning:  "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-500/20",
-  info:     "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-500/20",
-  success:  "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-500/20",
-};
+  let badgeText = "ATTENTION NEEDED";
+  let badgeStyle = "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800/40";
+  
+  if (isOutOfStock) {
+    badgeText = "OUT OF STOCK";
+    badgeStyle = "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200 dark:border-rose-800/40 font-black";
+  } else if (isRunningLow) {
+    badgeText = "RUNNING LOW";
+    badgeStyle = "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-800/40 font-bold";
+  } else if (isShipment) {
+    badgeText = "INCOMING SHIPMENT";
+    badgeStyle = "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-800/40 font-bold";
+  } else if (isOrderPending) {
+    badgeText = "ORDER NEEDS ATTENTION";
+    badgeStyle = "bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200 dark:border-purple-800/40 font-bold";
+  }
+
+  // Authoritative secondary button target
+  const secondaryHref = alert.type === "inventory" ? "/inventory/stock" : "/franchise/orders";
+
+  return (
+    <div
+      className={clsx(
+        "p-5 rounded-xl border transition-all duration-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4",
+        !alert.read
+          ? "bg-white dark:bg-card border-l-4 border-l-[#f58220] border-gray-200 dark:border-white/10"
+          : "bg-gray-50/50 dark:bg-card/40 border-gray-200 dark:border-white/5 opacity-90"
+      )}
+    >
+      <div className="space-y-2 flex-1 min-w-0">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className={clsx("px-2.5 py-0.5 rounded text-[11px] uppercase tracking-wider border", badgeStyle)}>
+            {badgeText}
+          </span>
+          {!alert.read && (
+            <span className="flex items-center gap-1 text-[11px] font-bold text-[#f58220]">
+              <span className="w-2 h-2 rounded-full bg-[#f58220] animate-pulse" />
+              New
+            </span>
+          )}
+        </div>
+
+        <div>
+          <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            {alert.title}
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-slate-300 mt-1 font-medium">
+            {alert.message}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-slate-400 pt-1">
+          <span className="flex items-center gap-1 font-medium">
+            <Building2 size={13} className="text-gray-400" />
+            Central Warehouse
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock size={13} />
+            {alert.time}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-white/5">
+        {alert.actionLabel && alert.actionHref && (
+          <Link
+            href={alert.actionHref}
+            className="px-4 py-2 text-xs font-bold rounded-lg bg-[#f58220] text-white hover:bg-[#e07318] transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+          >
+            <span>{alert.actionLabel}</span>
+            <ArrowRight size={14} />
+          </Link>
+        )}
+
+        <Link
+          href={secondaryHref}
+          className="px-3 py-2 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-white/10 transition-colors border border-gray-200 dark:border-white/10"
+        >
+          {alert.type === "inventory" ? "View Inventory" : "View Details"}
+        </Link>
+
+        {!alert.read && (
+          <button
+            onClick={() => onMarkRead(alert.id)}
+            className="px-2.5 py-2 text-xs font-medium text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 transition-colors cursor-pointer"
+            title="Mark as read"
+          >
+            Mark Read
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+AlertCard.displayName = "AlertCard";
 
 export default function AlertsPage() {
   const { user } = useAuth();
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [filterType, setFilterType] = useState<"all" | AlertType>("all");
-  const [filterSeverity, setFilterSeverity] = useState<"all" | AlertSeverity>("all");
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [backendSummary, setBackendSummary] = useState<any>(null);
+  const [activeChip, setActiveChip] = useState<"all" | "stock" | "orders" | "unread">("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isLiveMonitoring, setIsLiveMonitoring] = useState(false);
-  const isFetchingRef = useRef(false);
-
-  const getStorageKey = useCallback(() => {
-    const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-    const parsedUser = userStr ? JSON.parse(userStr) : null;
-    return `erp_alerts_read_${parsedUser?.id || "anonymous"}`;
-  }, []);
 
   const fetchAlerts = useCallback(async () => {
-    // Live Monitoring polls every 60s; a manual Refresh click or a slow prior
-    // poll must not overlap with another in-flight fetch.
-    if (isFetchingRef.current) return;
-    isFetchingRef.current = true;
     setIsRefreshing(true);
     try {
-      const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-      const parsedUser = userStr ? JSON.parse(userStr) : null;
-      const effectiveBranchId = user?.franchiseId || parsedUser?.franchiseId;
-      const isFranchise = Boolean(effectiveBranchId || (parsedUser?.role && parsedUser.role !== "SUPER_ADMIN"));
+      const effectiveBranchId = user?.franchiseId;
+      const isFranchise = user?.role !== "SUPER_ADMIN" && Boolean(effectiveBranchId);
 
-      const [invRes, ordRes] = await Promise.all([
-        inventoryApi.getAlerts(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined),
-        isFranchise
-          ? franchiseOrdersApi.getAll(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined).catch(() => ({ data: [] }))
-          : Promise.resolve({ data: [] }),
+      const queryParams: any = {};
+      if (effectiveBranchId) queryParams.franchiseId = effectiveBranchId;
+      if (searchQuery.trim()) queryParams.search = searchQuery.trim();
+
+      const [alertsRes, summaryRes] = await Promise.all([
+        alertsApi.getAlerts(queryParams).catch(() => ({ data: { data: [] } })),
+        alertsApi.getSummary(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined).catch(() => ({ data: null }))
       ]);
 
-      const rawInv: any[] = Array.isArray(invRes?.data) ? invRes.data : Array.isArray(invRes?.data?.data) ? invRes.data.data : [];
-      const rawOrders: any[] = Array.isArray(ordRes?.data) ? ordRes.data : Array.isArray(ordRes?.data?.data) ? ordRes.data.data : [];
-
-      const storageKey = getStorageKey();
-      const saved = localStorage.getItem(storageKey);
-      let currentReadIds = new Set<string>();
-      if (saved) {
-        try { currentReadIds = new Set(JSON.parse(saved)); } catch (e) {}
-      }
-
-      const invAlerts: Alert[] = rawInv.map((item: any, i: number) => {
-        const isOutOfStock = item.currentStock <= 0;
-        const minVal = item.minStockLevel ?? item.minimumStock ?? item.reorderPoint ?? 10;
-        return {
-          id: item.id ?? `inv-${i}`,
-          type: "inventory" as AlertType,
-          severity: isOutOfStock ? ("critical" as AlertSeverity) : ("warning" as AlertSeverity),
-          title: isOutOfStock
-            ? `Critical: ${item.name} Out of Stock`
-            : `Low Stock: ${item.name}`,
-          message: `${item.name} has ${item.currentStock} ${item.unit ?? "units"} remaining. Minimum threshold: ${minVal}.`,
-          time: "Just now",
-          read: currentReadIds.has(item.id ?? `inv-${i}`),
-          actionLabel: isFranchise ? "Order from HQ" : "Reorder",
-          actionHref: isFranchise
-            ? "/franchise-orders"
-            : `/purchases/new?materialId=${encodeURIComponent(item.id ?? "")}&qty=${encodeURIComponent(minVal)}`,
-        };
-      });
-
-      const orderAlerts: Alert[] = rawOrders
-        .filter((o: any) => o.status === "DISPATCHED" || o.status === "PENDING" || o.status === "APPROVED")
-        .map((o: any) => ({
-          id: `ord-${o.id}`,
-          type: "order" as AlertType,
-          severity: o.status === "DISPATCHED" ? ("info" as AlertSeverity) : ("warning" as AlertSeverity),
-          title: o.status === "DISPATCHED"
-            ? `Incoming Shipment: Order #${o.orderNumber}`
-            : o.status === "APPROVED"
-            ? `Order #${o.orderNumber} Approved by HQ`
-            : `Order #${o.orderNumber} Pending Approval`,
-          message: o.status === "DISPATCHED"
-            ? `Shipment is in transit from Central HQ (Total: ₹${o.totalAmount}). Click to view and inward.`
-            : `Order is being processed by HQ (Total: ₹${o.totalAmount}).`,
-          time: "Recent",
-          read: currentReadIds.has(`ord-${o.id}`),
-          actionLabel: o.status === "DISPATCHED" ? "Inward Stock" : "View Order",
-          actionHref: "/franchise-orders",
-        }));
-
-      const allAlerts = [...invAlerts, ...orderAlerts];
+      const rawData = alertsRes?.data?.data || (Array.isArray(alertsRes?.data) ? alertsRes.data : []);
       
-      const nextReadIds = new Set<string>();
-      allAlerts.forEach(a => {
-        if (a.read) nextReadIds.add(a.id);
-      });
-      localStorage.setItem(storageKey, JSON.stringify(Array.from(nextReadIds)));
+      const loadedAlerts: AlertItem[] = rawData.map((a: any) => ({
+        id: a.id,
+        type: (a.type?.toLowerCase() || "inventory") as AlertItem["type"],
+        severity: (a.severity?.toLowerCase() || "info") as AlertItem["severity"],
+        title: a.title,
+        message: a.message,
+        time: new Date(a.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        read: Boolean(a.isRead),
+        actionLabel: a.actionLabel,
+        actionHref: a.actionHref,
+        category: a.metadata?.category,
+      }));
 
-      setAlerts(allAlerts);
+      setAlerts(loadedAlerts);
+      if (summaryRes?.data) {
+        setBackendSummary(summaryRes.data);
+      }
     } catch (e) {
       console.error("Failed to load alerts:", e);
     } finally {
-      isFetchingRef.current = false;
       setIsRefreshing(false);
     }
-  }, [user, getStorageKey]);
+  }, [user, searchQuery]);
 
   useEffect(() => {
     fetchAlerts();
   }, [fetchAlerts]);
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isLiveMonitoring) {
-      interval = setInterval(() => {
-        fetchAlerts();
-      }, 60000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isLiveMonitoring, fetchAlerts]);
-
-  const filtered = alerts.filter((a) => {
-    if (filterType !== "all" && a.type !== filterType) return false;
-    if (filterSeverity !== "all" && a.severity !== filterSeverity) return false;
-    if (showUnreadOnly && a.read) return false;
-    return true;
-  });
-
-  const unreadCount = alerts.filter((a) => !a.read).length;
-  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
-  const inventoryCount = alerts.filter((a) => a.type === "inventory").length;
-  const orderCount = alerts.filter((a) => a.type === "order").length;
-
-  const markRead = (id: string) => {
+  const markRead = useCallback((id: string) => {
+    alertsApi.markAsRead?.(id)?.catch(() => {});
     setAlerts((p) => p.map((a) => a.id === id ? { ...a, read: true } : a));
-    const storageKey = getStorageKey();
-    const saved = localStorage.getItem(storageKey);
-    let ids = new Set<string>();
-    if (saved) { try { ids = new Set(JSON.parse(saved)); } catch(e) {} }
-    ids.add(id);
-    localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
-  };
+  }, []);
 
-  const markAllRead = () => {
+  const markAllRead = useCallback(() => {
+    alertsApi.markAllAsRead?.()?.catch(() => {});
     setAlerts((p) => p.map((a) => ({ ...a, read: true })));
-    const storageKey = getStorageKey();
-    const ids = new Set(alerts.map(a => a.id));
-    localStorage.setItem(storageKey, JSON.stringify(Array.from(ids)));
-  };
+  }, []);
 
-  const dismiss = (id: string) => setAlerts((p) => p.filter((a) => a.id !== id));
+  const filteredAlerts = useMemo(() => {
+    return alerts.filter((a) => {
+      if (activeChip === "stock" && a.type !== "inventory") return false;
+      if (activeChip === "orders" && a.type !== "order") return false;
+      if (activeChip === "unread" && a.read) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchTitle = a.title.toLowerCase().includes(q);
+        const matchMsg = a.message.toLowerCase().includes(q);
+        if (!matchTitle && !matchMsg) return false;
+      }
+      return true;
+    });
+  }, [alerts, activeChip, searchQuery]);
+
+  // Summary card metrics
+  const needsAttentionCount = backendSummary?.needsAttention ?? alerts.length;
+  const outOfStockCount = backendSummary?.outOfStockCount ?? alerts.filter(a => a.severity === "critical" && a.type === "inventory").length;
+  const runningLowCount = backendSummary?.runningLowCount ?? alerts.filter(a => a.severity === "warning" && a.type === "inventory").length;
+  const pendingActionsCount = backendSummary?.pendingActionsCount ?? alerts.filter(a => a.type === "order").length;
 
   return (
-    <div className="min-h-full space-y-6 animate-in fade-in duration-200">
-      {/* ── 1. TOP ACTION TOOLBAR ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={fetchAlerts}
-            className="p-1.5 px-2.5 sm:px-3 rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1.5 text-xs font-bold shrink-0"
-            title="Refresh alerts"
-          >
-            <RefreshCw
-              size={13}
-              className={clsx("transition-transform shrink-0", isRefreshing && "animate-spin text-[#F58220]")}
-            />
-            <span>Refresh</span>
-          </button>
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground">
+      {/* Page Header */}
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            Alerts & Notifications
+          </h1>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Things that need your attention</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {unreadCount > 0 && (
+        <div className="flex items-center gap-3">
+          {alerts.some(a => !a.read) && (
             <button
-              type="button"
               onClick={markAllRead}
-              className="px-2.5 sm:px-3 py-1.5 bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:border-[#F58220] transition-all flex items-center gap-1.5 shrink-0"
+              className="flex items-center gap-1.5 bg-white dark:bg-card text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-white/10 px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-50 dark:hover:bg-white/5 transition-all shadow-sm cursor-pointer"
             >
-              <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
-              <span>Mark All Read</span>
+              <CheckCircle2 size={14} className="text-emerald-500" />
+              Mark All Read
             </button>
           )}
 
           <button
-            type="button"
-            onClick={() => setIsLiveMonitoring(!isLiveMonitoring)}
-            className={clsx(
-              "flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold border shrink-0 transition-colors",
-              isLiveMonitoring
-                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                : "bg-slate-50 text-slate-500 dark:bg-white/5 dark:text-slate-400 border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10"
-            )}
+            onClick={fetchAlerts}
+            className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-500 hover:text-gray-700 dark:hover:text-white transition-colors cursor-pointer"
+            title="Refresh alerts"
           >
-            <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", isLiveMonitoring ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
-            <span>Live Monitoring</span>
+            <RefreshCw size={15} className={clsx("transition-transform", isRefreshing && "animate-spin text-[#f58220]")} />
           </button>
         </div>
       </div>
 
-      {/* ── 2. STATS CARDS ── */}
-      <div className="space-y-2">
-        <h2 className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-          ALERT SUMMARY
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-          {/* Card 1: Unread */}
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-orange-50 text-[#F58220] border-orange-200/60 dark:bg-orange-950/30 dark:border-orange-500/20">
-                <Bell size={16} strokeWidth={2.2} />
-              </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate flex-1 min-w-0">
-                UNREAD ALERTS
-              </p>
+      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+        {/* Top Operational KPI Summary */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 flex items-center gap-3.5 shadow-sm">
+            <div className="p-2.5 rounded-lg bg-orange-50 dark:bg-orange-950/30 text-[#f58220]">
+              <Bell size={20} />
             </div>
-            <div className="my-2 sm:my-2.5 min-w-0">
-              <h3 className="text-xl xs:text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {unreadCount}
-              </h3>
-            </div>
-            <div className="min-h-[18px] min-w-0">
-              {unreadCount > 0 && (
-                <p className="text-[11px] sm:text-xs font-medium text-[#F58220] truncate">
-                  Requires attention
-                </p>
-              )}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-slate-400 font-semibold">NEEDS ATTENTION</p>
+              <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-0.5">{needsAttentionCount}</h3>
             </div>
           </div>
 
-          {/* Card 2: Critical */}
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-rose-50 text-rose-600 border-rose-200/60 dark:bg-rose-950/30 dark:border-rose-500/20">
-                <AlertTriangle size={16} strokeWidth={2.2} />
-              </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate flex-1 min-w-0">
-                CRITICAL ISSUES
-              </p>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 flex items-center gap-3.5 shadow-sm">
+            <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400">
+              <AlertTriangle size={20} />
             </div>
-            <div className="my-2 sm:my-2.5 min-w-0">
-              <h3 className="text-xl xs:text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {criticalCount}
-              </h3>
-            </div>
-            <div className="min-h-[18px] min-w-0">
-              {criticalCount > 0 && (
-                <p className="text-[11px] sm:text-xs font-medium text-rose-600 truncate">
-                  Immediate action required
-                </p>
-              )}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-slate-400 font-semibold">OUT OF STOCK</p>
+              <h3 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-0.5">{outOfStockCount}</h3>
             </div>
           </div>
 
-          {/* Card 3: Inventory */}
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-blue-50 text-blue-600 border-blue-200/60 dark:bg-blue-950/30 dark:border-blue-500/20">
-                <Package size={16} strokeWidth={2.2} />
-              </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate flex-1 min-w-0">
-                INVENTORY ALERTS
-              </p>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 flex items-center gap-3.5 shadow-sm">
+            <div className="p-2.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400">
+              <Package size={20} />
             </div>
-            <div className="my-2 sm:my-2.5 min-w-0">
-              <h3 className="text-xl xs:text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {inventoryCount}
-              </h3>
-            </div>
-            <div className="min-h-[18px] min-w-0">
-              {inventoryCount > 0 && (
-                <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
-                  Low stock / reorder triggers
-                </p>
-              )}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-slate-400 font-semibold">RUNNING LOW</p>
+              <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{runningLowCount}</h3>
             </div>
           </div>
 
-          {/* Card 4: Orders */}
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 bg-emerald-50 text-emerald-600 border-emerald-200/60 dark:bg-emerald-950/30 dark:border-emerald-500/20">
-                <ShoppingCart size={16} strokeWidth={2.2} />
-              </div>
-              <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate flex-1 min-w-0">
-                ORDER ALERTS
-              </p>
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 flex items-center gap-3.5 shadow-sm">
+            <div className="p-2.5 rounded-lg bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400">
+              <ShoppingCart size={20} />
             </div>
-            <div className="my-2 sm:my-2.5 min-w-0">
-              <h3 className="text-xl xs:text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {orderCount}
-              </h3>
-            </div>
-            <div className="min-h-[18px] min-w-0">
-              {orderCount > 0 && (
-                <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
-                  Shipment & approval updates
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. FILTER BAR ── */}
-      <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-3 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 w-full min-w-0">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-2 w-full lg:w-auto min-w-0">
-          {/* Type filters */}
-          <div className="overflow-x-auto custom-scrollbar w-full sm:w-auto max-w-full pb-1 sm:pb-0">
-            <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5 gap-0.5 shrink-0 min-w-full sm:min-w-0">
-              {(["all", "inventory", "order", "payment", "dispatch", "system"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setFilterType(t)}
-                  className={clsx(
-                    "px-2.5 sm:px-3 py-1.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-bold capitalize transition-all select-none whitespace-nowrap shrink-0",
-                    filterType === t
-                      ? "bg-white dark:bg-slate-800 text-[#F58220] shadow-sm border border-slate-200 dark:border-white/10 font-black"
-                      : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                  )}
-                >
-                  {t === "all" ? "All Types" : TYPE_CONFIG[t as AlertType]?.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="hidden sm:block w-px h-5 bg-slate-200 dark:bg-white/10 shrink-0" />
-
-          {/* Severity filters */}
-          <div className="overflow-x-auto custom-scrollbar w-full sm:w-auto max-w-full pb-1 sm:pb-0">
-            <div className="inline-flex items-center p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/60 dark:border-white/5 gap-0.5 shrink-0 min-w-full sm:min-w-0">
-              {(["all", "critical", "warning", "info", "success"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setFilterSeverity(s)}
-                  className={clsx(
-                    "px-2 sm:px-2.5 py-1.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-bold capitalize transition-all select-none whitespace-nowrap shrink-0",
-                    filterSeverity === s
-                      ? "bg-white dark:bg-slate-800 text-[#F58220] shadow-sm border border-slate-200 dark:border-white/10 font-black"
-                      : "text-slate-500 hover:text-slate-800 dark:hover:text-white"
-                  )}
-                >
-                  {s === "all" ? "All" : s}
-                </button>
-              ))}
+            <div>
+              <p className="text-xs text-gray-500 dark:text-slate-400 font-semibold">PENDING ACTIONS</p>
+              <h3 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-0.5">{pendingActionsCount}</h3>
             </div>
           </div>
         </div>
 
-        {/* Unread Filter Button */}
-        <button
-          type="button"
-          onClick={() => setShowUnreadOnly(!showUnreadOnly)}
-          className={clsx(
-            "flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all shrink-0 w-full sm:w-auto",
-            showUnreadOnly
-              ? "bg-[#F58220] text-white border-[#F58220]"
-              : "bg-white dark:bg-[#12141c] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10 hover:border-slate-300"
-          )}
-        >
-          {showUnreadOnly ? <EyeOff size={13} className="shrink-0" /> : <Eye size={13} className="shrink-0" />}
-          <span>{showUnreadOnly ? "Showing Unread" : "Unread Only"}</span>
-        </button>
-      </div>
-
-      {/* ── 4. ALERT LIST ── */}
-      <div className="space-y-3 w-full min-w-0">
-        {filtered.map((alert) => {
-          const typeConf = TYPE_CONFIG[alert.type] || TYPE_CONFIG.system;
-          const Icon = typeConf.icon;
-
-          return (
-            <div
-              key={alert.id}
-              className={clsx(
-                "bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-3.5 sm:p-4 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition-all flex items-start gap-3 sm:gap-4 w-full min-w-0",
-                !alert.read && "ring-1 ring-[#F58220]/20"
-              )}
-            >
-              {/* Type Icon */}
-              <div
+        {/* Filter Chips Toolbar & Search */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl p-1.5 shadow-sm">
+            {[
+              { id: "all", label: `All (${alerts.length})` },
+              { id: "stock", label: `Stock (${alerts.filter(a => a.type === "inventory").length})` },
+              { id: "orders", label: `Orders (${alerts.filter(a => a.type === "order").length})` },
+              { id: "unread", label: `Unread (${alerts.filter(a => !a.read).length})` },
+            ].map((chip) => (
+              <button
+                key={chip.id}
+                onClick={() => setActiveChip(chip.id as any)}
                 className={clsx(
-                  "w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shrink-0 border",
-                  typeConf.bg,
-                  typeConf.color,
-                  typeConf.border
+                  "px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  activeChip === chip.id
+                    ? "bg-[#f58220] text-white shadow-sm"
+                    : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5"
                 )}
               >
-                <Icon size={15} strokeWidth={2.2} />
-              </div>
-
-              {/* Alert Body */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 sm:gap-3">
-                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap min-w-0">
-                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white break-words">
-                      {alert.title}
-                    </h3>
-                    {!alert.read && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#F58220] shrink-0" />
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                    <span
-                      className={clsx(
-                        "px-1.5 sm:px-2 py-0.5 rounded text-[9px] sm:text-[10px] font-bold uppercase tracking-wider border",
-                        SEVERITY_BADGE[alert.severity]
-                      )}
-                    >
-                      {alert.severity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => dismiss(alert.id)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                      title="Dismiss alert"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed break-words">
-                  {alert.message}
-                </p>
-
-                {/* Footer Meta & Actions */}
-                <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2.5 border-t border-slate-100 dark:border-white/5">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
-                      <Clock size={11} className="shrink-0" /> {alert.time}
-                    </span>
-
-                    <span
-                      className={clsx(
-                        "text-[10px] font-bold px-2 py-0.5 rounded border",
-                        typeConf.bg,
-                        typeConf.color,
-                        typeConf.border
-                      )}
-                    >
-                      {typeConf.label}
-                    </span>
-
-                    {!alert.read && (
-                      <button
-                        type="button"
-                        onClick={() => markRead(alert.id)}
-                        className="text-[11px] text-slate-500 hover:text-[#F58220] font-bold transition-colors"
-                      >
-                        Mark Read
-                      </button>
-                    )}
-                  </div>
-
-                  {alert.actionLabel && alert.actionHref && (
-                    <Link
-                      href={alert.actionHref}
-                      className="text-[11px] font-bold text-white bg-[#F58220] hover:bg-[#e0751a] px-3 py-1 rounded-lg transition-colors flex items-center gap-1 shadow-sm shrink-0 ml-auto"
-                    >
-                      <span>{alert.actionLabel}</span>
-                      <ChevronRight size={12} />
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {filtered.length === 0 && alerts.length === 0 && (
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-6 sm:p-12 text-center space-y-2 w-full max-w-full">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
-              <CheckCircle2 size={18} className="text-emerald-500" />
-            </div>
-            <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">All Clear — No Active Alerts</p>
-            <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed px-2">
-              All inventory levels and incoming shipments are operating within normal parameters.
-            </p>
+                {chip.label}
+              </button>
+            ))}
           </div>
-        )}
 
-        {filtered.length === 0 && alerts.length > 0 && (
-          <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 p-6 sm:p-12 text-center space-y-2 w-full max-w-full">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/5 text-slate-400 flex items-center justify-center mx-auto">
-              <EyeOff size={18} className="text-slate-500" />
-            </div>
-            <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-white">No Alerts Match Your Filters</p>
-            <p className="text-[11px] text-slate-400 max-w-sm mx-auto leading-relaxed px-2">
-              Try changing the alert type, severity, or unread filter.
-            </p>
+          <div className="relative flex-1 max-w-xs min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search alerts..."
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-sm"
+            />
+            {searchQuery && (
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 transition-colors"
+                onClick={() => setSearchQuery("")}
+              />
+            )}
           </div>
-        )}
+        </div>
+
+        {/* Alert Cards Container */}
+        <div className="space-y-3">
+          {filteredAlerts.length === 0 ? (
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-12 text-center text-sm text-gray-500 dark:text-slate-400 shadow-sm">
+              <CheckCircle2 size={32} className="mx-auto mb-2 text-emerald-500 opacity-60" />
+              All Clear — No active alerts match your view
+            </div>
+          ) : (
+            filteredAlerts.map((alert) => (
+              <AlertCard key={alert.id} alert={alert} onMarkRead={markRead} />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

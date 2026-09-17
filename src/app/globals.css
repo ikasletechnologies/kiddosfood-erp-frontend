@@ -221,6 +221,11 @@ input[type="number"] {
 
 /* ─── Premium ERP Print Layout Styles ────────────────────────── */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
   /* 1. Hide Sidebar, Header, non-print control panels and generic buttons */
   aside,
   header,
@@ -230,6 +235,7 @@ input[type="number"] {
   select,
   iframe,
   .no-print,
+  .print\:hidden,
   .badge-new,
   .badge-hot,
   .toast,
@@ -241,6 +247,7 @@ input[type="number"] {
   html,
   body,
   main,
+  #root,
   div[class*="flex-1"],
   div[class*="overflow-y-auto"] {
     background: #ffffff !important;
@@ -254,49 +261,24 @@ input[type="number"] {
     box-shadow: none !important;
   }
 
-  /* 3. Strip decorative UI element shadows, borders, backgrounds and radius rules */
-  .bg-white,
-  .dark\:bg-\[\#12141c\],
-  .bg-slate-50\/50,
-  .dark\:bg-slate-900\/30,
-  div[class*="border"],
-  div[class*="shadow-sm"],
-  div[class*="rounded-2xl"],
-  div[class*="rounded-xl"] {
-    border: none !important;
+  /* Remove shadows for crisp printing */
+  * {
     box-shadow: none !important;
-    background: transparent !important;
-    border-radius: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    text-shadow: none !important;
   }
 
-  /* 4. Elegant accounting report printing */
-  .p-5,
-  .px-5,
-  .py-4,
-  .p-4,
-  .md\:p-6 {
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-
-  /* Make sure titles stand out cleanly */
-  h2, .page-title, h1 {
-    font-size: 20pt !important;
-    font-weight: 800 !important;
+  /* Clean headings */
+  h1, h2, h3, .page-title {
     color: #000000 !important;
-    margin-bottom: 12pt !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+    font-family: inherit !important;
   }
 
-  /* 5. Force Table Grid lines & Clean Spacing */
+  /* 3. Force Table Grid lines & Clean Spacing */
   table {
     width: 100% !important;
     border-collapse: collapse !important;
-    margin-top: 15px !important;
-    font-size: 10pt !important;
+    margin-top: 10px !important;
+    font-size: 9pt !important;
   }
 
   thead {
@@ -310,31 +292,21 @@ input[type="number"] {
 
   th, td {
     color: #000000 !important;
-    border: 1px solid #e2e8f0 !important; /* Force explicit clean border grid */
-    padding: 10px 8px !important;
-    text-align: left !important;
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px 8px !important;
     background-color: transparent !important;
   }
 
   th {
     font-weight: bold !important;
-    background-color: #f8fafc !important; /* Light grey header backgrounds for print */
+    background-color: #f1f5f9 !important;
+    text-transform: uppercase !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
-  }
-
-  .text-right, td:nth-child(2), td:nth-child(3) {
-    text-align: right !important;
   }
 
   /* double underline for accounting report totals */
   .border-double-bottom {
     border-bottom: 3px double #000000 !important;
-  }
-
-  /* 6. Standard A4 Margins and Page Breaks */
-  @page {
-    size: A4 portrait;
-    margin: 1.5cm;
   }
 }

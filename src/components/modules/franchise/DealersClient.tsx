@@ -537,7 +537,9 @@ export default function DealersClient() {
                         <button
                           onClick={() => {
                             setIsMoreMenuOpen(false);
-                            const params = new URLSearchParams({ parent: "franchise", report: "Dealer Statement" });
+                            const params = new URLSearchParams({ parent: "franchise", report: "Party Statement" });
+                            if (selectedDealer?.id) params.set("partyId", selectedDealer.id);
+                            params.set("partyType", "DEALER");
                             if (selectedDealer?.name) params.set("partyName", selectedDealer.name);
                             router.push(`/reports?${params.toString()}`);
                           }}

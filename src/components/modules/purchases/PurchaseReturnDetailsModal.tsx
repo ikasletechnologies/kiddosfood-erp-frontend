@@ -45,7 +45,7 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
               <span className={clsx(
                 "px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest border inline-block mt-0.5",
                 data.status === "PENDING" ? "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-100 dark:border-amber-900/40" :
-                data.status === "APPROVED" || data.status === "COMPLETED" ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/40" :
+                data.status === "COMPLETED" ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-900/40" :
                 "bg-gray-50 dark:bg-white/5 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-white/10"
               )}>
                 {data.status}
@@ -62,7 +62,7 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
              ) : (
                <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 rounded-xl p-4">
                  <p className="text-xs font-bold text-orange-800 dark:text-orange-300">NORMAL PURCHASE RETURN</p>
-                 <p className="text-[11px] text-orange-600 dark:text-orange-400 mt-1">Approving this return will apply an inventory deduction (RETURN_OUT).</p>
+                 <p className="text-[11px] text-orange-600 dark:text-orange-400 mt-1">Confirming this return will apply an inventory deduction (RETURN_OUT).</p>
                </div>
              )}
           </div>
@@ -119,10 +119,10 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
               </button>
             ) : (
               <button 
-                onClick={() => onUpdateStatus(data.id, "APPROVED")}
+                onClick={() => onUpdateStatus(data.id, "COMPLETED")}
                 className="flex-[2] py-4 text-xs font-black uppercase tracking-widest text-white bg-orange-600 shadow-lg shadow-orange-600/20 rounded-xl hover:bg-orange-700 transition-all"
               >
-                Approve Return
+                Confirm Return
               </button>
             )}
           </div>

@@ -27,6 +27,7 @@ import { clsx } from "clsx";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { useAuth } from "@/context/AuthContext";
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
 const MONTH_NAMES = ["January","February","March","April","May","June",
@@ -224,6 +225,7 @@ function computeCommercialsFromPO(
 
 export default function GRNPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [view, setView] = useState<"NEW" | "HISTORY">("NEW");
   const [step, setStep] = useState<1 | 2>(1);
   const [pos, setPOs] = useState<PO[]>([]);
@@ -255,6 +257,13 @@ export default function GRNPage() {
     const parts = dateStr.split("-");
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
+  };
+
+  const formatLotPreview = (baseLot: string, indexOffset: number) => {
+    const match = baseLot.match(/^(LOT-\d{8}-)(\d{5})$/);
+    if (!match) return baseLot;
+    const seqNum = parseInt(match[2], 10) + indexOffset;
+    return `${match[1]}${String(seqNum).padStart(5, '0')}`;
   };
 
   const fmtDateDisplay = (iso: string) => {
@@ -296,17 +305,40 @@ export default function GRNPage() {
     setPreviewGRN(true);
   };
 
-  // Fetch Warehouses on mount
+  // Fetch Warehouses on mount (Role-aware: HQ gets HQ warehouses via forGRN scope; Franchise gets their own warehouse)
   useEffect(() => {
-    inventoryApi.getWarehouses()
+    const isFranchiseUser = !!(user?.franchiseId || (user as any)?.franchise?.id || (user?.role || (user as any)?.role?.name || "").toUpperCase() === "FRANCHISE_ADMIN");
+    const params = isFranchiseUser ? {} : { forGRN: true, scope: "HQ" };
+
+    inventoryApi.getWarehouses(params)
       .then(res => {
         const list = res.data || [];
-        setWarehouses(list);
+        const userFranchiseId = user?.franchiseId || (user as any)?.franchise?.id;
+
+        let filtered = list;
+        if (isFranchiseUser) {
+          // Franchise User: Show their own franchise warehouse(s)
+          const franchiseOnly = list.filter((w: any) =>
+            w.franchiseId === userFranchiseId ||
+            w.id === (user as any)?.primaryWarehouseId ||
+            w.isFranchise ||
+            w.type === "FRANCHISE"
+          );
+          filtered = franchiseOnly.length > 0 ? franchiseOnly : list;
+        } else {
+          // HQ / Headquarter User: Show Headquarter / Company warehouses (exclude franchise warehouses)
+          const hqOnly = list.filter((w: any) => !w.isFranchise && !w.franchiseId);
+          filtered = hqOnly.length > 0 ? hqOnly : list;
+        }
+        setWarehouses(filtered);
+        if (filtered.length > 0) {
+          setDefaultWarehouseId(prev => prev || filtered[0].id);
+        }
       })
       .catch(err => {
         console.error("Failed to fetch warehouses:", err);
       });
-  }, []);
+  }, [user]);
 
   const handleDefaultWarehouseChange = (whId: string) => {
     if (whId === "ADD_NEW") {
@@ -419,11 +451,20 @@ export default function GRNPage() {
       toast.error("Could not load remaining receivable quantity for this PO — showing full ordered quantity, but the server will still block over-receiving.");
     }
 
+    let baseLotStr = "";
+    try {
+      const res = await grnApi.generateLotNumber();
+      baseLotStr = res.data.lotNumber || "";
+    } catch (e) {
+      console.error(e);
+    }
+
     setGrnItems(
-      (po.poItems || []).map(item => {
+      (po.poItems || []).map((item, idx) => {
         const gstRate = item.gstRate ?? (item.inventoryItem as any)?.taxRate ?? (item.inventoryItem as any)?.gstRate ?? 0;
         const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
         const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
+        const autoLotStr = baseLotStr ? formatLotPreview(baseLotStr, idx) : "[AUTO]";
         return {
           materialId: item.inventoryItem.id,
           quantity: item.quantity,
@@ -439,7 +480,7 @@ export default function GRNPage() {
           vendorBatchNo: "",
           mfgDate: "",
           expDate: "",
-          lotNumber: "",
+          lotNumber: autoLotStr,
           warehouseId: po.warehouseId || defaultWarehouseId || "",
           inventoryItem: item.inventoryItem,
         };
@@ -503,9 +544,10 @@ export default function GRNPage() {
     setGeneratingLotIdx(idx);
     try {
       const res = await grnApi.generateLotNumber();
-      updateItemStr(idx, "lotNumber", res.data.lotNumber);
+      const lotStr = res.data.lotNumber ? formatLotPreview(res.data.lotNumber, idx) : "[AUTO]";
+      updateItemStr(idx, "lotNumber", lotStr);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || "Failed to generate lot number.");
+      updateItemStr(idx, "lotNumber", "[AUTO]");
     } finally {
       setGeneratingLotIdx(null);
     }
@@ -552,10 +594,6 @@ export default function GRNPage() {
       const item = itemsToSubmit[i];
       const itemName = item.inventoryItem?.name || selectedPO.poItems[i]?.inventoryItem?.name || `Item #${i + 1}`;
       if (item.acceptedQty > 0) {
-        if (!item.lotNumber || !item.lotNumber.trim()) {
-          toast.error(`Please provide a Batch/Lot Number for "${itemName}".`);
-          return;
-        }
         if (!item.expDate || isNaN(new Date(item.expDate).getTime())) {
           toast.error(`Please select a valid Expiry (EXP) Date for "${itemName}".`);
           return;
@@ -1096,7 +1134,7 @@ export default function GRNPage() {
                       const isOverridden = Math.abs(variance) > 0.001;
                       const actualLineAmount = item.acceptedQty * item.price;
 
-                      const isLotMissing = item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim());
+                      const isAutoLot = !item.lotNumber || !item.lotNumber.trim() || item.lotNumber.trim() === "[AUTO]" || item.lotNumber.trim().toUpperCase().endsWith("-[AUTO]");
                       const isExpMissing = item.acceptedQty > 0 && (!item.expDate || isNaN(new Date(item.expDate).getTime()));
 
                       return (
@@ -1106,34 +1144,38 @@ export default function GRNPage() {
                             <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="space-y-1.5 min-w-[240px]">
-                              <div className="flex items-center gap-1.5">
+                            <div className="space-y-1.5 min-w-[280px]">
+                              <div className="flex items-center gap-1.5 w-full">
                                 <button
                                   type="button"
-                                  title="Generate a unique lot/batch number"
+                                  title="Set to Auto-Generate Lot Number on Save"
                                   disabled={generatingLotIdx === idx}
                                   onClick={() => handleAutoBatch(idx)}
-                                  className="px-2 py-1 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 text-[#f58220] border border-orange-200 dark:border-orange-500/20 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors shrink-0 cursor-pointer"
+                                  className={clsx(
+                                    "px-2 py-1 rounded text-[11px] font-semibold transition-colors shrink-0 cursor-pointer border",
+                                    isAutoLot
+                                      ? "bg-orange-500 text-white border-orange-600 shadow-sm"
+                                      : "bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 text-[#f58220] border-orange-200 dark:border-orange-500/20"
+                                  )}
                                 >
                                   {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
                                 </button>
                                 <input
                                   type="text"
-                                  placeholder="Lot Number *"
+                                  placeholder="Auto-Generated on Save"
                                   value={item.lotNumber || ""}
+                                  title={isAutoLot ? "Permanent lot number will be allocated on Save" : item.lotNumber}
                                   onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
                                   className={clsx(
-                                    "w-36 px-2.5 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800 dark:text-white transition-colors",
-                                    isLotMissing
-                                      ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
-                                      : "border-gray-200 dark:border-white/10"
+                                    "flex-1 min-w-[170px] px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-mono outline-none focus:border-[#f58220] transition-colors",
+                                    isAutoLot ? "text-orange-600 dark:text-orange-400 font-semibold" : "text-gray-800 dark:text-white"
                                   )}
                                 />
                               </div>
 
                               <div className="flex items-center gap-1.5">
                                 <div className={clsx(
-                                  "relative flex items-center gap-1.5 border px-2.5 py-1 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors w-full max-w-[210px]",
+                                  "relative flex items-center gap-1.5 border px-2.5 py-1 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors w-full max-w-[270px]",
                                   isExpMissing
                                     ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
                                     : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
@@ -1153,10 +1195,10 @@ export default function GRNPage() {
                                 </div>
                               </div>
 
-                              {(isLotMissing || isExpMissing) && (
+                              {isExpMissing && (
                                 <div className="pt-0.5">
                                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 px-1.5 py-0.5 rounded">
-                                    {isLotMissing && isExpMissing ? "Lot No & EXP date required" : isLotMissing ? "Lot Number required" : "EXP Date required"}
+                                    EXP Date required
                                   </span>
                                 </div>
                               )}

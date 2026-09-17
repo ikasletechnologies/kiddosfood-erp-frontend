@@ -157,7 +157,10 @@ export default function LineItemsTable() {
 
     const material = materials.find(m => m.id === prefillMaterialId);
     if (!material) {
-      toast.error("That item can't be reordered directly via Purchase Order (it may be a finished good produced in-house). Search for the raw materials it needs instead.");
+      toast.error("That item is a finished good produced in-house. Redirecting to Production page...", { duration: 4000 });
+      setTimeout(() => {
+        window.location.href = "/production";
+      }, 1500);
       return;
     }
 
