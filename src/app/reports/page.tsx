@@ -34,7 +34,6 @@ import CentralBillWiseProfitReport from "./components/BillWiseProfitReport";
 import CentralCashFlowReport from "./components/CashFlowReport";
 import CentralTrialBalanceReport from "./components/TrialBalanceReport";
 import CentralBalanceSheetReport from "./components/BalanceSheetReport";
-import CentralPartyProfitLossReport from "./components/PartyProfitLossReport";
 import CentralAllPartiesReport from "./components/AllPartiesReport";
 import CentralPartyReportByItem from "./components/PartyReportByItem";
 import CentralSalePurchaseByParty from "./components/SalePurchaseByParty";
@@ -1516,8 +1515,11 @@ function transformPartyStatement(data: any): ReportData {
 
 function transformAllParties(data: any): ReportData {
   const rows = toArr(data);
-  const customers = rows.filter((r: any) => r.type === "CUSTOMER" || !r.type).length;
-  const vendors = rows.filter((r: any) => r.type === "VENDOR").length;
+  // API returns `partyType` (CUSTOMER/DEALER/FRANCHISE/VENDOR), never `type` —
+  // reading r.type here made every row (vendors included) count as a
+  // Customer, since undefined always satisfied `!r.type`.
+  const customers = rows.filter((r: any) => r.partyType === "CUSTOMER" || r.partyType === "DEALER" || r.partyType === "FRANCHISE").length;
+  const vendors = rows.filter((r: any) => r.partyType === "VENDOR").length;
   return {
     kpiValue: `${rows.length} Parties`,
     kpiSubText: `Customers: ${customers} • Vendors: ${vendors}`,
@@ -1526,7 +1528,8 @@ function transformAllParties(data: any): ReportData {
       phone: r.phone || r.mobile || "—",
       gst: r.gstNumber || r.gstin || "—",
       state: r.state || r.city || "—",
-      balance: fmtCurrency(r.balance || r.outstanding || 0),
+      // API returns `currentBalance`, not `balance`.
+      balance: fmtCurrency(r.currentBalance ?? r.balance ?? r.outstanding ?? 0),
       creditLimit: fmtCurrency(r.creditLimit || 0),
     })),
   };
@@ -1796,6 +1799,73 @@ function transformItemWiseProfitLoss(data: any): ReportData {
   };
 }
 
+function transformPartyProfitLoss(data: any): ReportData {
+  const rows = toArr(data);
+  const totalProfit = rows.reduce((s: number, r: any) => s + (Number(r.profit) || 0), 0);
+  return {
+    kpiValue: fmtCurrency(totalProfit, { decimals: 2 }),
+    kpiSubText: `${rows.length} ${rows.length === 1 ? "party" : "parties"}`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      totalSales: fmtCurrency(r.totalSales, { decimals: 2 }),
+      totalCost: r.costUnavailable ? "Cost unavailable" : fmtCurrency(r.totalCost, { decimals: 2 }),
+      profit: fmtCurrency(r.profit, { decimals: 2 }),
+      // margin is explicitly null (not 0) when totalSales is 0 — never divide
+      // by zero into Infinity/NaN, and never let that look like a real 0%.
+      margin: r.margin === null || r.margin === undefined ? "—" : `${Number(r.margin).toFixed(2)}%`,
+    })),
+  };
+}
+
+function transformPartyReportByItem(data: any): ReportData {
+  const rows = toArr(data);
+  const totalQuantity = rows.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+  const totalAmount = rows.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  return {
+    kpiValue: `${totalQuantity} Items`,
+    kpiSubText: `${rows.length} ${rows.length === 1 ? "transaction" : "transactions"} • ${fmtCurrency(totalAmount, { decimals: 2 })} total`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      itemName: r.itemName || "—",
+      quantity: String(r.quantity ?? 0),
+      amount: fmtCurrency(r.amount, { decimals: 2 }),
+      date: fmtDate(r.date),
+    })),
+  };
+}
+
+function transformSalePurchaseByParty(data: any): ReportData {
+  const rows = toArr(data);
+  const totalSale = rows.reduce((s: number, r: any) => s + (Number(r.totalSale) || 0), 0);
+  const totalPurchase = rows.reduce((s: number, r: any) => s + (Number(r.totalPurchase) || 0), 0);
+  return {
+    kpiValue: `${rows.length} ${rows.length === 1 ? "Record" : "Records"}`,
+    kpiSubText: `Sale: ${fmtCurrency(totalSale, { decimals: 2 })} • Purchase: ${fmtCurrency(totalPurchase, { decimals: 2 })}`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      totalSale: fmtCurrency(r.totalSale, { decimals: 2 }),
+      totalPurchase: fmtCurrency(r.totalPurchase, { decimals: 2 }),
+      net: fmtCurrency(r.net, { decimals: 2 }),
+    })),
+  };
+}
+
+function transformSalePurchaseByPartyGroup(data: any): ReportData {
+  const rows = toArr(data);
+  const totalSale = rows.reduce((s: number, r: any) => s + (Number(r.totalSale) || 0), 0);
+  const totalPurchase = rows.reduce((s: number, r: any) => s + (Number(r.totalPurchase) || 0), 0);
+  return {
+    kpiValue: `${rows.length} ${rows.length === 1 ? "Group" : "Groups"}`,
+    kpiSubText: `Sale: ${fmtCurrency(totalSale, { decimals: 2 })} • Purchase: ${fmtCurrency(totalPurchase, { decimals: 2 })}`,
+    rows: rows.map((r: any) => ({
+      groupName: r.groupName || "—",
+      totalSale: fmtCurrency(r.totalSale, { decimals: 2 }),
+      totalPurchase: fmtCurrency(r.totalPurchase, { decimals: 2 }),
+      net: fmtCurrency(r.net, { decimals: 2 }),
+    })),
+  };
+}
+
 function transformGeneric(data: any, meta?: ReportMeta): ReportData {
   const rows = toArr(data);
   const totalAmount = rows.reduce((s: number, r: any) => {
@@ -1826,6 +1896,34 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
         description: r.description || r.name || r.particulars || "—",
         amount: fmtCurrency(r.amount || r.total || r.value),
         status: r.status || "—",
+      };
+    }),
+  };
+}
+
+function transformItemDiscountReport(data: any, meta?: ReportMeta): ReportData {
+  const rawRows = Array.isArray(data) ? data : (data?.data || []);
+  const rows = toArr(rawRows);
+  
+  const totalDiscount = rows.reduce((s: number, r: any) => {
+    return s + (Number(r.discountAmount || r.totalDiscountAmount) || 0);
+  }, 0);
+
+  return {
+    kpiValue: rows.length > 0 ? fmtCurrency(totalDiscount) : "—",
+    kpiSubText: rows.length > 0 ? `${rows.length} records found` : "No records found",
+    rows: rows.map((r: any) => {
+      const totalSales = Number(r.totalSales || r.totalSaleAmount || 0);
+      const discountAmount = Number(r.discountAmount || r.totalDiscountAmount || 0);
+      const discountPct = r.discountPct !== undefined ? Number(r.discountPct) : (totalSales > 0 ? (discountAmount / totalSales) * 100 : 0);
+      const netAmount = r.netAmount !== undefined ? Number(r.netAmount) : Math.max(0, totalSales - discountAmount);
+
+      return {
+        itemName: r.itemName || "—",
+        totalSales: fmtCurrency(totalSales),
+        discountAmount: fmtCurrency(discountAmount),
+        discountPct: `${discountPct.toFixed(2)}%`,
+        netAmount: fmtCurrency(netAmount),
       };
     }),
   };
@@ -2239,7 +2337,7 @@ async function fetchReport(
       case "Stock Summary Report By Item Category":
         return transformGeneric((await reportsApi.getStockByCategory(params)).data, meta);
       case "Item Wise Discount":
-        return transformGeneric((await reportsApi.getItemDiscount(params)).data, meta);
+        return transformItemDiscountReport((await reportsApi.getItemDiscount(params)).data, meta);
 
       // Financial - Statements & P&L
       case "Sale":
@@ -2305,15 +2403,15 @@ async function fetchReport(
       case "Party Statement":
         return transformPartyStatement((await reportsApi.getPartyStatement(params)).data);
       case "Party wise Profit & Loss":
-        return transformGeneric((await reportsApi.getPartyProfitLoss(params)).data, meta);
+        return transformPartyProfitLoss((await reportsApi.getPartyProfitLoss(params)).data);
       case "All parties":
         return transformAllParties((await reportsApi.getAllParties()).data);
       case "Party Report By Item":
-        return transformGeneric((await reportsApi.getPartyByItem(params)).data, meta);
+        return transformPartyReportByItem((await reportsApi.getPartyByItem(params)).data);
       case "Sale Purchase By Party":
-        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
+        return transformSalePurchaseByParty((await reportsApi.getSalePurchaseByParty(params)).data);
       case "Sale Purchase By Party Group":
-        return transformGeneric((await reportsApi.getSalePurchaseByPartyGroup(params)).data, meta);
+        return transformSalePurchaseByPartyGroup((await reportsApi.getSalePurchaseByPartyGroup(params)).data);
       case "Franchise Dues & Balances":
         return transformFranchiseDues((await reportsApi.getFranchiseReport(params)).data);
       case "Franchise Performance Summary":

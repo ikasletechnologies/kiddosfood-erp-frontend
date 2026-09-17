@@ -467,10 +467,7 @@ function EditItemForm() {
       customerPrice: prices.customerPrice,
       customModeName: customChannels[0]?.name || "",
       customModePrice: customChannels[0]?.price || 0,
-      openingStockDate: openingDate,
-      openingPurchasePrice: openingPurchasePrice,
       binLocation: itemLocation,
-      initialStock: Number(openingStock) || 0,
     };
 
     try {
@@ -1108,21 +1105,24 @@ function EditItemForm() {
                 {/* Row 1: Opening Stock */}
                 <div className="relative mt-2">
                   <label className="absolute -top-2 left-3 bg-white dark:bg-[#12141a] px-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 z-10 transition-all select-none">
-                    Opening Stock ({category === "FINISHED_GOOD" ? "Units" : primaryUnit.toUpperCase()})
+                    Current Available Stock ({category === "FINISHED_GOOD" ? "Units" : primaryUnit.toUpperCase()}) [Read Only]
                     <span className="w-3.5 h-3.5 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-[8px] text-slate-400 cursor-pointer font-bold select-none hover:bg-slate-200">i</span>
                   </label>
                   <div className="flex gap-2 items-stretch">
                     <input
                       type="number"
                       placeholder={category === "FINISHED_GOOD" ? "Ex: 24" : "Ex: 300"}
-                      value={openingStock || ""}
-                      onChange={e => setOpeningStock(e.target.value)}
-                      className="flex-1 px-3.5 py-3 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
+                      value={openingStock || "0"}
+                      readOnly
+                      className="flex-1 px-3.5 py-3 text-sm bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg outline-none text-slate-700 dark:text-slate-200 font-semibold transition-all cursor-not-allowed"
                     />
                     <div className="flex items-center justify-center px-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-black text-slate-700 dark:text-slate-200 min-w-[3.5rem]">
                       {category === "FINISHED_GOOD" ? "UNITS" : primaryUnit.toUpperCase()}
                     </div>
                   </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Stock is managed via inventory transactions (GRN, Production, Dispatches, Adjustments). Updating product details does not modify stock.
+                  </p>
 
                   {/* Raw material: show entry info with optional conversion */}
                   {category !== "FINISHED_GOOD" && Number(openingStock) > 0 && (
