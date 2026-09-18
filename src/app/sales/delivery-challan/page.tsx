@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -359,6 +359,7 @@ export default function DeliveryChallanPage() {
   const [previewingChallan, setPreviewingChallan] = useState<any>(null);
   const [deliveringChallan, setDeliveringChallan] = useState<any>(null);
   const [returningChallan, setReturningChallan] = useState<any>(null);
+  const [convertingChallan, setConvertingChallan] = useState<any>(null);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const currentCompany = companyProfile || FALLBACK_COMPANY;
 
@@ -396,13 +397,14 @@ export default function DeliveryChallanPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const targetFranchise = isFranchiseUser ? franchiseBranchId : (sourceFranchiseId || undefined);
       const [cRes, dlRes, pRes, fRes, wRes, dcRes, cpRes] = await Promise.allSettled([
-        customersApi.getAll(),
+        customersApi.getAll(targetFranchise ? { franchiseId: targetFranchise } : {}),
         dealersApi.getAll(),
-        productsFullApi.getAll({ includeAll: true }),
+        productsFullApi.getAll(targetFranchise ? { franchiseId: targetFranchise, includeAll: false } : { includeAll: true }),
         franchiseApi.getAll(),
         inventoryApi.getWarehouses(),
-        salesApi.getDeliveryChallans(),
+        salesApi.getDeliveryChallans(targetFranchise ? { franchiseId: targetFranchise } : {}),
         settingsApi.getCompanyProfile(),
       ]);
 
@@ -496,11 +498,37 @@ export default function DeliveryChallanPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isFranchiseUser, franchiseBranchId, sourceFranchiseId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // For franchise users, lock to their own franchise ID.
+  // For Super Admins, prefer the real HQ franchise.
+  const defaultSourceFranchiseId = useCallback(() => {
+    if (isFranchiseUser && franchiseBranchId) {
+      return franchiseBranchId;
+    }
+    return franchises.find((f: any) => f.isHQ)?.id || franchises[0]?.id || "";
+  }, [isFranchiseUser, franchiseBranchId, franchises]);
+
+  // Dynamically re-fetch products when sourceFranchiseId changes
+  useEffect(() => {
+    if (!sourceFranchiseId) return;
+    let cancelled = false;
+    const isHq = !isFranchiseUser && sourceFranchiseId === defaultSourceFranchiseId();
+    productsFullApi.getAll({
+      franchiseId: sourceFranchiseId,
+      includeAll: isHq
+    }).then((res: any) => {
+      if (!cancelled && res?.data) {
+        const d = res.data;
+        setProducts(Array.isArray(d) ? d : d?.data || []);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sourceFranchiseId, isFranchiseUser, defaultSourceFranchiseId]);
 
   // Transit Stock — derived from IN_TRANSIT challans server-side (see
   // SalesService.getTransitStock), not its own manual-entry page.
@@ -851,14 +879,7 @@ export default function DeliveryChallanPage() {
     }
   };
 
-  // For franchise users, lock to their own franchise ID.
-  // For Super Admins, prefer the real HQ franchise.
-  const defaultSourceFranchiseId = useCallback(() => {
-    if (isFranchiseUser && franchiseBranchId) {
-      return franchiseBranchId;
-    }
-    return franchises.find((f: any) => f.isHQ)?.id || franchises[0]?.id || "";
-  }, [isFranchiseUser, franchiseBranchId, franchises]);
+
 
   // Sync source warehouse to branch for franchise users or default for super admins
   useEffect(() => {
@@ -1140,11 +1161,14 @@ export default function DeliveryChallanPage() {
 
   const filteredChallans = getFilteredChallans();
 
-  const filteredCustomers = customers.filter(c =>
-    !customerSearch ||
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.phone?.includes(customerSearch)
-  );
+  const filteredCustomers = customers.filter(c => {
+    if (isFranchiseUser && c.franchiseId && c.franchiseId !== franchiseBranchId) return false;
+    return (
+      !customerSearch ||
+      c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+      c.phone?.includes(customerSearch)
+    );
+  });
 
   const filteredDealers = dealers.filter(d =>
     !customerSearch ||
@@ -2330,16 +2354,8 @@ export default function DeliveryChallanPage() {
                           )}
                           {dc.status === "CLOSED" && (
                             <button
-                              onClick={() => setReturningChallan(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded transition-colors"
-                            >
-                              Return Goods
-                            </button>
-                          )}
-                          {dc.status === "CLOSED" && (
-                            <button
-                              onClick={() => convertToSale(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded transition-colors"
+                              onClick={() => setConvertingChallan(dc)}
+                              className="px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded transition-colors cursor-pointer"
                             >
                               Convert to Sale
                             </button>
@@ -2440,6 +2456,7 @@ export default function DeliveryChallanPage() {
       {deliveringChallan && (
         <MarkDeliveredModal
           challan={deliveringChallan}
+          products={products}
           onClose={() => setDeliveringChallan(null)}
           onDelivered={() => { setDeliveringChallan(null); fetchData(); }}
           showToast={showToast}
@@ -2454,13 +2471,61 @@ export default function DeliveryChallanPage() {
           showToast={showToast}
         />
       )}
+
+      {convertingChallan && (
+        <ConvertChallanToSaleModal
+          challan={convertingChallan}
+          products={products}
+          onClose={() => setConvertingChallan(null)}
+          onSuccess={() => {
+            setConvertingChallan(null);
+            fetchData();
+          }}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }
 
 // ── Mark Delivered modal ─────────────────────────────────────────────────────
-function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { challan: any; onClose: () => void; onDelivered: () => void; showToast: (msg: string, type?: any) => void }) {
+function MarkDeliveredModal({
+  challan,
+  products = [],
+  onClose,
+  onDelivered,
+  showToast,
+}: {
+  challan: any;
+  products?: any[];
+  onClose: () => void;
+  onDelivered: () => void;
+  showToast: (msg: string, type?: any) => void;
+}) {
   const [saving, setSaving] = useState(false);
+  const [currentChallan, setCurrentChallan] = useState<any>(challan);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  useEffect(() => {
+    // If challan has items already loaded, use them
+    if (challan?.items && Array.isArray(challan.items) && challan.items.length > 0) {
+      setCurrentChallan(challan);
+      return;
+    }
+    // Fallback: fetch full challan details if items array is missing or empty
+    if (challan?.id) {
+      setLoadingItems(true);
+      salesApi
+        .getDeliveryChallanById(challan.id)
+        .then((res: any) => {
+          if (res?.data) {
+            setCurrentChallan((prev: any) => ({ ...prev, ...res.data }));
+          }
+        })
+        .catch((e: any) => console.error("Failed to load delivery challan items:", e))
+        .finally(() => setLoadingItems(false));
+    }
+  }, [challan]);
 
   const submit = async () => {
     setSaving(true);
@@ -2475,9 +2540,20 @@ function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { chal
     }
   };
 
-  const recipientName = challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchise?.name || challan.partyName || "—";
-  const firstItem = challan.items?.[0] || challan.lineItems?.[0];
-  const totalItemsCount = challan.items?.length || challan.lineItems?.length || 0;
+  const recipientName =
+    currentChallan.customerName ||
+    currentChallan.customer?.name ||
+    currentChallan.dealer?.name ||
+    currentChallan.franchise?.name ||
+    currentChallan.partyName ||
+    "—";
+
+  const itemsList: any[] =
+    Array.isArray(currentChallan.items) && currentChallan.items.length > 0
+      ? currentChallan.items
+      : Array.isArray(currentChallan.lineItems)
+      ? currentChallan.lineItems
+      : [];
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150" onClick={() => { if (!saving) onClose(); }}>
@@ -2510,31 +2586,84 @@ function MarkDeliveredModal({ challan, onClose, onDelivered, showToast }: { chal
           </p>
 
           {/* Dynamic Challan Details Card */}
-          <div className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 space-y-2 text-xs">
+          <div className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/5 rounded-xl p-3.5 space-y-3 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-gray-500 dark:text-slate-400 font-medium">Challan:</span>
-              <span className="font-mono font-bold text-orange-600 dark:text-orange-400">{challan.challanNo || challan.challanNumber}</span>
+              <span className="font-mono font-bold text-orange-600 dark:text-orange-400">
+                {currentChallan.challanNo || currentChallan.challanNumber}
+              </span>
             </div>
-            {firstItem && (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-gray-500 dark:text-slate-400 font-medium shrink-0">Product:</span>
-                  <span className="font-semibold text-gray-800 dark:text-slate-200 text-right leading-snug break-words">
-                    {firstItem.productName || firstItem.product?.name || "Product"}
-                    {totalItemsCount > 1 && ` (+${totalItemsCount - 1} more)`}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-500 dark:text-slate-400 font-medium">Quantity:</span>
-                  <span className="font-bold text-gray-900 dark:text-white font-mono">
-                    {firstItem.quantity || firstItem.qty} <span className="font-normal text-gray-500 dark:text-slate-400">{firstItem.unit}</span>
-                  </span>
-                </div>
-              </>
-            )}
+
             <div className="flex items-center justify-between">
               <span className="text-gray-500 dark:text-slate-400 font-medium">Recipient:</span>
               <span className="font-medium text-gray-800 dark:text-slate-200">{recipientName}</span>
+            </div>
+
+            {/* Products Section */}
+            <div className="pt-2.5 border-t border-gray-200 dark:border-white/10 space-y-2">
+              <div className="flex items-center justify-between font-semibold text-gray-700 dark:text-slate-300 pb-0.5">
+                <span>Products {itemsList.length > 0 && `(${itemsList.length})`}</span>
+                <span className="text-[11px] text-gray-500 dark:text-slate-400 font-normal">Quantity</span>
+              </div>
+
+              {loadingItems ? (
+                <div className="flex items-center justify-center py-4 gap-2 text-gray-400 dark:text-slate-500">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500" />
+                  <span>Loading product details...</span>
+                </div>
+              ) : itemsList.length === 0 ? (
+                <div className="py-2 text-center text-gray-400 dark:text-slate-500 italic">
+                  No products listed on this challan
+                </div>
+              ) : (
+                <div className="max-h-52 overflow-y-auto space-y-2 pr-1 divide-y divide-gray-200/60 dark:divide-white/5">
+                  {itemsList.map((it: any, idx: number) => {
+                    const matchedProduct = products.find(
+                      (p: any) =>
+                        (it.productId && p.id === it.productId) ||
+                        (it.sku && p.sku === it.sku)
+                    );
+                    const prodName =
+                      it.productName ||
+                      it.product?.name ||
+                      matchedProduct?.name ||
+                      `Product #${idx + 1}`;
+                    const prodSku =
+                      it.sku ||
+                      it.product?.sku ||
+                      matchedProduct?.sku ||
+                      null;
+                    const qty = it.quantity ?? it.qty ?? 0;
+                    const unit = it.unit || matchedProduct?.unit || it.product?.unit || "PCS";
+
+                    return (
+                      <div
+                        key={it.id || it.productId || idx}
+                        className="flex items-start justify-between gap-3 pt-2 first:pt-0"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold text-gray-800 dark:text-slate-200 leading-snug break-words">
+                            {prodName}
+                          </p>
+                          {prodSku && (
+                            <p className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">
+                              SKU: {prodSku}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="font-bold text-gray-900 dark:text-white font-mono">
+                            {qty}
+                          </span>{" "}
+                          <span className="font-normal text-gray-500 dark:text-slate-400 text-[11px]">
+                            {unit}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -2701,3 +2830,316 @@ function ReturnGoodsModal({ challan, onClose, onReturned, showToast }: { challan
     </div>
   );
 }
+
+// ── Convert Challan to Sale modal ──────────────────────────────────────────
+function ConvertChallanToSaleModal({
+  challan,
+  products = [],
+  onClose,
+  onSuccess,
+  showToast
+}: {
+  challan: any;
+  products: any[];
+  onClose: () => void;
+  onSuccess: () => void;
+  showToast: (msg: string, type?: any) => void;
+}) {
+  const router = useRouter();
+  const items = (challan.items || []) as any[];
+
+  // Return quantities by line item id (strings for controlled inputs)
+  const [returnQtys, setReturnQtys] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    items.forEach(it => {
+      init[it.id] = "0";
+    });
+    return init;
+  });
+
+  const [saving, setSaving] = useState(false);
+
+  // Helper to resolve product SKU
+  const getProductSku = (it: any) => {
+    if (it.sku) return it.sku;
+    if (it.productId) {
+      const match = products.find(p => p.id === it.productId || (p.sku && p.sku === it.productId));
+      if (match?.sku) return match.sku;
+    }
+    return it.productId || "—";
+  };
+
+  // Compute stats per row
+  const rowData = useMemo(() => {
+    return items.map(it => {
+      const dispatched = Number(it.quantity ?? it.qty ?? 0);
+      const returnRaw = returnQtys[it.id];
+      const returnNum = parseFloat(returnRaw) || 0;
+      const isInvalid = isNaN(returnNum) || returnNum < 0 || returnNum > dispatched;
+      const sold = isInvalid ? 0 : Math.max(0, dispatched - returnNum);
+      const sku = getProductSku(it);
+      return {
+        item: it,
+        dispatched,
+        returnRaw: returnRaw === undefined ? "0" : returnRaw,
+        returnNum,
+        sold,
+        isInvalid,
+        sku
+      };
+    });
+  }, [items, returnQtys, products]);
+
+  const hasAnyInvalid = rowData.some(r => r.isInvalid);
+  const totalDispatched = rowData.reduce((sum, r) => sum + r.dispatched, 0);
+  const totalReturned = rowData.reduce((sum, r) => sum + (r.isInvalid ? 0 : r.returnNum), 0);
+  const totalSold = rowData.reduce((sum, r) => sum + (r.isInvalid ? 0 : r.sold), 0);
+
+  const handleReturnQtyChange = (itemId: string, value: string) => {
+    setReturnQtys(prev => ({ ...prev, [itemId]: value }));
+  };
+
+  const handleContinue = async () => {
+    if (hasAnyInvalid) {
+      showToast("Please correct the invalid return quantities before continuing.", "error");
+      return;
+    }
+
+    if (totalSold <= 0) {
+      showToast("Cannot continue to Sale Invoice: All items have been returned (0 sold quantity).", "error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // 1. Record returns for any items with return quantity > 0
+      const returnLines = rowData
+        .filter(r => r.returnNum > 0)
+        .map(r => ({
+          challanItemId: r.item.id,
+          quantity: r.returnNum
+        }));
+
+      if (returnLines.length > 0) {
+        const retRes: any = await salesApi.createDeliveryChallanReturn({
+          challanId: challan.id,
+          reason: "Excess Quantity",
+          items: returnLines,
+          idempotencyKey: crypto.randomUUID()
+        });
+
+        const createdReturn = retRes?.data;
+        if (createdReturn?.id) {
+          const itemConditions = (createdReturn.items || []).map((ri: any) => ({
+            returnItemId: ri.id,
+            condition: "GOOD"
+          }));
+          await salesApi.receiveDeliveryChallanReturn(createdReturn.id, itemConditions);
+        }
+      }
+
+      // 2. Prepare items for the Sale Invoice (ONLY products where sold > 0)
+      const soldItemsForInvoice = rowData
+        .filter(r => r.sold > 0)
+        .map(r => {
+          const it = r.item;
+          return {
+            id: it.id || Math.random().toString(36).slice(2),
+            productId: it.productId || "",
+            productName: it.productName || it.description || "Product",
+            itemSearch: it.productName || it.description || "Product",
+            qty: r.sold,
+            unit: it.unit || "NONE",
+            rate: Number(it.rate ?? it.unitPrice ?? 0),
+            discountPct: Number(it.discountPercent ?? it.discountPct ?? 0),
+            taxPct: Number(it.taxPercent ?? it.taxPct ?? 0),
+            batchNumber: it.batchNumber || "",
+            sku: r.sku
+          };
+        });
+
+      // 3. Cache the conversion payload in sessionStorage for seamless transfer
+      const conversionPayload = {
+        challanId: challan.id,
+        challanNumber: challan.challanNo || challan.challanNumber,
+        partyId: challan.customerId || challan.dealerId || challan.franchiseId,
+        partyType: challan.dealerId ? "DEALER" : challan.franchiseId ? "FRANCHISE" : "CUSTOMER",
+        partyName: challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchiseName || "",
+        partyPhone: challan.customerPhone || challan.customer?.phone || challan.dealer?.phone || "",
+        stateOfSupply: challan.stateOfSupply || "",
+        items: soldItemsForInvoice,
+        timestamp: Date.now()
+      };
+
+      try {
+        sessionStorage.setItem(`convert_dc_to_sale_${challan.id}`, JSON.stringify(conversionPayload));
+      } catch (e) {
+        console.warn("Failed to set sessionStorage conversionPayload", e);
+      }
+
+      showToast("Redirecting to Sale Invoice with sold quantities...", "success");
+      onSuccess();
+      router.push(`/sales/invoices?view=create&sourceDeliveryChallanId=${challan.id}`);
+    } catch (e: any) {
+      console.error("Convert to sale error:", e);
+      showToast(e?.response?.data?.error || "Failed to initiate conversion to Sale Invoice", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150" onClick={onClose}>
+      <div 
+        className="bg-white dark:bg-[#0e1017] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-gray-200 dark:border-white/10 overflow-hidden" 
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+              <Truck className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-gray-900 dark:text-white">Convert Challan to Sale</h2>
+              <p className="text-xs text-gray-500 dark:text-slate-400">
+                Enter any return quantities below. Only remaining sold quantities will continue to the Sale Invoice.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Challan Metadata Bar */}
+        <div className="px-5 py-3 bg-gray-50/75 dark:bg-white/[0.01] border-b border-gray-100 dark:border-white/5 grid grid-cols-3 gap-2 text-xs">
+          <div>
+            <span className="text-gray-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Challan Number</span>
+            <span className="font-bold text-gray-800 dark:text-slate-200">#{challan.challanNo || challan.challanNumber}</span>
+          </div>
+          <div>
+            <span className="text-gray-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Party</span>
+            <span className="font-bold text-gray-800 dark:text-slate-200 truncate block">
+              {challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchiseName || "Customer"}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-gray-400 dark:text-slate-500 block text-[10px] uppercase font-semibold">Challan Date</span>
+            <span className="font-medium text-gray-700 dark:text-slate-300">
+              {formatDate(challan.invoiceDate || challan.challanDate || new Date())}
+            </span>
+          </div>
+        </div>
+
+        {/* Table of Product Rows */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 custom-scrollbar">
+          <div className="border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden shadow-2xs">
+            <table className="w-full text-xs">
+              <thead className="bg-slate-50 dark:bg-white/[0.03] text-gray-500 dark:text-slate-400 font-semibold border-b border-gray-200 dark:border-white/10">
+                <tr>
+                  <th className="text-left px-3 py-2.5">Product</th>
+                  <th className="text-left px-3 py-2.5 hidden sm:table-cell">SKU</th>
+                  <th className="text-right px-3 py-2.5">Dispatched</th>
+                  <th className="text-right px-3 py-2.5 w-32">Return Qty</th>
+                  <th className="text-right px-3 py-2.5 font-bold text-purple-600 dark:text-purple-400">Sold Qty</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                {rowData.map(r => (
+                  <tr key={r.item.id} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.01]">
+                    <td className="px-3 py-2.5">
+                      <div className="font-bold text-gray-900 dark:text-white">{r.item.productName || r.item.description}</div>
+                      <div className="text-[10px] text-gray-400 dark:text-slate-500 sm:hidden">SKU: {r.sku}</div>
+                    </td>
+                    <td className="px-3 py-2.5 text-gray-500 dark:text-slate-400 font-mono hidden sm:table-cell">
+                      {r.sku}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                      {r.dispatched} {r.item.unit || "PCS"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          max={r.dispatched}
+                          value={r.returnRaw}
+                          onChange={e => handleReturnQtyChange(r.item.id, e.target.value)}
+                          className={clsx(
+                            "w-full px-2.5 py-1 text-right text-xs font-semibold rounded-lg outline-none border transition-colors bg-white dark:bg-[#13151f]",
+                            r.isInvalid
+                              ? "border-red-500 text-red-600 focus:ring-1 focus:ring-red-500"
+                              : "border-gray-300 dark:border-white/10 text-gray-800 dark:text-white focus:border-purple-500"
+                          )}
+                        />
+                      </div>
+                      {r.isInvalid && (
+                        <div className="text-[10px] text-red-500 mt-0.5">0 to {r.dispatched} only</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <span className={clsx(
+                        "font-black text-xs px-2 py-0.5 rounded",
+                        r.sold > 0 
+                          ? "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-900/40" 
+                          : "text-gray-400 dark:text-slate-500"
+                      )}>
+                        {r.sold} {r.item.unit || "PCS"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Summary Footer */}
+        <div className="px-5 py-3 border-t border-gray-100 dark:border-white/10 bg-slate-50/75 dark:bg-white/[0.02] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-4 text-xs">
+            <div>
+              <span className="text-gray-400 dark:text-slate-500 text-[10px] uppercase font-semibold block">Total Dispatched</span>
+              <span className="font-bold text-gray-800 dark:text-slate-200">{totalDispatched}</span>
+            </div>
+            <div className="w-px h-6 bg-gray-200 dark:bg-white/10" />
+            <div>
+              <span className="text-gray-400 dark:text-slate-500 text-[10px] uppercase font-semibold block">Total Returned</span>
+              <span className="font-bold text-rose-600 dark:text-rose-400">{totalReturned}</span>
+            </div>
+            <div className="w-px h-6 bg-gray-200 dark:bg-white/10" />
+            <div>
+              <span className="text-gray-400 dark:text-slate-500 text-[10px] uppercase font-semibold block">Total Sold</span>
+              <span className="font-black text-purple-600 dark:text-purple-400">{totalSold}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-3.5 py-2 text-xs font-semibold text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={saving || hasAnyInvalid || totalSold <= 0}
+              className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
+              <span>{saving ? "Processing..." : "Continue to Sale Invoice"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
