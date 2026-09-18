@@ -61,7 +61,7 @@ export const inventoryApi = {
     api.post('/api/inventory/stock-in', data),
   stockOut: (data: { itemId: string, quantity: number, type: string, note?: string }) =>
     api.post('/api/inventory/stock-out', data),
-  adjustment: (data: { itemId: string, newQuantity: number, note?: string }) =>
+  adjustment: (data: { itemId: string, newQuantity: number, unit?: string, note?: string }) =>
     api.post('/api/inventory/adjustment', data),
   getMovements: (params?: any) => api.get('/api/inventory/movements', { params }),
   getAlerts: (params?: { franchiseId?: string; warehouseId?: string }) => api.get('/api/inventory/alerts', { params }),

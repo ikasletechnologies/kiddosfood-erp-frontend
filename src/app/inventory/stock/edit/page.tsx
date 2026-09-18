@@ -7,7 +7,8 @@ import {
   AlertCircle, CheckCircle2,
   Tag, LayoutGrid,
   RefreshCw, Plus, Percent,
-  Coins, Calendar, Search, Barcode, Globe
+  Coins, Calendar, Search, Barcode, Globe,
+  SlidersHorizontal
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -18,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import Fuse from "fuse.js";
 import { toast } from "react-hot-toast";
 import WarehouseFormModal from "@/components/modals/WarehouseFormModal";
+import { Modal } from "@/components/ui/Modal";
 
 function EditItemForm() {
   const router = useRouter();
@@ -187,6 +189,49 @@ function EditItemForm() {
   const [itemLocation, setItemLocation] = useState("");
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [showAddWarehouse, setShowAddWarehouse] = useState(false);
+
+  // Manual stock correction — hits the dedicated adjustment endpoint (POST
+  // /api/inventory/adjustment) rather than the item-master Save above, which
+  // must never touch currentStock (see backend inventory.service.ts comment
+  // "Master-data updates must NEVER mutate stock"). Restricted to the same
+  // roles the backend route allows (SUPER_ADMIN, FRANCHISE_ADMIN).
+  const canAdjustStock = ["SUPER_ADMIN", "FRANCHISE_ADMIN"].includes(
+    ((user as any)?.role?.name || user?.role || "").toUpperCase()
+  );
+  const [showAdjustModal, setShowAdjustModal] = useState(false);
+  const [adjustQty, setAdjustQty] = useState<string>("");
+  const [adjustNote, setAdjustNote] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
+
+  const openAdjustModal = () => {
+    setAdjustQty(String(openingStock || 0));
+    setAdjustNote("");
+    setShowAdjustModal(true);
+  };
+
+  const handleAdjustSubmit = async () => {
+    const qty = Number(adjustQty);
+    if (adjustQty === "" || isNaN(qty) || qty < 0) {
+      toast.error("Enter a valid stock quantity.");
+      return;
+    }
+    setAdjusting(true);
+    try {
+      await inventoryApi.adjustment({
+        itemId: id as string,
+        newQuantity: qty,
+        unit: category === "FINISHED_GOOD" ? "unit" : primaryUnit,
+        note: adjustNote || undefined,
+      });
+      setOpeningStock(qty);
+      toast.success("Stock adjusted successfully.");
+      setShowAdjustModal(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e.message || "Failed to adjust stock.");
+    } finally {
+      setAdjusting(false);
+    }
+  };
 
   const [size, setSize] = useState("1KG");
   const [customNumber, setCustomNumber] = useState("1");
@@ -1119,9 +1164,20 @@ function EditItemForm() {
                     <div className="flex items-center justify-center px-4 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-black text-slate-700 dark:text-slate-200 min-w-[3.5rem]">
                       {category === "FINISHED_GOOD" ? "UNITS" : primaryUnit.toUpperCase()}
                     </div>
+                    {canAdjustStock && (
+                      <button
+                        type="button"
+                        onClick={openAdjustModal}
+                        title="Manually correct stock via a recorded adjustment transaction"
+                        className="flex items-center justify-center gap-1.5 px-4 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 dark:hover:bg-rose-500/20 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs font-bold text-rose-600 dark:text-rose-400 transition-all whitespace-nowrap"
+                      >
+                        <SlidersHorizontal size={13} /> Adjust
+                      </button>
+                    )}
                   </div>
                   <p className="mt-1 text-[10px] text-slate-400">
-                    Stock is managed via inventory transactions (GRN, Production, Dispatches, Adjustments). Updating product details does not modify stock.
+                    Stock is managed via inventory transactions (GRN, Production, Dispatches, Adjustments). Updating product details does not modify stock
+                    {canAdjustStock && " — use \"Adjust\" to record a manual correction"}.
                   </p>
 
                   {/* Raw material: show entry info with optional conversion */}
@@ -1378,6 +1434,69 @@ function EditItemForm() {
         </div>
 
       </div>
+
+      {/* Manual Stock Adjustment Modal */}
+      <Modal
+        isOpen={showAdjustModal}
+        onClose={() => !adjusting && setShowAdjustModal(false)}
+        title="Adjust Stock"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAdjustModal(false)}
+              disabled={adjusting}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleAdjustSubmit}
+              disabled={adjusting}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition-all disabled:opacity-50"
+            >
+              {adjusting ? <RefreshCw size={14} className="animate-spin" /> : <SlidersHorizontal size={14} />}
+              {adjusting ? "Saving..." : "Save Adjustment"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            This records a physical count correction as an <span className="font-bold text-slate-700 dark:text-slate-300">ADJUSTMENT</span> stock movement.
+            The item's stock becomes exactly the quantity you enter below.
+          </p>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              New Stock Quantity ({category === "FINISHED_GOOD" ? "Units" : primaryUnit.toUpperCase()})
+            </label>
+            <input
+              type="number"
+              autoFocus
+              min={0}
+              value={adjustQty}
+              onChange={e => setAdjustQty(e.target.value)}
+              placeholder="Ex: 50"
+              className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 text-slate-800 dark:text-white font-semibold transition-all"
+            />
+            <p className="text-[10px] text-slate-400">
+              Current system stock: {openingStock || 0} {category === "FINISHED_GOOD" ? "Units" : primaryUnit.toUpperCase()}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason / Note (optional)</label>
+            <textarea
+              rows={2}
+              value={adjustNote}
+              onChange={e => setAdjustNote(e.target.value)}
+              placeholder="e.g. Opening balance entry, physical count correction..."
+              className="w-full px-3.5 py-2.5 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 text-slate-800 dark:text-white font-medium transition-all resize-none"
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* HSN Search Modal - moved to root to overlay sticky sidebar correctly */}
       {showHsnSearch && (
