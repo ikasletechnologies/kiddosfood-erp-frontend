@@ -220,7 +220,14 @@ function EditItemForm() {
       await inventoryApi.adjustment({
         itemId: id as string,
         newQuantity: qty,
-        unit: category === "FINISHED_GOOD" ? "unit" : primaryUnit,
+        // Always send the item's own unit back — matching it exactly skips
+        // the backend's measurement-conversion path entirely (see
+        // inventory.service.ts: it only converts when the transaction unit
+        // differs from the item's stored unit). Sending a synthesized unit
+        // like "unit" instead of the item's real unit (e.g. "PC") made the
+        // backend try to convert between two incompatible discrete-count
+        // units and fail with "Unit conversion failed".
+        unit: primaryUnit,
         note: adjustNote || undefined,
       });
       setOpeningStock(qty);
@@ -1441,6 +1448,7 @@ function EditItemForm() {
         onClose={() => !adjusting && setShowAdjustModal(false)}
         title="Adjust Stock"
         size="sm"
+        zIndex={70}
         footer={
           <>
             <button
