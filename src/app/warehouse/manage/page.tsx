@@ -385,14 +385,6 @@ export default function ManageWarehousesPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setWarehouseForBins(wh)}
-                            title="Manage Bins"
-                            className="p-1.5 text-slate-500 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Layers className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
                             onClick={() => setViewingWarehouse(wh)}
                             title="View Warehouse Details"
                             className="p-1.5 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-lg transition-colors cursor-pointer"
