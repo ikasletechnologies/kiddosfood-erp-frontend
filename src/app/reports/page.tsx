@@ -1879,8 +1879,17 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
         const row: Record<string, any> = {};
         meta.columns.forEach((col) => {
           const val = r[col.key];
-          if (val !== undefined) {
-            row[col.key] = val;
+          if (val !== undefined && val !== null && val !== "") {
+            if (col.key === "category" && typeof val === "string") {
+              const clean = val.trim().toUpperCase().replace(/[\s_-]+/g, "");
+              if (clean === "FINISHEDGOOD" || clean === "FINISHEDGOODS" || clean === "RAWMATERIAL" || clean === "RAWMATERIALS" || clean === "SEMIFINISHED" || clean === "SEMIFINISHEDGOOD") {
+                row[col.key] = "Uncategorized";
+              } else {
+                row[col.key] = val;
+              }
+            } else {
+              row[col.key] = Array.isArray(val) ? val.join(", ") : val;
+            }
           } else if (col.key === "date") {
             row[col.key] = fmtDate(r.date || r.createdAt);
           } else if (["amount", "total", "value", "cost"].some((k) => col.key.toLowerCase().includes(k))) {
@@ -1889,6 +1898,7 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
             row[col.key] = r[col.key] || "—";
           }
         });
+        if (r.itemNames) row.itemNames = r.itemNames;
         return row;
       }
       return {
@@ -2788,7 +2798,7 @@ function ReportsContent() {
       const cols = currentMeta.columns.map((c) => ({
         header: c.label,
         key: c.key,
-        format: (["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout"].some((k) => c.key.toLowerCase().includes(k)) ? "currency" : ["quantity", "qty", "count", "units", "items"].some((k) => c.key.toLowerCase().includes(k)) ? "number" : "string") as any
+        format: (["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout"].some((k) => c.key.toLowerCase().includes(k)) ? "currency" : (c.key !== "items" && ["quantity", "qty", "count", "units"].some((k) => c.key.toLowerCase().includes(k))) ? "number" : "string") as any
       }));
 
       // Calculate totals if applicable
@@ -2914,6 +2924,28 @@ function ReportsContent() {
   const isTdsReceivable = activeChild?.id === "TDS Receivable";
   const isItemReportByParty = activeChild?.id === "Item Report By Party";
   const isItemWiseProfitLoss = activeChild?.id === "Item Wise Profit And Loss";
+  const isItemCategoryProfitLoss = activeChild?.id === "Item Category Wise Profit And Loss";
+
+  const categoryProfitSummary = useMemo(() => {
+    if (!isItemCategoryProfitLoss) return null;
+    const totalRevenue = filteredRows.reduce((sum, r) => {
+      const v = r._rawRevenue ?? r.revenue;
+      return sum + (typeof v === "number" ? v : Number(String(v || 0).replace(/[^\d.-]/g, "")) || 0);
+    }, 0);
+    const totalCost = filteredRows.reduce((sum, r) => {
+      const v = r._rawCost ?? r.cost;
+      return sum + (typeof v === "number" ? v : Number(String(v || 0).replace(/[^\d.-]/g, "")) || 0);
+    }, 0);
+    const totalProfit = Number((totalRevenue - totalCost).toFixed(2));
+    const overallMargin = totalRevenue > 0 ? Number(((totalProfit / totalRevenue) * 100).toFixed(2)) : 0;
+    return {
+      totalRevenue,
+      totalCost,
+      totalProfit,
+      overallMargin,
+      categoryCount: filteredRows.length,
+    };
+  }, [isItemCategoryProfitLoss, filteredRows]);
   const isTaxComplianceReport = isGstReport || isGstRateReport || isTdsPayable || isTdsReceivable;
 
   const taxComplianceSummary = useMemo(() => {
@@ -2940,24 +2972,54 @@ function ReportsContent() {
     <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0 print:m-0 print:p-0 print:w-full print:max-w-none print:min-h-0 print:bg-white">
       
       {/* ── Production PDF / Print Header ── */}
-      <div className="hidden print:block mb-4 border-b-2 border-gray-900 pb-3">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 uppercase tracking-tight m-0 p-0">
-              {currentMeta.title || reportTitle}
-            </h1>
-            <p className="text-xs font-semibold text-gray-600 mt-1 m-0 p-0">
-              Kiddos Foods ERP — {reportGroupLabel}
-            </p>
-          </div>
-          <div className="text-right text-xs text-gray-700">
-            <div className="font-bold text-gray-900">Period: {displayRange}</div>
-            <div className="text-[10px] text-gray-500 mt-0.5">
-              Printed: {new Date().toLocaleDateString("en-IN")} • {filteredRows.length} Records
+      {isItemCategoryProfitLoss ? (
+        <div className="hidden print:block mb-4 border-b-2 border-slate-800 pb-3">
+          <div className="flex justify-between items-start">
+            <div className="flex items-center gap-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="Kiddos Food" className="h-11 w-auto max-w-[150px] object-contain" />
+              <div>
+                <div className="text-base font-black text-slate-900 tracking-wider uppercase leading-none">
+                  Kiddos Food
+                </div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">
+                  Enterprise ERP • Inventory &amp; Financial Reports
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <h1 className="text-lg font-black text-slate-900 uppercase tracking-tight m-0 p-0">
+                Item Category Wise Profit &amp; Loss
+              </h1>
+              <div className="text-xs font-bold text-orange-600 mt-1">
+                Period: {displayRange}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                Generated: {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })} at {new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })} • {filteredRows.length} Categories
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="hidden print:block mb-4 border-b-2 border-gray-900 pb-3">
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 uppercase tracking-tight m-0 p-0">
+                {currentMeta.title || reportTitle}
+              </h1>
+              <p className="text-xs font-semibold text-gray-600 mt-1 m-0 p-0">
+                Kiddos Foods ERP — {reportGroupLabel}
+              </p>
+            </div>
+            <div className="text-right text-xs text-gray-700">
+              <div className="font-bold text-gray-900">Period: {displayRange}</div>
+              <div className="text-[10px] text-gray-500 mt-0.5">
+                Printed: {new Date().toLocaleDateString("en-IN")} • {filteredRows.length} Records
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Top Header / Breadcrumb Bar ── */}
       <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs w-full min-w-0 print:hidden">
@@ -3165,7 +3227,30 @@ function ReportsContent() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-3 print:gap-2 print:mb-3">
+          <>
+            {isItemCategoryProfitLoss && categoryProfitSummary && (
+              <div className="hidden print:grid grid-cols-4 gap-2 mb-3 border border-slate-300 rounded-lg p-2.5 bg-slate-50">
+                <div className="border-r border-slate-300 pr-2">
+                  <div className="text-[8.5pt] font-bold text-slate-500 uppercase tracking-wider">Total Revenue</div>
+                  <div className="text-[11pt] font-black text-slate-900 font-mono mt-0.5">{fmtCurrency(categoryProfitSummary.totalRevenue)}</div>
+                </div>
+                <div className="border-r border-slate-300 pr-2 pl-1">
+                  <div className="text-[8.5pt] font-bold text-slate-500 uppercase tracking-wider">Total Cost</div>
+                  <div className="text-[11pt] font-black text-slate-900 font-mono mt-0.5">{fmtCurrency(categoryProfitSummary.totalCost)}</div>
+                </div>
+                <div className="border-r border-slate-300 pr-2 pl-1">
+                  <div className="text-[8.5pt] font-bold text-slate-500 uppercase tracking-wider">Net Profit</div>
+                  <div className={`text-[11pt] font-black font-mono mt-0.5 ${categoryProfitSummary.totalProfit >= 0 ? "text-slate-900" : "text-rose-600"}`}>
+                    {fmtCurrency(categoryProfitSummary.totalProfit)}
+                  </div>
+                </div>
+                <div className="pl-1">
+                  <div className="text-[8.5pt] font-bold text-slate-500 uppercase tracking-wider">Overall Margin</div>
+                  <div className="text-[11pt] font-black text-slate-900 font-mono mt-0.5">{categoryProfitSummary.overallMargin}%</div>
+                </div>
+              </div>
+            )}
+            <div className={clsx("grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:gap-2 print:mb-3", isItemCategoryProfitLoss ? "print:hidden" : "print:grid-cols-3")}>
             <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
               <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
@@ -3202,6 +3287,7 @@ function ReportsContent() {
               </div>
             </div>
           </div>
+          </>
         )}
 
         {/* ── Party Picker (Party Statement only) ── */}
@@ -3495,9 +3581,33 @@ function ReportsContent() {
                                   <span className="font-mono font-semibold text-blue-600 dark:text-blue-400 print:text-black">
                                     {row[col.key] ?? "—"}
                                   </span>
-                                ) : (
-                                  row[col.key] ?? "—"
-                                )}
+                                 ) : col.key === "category" ? (
+                                  <span className="font-semibold text-gray-900 dark:text-white uppercase tracking-tight">
+                                    {(() => {
+                                      const catVal = String(row[col.key] ?? "—");
+                                      const clean = catVal.trim().toUpperCase().replace(/[\s_-]+/g, "");
+                                      if (clean === "FINISHEDGOOD" || clean === "FINISHEDGOODS" || clean === "RAWMATERIAL" || clean === "RAWMATERIALS" || clean === "SEMIFINISHED" || clean === "SEMIFINISHEDGOOD") {
+                                        return "Uncategorized";
+                                      }
+                                      return catVal;
+                                    })()}
+                                  </span>
+                                ) : col.key === "items" ? (
+                                   <div
+                                     className="max-w-[280px] sm:max-w-xs md:max-w-md print:max-w-none text-xs text-gray-700 dark:text-slate-300 print:text-black leading-relaxed font-normal whitespace-normal break-words"
+                                     title={typeof row[col.key] === "string" && row[col.key] !== "—" ? row[col.key] : undefined}
+                                   >
+                                     {row[col.key] && row[col.key] !== "—" ? (
+                                       <span className="line-clamp-2 print:line-clamp-none hover:line-clamp-none transition-all duration-150 cursor-default">
+                                         {row[col.key]}
+                                       </span>
+                                     ) : (
+                                       <span className="text-gray-400 dark:text-slate-500">—</span>
+                                     )}
+                                   </div>
+                                 ) : (
+                                   row[col.key] ?? "—"
+                                 )}
                               </td>
                             );
                           })}
@@ -3557,6 +3667,31 @@ function ReportsContent() {
                           <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((sum, r) => sum + Number(r._rawPurchaseAmt ?? 0), 0))}
                           </td>
+                        </tr>
+                      )}
+                      {isItemCategoryProfitLoss && categoryProfitSummary && filteredRows.length > 0 && (
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-300 dark:border-white/10 print:bg-slate-100 print:border-t-2 print:border-slate-400 text-xs print:text-[9pt]">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white uppercase print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left font-black">
+                            Total
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-500 dark:text-slate-400 text-xs print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left font-semibold">
+                            {filteredRows.length} Categories
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black">
+                            {fmtCurrency(categoryProfitSummary.totalRevenue)}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black">
+                            {fmtCurrency(categoryProfitSummary.totalCost)}
+                          </td>
+                          <td className={`px-5 py-3.5 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black ${categoryProfitSummary.totalProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600"}`}>
+                            {fmtCurrency(categoryProfitSummary.totalProfit)}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black">
+                            {categoryProfitSummary.overallMargin}%
+                          </td>
+                          {!isTaxComplianceReport && !isItemReportByParty && !isItemWiseProfitLoss && (
+                            <td className="print:hidden"></td>
+                          )}
                         </tr>
                       )}
                       {isItemWiseProfitLoss && filteredRows.length > 0 && (
@@ -3657,6 +3792,61 @@ function ReportsContent() {
                 </div>
               </div>
             )}
+        {/* ── Print-only Footer for Item Category Wise Profit & Loss ── */}
+        {isItemCategoryProfitLoss && (
+          <div className="hidden print:flex justify-between items-center mt-6 pt-3 border-t border-slate-300 text-[8pt] text-slate-500 font-medium">
+            <div>
+              Kiddos Food ERP • Item Category Wise Profit &amp; Loss Report • Confidential Business Telemetry
+            </div>
+            <div className="text-right">
+              Printed on {new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+            </div>
+          </div>
+        )}
+
+        {isItemCategoryProfitLoss && (
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 10mm 10mm 10mm 10mm;
+              }
+              body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              aside, header, nav, button, input, select, .print\\:hidden {
+                display: none !important;
+              }
+              table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                font-size: 8.5pt !important;
+              }
+              thead {
+                display: table-header-group !important;
+              }
+              tr {
+                page-break-inside: avoid !important;
+              }
+              th {
+                background-color: #f1f5f9 !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+                font-weight: 700 !important;
+                padding: 6px 8px !important;
+              }
+              td {
+                border: 1px solid #cbd5e1 !important;
+                padding: 5px 8px !important;
+                color: #0f172a !important;
+              }
+            }
+          `}} />
+        )}
           </div>
         </div>
       </div>

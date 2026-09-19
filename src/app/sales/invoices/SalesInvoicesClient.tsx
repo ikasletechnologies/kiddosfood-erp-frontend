@@ -581,6 +581,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         setCustomerSearch(cachedPayload.partyName || "");
         setCustomerPhone(cachedPayload.partyPhone || "");
         if (cachedPayload.stateOfSupply) setStateOfSupply(cachedPayload.stateOfSupply);
+        if (cachedPayload.sourceFranchiseId) setSelectedFranchiseId(cachedPayload.sourceFranchiseId);
         setSelectedCustomer({
           id: cachedPayload.partyId,
           name: cachedPayload.partyName,
@@ -603,6 +604,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           taxPct: Number(it.taxPct || 0),
           taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPct))?.label || "NONE",
           batchNumber: it.batchNumber || "",
+          sku: it.sku || "",
         }));
         setItems(loadedItems);
       }
@@ -631,6 +633,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             setCustomerSearch(pName);
             setCustomerPhone(pPhone);
             if (challan.stateOfSupply) setStateOfSupply(challan.stateOfSupply);
+          if (challan.sourceFranchiseId) setSelectedFranchiseId(challan.sourceFranchiseId);
             setSelectedCustomer({
               id: challan.customerId || challan.dealerId || challan.franchiseId,
               name: pName,
@@ -668,6 +671,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   taxPct,
                   taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
                   batchNumber: it.batchNumber || "",
+                  sku: it.sku || "",
                 });
               }
             }
@@ -1004,7 +1008,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     if (!products.length) return;
     setItems(prev => prev.map(it => {
       if (!it.productId) return it;
-      const p = products.find((pr: any) => pr.id === it.productId);
+      const p = products.find((pr: any) => pr.id === it.productId || (it.sku && pr.sku && pr.sku === it.sku) || (it.productId && pr.sku && pr.sku === it.productId));
       if (!p) return it;
       const rate = getChannelPrice(p, partyType);
       const stock = p.currentStock !== undefined ? p.currentStock : (p.stock || 0);

@@ -2962,6 +2962,7 @@ function ConvertChallanToSaleModal({
       const conversionPayload = {
         challanId: challan.id,
         challanNumber: challan.challanNo || challan.challanNumber,
+        sourceFranchiseId: challan.sourceFranchiseId || null,
         partyId: challan.customerId || challan.dealerId || challan.franchiseId,
         partyType: challan.dealerId ? "DEALER" : challan.franchiseId ? "FRANCHISE" : "CUSTOMER",
         partyName: challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchiseName || "",
