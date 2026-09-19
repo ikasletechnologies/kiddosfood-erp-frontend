@@ -1121,6 +1121,10 @@ function formatCategory(cat: any): string {
   if (!cat) return "—";
   const name = typeof cat === "object" ? (cat.name || cat.label || "") : String(cat);
   if (!name || name === "null" || name === "undefined") return "—";
+  const clean = name.trim().toUpperCase().replace(/[\s_-]+/g, "");
+  if (clean === "FINISHEDGOOD" || clean === "FINISHEDGOODS") return "Finished Goods";
+  if (clean === "RAWMATERIAL" || clean === "RAWMATERIALS") return "Raw Materials";
+  if (clean === "SEMIFINISHED" || clean === "SEMIFINISHEDGOOD" || clean === "SEMIFINISHEDGOODS") return "Semi Finished";
   return name.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
 }
 
@@ -1575,37 +1579,80 @@ function transformStockSummary(data: any): ReportData {
 }
 
 function transformLowStock(data: any): ReportData {
-  const rows = toArr(data?.alerts || data);
+  const rows = toArr(data?.alerts || data?.rows || data?.data || data);
+  const lowStockRows = rows
+    .map((r: any) => {
+      const currentStock = Number(r.currentStock ?? r.stockQty ?? r.quantity ?? r.stock ?? 0);
+      const minStock = Number(
+        r.minimumStock ??
+        r.minStock ??
+        r.minQuantity ??
+        r.reorderPoint ??
+        r.threshold ??
+        r.item?.minimumStock ??
+        r.item?.minStock ??
+        0
+      );
+      const shortfall = Math.max(0, minStock - currentStock);
+      const rawStatus = String(r.status || "").toUpperCase();
+      const status = shortfall > 0
+        ? (rawStatus === "OUT_OF_STOCK" || currentStock <= 0 ? "LOW" : (r.status || "LOW"))
+        : "SAFE";
+      const rawCat = r.effectiveCategory || r.productCategory || r.item?.category || r.category;
+      const category = formatCategory(rawCat);
+
+      return {
+        itemName: r.item?.name || r.name || r.itemName || "—",
+        category,
+        unit: r.unit || r.item?.unit || "—",
+        currentStock: String(currentStock),
+        minStock: String(minStock),
+        shortfall: String(shortfall),
+        status,
+        _rawCurrentStock: currentStock,
+        _rawMinStock: minStock,
+        _rawShortfall: shortfall,
+      };
+    })
+    .filter((r: any) => r._rawMinStock > 0 && r._rawShortfall > 0);
+
   return {
-    kpiValue: `${rows.length} Items`,
-    kpiSubText: rows.length > 0 ? "Requires reorder" : "Stock healthy",
-    rows: rows.map((r: any) => ({
-      itemName: r.item?.name || r.name || r.itemName || "—",
-      category: formatCategory(r.item?.category || r.category),
-      unit: r.unit || r.item?.unit || "—",
-      currentStock: String(Number(r.currentStock || r.quantity || r.stock || 0)),
-      minStock: String(Number(r.minQuantity || r.reorderPoint || r.threshold || 0)),
-      shortfall: String(Math.max(0, Number(r.minQuantity || r.reorderPoint || 0) - Number(r.currentStock || r.quantity || 0))),
-      status: r.status || "Low",
-    })),
+    kpiValue: `${lowStockRows.length} Items`,
+    kpiSubText: lowStockRows.length > 0 ? "Requires reorder" : "Stock healthy",
+    rows: lowStockRows,
   };
 }
 
 function transformStockDetail(data: any): ReportData {
   const rows = toArr(data);
-  const totalIn = rows.filter((r: any) => r.type === "IN" || r.direction === "IN").reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
-  const totalOut = rows.filter((r: any) => r.type === "OUT" || r.direction === "OUT").reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+  const isRowIn = (r: any) => {
+    const rawQty = Number(r.quantity ?? r.baseQty ?? 0);
+    const mType = String(r.movementType || r.type || "").toUpperCase();
+    if (r.type === "IN" || r.direction === "IN" || mType.endsWith("_IN") || mType === "IN") return true;
+    if (r.type === "OUT" || r.direction === "OUT" || mType.endsWith("_OUT") || mType === "OUT") return false;
+    return rawQty >= 0;
+  };
+
+  const totalIn = rows
+    .filter((r: any) => isRowIn(r))
+    .reduce((s: number, r: any) => s + Math.abs(Number(r.quantity ?? r.baseQty ?? 0)), 0);
+  const totalOut = rows
+    .filter((r: any) => !isRowIn(r))
+    .reduce((s: number, r: any) => s + Math.abs(Number(r.quantity ?? r.baseQty ?? 0)), 0);
+
   return {
     kpiValue: `${rows.length} Movements`,
     kpiSubText: `In: ${totalIn} • Out: ${totalOut}`,
     rows: rows.map((r: any) => {
-      const isIn = r.type === "IN" || r.direction === "IN";
+      const rawQty = Number(r.quantity ?? r.baseQty ?? 0);
+      const absQty = Math.abs(rawQty);
+      const isIn = isRowIn(r);
       return {
         date: fmtDate(r.date || r.createdAt),
         itemName: r.item?.name || r.itemName || "—",
         type: r.type || r.movementType || "—",
-        quantityIn: isIn ? String(Number(r.quantity || 0)) : "—",
-        quantityOut: !isIn ? String(Number(r.quantity || 0)) : "—",
+        quantityIn: isIn ? String(absQty) : "—",
+        quantityOut: !isIn ? String(absQty) : "—",
         balance: String(Number(r.runningBalance || r.stockAfter || 0)),
       };
     }),
@@ -1613,19 +1660,36 @@ function transformStockDetail(data: any): ReportData {
 }
 
 function transformItemDetail(data: any): ReportData {
-  const rows = toArr(data);
+  const rawRows = Array.isArray(data) ? data : (data?.data || data?.rows || []);
+  const rows = toArr(rawRows);
   return {
     kpiValue: `${rows.length} Items`,
     kpiSubText: "Active catalog items",
-    rows: rows.map((r: any) => ({
-      name: r.name || "—",
-      sku: r.sku || r.code || "—",
-      hsn: r.hsnCode || r.hsn || "—",
-      unit: r.unit || "—",
-      saleRate: fmtCurrency(r.price || r.sellingPrice),
-      purchaseRate: fmtCurrency(r.costPrice || r.purchasePrice),
-      tax: r.gstRate ? `${r.gstRate}%` : "—",
-    })),
+    rows: rows.map((r: any) => {
+      const saleRate = Number(
+        r.saleRate ?? r.basePrice ?? r.sellingPrice ?? r.customerPrice ?? r.inventoryBasePrice ?? r.price ?? 0
+      );
+      const purchaseRate = Number(
+        r.purchaseRate ?? r.costPrice ?? r.purchasePrice ?? r.inventoryCostPrice ?? 0
+      );
+      const taxVal = r.taxPercent !== undefined && r.taxPercent !== null && r.taxPercent !== ""
+        ? r.taxPercent
+        : r.gstRate !== undefined && r.gstRate !== null && r.gstRate !== ""
+        ? r.gstRate
+        : undefined;
+
+      return {
+        name: r.name || "—",
+        sku: r.sku || r.code || "—",
+        hsn: r.hsnCode || r.hsn || "—",
+        unit: r.unit || "—",
+        saleRate: fmtCurrency(saleRate),
+        purchaseRate: fmtCurrency(purchaseRate),
+        tax: taxVal !== undefined ? `${taxVal}%` : "—",
+        _rawSaleRate: saleRate,
+        _rawPurchaseRate: purchaseRate,
+      };
+    }),
   };
 }
 
@@ -1881,12 +1945,9 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
           const val = r[col.key];
           if (val !== undefined && val !== null && val !== "") {
             if (col.key === "category" && typeof val === "string") {
-              const clean = val.trim().toUpperCase().replace(/[\s_-]+/g, "");
-              if (clean === "FINISHEDGOOD" || clean === "FINISHEDGOODS" || clean === "RAWMATERIAL" || clean === "RAWMATERIALS" || clean === "SEMIFINISHED" || clean === "SEMIFINISHEDGOOD") {
-                row[col.key] = "Uncategorized";
-              } else {
-                row[col.key] = val;
-              }
+              row[col.key] = formatCategory(val);
+            } else if (col.key === "items" && (typeof val === "number" || (!isNaN(Number(val)) && !Array.isArray(val) && !String(val).includes(",")))) {
+              row[col.key] = Number(val);
             } else {
               row[col.key] = Array.isArray(val) ? val.join(", ") : val;
             }
@@ -2212,7 +2273,7 @@ function transformPackaging(data: any): ReportData {
 
 async function fetchReport(
   label: string,
-  params: { startDate: string; endDate: string; search?: string; page?: number; limit?: number; partyId?: string; partyType?: string }
+  params: { startDate: string; endDate: string; search?: string; page?: number; limit?: number; partyId?: string; partyType?: string; franchiseId?: string }
 ): Promise<ReportData> {
   const meta = REPORT_METADATA[label];
   try {
@@ -2337,11 +2398,11 @@ async function fetchReport(
       case "Item Category Wise Profit And Loss":
         return transformGeneric((await reportsApi.getItemCategoryProfitLoss(params)).data, meta);
       case "Low Stock Summary":
-        return transformLowStock((await inventoryApi.getAlerts()).data);
+        return transformLowStock((await inventoryApi.getAlerts(params?.franchiseId ? { franchiseId: params.franchiseId } : undefined)).data);
       case "Stock Detail":
         return transformStockDetail((await inventoryApi.getMovements(params)).data);
       case "Item Detail":
-        return transformItemDetail((await productsFullApi.getAll()).data);
+        return transformItemDetail((await productsFullApi.getAll({ ...params, includeAll: true })).data);
       case "Sale/ Purchase Report By Item Category":
         return transformGeneric((await reportsApi.getSalePurchaseByCategory(params)).data, meta);
       case "Stock Summary Report By Item Category":
@@ -2798,7 +2859,7 @@ function ReportsContent() {
       const cols = currentMeta.columns.map((c) => ({
         header: c.label,
         key: c.key,
-        format: (["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout"].some((k) => c.key.toLowerCase().includes(k)) ? "currency" : (c.key !== "items" && ["quantity", "qty", "count", "units"].some((k) => c.key.toLowerCase().includes(k))) ? "number" : "string") as any
+        format: (c.key.toLowerCase() !== "tax" && !c.key.toLowerCase().includes("percent") && !c.key.toLowerCase().includes("pct") && ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout"].some((k) => c.key.toLowerCase().includes(k)) ? "currency" : ((isItemCategoryProfitLoss && c.key === "items") || (c.key !== "items" && ["quantity", "qty", "count", "units"].some((k) => c.key.toLowerCase().includes(k)))) ? "number" : "string") as any
       }));
 
       // Calculate totals if applicable
@@ -2832,6 +2893,15 @@ function ReportsContent() {
           mfgCost: rowsToExport.reduce((sum, r) => sum + Number(r._rawMfgCost ?? 0), 0),
           consumptionCost: rowsToExport.reduce((sum, r) => sum + Number(r._rawConsumptionCost ?? 0), 0),
           netProfitLoss: rowsToExport.reduce((sum, r) => sum + Number(r._rawNetProfitLoss ?? 0), 0),
+        };
+      } else if (isItemCategoryProfitLoss && categoryProfitSummary) {
+        totalsRow = {
+          category: "Total",
+          items: categoryProfitSummary.totalQuantity,
+          revenue: categoryProfitSummary.totalRevenue,
+          cost: categoryProfitSummary.totalCost,
+          profit: categoryProfitSummary.totalProfit,
+          margin: `${categoryProfitSummary.overallMargin}%`,
         };
       }
 
@@ -2936,11 +3006,16 @@ function ReportsContent() {
       const v = r._rawCost ?? r.cost;
       return sum + (typeof v === "number" ? v : Number(String(v || 0).replace(/[^\d.-]/g, "")) || 0);
     }, 0);
+    const totalQuantity = filteredRows.reduce((sum, r) => {
+      const v = r.items ?? r.quantity ?? 0;
+      return sum + (typeof v === "number" ? v : Number(String(v || 0).replace(/[^\d.-]/g, "")) || 0);
+    }, 0);
     const totalProfit = Number((totalRevenue - totalCost).toFixed(2));
     const overallMargin = totalRevenue > 0 ? Number(((totalProfit / totalRevenue) * 100).toFixed(2)) : 0;
     return {
       totalRevenue,
       totalCost,
+      totalQuantity,
       totalProfit,
       overallMargin,
       categoryCount: filteredRows.length,
@@ -3476,7 +3551,7 @@ function ReportsContent() {
                 <thead>
                   <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider print:bg-slate-100 print:text-black">
                     {currentMeta.columns.map((col, idx) => {
-                      const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k));
+                      const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k)) || (isItemCategoryProfitLoss && col.key === "items");
                       return (
                         <th
                           key={idx}
@@ -3505,7 +3580,7 @@ function ReportsContent() {
                           className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors print:hover:bg-transparent"
                         >
                           {currentMeta.columns.map((col, colIdx) => {
-                            const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k));
+                            const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k)) || (isItemCategoryProfitLoss && col.key === "items");
                             return (
                               <td
                                 key={colIdx}
@@ -3582,15 +3657,12 @@ function ReportsContent() {
                                     {row[col.key] ?? "—"}
                                   </span>
                                  ) : col.key === "category" ? (
-                                  <span className="font-semibold text-gray-900 dark:text-white uppercase tracking-tight">
-                                    {(() => {
-                                      const catVal = String(row[col.key] ?? "—");
-                                      const clean = catVal.trim().toUpperCase().replace(/[\s_-]+/g, "");
-                                      if (clean === "FINISHEDGOOD" || clean === "FINISHEDGOODS" || clean === "RAWMATERIAL" || clean === "RAWMATERIALS" || clean === "SEMIFINISHED" || clean === "SEMIFINISHEDGOOD") {
-                                        return "Uncategorized";
-                                      }
-                                      return catVal;
-                                    })()}
+                                   <span className="font-semibold text-gray-900 dark:text-white tracking-tight">
+                                     {formatCategory(row[col.key])}
+                                   </span>
+                                ) : isItemCategoryProfitLoss && col.key === "items" ? (
+                                  <span className="font-mono font-semibold text-gray-900 dark:text-white print:text-black">
+                                    {row[col.key] !== undefined && row[col.key] !== null && row[col.key] !== "—" ? row[col.key] : (row.quantity ?? 0)}
                                   </span>
                                 ) : col.key === "items" ? (
                                    <div
@@ -3674,8 +3746,8 @@ function ReportsContent() {
                           <td className="px-5 py-3.5 text-gray-900 dark:text-white uppercase print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left font-black">
                             Total
                           </td>
-                          <td className="px-5 py-3.5 text-gray-500 dark:text-slate-400 text-xs print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left font-semibold">
-                            {filteredRows.length} Categories
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black">
+                            {categoryProfitSummary.totalQuantity}
                           </td>
                           <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right font-black">
                             {fmtCurrency(categoryProfitSummary.totalRevenue)}

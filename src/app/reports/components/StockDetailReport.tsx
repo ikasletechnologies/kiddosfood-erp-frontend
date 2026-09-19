@@ -42,10 +42,10 @@ export default function StockDetailReport() {
         
         const formatted = rows.map((r: any) => ({
           itemName: r.itemName || r.name || "—",
-          beginningQuantity: Number(r.beginningQuantity || 0),
-          quantityIn: Number(r.quantityIn || 0),
+          beginningQuantity: Math.abs(Number(r.beginningQuantity || 0)),
+          quantityIn: Math.abs(Number(r.quantityIn || 0)),
           purchaseAmount: Number(r.purchaseAmount || 0),
-          quantityOut: Number(r.quantityOut || 0),
+          quantityOut: Math.abs(Number(r.quantityOut || 0)),
           saleAmount: Number(r.saleAmount || 0),
           closingQuantity: Number(r.closingQuantity || 0)
         }));

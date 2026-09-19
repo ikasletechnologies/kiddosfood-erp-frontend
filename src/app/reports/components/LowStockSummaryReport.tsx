@@ -28,12 +28,18 @@ export default function LowStockSummaryReport() {
         const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
-        const formatted = rows.map((r: any) => ({
-          itemName: r.itemName || r.name || "—",
-          minimumStock: Number(r.minimumStock ?? 0),
-          stockQty: Number(r.stockQty ?? 0),
-          stockValue: Number(r.stockValue ?? 0)
-        }));
+        const formatted = rows
+          .map((r: any) => {
+            const minStock = Number(r.minimumStock ?? r.minStock ?? 0);
+            const stockQty = Number(r.stockQty ?? r.currentStock ?? 0);
+            return {
+              itemName: r.itemName || r.name || "—",
+              minimumStock: minStock,
+              stockQty,
+              stockValue: Number(r.stockValue ?? (stockQty > 0 ? stockQty * (r.costPrice || 0) : 0)),
+            };
+          })
+          .filter((r: any) => r.minimumStock > 0 && r.stockQty < r.minimumStock);
 
         setReportData(formatted);
       } catch (err) {

@@ -107,6 +107,7 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
 interface LineItem {
   id: string;
   productId: string;
+  sku?: string;
   itemSearch: string;
   qty: number;
   unit: string;
@@ -592,20 +593,31 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         setDescription(`Delivery Challan Ref: #${cachedPayload.challanNumber}`);
         setShowDesc(true);
 
-        const loadedItems: LineItem[] = cachedPayload.items.map((it: any) => ({
-          ...makeItem(),
-          productId: it.productId || "",
-          itemSearch: it.productName || it.itemSearch || "Product",
-          qty: Number(it.qty || 1),
-          unit: it.unit || "NONE",
-          rate: Number(it.rate || 0),
-          basePrice: Number(it.rate || 0),
-          discountPct: Number(it.discountPct || 0),
-          taxPct: Number(it.taxPct || 0),
-          taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPct))?.label || "NONE",
-          batchNumber: it.batchNumber || "",
-          sku: it.sku || "",
-        }));
+        const loadedItems: LineItem[] = cachedPayload.items.map((it: any) => {
+          const matchedProd = products.find((p: any) => p.id === it.productId || (p.sku && p.sku === it.productId) || (it.sku && p.sku === it.sku));
+          const validBatches = Array.isArray(matchedProd?.batches)
+            ? matchedProd.batches.filter((b: any) => (b.quantity || b.currentStock || 0) > 0)
+            : [];
+          return {
+            ...makeItem(),
+            productId: it.productId || "",
+            itemSearch: it.productName || it.itemSearch || "Product",
+            qty: Number(it.qty || 1),
+            unit: it.unit || matchedProd?.unit?.code || matchedProd?.unit || "NONE",
+            rate: Number(it.rate || 0),
+            basePrice: Number(it.rate || 0),
+            discountPct: Number(it.discountPct || 0),
+            taxPct: Number(it.taxPct || 0),
+            taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPct))?.label || "NONE",
+            batchNumber: it.batchNumber || (validBatches.length > 0 ? validBatches[0].batchCode : ""),
+            sku: it.sku || matchedProd?.sku || "",
+            baseUnit: matchedProd?.baseUnit || matchedProd?.unit,
+            conversions: matchedProd?.conversions || [],
+            packSize: matchedProd?.packSize || null,
+            availableStock: matchedProd?.currentStock !== undefined ? matchedProd.currentStock : (matchedProd?.stock || 0),
+            batches: validBatches,
+          };
+        });
         setItems(loadedItems);
       }
 
@@ -659,19 +671,28 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               if (soldQty > 0) {
                 const taxPct = Number(it.taxPercent ?? it.taxPct ?? 0);
                 const rate = Number(it.rate ?? it.unitPrice ?? 0);
+                const matchedProd = products.find((p: any) => p.id === it.productId || (p.sku && p.sku === it.productId) || (it.sku && p.sku === it.sku));
+                const validBatches = Array.isArray(matchedProd?.batches)
+                  ? matchedProd.batches.filter((b: any) => (b.quantity || b.currentStock || 0) > 0)
+                  : [];
                 netItems.push({
                   ...makeItem(),
                   productId: it.productId || "",
                   itemSearch: it.productName || it.description || "Product",
                   qty: soldQty,
-                  unit: it.unit || "NONE",
+                  unit: it.unit || matchedProd?.unit?.code || matchedProd?.unit || "NONE",
                   rate,
                   basePrice: rate,
                   discountPct: Number(it.discountPercent ?? it.discountPct ?? 0),
                   taxPct,
                   taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
-                  batchNumber: it.batchNumber || "",
-                  sku: it.sku || "",
+                  batchNumber: it.batchNumber || (validBatches.length > 0 ? validBatches[0].batchCode : ""),
+                  sku: it.sku || matchedProd?.sku || "",
+                  baseUnit: matchedProd?.baseUnit || matchedProd?.unit,
+                  conversions: matchedProd?.conversions || [],
+                  packSize: matchedProd?.packSize || null,
+                  availableStock: matchedProd?.currentStock !== undefined ? matchedProd.currentStock : (matchedProd?.stock || 0),
+                  batches: validBatches,
                 });
               }
             }
