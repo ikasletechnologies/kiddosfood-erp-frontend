@@ -19,7 +19,7 @@ import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import { Modal } from "@/components/ui/Modal";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 
 function toLocalDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -150,7 +150,7 @@ export default function VendorsClient() {
   const [paymentForm, setPaymentForm] = useState({
     amount: "",
     note: "",
-    type: "PAYMENT" as "PAYMENT" | "ADVANCE",
+    type: "PAYMENT" as "PAYMENT" | "ADVANCE" | "REFUND",
     accountId: "",
     paymentMode: "CASH",
     transactionRef: "",
@@ -400,9 +400,9 @@ export default function VendorsClient() {
           <td>${formatReferenceType(e.referenceType)}</td>
           <td>${refNo}</td>
           <td>${e.note || '—'}</td>
-          <td style="text-align: right; color: #dc2626;">${e.type === 'DEBIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
-          <td style="text-align: right; color: #16a34a;">${e.type === 'CREDIT' ? '₹ ' + Math.round(e.amount).toLocaleString() : '₹ 0'}</td>
-          <td style="text-align: right; font-weight: bold;">₹ ${Math.abs(Math.round(balance)).toLocaleString()} ${balance >= 0 ? 'Cr' : 'Dr'}</td>
+          <td style="text-align: right; color: #dc2626;">${e.type === 'DEBIT' ? formatCurrency(e.amount) : '₹ 0'}</td>
+          <td style="text-align: right; color: #16a34a;">${e.type === 'CREDIT' ? formatCurrency(e.amount) : '₹ 0'}</td>
+          <td style="text-align: right; font-weight: bold;">₹ ${formatCurrency(Math.abs(balance)).replace(/^₹/, "")} ${balance >= 0 ? 'Cr' : 'Dr'}</td>
         </tr>
       `;
     }).join('');
@@ -452,9 +452,9 @@ export default function VendorsClient() {
               ${rowsHtml}
               <tr class="total-row">
                 <td colspan="4" style="text-align: right;">Totals:</td>
-                <td style="text-align: right; color: #dc2626;">₹ ${Math.round(printDebitTotal).toLocaleString()}</td>
-                <td style="text-align: right; color: #16a34a;">₹ ${Math.round(printCreditTotal).toLocaleString()}</td>
-                <td style="text-align: right;">₹ ${Math.abs(Math.round(printCreditTotal - printDebitTotal)).toLocaleString()} ${(printCreditTotal - printDebitTotal) >= 0 ? 'Cr' : 'Dr'}</td>
+                <td style="text-align: right; color: #dc2626;">${formatCurrency(printDebitTotal)}</td>
+                <td style="text-align: right; color: #16a34a;">${formatCurrency(printCreditTotal)}</td>
+                <td style="text-align: right;">₹ ${formatCurrency(Math.abs(printCreditTotal - printDebitTotal)).replace(/^₹/, "")} ${(printCreditTotal - printDebitTotal) >= 0 ? 'Cr' : 'Dr'}</td>
               </tr>
             </tbody>
           </table>
@@ -759,6 +759,7 @@ export default function VendorsClient() {
   const selectedAccount = accounts.find(a => a.id === paymentForm.accountId);
   const accountBalance = selectedAccount?.balance || 0;
   const vendorNetPayable = Number(selectedVendor?.totalPurchased || 0) - Number(selectedVendor?.totalPaid || 0);
+  const vendorReceivable = Number(selectedVendor?.balance || 0) < 0 ? Math.abs(Number(selectedVendor?.balance || 0)) : 0;
 
   const getFilteredAccounts = () => {
     if (paymentForm.paymentMode === "CASH") {
@@ -796,7 +797,11 @@ export default function VendorsClient() {
       showToast(`Payment amount cannot exceed Net Payable of ₹${vendorNetPayable.toLocaleString()}`, "error");
       return;
     }
-    if (amountNum > accountBalance) {
+    if (paymentForm.type === 'REFUND' && amountNum > vendorReceivable + 0.01) {
+      showToast(`Refund amount cannot exceed Receivable Balance of ₹${vendorReceivable.toLocaleString()}`, "error");
+      return;
+    }
+    if (paymentForm.type !== 'REFUND' && amountNum > accountBalance) {
       showToast(`Payment amount cannot exceed Available Account Balance of ₹${accountBalance.toLocaleString()}`, "error");
       return;
     }
@@ -859,19 +864,9 @@ export default function VendorsClient() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
-          <button
-            onClick={() => importFileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap"
-            title="Import Vendors from Excel"
-          >
-            <Upload className="h-3.5 w-3.5 shrink-0" />
-            <span className="hidden sm:inline">Import</span>
-          </button>
-
           <button
             onClick={handleDownloadAllPartiesReport}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg shadow-2xs transition-all whitespace-nowrap cursor-pointer"
             title="Export All Vendors to Excel"
           >
             <Download className="h-3.5 w-3.5 shrink-0" />
@@ -1188,14 +1183,14 @@ export default function VendorsClient() {
                       <div className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-xl">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Purchases</div>
                         <div className="text-lg sm:text-xl font-bold font-mono text-slate-800 dark:text-white mt-1">
-                          ₹ {Math.round(selectedVendor.totalPurchased || 0).toLocaleString()}
+                          {formatCurrency(selectedVendor.totalPurchased || 0)}
                         </div>
                       </div>
 
                       <div className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-xl">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payments Made</div>
                         <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-                          ₹ {Math.round(selectedVendor.totalPayments || 0).toLocaleString()}
+                          {formatCurrency(selectedVendor.totalPayments || 0)}
                         </div>
                       </div>
 
@@ -1207,7 +1202,7 @@ export default function VendorsClient() {
                           "text-lg sm:text-xl font-bold font-mono mt-1",
                           Number(selectedVendor.balance) > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
                         )}>
-                          ₹ {Math.abs(Math.round(selectedVendor.balance || 0)).toLocaleString()}
+                          {formatCurrency(Math.abs(selectedVendor.balance || 0))}
                         </div>
                       </div>
                     </div>
@@ -1263,7 +1258,7 @@ export default function VendorsClient() {
                             <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Credit Limit</p>
                               <p className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                                {detail?.creditLimit ? `₹ ${Number(detail.creditLimit).toLocaleString()}` : "No Limit"}
+                                {detail?.creditLimit ? `${formatCurrency(detail.creditLimit)}` : "No Limit"}
                               </p>
                             </div>
                             <div>
@@ -1463,7 +1458,15 @@ export default function VendorsClient() {
                             filteredLedger.map(e => {
                               const balance = e.runningBalance || e.balanceAfterTransaction || 0;
                               const cleanRefType = formatReferenceType(e.referenceType);
-                              const refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
+                              let refNo = e.returnNumber || e.paymentNumber || e.referenceId || "—";
+                              
+                              // Fix for existing data where referenceId is a UUID
+                              if (e.referenceType === 'PURCHASE' && refNo.length > 20 && e.note?.includes('#')) {
+                                const match = e.note.match(/#([^\s—]+)/);
+                                if (match && match[1]) {
+                                  refNo = match[1];
+                                }
+                              }
 
                               return (
                                 <tr key={e.id} className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors">
@@ -1487,13 +1490,13 @@ export default function VendorsClient() {
                                     {e.note || "—"}
                                   </td>
                                   <td className="px-4 py-3 font-semibold font-mono text-rose-600 dark:text-rose-400 text-right">
-                                    {e.type === 'DEBIT' ? `₹ ${Math.round(e.amount).toLocaleString()}` : '₹ 0'}
+                                    {e.type === 'DEBIT' ? `${formatCurrency(e.amount)}` : '₹ 0'}
                                   </td>
                                   <td className="px-4 py-3 font-semibold font-mono text-emerald-600 dark:text-emerald-400 text-right">
-                                    {e.type === 'CREDIT' ? `₹ ${Math.round(e.amount).toLocaleString()}` : '₹ 0'}
+                                    {e.type === 'CREDIT' ? `${formatCurrency(e.amount)}` : '₹ 0'}
                                   </td>
                                   <td className="px-4 py-3 font-bold font-mono text-slate-800 dark:text-white text-right">
-                                    ₹ {Math.abs(Math.round(balance)).toLocaleString()} {balance >= 0 ? 'Cr' : 'Dr'}
+                                    {formatCurrency(Math.abs(balance))} {balance >= 0 ? 'Cr' : 'Dr'}
                                   </td>
                                   <td className="px-2 py-3 text-center">
                                     <button
@@ -1515,13 +1518,13 @@ export default function VendorsClient() {
                               Totals:
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-rose-600 dark:text-rose-400">
-                              ₹ {Math.round(ledgerTotals.totalDebit).toLocaleString()}
+                              {formatCurrency(ledgerTotals.totalDebit)}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400">
-                              ₹ {Math.round(ledgerTotals.totalCredit).toLocaleString()}
+                              {formatCurrency(ledgerTotals.totalCredit)}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-slate-900 dark:text-white">
-                              ₹ {Math.abs(Math.round(ledgerTotals.closingBalance)).toLocaleString()} {ledgerTotals.closingBalance >= 0 ? 'Cr' : 'Dr'}
+                              {formatCurrency(Math.abs(ledgerTotals.closingBalance))} {ledgerTotals.closingBalance >= 0 ? 'Cr' : 'Dr'}
                             </td>
                             <td></td>
                           </tr>
@@ -1762,9 +1765,9 @@ export default function VendorsClient() {
               { label: "Type", value: formatReferenceType(ledgerDetailEntry.referenceType) },
               { label: "Reference", value: ledgerDetailEntry.returnNumber || ledgerDetailEntry.paymentNumber || ledgerDetailEntry.referenceId || "—" },
               { label: "Date", value: new Date(ledgerDetailEntry.createdAt).toLocaleString() },
-              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
-              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `₹ ${Math.round(ledgerDetailEntry.amount).toLocaleString()}` : "—" },
-              { label: "Balance After", value: `₹ ${Math.abs(Math.round(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0)).toLocaleString()} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
+              { label: "Debit", value: ledgerDetailEntry.type === 'DEBIT' ? `${formatCurrency(ledgerDetailEntry.amount)}` : "—" },
+              { label: "Credit", value: ledgerDetailEntry.type === 'CREDIT' ? `${formatCurrency(ledgerDetailEntry.amount)}` : "—" },
+              { label: "Balance After", value: `${formatCurrency(Math.abs(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0))} ${(ledgerDetailEntry.runningBalance || ledgerDetailEntry.balanceAfterTransaction || 0) >= 0 ? 'Cr' : 'Dr'}` },
               { label: "Note", value: ledgerDetailEntry.note || "—" },
             ].map((row) => (
               <div key={row.label} className="flex items-start justify-between gap-4 py-1 border-b border-slate-50 dark:border-white/5 last:border-0">
@@ -1806,10 +1809,20 @@ export default function VendorsClient() {
                 >
                   Advance
                 </button>
+                {vendorReceivable > 0 && (
+                  <button
+                    onClick={() => setPaymentForm({ ...paymentForm, type: 'REFUND' })}
+                    className={clsx("flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors", paymentForm.type === 'REFUND' ? "bg-white dark:bg-white/10 text-emerald-600 shadow-sm" : "text-gray-500")}
+                  >
+                    Receive Refund
+                  </button>
+                )}
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Payment Amount *</label>
+                <label className="text-xs font-medium text-gray-500 dark:text-slate-400">
+                  {paymentForm.type === 'REFUND' ? 'Amount to Receive *' : 'Payment Amount *'}
+                </label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-gray-400">₹</span>
                   <input
@@ -1823,7 +1836,9 @@ export default function VendorsClient() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
-                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 block">Debit Account *</label>
+                  <label className="text-xs font-medium text-gray-500 dark:text-slate-400 mb-1 block">
+                    {paymentForm.type === 'REFUND' ? 'Receive Into Account *' : 'Debit Account *'}
+                  </label>
                   <select
                     value={paymentForm.accountId}
                     onChange={e => setPaymentForm({ ...paymentForm, accountId: e.target.value })}

@@ -1,17 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   Receipt, Plus, Search, RefreshCw, X, User,
   Printer, ChevronDown, Trash2, Check, Share2, Calendar,
   AlignLeft, FileText, ArrowLeft, Truck, MoreVertical,
   Eye, Pencil, CreditCard, FileCheck, RotateCcw, Copy,
-  FileSpreadsheet, Slash
+  FileSpreadsheet, Slash, AlertTriangle
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi, dealersApi } from "@/lib/api";
+import { customersApi, productsFullApi, draftsApi, franchiseApi, settingsApi, dealersApi, salesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
@@ -58,6 +58,13 @@ const UNITS = [
   { label: "Tons (Tne)",       short: "Tne",   code: "TNE" },
   { label: "Units (Unt)",      short: "Unt",   code: "UNT" },
 ];
+
+// Same pattern as pos/page.tsx's formatPackSize — displays a SKU's pack/
+// weight variant (e.g. "450G") as a label distinguishing it from other
+// variants of the same product name. Never used as the stocking unit.
+const PACK_UNIT_LABEL: Record<string, string> = { KG: "kg", G: "g", L: "L", ML: "ml", PCS: "pcs", PC: "pc" };
+const formatPackSize = (p?: { qty: number; unit: string } | null) =>
+  p ? `${p.qty % 1 === 0 ? p.qty : p.qty.toFixed(2)}${PACK_UNIT_LABEL[p.unit] || p.unit.toLowerCase()}` : null;
 
 const TAX_OPTIONS = [
   { label: "NONE", value: 0 },
@@ -113,6 +120,10 @@ interface LineItem {
   basePrice: number;
   batchNumber?: string;
   batches?: any[];
+  // Pack/weight variant (e.g. "450G" parsed off the SKU) — display-only
+  // metadata distinguishing which SKU variant this is (APPAM 450G vs
+  // APPAM 900G). Never the transaction/stocking unit — `unit` above is.
+  packSize?: { qty: number; unit: string } | null;
 }
 
 function makeItem(): LineItem {
@@ -242,7 +253,10 @@ export function getPartyDisplayName(order: any, invoice?: any): string {
   if (o.dealer?.name && typeof o.dealer.name === "string" && o.dealer.name.trim()) {
     return o.dealer.name.trim();
   }
-  if (o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
+  if (o.buyerFranchise?.name && typeof o.buyerFranchise.name === "string" && o.buyerFranchise.name.trim()) {
+    return o.buyerFranchise.name.trim();
+  }
+  if (o.partyType === "FRANCHISE" && o.franchise?.name && typeof o.franchise.name === "string" && o.franchise.name.trim()) {
     return o.franchise.name.trim();
   }
   if (o.customer?.name && typeof o.customer.name === "string" && o.customer.name.trim()) {
@@ -257,7 +271,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
-  const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN";
+  const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN" || user?.role?.toUpperCase() === "FRANCHISE_STAFF" || Boolean(user?.franchiseId);
 
   const [franchises, setFranchises] = useState<any[]>([]);
   const [dealers, setDealers] = useState<any[]>([]);
@@ -308,6 +322,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [showPriceDrop, setShowPriceDrop] = useState(false);
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
   const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  // The dropdown only ever renders when BOTH openItemDrop and itemDropRect
+  // are set (it's positioned via itemDropRect, fixed-position so it can
+  // escape the table's overflow clipping) — clicking/focusing the search
+  // input must compute this rect too, not just the chevron button, or the
+  // list never appears when the user's insertion point is in the search box.
+  const openItemDropdownFor = (itemId: string, target: Element) => {
+    setOpenItemDrop(itemId);
+    const rect = target.closest("td")?.getBoundingClientRect();
+    if (rect && typeof window !== "undefined") {
+      const dropWidth = Math.min(300, window.innerWidth - 32);
+      const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
+      setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
+    }
+  };
   const [openUnitDrop, setOpenUnitDrop] = useState<string | null>(null);
   const [unitDropRect, setUnitDropRect] = useState<{ top: number; left: number } | null>(null);
   const [termsText, setTermsText] = useState("");
@@ -321,6 +349,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [draftId, setDraftId] = useState<string | null>(null);
   const [deliveryCharge, setDeliveryCharge] = useState<number>(0);
   const [sourceFranchiseOrderId, setSourceFranchiseOrderId] = useState<string | null>(null);
+  const [sourceDeliveryChallanId, setSourceDeliveryChallanId] = useState<string | null>(null);
 
   // Action Menu State
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
@@ -365,9 +394,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const dealerOrderId = searchParams.get("dealerOrderId") || (searchParams.get("source") === "DEALER" ? (searchParams.get("orderId") || searchParams.get("sourceOrderId")) : null);
     const dealerId = searchParams.get("dealerId") || (searchParams.get("partyType") === "DEALER" ? searchParams.get("partyId") : null);
     const customerId = searchParams.get("customerId") || (searchParams.get("partyType") === "CUSTOMER" ? searchParams.get("partyId") : null);
+    const deliveryChallanId = searchParams.get("sourceDeliveryChallanId") || searchParams.get("challanId");
     const sourceParam = searchParams.get("source")?.toUpperCase() || searchParams.get("partyType")?.toUpperCase();
 
-    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create" || franchiseOrderId || dealerOrderId || dealerId || customerId) {
+    if (action === "new" || action === "create" || viewParam === "create" || initialView === "create" || franchiseOrderId || dealerOrderId || dealerId || customerId || deliveryChallanId) {
       setView("create");
     }
 
@@ -404,9 +434,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           const fList = (franRes?.data as any)?.franchises || franRes?.data || [];
           const fr = order.franchise || (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId) : null) || {};
 
-          if (order.franchiseId) {
-            setSelectedFranchiseId(order.franchiseId);
-          }
+          // Franchise Order deep-link buyer identity set to selectedCustomer
 
           // Auto-fetch Customer/Franchise details with actual Franchise name (e.g. gym)
           const resolvedFrName = fr.name || (order.franchiseName && order.franchiseName !== "Unknown" ? order.franchiseName : "") || (order.franchiseId ? (Array.isArray(fList) ? fList.find((f: any) => f.id === order.franchiseId)?.name : "") : "") || "Franchise";
@@ -537,6 +565,122 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       }).catch(() => {});
     }
 
+    if (deliveryChallanId) {
+      setSourceDeliveryChallanId(deliveryChallanId);
+
+      // Check session storage first for immediate data
+      let cachedPayload: any = null;
+      try {
+        const cachedStr = sessionStorage.getItem(`convert_dc_to_sale_${deliveryChallanId}`);
+        if (cachedStr) cachedPayload = JSON.parse(cachedStr);
+      } catch (e) {}
+
+      if (cachedPayload && Array.isArray(cachedPayload.items) && cachedPayload.items.length > 0) {
+        setPartyType(cachedPayload.partyType || "CUSTOMER");
+        setSourceOrderType(cachedPayload.partyType || "CUSTOMER");
+        setCustomerSearch(cachedPayload.partyName || "");
+        setCustomerPhone(cachedPayload.partyPhone || "");
+        if (cachedPayload.stateOfSupply) setStateOfSupply(cachedPayload.stateOfSupply);
+        setSelectedCustomer({
+          id: cachedPayload.partyId,
+          name: cachedPayload.partyName,
+          phone: cachedPayload.partyPhone,
+          state: cachedPayload.stateOfSupply,
+          partyType: cachedPayload.partyType
+        });
+        setDescription(`Delivery Challan Ref: #${cachedPayload.challanNumber}`);
+        setShowDesc(true);
+
+        const loadedItems: LineItem[] = cachedPayload.items.map((it: any) => ({
+          ...makeItem(),
+          productId: it.productId || "",
+          itemSearch: it.productName || it.itemSearch || "Product",
+          qty: Number(it.qty || 1),
+          unit: it.unit || "NONE",
+          rate: Number(it.rate || 0),
+          basePrice: Number(it.rate || 0),
+          discountPct: Number(it.discountPct || 0),
+          taxPct: Number(it.taxPct || 0),
+          taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPct))?.label || "NONE",
+          batchNumber: it.batchNumber || "",
+        }));
+        setItems(loadedItems);
+      }
+
+      // Authoritative challan details from API
+      salesApi.getDeliveryChallanById(deliveryChallanId)
+        .then((res: any) => {
+          const challan = res.data;
+          if (!challan) return;
+
+          if (challan.status === "CONVERTED") {
+            showToast(`Challan #${challan.challanNumber || challan.challanNo} has already been converted to a sale.`, "info");
+            if (challan.convertedInvoiceId) {
+              router.push(`/sales/invoices?id=${challan.convertedInvoiceId}`);
+            }
+            return;
+          }
+
+          // If not loaded from cache, compute net sold items (items where sold > 0)
+          if (!cachedPayload || !Array.isArray(cachedPayload.items) || cachedPayload.items.length === 0) {
+            const pType = challan.dealerId ? "DEALER" : challan.franchiseId ? "FRANCHISE" : "CUSTOMER";
+            setPartyType(pType);
+            setSourceOrderType(pType);
+            const pName = challan.customerName || challan.customer?.name || challan.dealer?.name || challan.franchiseName || "Customer";
+            const pPhone = challan.customerPhone || challan.customer?.phone || challan.dealer?.phone || "";
+            setCustomerSearch(pName);
+            setCustomerPhone(pPhone);
+            if (challan.stateOfSupply) setStateOfSupply(challan.stateOfSupply);
+            setSelectedCustomer({
+              id: challan.customerId || challan.dealerId || challan.franchiseId,
+              name: pName,
+              phone: pPhone,
+              state: challan.stateOfSupply,
+              partyType: pType
+            });
+            setDescription(`Delivery Challan Ref: #${challan.challanNumber || challan.challanNo}`);
+            setShowDesc(true);
+
+            // Compute sold quantities: dispatched - returns
+            const netItems: LineItem[] = [];
+            for (const it of (challan.items || [])) {
+              let returnedQty = 0;
+              for (const ret of (challan.returns || [])) {
+                for (const ri of (ret.items || [])) {
+                  if (ri.challanItemId === it.id) {
+                    returnedQty += Number(ri.quantity || 0);
+                  }
+                }
+              }
+              const soldQty = Math.max(0, Number(it.quantity ?? it.qty ?? 0) - returnedQty);
+              if (soldQty > 0) {
+                const taxPct = Number(it.taxPercent ?? it.taxPct ?? 0);
+                const rate = Number(it.rate ?? it.unitPrice ?? 0);
+                netItems.push({
+                  ...makeItem(),
+                  productId: it.productId || "",
+                  itemSearch: it.productName || it.description || "Product",
+                  qty: soldQty,
+                  unit: it.unit || "NONE",
+                  rate,
+                  basePrice: rate,
+                  discountPct: Number(it.discountPercent ?? it.discountPct ?? 0),
+                  taxPct,
+                  taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
+                  batchNumber: it.batchNumber || "",
+                });
+              }
+            }
+            if (netItems.length > 0) {
+              setItems(netItems);
+            }
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load delivery challan for invoice:", err);
+        });
+    }
+
     const id = searchParams.get("id");
     if (!id) return;
     const loadDeepLinked = async () => {
@@ -559,16 +703,32 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [invRes, custRes, prodRes, franRes, dealRes] = await Promise.allSettled([
-        api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}`).catch(() => ({ data: [] })),
-        customersApi.getAll(),
-        productsFullApi.getAll({ stockSource: "HQ" }),
+      const activeFranchise = isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined);
+      const [invRes, custRes, prodRes, franRes, dealRes, draftRes] = await Promise.allSettled([
+        api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}${activeFranchise ? `&franchiseId=${activeFranchise}` : ""}`).catch(() => ({ data: [] })),
+        customersApi.getAll(activeFranchise ? { franchiseId: activeFranchise } : undefined),
+        productsFullApi.getAll(activeFranchise ? { franchiseId: activeFranchise } : { stockSource: "HQ" }),
         franchiseApi.getAll(),
         dealersApi.getAll().catch(() => ({ data: [] })),
+        draftsApi.getDrafts("SALES_INVOICE").catch(() => ({ data: [] })),
       ]);
 
       if (invRes.status === "fulfilled") {
-        setInvoices(invRes.value.data || []);
+        // Saved drafts (Draft table, type SALES_INVOICE) are a separate
+        // record from a real Order/Invoice — merged in here so the DRAFT
+        // tab (already fully built to render them: "Not yet numbered",
+        // click-to-resume via loadDraft, the Delete action below) has
+        // something to show. `data` is kept on the row as-is so loadDraft
+        // can read the exact saved form state back out of it.
+        const draftRows = (draftRes.status === "fulfilled" ? draftRes.value.data || [] : []).map((d: any) => ({
+          id: d.id,
+          status: "DRAFT",
+          createdAt: d.updatedAt || d.createdAt,
+          finalAmount: 0,
+          data: d.data,
+          customerName: d.data?.selectedCustomer?.name || d.data?.customerSearch || d.name || "Draft Invoice",
+        }));
+        setInvoices([...draftRows, ...(invRes.value.data || [])]);
       }
       if (custRes.status === "fulfilled") {
         const cData = custRes.value.data?.customers || custRes.value.data || [];
@@ -591,7 +751,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo, showToast]);
+  }, [dateFrom, dateTo, showToast, isFranchiseUser, user?.franchiseId, selectedFranchiseId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -775,23 +935,53 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setShowCustomerDrop(false);
   };
 
+  // Channel prices default to 0 (unconfigured, not "genuinely free") on
+  // items that predate these fields — only a positive value counts as
+  // configured, otherwise fall back to the generic base price. Mirrors
+  // pos/page.tsx's getPrice().
+  const getChannelPrice = (p: any, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
+    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
+    if (p.customerPrice > 0) return p.customerPrice;
+    return p.basePrice || p.price || 0;
+  };
+
+  // The Item Master's "Customer Retail Discount" (discountType/discountValue)
+  // applies only to the Customer channel. This LineItem model only tracks a
+  // percent (no separate flat-amount field), so a FLAT-configured discount
+  // is converted to an equivalent percent of this line's resolved price.
+  // This only auto-fills discountPct as a starting point — the operator can
+  // still freely edit it via the existing manual discount input.
+  const getAutoDiscountPct = (p: any, price: number, type: "CUSTOMER" | "DEALER" | "FRANCHISE") => {
+    if (type !== "CUSTOMER" || price <= 0) return 0;
+    const val = Number(p.discountValue) || 0;
+    if (val <= 0) return 0;
+    if (p.discountType === "FLAT") {
+      return parseFloat((Math.min(val, price) / price * 100).toFixed(2));
+    }
+    return Math.min(100, val);
+  };
+
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
-    const validBatches = Array.isArray(p.batches) 
+    const validBatches = Array.isArray(p.batches)
       ? p.batches.filter((b: any) => (b.quantity || b.currentStock || 0) > 0)
       : [];
     const firstBatch = validBatches.length > 0 ? validBatches[0].batchCode : "";
+    const resolvedRate = getChannelPrice(p, partyType);
 
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
         ...it,
         productId: p.id,
         itemSearch: p.name,
-        rate: p.basePrice || p.price || 0,
-        basePrice: p.basePrice || p.price || 0,
+        rate: resolvedRate,
+        basePrice: resolvedRate,
+        discountPct: getAutoDiscountPct(p, resolvedRate, partyType),
         unit: p.unit?.code || p.unit || "NONE",
         baseUnit: p.baseUnit || p.unit,
         conversions: p.conversions || [],
+        packSize: p.packSize || null,
         availableStock: p.currentStock !== undefined ? p.currentStock : (p.stock || 0),
         taxPct,
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
@@ -805,6 +995,80 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
+
+  // Line items are priced at selection-time; if the party channel changes
+  // after items are already picked, re-derive each line's rate against the
+  // newly selected channel so the form never shows a stale Customer rate
+  // while Dealer/Franchise is now active (or vice versa). Also keep stock and units synced.
+  useEffect(() => {
+    if (!products.length) return;
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const p = products.find((pr: any) => pr.id === it.productId);
+      if (!p) return it;
+      const rate = getChannelPrice(p, partyType);
+      const stock = p.currentStock !== undefined ? p.currentStock : (p.stock || 0);
+      const baseUnit = p.baseUnit || p.unit;
+      const conversions = p.conversions || [];
+      const packSize = p.packSize || null;
+
+      const rateChanged = rate !== it.rate;
+      const stockChanged = it.availableStock !== stock;
+      const unitsMissing = !it.baseUnit || !it.conversions;
+
+      if (!rateChanged && !stockChanged && !unitsMissing) return it;
+
+      return {
+        ...it,
+        rate: rateChanged ? rate : it.rate,
+        basePrice: rateChanged ? rate : it.basePrice,
+        discountPct: rateChanged ? getAutoDiscountPct(p, rate, partyType) : it.discountPct,
+        availableStock: stock,
+        baseUnit: it.baseUnit || baseUnit,
+        conversions: it.conversions && it.conversions.length ? it.conversions : conversions,
+        packSize: it.packSize || packSize,
+      };
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyType, products]);
+
+  const checkItemStockInsufficiency = useCallback((item: LineItem) => {
+    if (!item.productId || item.qty <= 0) return null;
+
+    let req = Number(item.qty || 0);
+    const u = String(item.unit || "").toUpperCase();
+    const conv = item.conversions?.find((c: any) =>
+      c.unitId === item.unit ||
+      c.unit?.code === item.unit ||
+      c.unit?.name?.toUpperCase() === u ||
+      c.unit?.shortName?.toUpperCase() === u
+    );
+    if (conv && conv.multiplier) {
+      req = req * Number(conv.multiplier);
+    }
+
+    const available = Number(item.availableStock ?? 0);
+    const baseName = item.baseUnit?.shortName || item.baseUnit?.name || item.unit || "Units";
+
+    if (req > available) {
+      return {
+        id: item.id,
+        name: item.itemSearch || "Product",
+        required: req,
+        available: Math.max(0, available),
+        unit: baseName,
+      };
+    }
+    return null;
+  }, []);
+
+  const insufficientItems = useMemo(() => {
+    return items
+      .map(it => checkItemStockInsufficiency(it))
+      .filter((res): res is NonNullable<typeof res> => res !== null);
+  }, [items, checkItemStockInsufficiency]);
+
+  const hasInsufficientStock = insufficientItems.length > 0;
 
   const addRow = () => setItems(prev => [...prev, makeItem()]);
 
@@ -830,12 +1094,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const validItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
     if (!isDraft && validItems.length === 0) { showToast("Add at least one item with price", "error"); return; }
 
+    if (!isDraft && hasInsufficientStock) {
+      const details = insufficientItems
+        .map((i: any) => `"${i.name}" (Available: ${i.available} ${i.unit}, Required: ${i.required} ${i.unit})`)
+        .join(", ");
+      showToast(`Cannot create invoice: Insufficient stock for ${details}`, "error");
+      return;
+    }
+
     const itemsToSave = isDraft ? items.filter(i => i.productId || i.itemSearch.trim()) : validItems;
 
     setSaving(true);
     try {
       const payload: any = {
-        franchiseId: selectedFranchiseId || (effectivePartyType === "FRANCHISE" ? selectedCustomer?.id : undefined) || undefined,
+        franchiseId: isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined),
         partyType: effectivePartyType,
         partyId: selectedCustomer?.id || undefined,
         dealerId: effectivePartyType === "DEALER" ? selectedCustomer?.id : undefined,
@@ -848,6 +1120,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         paymentType,
         deliveryCharge: deliveryChargeNum,
         sourceFranchiseOrderId: sourceFranchiseOrderId || undefined,
+        sourceDeliveryChallanId: sourceDeliveryChallanId || undefined,
         isDraft,
         items: itemsToSave.map(i => ({
           productId: i.productId || undefined,
@@ -869,7 +1142,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           id: draftId || undefined,
           type: "SALES_INVOICE",
           name: selectedCustomer?.name || customerSearch || "Draft Invoice",
-          state: { ...payload, partyType: effectivePartyType, selectedCustomer, customerSearch, customerPhone, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
+          data: { ...payload, partyType: effectivePartyType, selectedCustomer, customerSearch, customerPhone, items, priceMode, showTerms, termsText, showDesc, description, roundOffEnabled, deliveryCharge: deliveryChargeNum }
         });
         if (dRes?.data?.id) setDraftId(dRes.data.id);
         showToast("Draft saved successfully", "success");
@@ -882,7 +1155,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       }
 
       fetchData();
-      if (sourceFranchiseOrderId) {
+      if (sourceDeliveryChallanId) {
+        try {
+          sessionStorage.removeItem(`convert_dc_to_sale_${sourceDeliveryChallanId}`);
+        } catch (e) {}
+        router.push("/sales/delivery-challan");
+      } else if (sourceFranchiseOrderId) {
         router.push("/franchise-orders");
       } else if (initialView === "create") {
         router.push("/sales/invoices");
@@ -908,7 +1186,11 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const loadDraft = (inv: any) => {
     const raw = inv.order || inv;
-    const rawState = raw._rawState || {};
+    // A saved draft's actual content lives on `inv.data` (the Draft row's
+    // own Json field, see fetchData's draftRows mapping and
+    // DraftsService.saveDraft) — `_rawState` is kept only as a defensive
+    // fallback for any other shape this function might ever be called with.
+    const rawState = inv.data || raw._rawState || {};
     setDraftId(inv.id);
     const draftPartyType = rawState.partyType || (raw.partyType === "FRANCHISE" || rawState.sourceFranchiseOrderId || rawState.selectedCustomer?.isFranchise ? "FRANCHISE" : raw.partyType === "DEALER" || rawState.selectedCustomer?.isDealer ? "DEALER" : "CUSTOMER");
     setPartyType(draftPartyType);
@@ -983,7 +1265,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const receivedAmt  = nonDraft.filter(i => i.status === "PAID").reduce((s, i) => s + (i.finalAmount || 0), 0);
   const balanceAmt   = totalAmt - receivedAmt;
 
-  const currentPartyList = partyType === "FRANCHISE" ? franchises : partyType === "DEALER" ? dealers : customers;
+  const currentPartyList = useMemo(() => {
+    if (partyType === "FRANCHISE") return franchises;
+    if (partyType === "DEALER") return dealers;
+    if (isFranchiseUser && user?.franchiseId) {
+      return customers.filter((c: any) => c.franchiseId === user.franchiseId);
+    }
+    if (selectedFranchiseId) {
+      return customers.filter((c: any) => c.franchiseId === selectedFranchiseId);
+    }
+    return customers.filter((c: any) => !c.franchiseId);
+  }, [partyType, franchises, dealers, customers, isFranchiseUser, user?.franchiseId, selectedFranchiseId]);
   const filteredCustomers = currentPartyList.filter((c: any) =>
     !customerSearch ||
     (c.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -998,26 +1290,37 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
   // ══════════════════════════════════════════════════════════════════════════
   if (viewInvoice) {
-    // GET /api/sales/invoices/:id (FinanceService.getInvoiceById) returns the
-    // Invoice row itself at the top level (id, status, finalAmount, ...) with
-    // Order-owned fields (invoiceNum, customer, orderItems, partyType, ...)
-    // nested under `order` — there is no nested `.invoice` key. Reading
-    // `inv.invoice`/`inv.orderItems`/`inv.customer`/etc. directly always came
-    // back empty, which is why this view showed a blank items table, "—" for
-    // invoice number, "UNPAID" regardless of real status, and never showed
-    // Record Payment for ANY invoice (not just cancelled ones).
     const inv = viewInvoice;
     const order = inv.order || {};
     const items = order.orderItems || [];
     const customer = order.customer || {};
+    const dealer = order.dealer || {};
+    const franchise = order.franchise || {};
     const invoice = inv;
     const payments = inv.payments || [];
     const paidAmt = payments
       .filter((p: any) => p.status === "PAID" && !p.isCancelled)
       .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-    // finalAmount (GST-inclusive) is what the customer actually owes — the
-    // old `inv.totalAmount` read the pre-tax subtotal, understating balance.
     const balance = Math.max(0, (inv.finalAmount || 0) - paidAmt);
+
+    const partyTypeLabel = order.partyType || (order.dealerId ? "DEALER" : order.franchiseId ? "FRANCHISE" : "CUSTOMER");
+    const partyPhone = customer.phone || customer.contact || dealer.phone || franchise.contactNum || order.customerPhone || "—";
+    const partyEmail = customer.email || dealer.email || franchise.email || "—";
+    const partyGstin = customer.gstNumber || customer.gstin || dealer.gstin || franchise.gstin || "—";
+    const partyGstType = customer.gstType || (partyGstin !== "—" ? "Registered Business" : "Unregistered / Consumer");
+    const billingAddress = customer.billingAddress || customer.address || dealer.address || franchise.location || "—";
+    const shippingAddress = customer.shippingAddress || customer.address || dealer.address || franchise.location || "—";
+
+    const companyState = (companyProfile?.state || "").toLowerCase().trim();
+    const supplyState = (order.stateOfSupply || customer.state || dealer.state || "").toLowerCase().trim();
+    const isIntraState = !supplyState || !companyState || supplyState === companyState || supplyState.includes(companyState) || companyState.includes(supplyState);
+    const totalTax = Number(inv.taxAmount || 0);
+    const cgstAmount = isIntraState ? totalTax / 2 : 0;
+    const sgstAmount = isIntraState ? totalTax / 2 : 0;
+    const igstAmount = isIntraState ? 0 : totalTax;
+
+    const deliveryCharge = Number(order.deliveryCharge || order.shippingAmount || order.freightCost || 0);
+    const discountAmount = Number(order.discountAmount || order.discount || 0);
 
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 min-h-screen w-full min-w-0">
@@ -1029,14 +1332,25 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 setViewInvoice(null);
                 window.history.replaceState({}, "", window.location.pathname);
               }}
-              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl text-gray-500 dark:text-slate-400 transition-colors shrink-0 cursor-pointer"
             >
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                Sale Invoice — {order.invoiceNum || "—"}
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
+                  Sale Invoice — {order.invoiceNum || "—"}
+                </h2>
+                <span className={clsx(
+                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
+                  invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
+                  : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
+                  : invoice.status === "CANCELLED" ? "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20"
+                  : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
+                )}>
+                  {invoice.status || order.paymentStatus || "UNPAID"}
+                </span>
+              </div>
               {order.sourceProformaInvoiceId && (
                 <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5 truncate">
                   Source Proforma: <span className="font-mono font-semibold text-[#f58220]">{order.sourceProformaNumber || order.sourceProformaInvoiceId}</span>
@@ -1045,14 +1359,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <span className={clsx(
-              "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border",
-              invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
-              : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-              : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
-            )}>
-              {invoice.status || order.paymentStatus || "UNPAID"}
-            </span>
+            <button
+              onClick={() => handlePrint(inv)}
+              className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <Printer size={14} />
+              <span>Print / Download</span>
+            </button>
             {invoice.id && balance > 0.01 && invoice.status !== "CANCELLED" && (
               <button
                 onClick={() => router.push(
@@ -1073,98 +1386,234 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-4 md:p-6 space-y-4 w-full min-w-0">
-          {/* Party + Invoice Meta */}
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8 w-full min-w-0">
-              <div className="space-y-2 min-w-0">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Party Details</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 font-medium">Type: <span className="text-gray-800 dark:text-white font-bold">{order.partyType || (order.franchiseId ? "FRANCHISE" : "CUSTOMER")}</span></p>
-                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{getPartyDisplayName(order, inv)}</p>
-                {(customer.contact || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.contact || order.franchise?.contactNum}</p>}
-                {(customer.phone || order.franchise?.contactNum) && <p className="text-sm text-gray-600 dark:text-slate-300">{customer.phone || order.franchise?.contactNum}</p>}
-                {(customer.email || order.franchise?.email) && <p className="text-xs text-gray-500 dark:text-slate-400 truncate">{customer.email || order.franchise?.email}</p>}
-                {(customer.gstNumber || order.franchise?.gstin) && <p className="text-xs text-gray-500 dark:text-slate-400 font-mono">GSTIN: {customer.gstNumber || order.franchise?.gstin}</p>}
+          {/* Party Details & Invoice Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
+            {/* Customer / Party Card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Customer / Party Details</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20">
+                  {partyTypeLabel}
+                </span>
               </div>
-              <div className="space-y-2 min-w-0">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Invoice Information</p>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Invoice No.</span><span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Date</span><span className="text-gray-700 dark:text-slate-300">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span></div>
-                {order.stateOfSupply && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">State of Supply</span><span className="text-gray-700 dark:text-slate-300">{order.stateOfSupply}</span></div>}
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Payment Type</span><span className="text-gray-700 dark:text-slate-300">{order.paymentType || "—"}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Order Type</span><span className="text-gray-700 dark:text-slate-300">{order.orderType || "TAX_INVOICE"}</span></div>
+              <div>
+                <p className="text-base font-bold text-gray-900 dark:text-white truncate">{getPartyDisplayName(order, inv)}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2.5 text-xs text-gray-600 dark:text-slate-300">
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Phone</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200">{partyPhone}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Email</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200 truncate block">{partyEmail}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">GSTIN</span>
+                    <span className="font-mono font-medium text-gray-800 dark:text-slate-200">{partyGstin}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">GST Type</span>
+                    <span className="font-medium text-gray-800 dark:text-slate-200">{partyGstType}</span>
+                  </div>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-white/5 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Billing Address</span>
+                    <p className="text-gray-700 dark:text-slate-300 mt-0.5 leading-relaxed">{billingAddress}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 dark:text-slate-500 block text-[11px]">Shipping Address</span>
+                    <p className="text-gray-700 dark:text-slate-300 mt-0.5 leading-relaxed">{shippingAddress}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Invoice Information Card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full min-w-0 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-2.5">
+                <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Sale Invoice Details</span>
+                <span className="text-[11px] font-mono font-bold text-gray-700 dark:text-slate-300">
+                  {order.orderType || "TAX_INVOICE"}
+                </span>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Invoice Number</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Invoice Date</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{inv.createdAt ? formatDate(inv.createdAt) : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">State / Place of Supply</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{order.stateOfSupply || customer.state || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 dark:text-slate-400">Payment Mode</span>
+                  <span className="text-gray-800 dark:text-slate-200 font-medium">{order.paymentType || "CASH"}</span>
+                </div>
+                <div className="flex justify-between pt-1 border-t border-gray-100 dark:border-white/5">
+                  <span className="text-gray-500 dark:text-slate-400">Payment Status</span>
+                  <span className={clsx(
+                    "font-bold text-xs px-2 py-0.5 rounded",
+                    invoice.status === "PAID" ? "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10"
+                    : invoice.status === "PARTIAL" ? "text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10"
+                    : "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-white/5"
+                  )}>
+                    {invoice.status || order.paymentStatus || "UNPAID"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Items Table */}
+          {/* Products Sold Table */}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
-            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02]">
-              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Items</span>
+            <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02] flex items-center justify-between">
+              <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Products Sold</span>
+              <span className="text-xs text-gray-400 dark:text-slate-500">{items.length} {items.length === 1 ? 'item' : 'items'}</span>
             </div>
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[680px]">
+              <table className="w-full text-sm min-w-[720px]">
                 <thead>
                   <tr className="bg-gray-50/75 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="px-4 py-2.5 text-left w-8">#</th>
-                    <th className="px-4 py-2.5 text-left">Product</th>
+                    <th className="px-4 py-2.5 text-left">Product & SKU</th>
                     <th className="px-4 py-2.5 text-center">Qty</th>
                     <th className="px-4 py-2.5 text-center">UOM</th>
-                    <th className="px-4 py-2.5 text-right">Rate</th>
-                    <th className="px-4 py-2.5 text-center">Tax %</th>
+                    <th className="px-4 py-2.5 text-right">Selling Price</th>
+                    <th className="px-4 py-2.5 text-right">Discount</th>
+                    <th className="px-4 py-2.5 text-center">GST %</th>
                     <th className="px-4 py-2.5 text-right">Tax Amt</th>
                     <th className="px-4 py-2.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {items.map((it: any, idx: number) => (
-                    <tr key={it.id || idx} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="font-semibold text-gray-900 dark:text-white">{it.product?.name || it.productName || "—"}</div>
-                        {it.productId && <div className="text-[10px] text-gray-400 dark:text-slate-500 font-mono">{it.productId}</div>}
-                        {it.batchNumber && <div className="text-[10px] text-gray-500 dark:text-slate-400">Batch: {it.batchNumber}</div>}
-                      </td>
-                      <td className="px-4 py-2.5 text-center dark:text-slate-200">{it.quantity}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || "—"}</td>
-                      <td className="px-4 py-2.5 text-right font-mono dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {items.map((it: any, idx: number) => {
+                    const skuCode = it.product?.sku || it.sku || (it.productId ? String(it.productId).slice(0, 8).toUpperCase() : "—");
+                    const discountVal = it.discountPct ? `${it.discountPct}%` : (it.discountAmount ? `₹${Number(it.discountAmount).toFixed(2)}` : "—");
+                    return (
+                      <tr key={it.id || idx} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-2.5 text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="font-semibold text-gray-900 dark:text-white">{it.product?.name || it.productName || "—"}</div>
+                          <div className="text-[11px] text-gray-500 dark:text-slate-400 font-mono">SKU: {skuCode}</div>
+                          {it.batchNumber && <div className="text-[10px] text-gray-500 dark:text-slate-400">Batch: {it.batchNumber}</div>}
+                        </td>
+                        <td className="px-4 py-2.5 text-center font-semibold text-gray-900 dark:text-slate-100">{it.quantity}</td>
+                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || it.product?.unit || "PC"}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-800 dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-500 dark:text-slate-400">{discountVal}</td>
+                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Totals + Payment */}
+          {/* Financial Totals + Sales Payment History */}
           <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-start w-full min-w-0">
-            {/* Payment history */}
-            {payments.length > 0 && (
-              <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 min-w-0 shadow-2xs">
-                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider mb-2">Payment History</p>
-                <div className="space-y-1.5">
+            {/* Sales Payment History */}
+            <div className="flex-1 bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 min-w-0 shadow-2xs">
+              <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-white/5 pb-2">
+                <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wider">Sales Payment Transactions</p>
+                <span className="text-xs text-gray-400 dark:text-slate-500">{payments.length} {payments.length === 1 ? 'record' : 'records'}</span>
+              </div>
+              {payments.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500 py-4 text-center italic">No payment transactions recorded yet.</p>
+              ) : (
+                <div className="space-y-2">
                   {payments.map((p: any, i: number) => (
-                    <div key={i} className="flex justify-between text-sm py-1 border-b border-gray-50 dark:border-white/5 last:border-0">
-                      <span className={clsx("text-gray-600 dark:text-slate-300", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
-                        {p.paymentMode || "Payment"} — {p.createdAt ? formatDate(p.createdAt) : ""}
-                        {p.isCancelled ? " (Cancelled)" : p.status !== "PAID" ? ` (${p.status})` : ""}
+                    <div key={i} className="flex justify-between items-center text-sm py-1.5 px-2 rounded-lg bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5">
+                      <div>
+                        <span className={clsx("font-medium text-gray-800 dark:text-slate-200 block text-xs", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
+                          {p.paymentMode || p.method || "Payment"} {p.reference ? `(${p.reference})` : ""}
+                        </span>
+                        <span className="text-[11px] text-gray-400 dark:text-slate-500">
+                          {p.createdAt ? formatDate(p.createdAt) : ""}
+                          {p.isCancelled ? " • Cancelled" : p.status !== "PAID" ? ` • ${p.status}` : " • Settled"}
+                        </span>
+                      </div>
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                        ₹{Number(p.paidAmount || p.amount || 0).toFixed(2)}
                       </span>
-                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">₹{Number(p.paidAmount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Summary card */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-80 shrink-0 space-y-2 shadow-2xs">
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Subtotal</span><span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span></div>
-              {(inv.taxAmount > 0) && <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Tax</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.taxAmount || 0).toFixed(2)}</span></div>}
-              <div className="flex justify-between text-sm"><span className="text-gray-500 dark:text-slate-400">Round Off</span><span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span></div>
-              <div className="pt-2 border-t border-gray-100 dark:border-white/5 flex justify-between"><span className="font-bold text-gray-800 dark:text-white">Total</span><span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-emerald-600 dark:text-emerald-400 font-medium">Paid</span><span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm font-semibold"><span className={balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>Balance</span><span className={clsx("font-mono", balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>₹{balance.toFixed(2)}</span></div>
+            {/* Financial Summary card */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full lg:w-88 shrink-0 space-y-2.5 shadow-2xs">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
+                <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span>
+              </div>
+              {discountAmount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Discount</span>
+                  <span className="font-mono font-semibold text-rose-600 dark:text-rose-400">-₹{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
+              {deliveryCharge > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Delivery / Shipping</span>
+                  <span className="font-mono text-gray-700 dark:text-slate-200">+₹{deliveryCharge.toFixed(2)}</span>
+                </div>
+              )}
+              {totalTax > 0 && (
+                <div className="pt-2 border-t border-gray-100 dark:border-white/5 space-y-1.5 text-xs">
+                  {isIntraState ? (
+                    <>
+                      <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                        <span>CGST</span>
+                        <span className="font-mono">₹{cgstAmount.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                        <span>SGST</span>
+                        <span className="font-mono">₹{sgstAmount.toFixed(2)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-gray-600 dark:text-slate-400">
+                      <span>IGST</span>
+                      <span className="font-mono">₹{igstAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-gray-700 dark:text-slate-300">
+                    <span>Total Tax</span>
+                    <span className="font-mono">₹{totalTax.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+              {Number(inv.roundOff || 0) !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-500 dark:text-slate-400">Round Off</span>
+                  <span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="pt-2.5 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
+                <span className="font-bold text-gray-800 dark:text-white">Grand Total</span>
+                <span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm pt-1">
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">Amount Paid</span>
+                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">₹{paidAmt.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm font-semibold pt-1 border-t border-gray-100 dark:border-white/5">
+                <span className={balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}>
+                  {balance > 0 ? "Outstanding Balance" : "Balance Due"}
+                </span>
+                <span className={clsx("font-mono", balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
+                  ₹{balance.toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1220,7 +1669,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party Type</label>
                     <div className="flex flex-wrap items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-[#13151f] w-fit p-0.5">
-                      {PARTY_TYPES.map(pt => (
+                      {(isFranchiseUser ? PARTY_TYPES.filter(pt => pt.value !== "FRANCHISE") : PARTY_TYPES).map(pt => (
                         <button
                           key={pt.value}
                           type="button"
@@ -1305,7 +1754,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               No {partyType === "FRANCHISE" ? "franchises" : partyType === "DEALER" ? "dealers" : "customers"} found
                             </div>
                           ) : (
-                            filteredCustomers.map(c => (
+                            filteredCustomers.map((c: any) => (
                               <button
                                 key={c.id}
                                 className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
@@ -1474,10 +1923,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 min-w-0"
                               placeholder="Search item..."
                               value={item.itemSearch}
+                              onClick={e => openItemDropdownFor(item.id, e.currentTarget)}
+                              onFocus={e => openItemDropdownFor(item.id, e.currentTarget)}
                               onChange={e => {
                                 updateItem(idx, "itemSearch", e.target.value);
                                 updateItem(idx, "productId", "");
-                                setOpenItemDrop(item.id);
+                                openItemDropdownFor(item.id, e.currentTarget);
                               }}
                             />
                             {item.itemSearch && (
@@ -1495,18 +1946,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                 if (openItemDrop === item.id) {
                                   setOpenItemDrop(null);
                                 } else {
-                                  setOpenItemDrop(item.id);
-                                  const rect = (e.target as HTMLElement).closest("td")?.getBoundingClientRect();
-                                  if (rect && typeof window !== "undefined") {
-                                    const dropWidth = Math.min(300, window.innerWidth - 32);
-                                    const leftPos = Math.max(16, Math.min(rect.left, window.innerWidth - dropWidth - 16));
-                                    setItemDropRect({ top: rect.bottom, left: leftPos, width: dropWidth });
-                                  }
+                                  openItemDropdownFor(item.id, e.currentTarget);
                                 }
                               }}
                             />
                           </div>
                           
+                          {item.productId && formatPackSize(item.packSize) && (
+                            <div className="text-[10px] text-gray-400 dark:text-slate-500 leading-tight">
+                              Pack: {formatPackSize(item.packSize)}
+                            </div>
+                          )}
+
                           {item.productId && (
                             <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
                               {(() => {
@@ -1575,8 +2026,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                       onMouseDown={() => selectProduct(idx, p)}
                                     >
                                       <div>
-                                        <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{p.name}</div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{p.basePrice || p.price || 0}</div>
+                                        <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">
+                                          {p.name}
+                                          {formatPackSize(p.packSize) && (
+                                            <span className="ml-1 font-normal text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
+                                          )}
+                                        </div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{getChannelPrice(p, partyType)}</div>
                                       </div>
                                     </button>
                                   ))
@@ -1855,6 +2311,23 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
         </div>
 
+        {/* Insufficient Stock Warning Banner */}
+        {hasInsufficientStock && (
+          <div className="bg-red-50 dark:bg-red-500/10 border-t border-b sm:border border-red-200 dark:border-red-500/20 sm:rounded-xl p-3 sm:mx-6 mb-2 text-xs sm:text-sm text-red-700 dark:text-red-400 shrink-0">
+            <div className="flex items-center gap-2 font-bold mb-1">
+              <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0" />
+              <span>Cannot create invoice: Insufficient stock for {insufficientItems.map((i: any) => `"${i.name}"`).join(", ")}</span>
+            </div>
+            <ul className="list-disc list-inside space-y-0.5 ml-1 text-xs text-red-600 dark:text-red-300">
+              {insufficientItems.map((item: any, idx: number) => (
+                <li key={idx}>
+                  <span className="font-semibold">{item.name}</span>: Available: {item.available} {item.unit}, Required: {item.required} {item.unit}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {/* Action Bar */}
         <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between sm:justify-end gap-2.5 sm:gap-3 shrink-0 shadow-2xs w-full min-w-0">
           <button
@@ -1927,8 +2400,14 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                     <Printer size={13} /> Print
                   </button>
                   <button
-                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg cursor-pointer"
-                    onClick={async () => { setShowShareDrop(false); await handleSave(false); openCreate(); }}
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={hasInsufficientStock}
+                    onClick={async () => {
+                      if (hasInsufficientStock) return;
+                      setShowShareDrop(false);
+                      await handleSave(false);
+                      openCreate();
+                    }}
                   >
                     Save &amp; New
                   </button>
@@ -1939,8 +2418,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <button
               type="button"
               onClick={() => handleSave(false)}
-              disabled={saving}
-              className="flex items-center gap-1.5 px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl shadow-sm active:scale-95 disabled:opacity-60 transition-all cursor-pointer"
+              disabled={saving || hasInsufficientStock}
+              title={hasInsufficientStock ? "Cannot save: Insufficient stock for one or more items" : ""}
+              className="flex items-center gap-1.5 px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all cursor-pointer"
             >
               <Check size={16} /> <span>{saving ? "Saving..." : "Save"}</span>
             </button>
@@ -1954,7 +2434,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             setShowAddParty(false);
             setNewParty({ name: "", phone: "", email: "", gstin: "", gstType: "Unregistered/Consumer", state: "", city: "", pincode: "", billingAddress: "", shippingAddress: "", openingBalance: "", creditLimit: "" });
           }}
-          partyType={partyType === "DEALER" ? "vendor" : "customer"}
+          partyType="customer"
           title={partyType === "DEALER" ? "ADD DEALER" : "ADD CUSTOMER"}
           initialData={newParty.name || newParty.phone ? newParty : undefined}
           onSave={async (data) => {
@@ -2306,6 +2786,20 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                             >
                               Print
                             </button>
+
+                            {/* Draft-only: a direct, one-click delete — the
+                                3-dot menu's "Delete Invoice" already handles
+                                this via handleDeleteDraft, this is just a
+                                more visible shortcut for a disposable draft. */}
+                            {isDraft && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}
+                                className="px-2 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Draft"
+                              >
+                                Delete
+                              </button>
+                            )}
 
                             {/* 3-Dots Menu Icon (⋮) */}
                             <div className="relative inline-block text-left">

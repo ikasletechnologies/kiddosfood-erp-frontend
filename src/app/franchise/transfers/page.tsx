@@ -109,10 +109,11 @@ export default function FranchiseTransfersPage() {
     if (cleanItems.length === 0) { showToast("Add at least one item to transfer.", "error"); return; }
     for (const row of cleanItems) {
       if (!(row.quantity > 0)) { showToast("Quantity must be greater than 0 for every item.", "error"); return; }
-      const available = sourceInventory.find((i) => i.id === row.inventoryItemId)?.currentStock ?? 0;
+      const invItem = sourceInventory.find((i) => i.id === row.inventoryItemId);
+      const available = invItem?.transferableStock ?? invItem?.currentStock ?? 0;
       if (row.quantity > available) {
-        const name = sourceInventory.find((i) => i.id === row.inventoryItemId)?.name ?? "item";
-        showToast(`Quantity for "${name}" exceeds available stock (${available}).`, "error");
+        const name = invItem?.name ?? "item";
+        showToast(`Quantity for "${name}" exceeds transferable stock (${available}).`, "error");
         return;
       }
     }
@@ -129,7 +130,11 @@ export default function FranchiseTransfersPage() {
       handleBack();
       await loadTransfers();
     } catch (err: any) {
-      showToast(err?.response?.data?.error || "Failed to create transfer.", "error");
+      const details = err?.response?.data?.details;
+      const msg = details?.reason === 'NO_TRANSFERABLE_STOCK' 
+        ? `Insufficient transferable stock for ${details.itemName}. Available: ${details.availableQty}`
+        : (err?.response?.data?.error || "Failed to create transfer.");
+      showToast(msg, "error");
     } finally {
       setCreating(false);
     }
@@ -143,7 +148,11 @@ export default function FranchiseTransfersPage() {
       showToast("Transfer dispatched", "success");
       await loadTransfers();
     } catch (err: any) {
-      showToast(err?.response?.data?.error || "Failed to dispatch transfer.", "error");
+      const details = err?.response?.data?.details;
+      const msg = details?.reason === 'NO_TRANSFERABLE_STOCK' 
+        ? `Insufficient transferable stock for ${details.itemName}. Available: ${details.availableQty}`
+        : (err?.response?.data?.error || "Failed to dispatch transfer.");
+      showToast(msg, "error");
     } finally {
       setActioningId(null);
     }
@@ -285,12 +294,21 @@ export default function FranchiseTransfersPage() {
                             />
                           )}
                           
-                          {item.inventoryItemId && (
-                            <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
-                              Available: {item.availableStock || 0} {item.unit}
-                              {item.quantity > (item.availableStock || 0) && <span className="text-red-500 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
-                            </div>
-                          )}
+                          {item.inventoryItemId && (() => {
+                            const p = sourceInventory.find(inv => inv.id === item.inventoryItemId);
+                            const tStock = p?.transferableStock ?? p?.currentStock ?? 0;
+                            const pStock = p?.currentStock ?? 0;
+                            return (
+                              <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight space-y-1">
+                                <div>Physical stock: <span className="font-medium text-gray-700 dark:text-white">{pStock} {item.unit}</span></div>
+                                <div>
+                                  Available for transfer: <span className="font-medium text-gray-700 dark:text-white">{tStock} {item.unit}</span>
+                                  {pStock !== tStock && <span className="text-red-500 ml-1">(Blocked/Quarantined)</span>}
+                                </div>
+                                {item.quantity > tStock && <span className="text-red-500 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
+                              </div>
+                            );
+                          })()}
 
                           {openItemDrop === item.id && itemDropRect && (
                             <div
@@ -304,17 +322,17 @@ export default function FranchiseTransfersPage() {
                                   filtProd.map(p => (
                                     <button
                                       key={p.id}
-                                      disabled={p.currentStock <= 0}
+                                      disabled={(p.transferableStock ?? p.currentStock) <= 0}
                                       className={clsx(
                                         "w-full flex items-center justify-between px-3 py-2.5 text-left border-b border-gray-50 dark:border-white/5 last:border-0",
-                                        p.currentStock > 0 ? "hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer" : "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-white/[0.02]"
+                                        (p.transferableStock ?? p.currentStock) > 0 ? "hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer" : "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-white/[0.02]"
                                       )}
                                       onMouseDown={() => {
-                                        if (p.currentStock > 0) {
+                                        if ((p.transferableStock ?? p.currentStock) > 0) {
                                           updateItemRow(idx, { 
                                             inventoryItemId: p.id, 
                                             itemSearch: p.name,
-                                            availableStock: p.currentStock,
+                                            availableStock: p.transferableStock ?? p.currentStock,
                                             unit: p.unit
                                           });
                                           setOpenItemDrop(null);
@@ -326,7 +344,7 @@ export default function FranchiseTransfersPage() {
                                         <div className="text-[10px] text-gray-500 dark:text-slate-400">{p.category}</div>
                                       </div>
                                       <div className="text-xs font-semibold text-gray-600 dark:text-slate-300 text-right">
-                                        {p.currentStock} {p.unit} <span className="text-[9px] font-normal block text-gray-400 dark:text-slate-500">avail</span>
+                                        {p.transferableStock ?? p.currentStock} {p.unit} <span className="text-[9px] font-normal block text-gray-400 dark:text-slate-500">avail</span>
                                       </div>
                                     </button>
                                   ))

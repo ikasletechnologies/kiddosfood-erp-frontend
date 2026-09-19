@@ -18,6 +18,7 @@ interface SetupStatus {
   hqWarehouseConfigured: boolean;
   hq: { id: string; name: string } | null;
   warehouse: { id: string; name: string } | null;
+  nextWarehouseCode?: string | null;
   error?: string;
 }
 

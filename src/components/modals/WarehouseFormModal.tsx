@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Warehouse, MapPin, Tag, CheckCircle2, Loader2 } from "lucide-react";
 import { inventoryApi } from "@/lib/api";
 import toast from "react-hot-toast";
@@ -13,11 +13,25 @@ interface WarehouseFormModalProps {
 
 export default function WarehouseFormModal({ isOpen, onClose, onSuccess }: WarehouseFormModalProps) {
   const [loading, setLoading] = useState(false);
+  const [code, setCode] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     location: "",
     type: "MAIN"
   });
+
+  useEffect(() => {
+    if (isOpen) {
+      setCodeLoading(true);
+      inventoryApi.getNextWarehouseCode()
+        .then(res => {
+          if (res.data?.code) setCode(res.data.code);
+        })
+        .catch(() => setCode("WH-001"))
+        .finally(() => setCodeLoading(false));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -30,7 +44,10 @@ export default function WarehouseFormModal({ isOpen, onClose, onSuccess }: Wareh
 
     setLoading(true);
     try {
-      const response = await inventoryApi.createWarehouse(formData);
+      const response = await inventoryApi.createWarehouse({
+        ...formData,
+        code: code || undefined
+      });
       toast.success("Warehouse created successfully");
       onSuccess(response.data);
       onClose();
@@ -76,6 +93,24 @@ export default function WarehouseFormModal({ isOpen, onClose, onSuccess }: Wareh
               className="w-full text-xs sm:text-sm font-bold bg-slate-50 dark:bg-slate-900 border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 outline-none focus:ring-2 ring-purple-500/20 transition-all"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <Tag size={12} /> Warehouse Code
+              </label>
+              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-900/50">
+                Auto-generated
+              </span>
+            </div>
+            <input 
+              type="text"
+              readOnly
+              disabled
+              value={codeLoading ? "Generating code..." : (code || "WH-001")}
+              className="w-full text-xs sm:text-sm font-bold font-mono bg-slate-100 dark:bg-slate-900/60 text-slate-600 dark:text-slate-400 border-none rounded-xl sm:rounded-2xl p-3 sm:p-4 cursor-not-allowed select-none"
             />
           </div>
 

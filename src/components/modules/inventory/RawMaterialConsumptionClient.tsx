@@ -7,17 +7,7 @@ import { inventoryApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { convertUnit } from "@/lib/unitConversion";
 
-// Only convert units erp-units actually knows are weight — converting an
-// unrelated unit (PCS, BOX...) would silently fall back to the identity
-// value via convertUnit and render a bogus "(3 g)" next to a piece count.
 const WEIGHT_UNITS = ["KG", "MG"];
-
-const TYPE_FILTERS = [
-  { id: "ALL", label: "All" },
-  { id: "PRODUCTION", label: "Production" },
-  { id: "DAMAGE", label: "Damage" },
-  { id: "EXPIRY", label: "Expiry" },
-];
 
 const SOURCE_STYLES: Record<string, { color: string; bg: string; border: string }> = {
   "Production Consumption": { color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
@@ -27,45 +17,112 @@ const SOURCE_STYLES: Record<string, { color: string; bg: string; border: string 
 };
 const DEFAULT_SOURCE_STYLE = { color: "text-gray-600 dark:text-slate-400", bg: "bg-gray-50 dark:bg-white/5", border: "border-gray-200 dark:border-white/10" };
 
+const DATE_FILTERS = [
+  { id: "ALL", label: "All Dates" },
+  { id: "TODAY", label: "Today" },
+  { id: "YESTERDAY", label: "Yesterday" },
+  { id: "LAST_7_DAYS", label: "Last 1 Week" },
+  { id: "LAST_30_DAYS", label: "Last 1 Month" },
+  { id: "CUSTOM", label: "Custom Date" },
+];
+
 export default function RawMaterialConsumptionClient() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("ALL");
 
-  // Consumption is scoped by warehouse (where material actually left from),
-  // not franchise. "" means every warehouse combined.
+  // Date Filter State
+  const [dateFilter, setDateFilter] = useState("ALL");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+
+  // HQ Warehouses
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
 
   useEffect(() => {
-    inventoryApi.getWarehouses()
-      .then((res) => setWarehouses(res.data ?? []))
-      .catch((e) => console.error("Failed to fetch warehouses:", e));
+    inventoryApi.getWarehouses({ scope: "HQ" })
+      .then((res) => {
+        const list = res.data ?? [];
+        const hqOnly = list.filter((w: any) => !w.isFranchise);
+        setWarehouses(hqOnly.length > 0 ? hqOnly : list);
+      })
+      .catch((e) => console.error("Failed to fetch HQ warehouses:", e));
+  }, []);
+
+  const calculateDateRange = useCallback((filter: string, from?: string, to?: string) => {
+    const now = new Date();
+    const toYMD = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
+    if (filter === "TODAY") {
+      const t = toYMD(now);
+      return { startDate: t, endDate: t };
+    }
+    if (filter === "YESTERDAY") {
+      const y = new Date(now);
+      y.setDate(y.getDate() - 1);
+      const yStr = toYMD(y);
+      return { startDate: yStr, endDate: yStr };
+    }
+    if (filter === "LAST_7_DAYS") {
+      const p = new Date(now);
+      p.setDate(p.getDate() - 7);
+      return { startDate: toYMD(p), endDate: toYMD(now) };
+    }
+    if (filter === "LAST_30_DAYS") {
+      const p = new Date(now);
+      p.setDate(p.getDate() - 30);
+      return { startDate: toYMD(p), endDate: toYMD(now) };
+    }
+    if (filter === "CUSTOM") {
+      return { startDate: from || undefined, endDate: to || undefined };
+    }
+    return { startDate: undefined, endDate: undefined };
   }, []);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await inventoryApi.getRawMaterialConsumption(selectedWarehouseId || undefined);
+      const { startDate, endDate } = calculateDateRange(dateFilter, customStartDate, customEndDate);
+      const params: any = {};
+      if (selectedWarehouseId) params.warehouseId = selectedWarehouseId;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+
+      const res = await inventoryApi.getRawMaterialConsumption(params);
       setItems(res.data ?? []);
     } catch (e) {
       console.error("Failed to fetch raw material consumption:", e);
     } finally {
       setLoading(false);
     }
-  }, [selectedWarehouseId]);
+  }, [selectedWarehouseId, dateFilter, customStartDate, customEndDate, calculateDateRange]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  const filtered = items.filter((it) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      it.itemName?.toLowerCase().includes(q) ||
+      it.sku?.toLowerCase().includes(q) ||
+      it.notes?.toLowerCase().includes(q)
+    );
+  });
 
   const downloadCSV = () => {
     const headers = ["Date", "Batch / Ref", "Material", "Qty", "Unit", "Source", "Reason / Notes", "Valuation (₹)"];
     const rows = filtered.map(item => {
       const source = item.consumptionType || "Production";
       const prefix = source === "Production Consumption" ? "PRD" : source === "Damage" ? "WST" : source === "Expiry" ? "EXP" : "ADJ";
-      const batchRef = `${prefix}-${item.id.substring(0, 4).toUpperCase()}`;
+      const batchRef = item.batchCode || `${prefix}-${item.id.substring(0, 4).toUpperCase()}`;
       const material = `${item.itemName || ""}${item.sku ? ` (${item.sku})` : ""}`;
       const reason = item.notes || (source === "Production Consumption" ? "Recipe" : source === "Damage" ? "Spillage" : "Stock Count");
 
@@ -90,35 +147,16 @@ export default function RawMaterialConsumptionClient() {
     URL.revokeObjectURL(url);
   };
 
-  const filtered = items.filter((it) => {
-    const matchSearch = !search ||
-      it.itemName?.toLowerCase().includes(search.toLowerCase()) ||
-      it.sku?.toLowerCase().includes(search.toLowerCase()) ||
-      it.notes?.toLowerCase().includes(search.toLowerCase());
-
-    const matchType = typeFilter === "ALL" ||
-      (typeFilter === "PRODUCTION" && it.consumptionType === "Production Consumption") ||
-      (typeFilter === "DAMAGE" && it.consumptionType === "Damage") ||
-      (typeFilter === "EXPIRY" && it.consumptionType === "Expiry") ||
-      (typeFilter === "MANUAL_ADJUSTMENT" && it.consumptionType === "Manual Adjustment");
-
-    return matchSearch && matchType;
-  });
-
   const totalValue = filtered.reduce((acc, i) => acc + (i.value || 0), 0);
   const productionValue = filtered.filter(i => i.consumptionType === "Production Consumption").reduce((acc, i) => acc + (i.value || 0), 0);
-  const damageValue = filtered.filter(i => i.consumptionType === "Damage").reduce((acc, i) => acc + (i.value || 0), 0);
-  const expiryValue = filtered.filter(i => i.consumptionType === "Expiry").reduce((acc, i) => acc + (i.value || 0), 0);
 
   return (
     <div className="space-y-4 sm:space-y-5 text-gray-800 dark:text-slate-100 w-full min-w-0">
       {/* Summary Strip */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full max-w-lg min-w-0">
         {[
-          { label: "Total Consumption", value: `₹${totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,      dot: "bg-gray-400" },
+          { label: "Total Consumption", value: `₹${totalValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, dot: "bg-gray-400" },
           { label: "Production Usage",  value: `₹${productionValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, dot: "bg-emerald-500" },
-          { label: "Damage Disposal",   value: `₹${damageValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,     dot: "bg-amber-500" },
-          { label: "Expiry Loss",       value: `₹${expiryValue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`,     dot: "bg-rose-500" },
         ].map((s) => (
           <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 min-w-0">
             <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
@@ -149,22 +187,39 @@ export default function RawMaterialConsumptionClient() {
             />
           )}
         </div>
-        <div className="overflow-x-auto custom-scrollbar max-w-full">
-          <div className="inline-flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-hidden bg-white dark:bg-card">
-            {TYPE_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setTypeFilter(f.id)}
-                className={clsx(
-                  "px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap",
-                  typeFilter === f.id ? "bg-[#f58220] text-white font-bold" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
+
+        {/* Date Filter Dropdown */}
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 outline-none focus:border-[#f58220]"
+        >
+          {DATE_FILTERS.map((df) => (
+            <option key={df.id} value={df.id}>{df.label}</option>
+          ))}
+        </select>
+
+        {/* Custom Date Range Pickers */}
+        {dateFilter === "CUSTOM" && (
+          <div className="flex items-center gap-1.5 border border-gray-200 dark:border-white/10 rounded-xl px-2.5 py-1.5 bg-white dark:bg-card">
+            <span className="text-xs text-gray-500 dark:text-slate-400">From:</span>
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => setCustomStartDate(e.target.value)}
+              className="text-xs bg-transparent outline-none text-gray-700 dark:text-slate-200"
+            />
+            <span className="text-xs text-gray-500 dark:text-slate-400">To:</span>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => setCustomEndDate(e.target.value)}
+              className="text-xs bg-transparent outline-none text-gray-700 dark:text-slate-200"
+            />
           </div>
-        </div>
+        )}
+
+        {/* HQ Warehouses Only Dropdown */}
         <select
           value={selectedWarehouseId}
           onChange={(e) => setSelectedWarehouseId(e.target.value)}
@@ -175,6 +230,7 @@ export default function RawMaterialConsumptionClient() {
             <option key={w.id} value={w.id}>{w.name}</option>
           ))}
         </select>
+
         <div className="flex items-center gap-2 ml-auto">
           <button
             onClick={downloadCSV}
@@ -220,10 +276,6 @@ export default function RawMaterialConsumptionClient() {
                   const source = item.consumptionType || "Production";
                   const style = SOURCE_STYLES[source] || DEFAULT_SOURCE_STYLE;
                   const prefix = source === "Production Consumption" ? "PRD" : source === "Damage" ? "WST" : source === "Expiry" ? "EXP" : "ADJ";
-                  const unitUpper = (item.unit || "").trim().toUpperCase();
-                  const gramsEquivalent = WEIGHT_UNITS.includes(unitUpper)
-                    ? convertUnit(item.quantity, item.unit, "G")
-                    : null;
 
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
@@ -231,7 +283,7 @@ export default function RawMaterialConsumptionClient() {
                         {formatDate(item.date)}
                       </td>
                       <td className="px-4 py-3 font-mono font-semibold text-gray-800 dark:text-slate-200 text-xs">
-                        {prefix}-{item.id.substring(0, 4).toUpperCase()}
+                        {item.batchCode || `${prefix}-${item.id.substring(0, 4).toUpperCase()}`}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-sm font-medium text-gray-800 dark:text-white">{item.itemName}</span>

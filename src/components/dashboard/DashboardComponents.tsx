@@ -5,15 +5,12 @@ import Link from "next/link";
 import {
   TrendingUp,
   TrendingDown,
-  IndianRupee,
   Package,
   AlertTriangle,
   ArrowRight,
   CreditCard,
   Target,
-  Activity,
   ChevronRight,
-  Factory,
   ShieldAlert,
   Zap,
   Building2,
@@ -24,8 +21,6 @@ import {
   Landmark,
   Check,
   ShieldCheck,
-  Store,
-  Truck,
   Sparkles,
   PackageCheck,
   Receipt,
@@ -81,7 +76,10 @@ export function KPICard({
   return (
     <div
       onClick={onClick}
-      className="bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm hover:border-slate-300 dark:hover:border-white/20 transition-colors cursor-pointer flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0"
+      className={clsx(
+        "bg-white dark:bg-[#12141c] rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-white/10 shadow-sm transition-colors flex flex-col justify-between min-h-[125px] sm:min-h-[135px] w-full min-w-0",
+        onClick && "hover:border-slate-300 dark:hover:border-white/20 cursor-pointer"
+      )}
     >
       <div className="flex items-center gap-2.5 min-w-0">
         <div className={clsx("w-8 h-8 rounded-lg flex items-center justify-center border shrink-0", iconStyles[colorClass])}>
@@ -143,7 +141,7 @@ export function InvoiceReportTable({
   };
 
   return (
-    <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden flex flex-col justify-between w-full min-w-0">
+    <div className="bg-white dark:bg-[#12141c] rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm overflow-hidden flex flex-col justify-start w-full min-w-0 h-full">
       {/* Table Header */}
       <div className="px-4 sm:px-5 py-3 sm:py-3.5 border-b border-slate-100 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02] gap-2">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
@@ -283,8 +281,10 @@ export function ProductionYieldGauge({ percentage = 100 }: { percentage: number 
 const CustomChartTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const sales = payload.find((p: any) => p.dataKey === "sales")?.value || 0;
-    const purchase = payload.find((p: any) => p.dataKey === "purchase")?.value || 0;
-    const profit = sales - purchase;
+    // profit is the backend-computed bucket value (see historicalSales in
+    // dashboard.analytics.ts) — read it from the payload instead of
+    // re-deriving sales-purchase a second time here.
+    const profit = payload.find((p: any) => p.dataKey === "profit")?.value || 0;
     const margin = sales > 0 ? ((profit / sales) * 100).toFixed(1) : "0";
 
     return (
@@ -462,84 +462,6 @@ export function BusinessPerformanceChart({
   );
 }
 
-// ─── 5. COMPACT LIVE ACTIVITY STREAM ──────────────────────────────────────────
-export function CompactLiveActivity() {
-  const activities = [
-    {
-      title: "Batch #B2026-92 Completed",
-      time: "10m ago",
-      type: "production",
-      desc: "100 KG Recipe verified by Factory QC.",
-      icon: Factory,
-      color: "bg-indigo-50 text-indigo-600 border-indigo-200/50",
-    },
-    {
-      title: "Vendor Payment Recorded",
-      time: "42m ago",
-      type: "finance",
-      desc: "₹45,000 disbursed to FreshOils Ltd.",
-      icon: IndianRupee,
-      color: "bg-emerald-50 text-emerald-600 border-emerald-200/50",
-    },
-    {
-      title: "Stock Dispatched to Franchise Alpha",
-      time: "2h ago",
-      type: "inventory",
-      desc: "Delivery Challan #DC-9082 cleared.",
-      icon: Truck,
-      color: "bg-blue-50 text-blue-600 border-blue-200/50",
-    },
-    {
-      title: "POS Day Closing Settlement",
-      time: "Yesterday",
-      type: "pos",
-      desc: "Shift closed with ₹38,200 collection.",
-      icon: Store,
-      color: "bg-amber-50 text-amber-600 border-amber-200/50",
-    },
-  ];
-
-  return (
-    <div className="bg-white dark:bg-[#12141c] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-sm space-y-3 w-full min-w-0">
-      <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2.5">
-        <div className="flex items-center gap-2">
-          <Activity size={15} className="text-[#F58220]" />
-          <h3 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wider">
-            Live Activity Stream
-          </h3>
-        </div>
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          Recent Events
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {activities.map((act, i) => {
-          const Icon = act.icon;
-          return (
-            <div
-              key={i}
-              className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/5 space-y-1 min-w-0"
-            >
-              <div className="flex items-center justify-between">
-                <div className={clsx("w-6 h-6 rounded-lg flex items-center justify-center border", act.color)}>
-                  <Icon size={12} />
-                </div>
-                <span className="text-[10px] text-slate-400 font-semibold">{act.time}</span>
-              </div>
-              <p className="font-bold text-slate-800 dark:text-slate-200 text-xs truncate">
-                {act.title}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                {act.desc}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ─── 6. PREMIUM FILTER (Segmented Date Control) ──────────────────────────────
 interface PremiumFilterProps {

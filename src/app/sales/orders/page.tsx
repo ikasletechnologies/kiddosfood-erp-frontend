@@ -505,6 +505,20 @@ export default function SalesOrdersPage() {
     setShowCustomerDrop(false);
   };
 
+  // This screen is Customer-only (no Dealer/Franchise selector exists in
+  // this UI — see the Sales Order channel-pricing fix), so the Item
+  // Master's "Customer Retail Discount" always applies here when
+  // configured. This only auto-fills the line's discount fields as a
+  // starting point — the operator can still freely edit them via the
+  // existing manual discount inputs.
+  const getAutoDiscount = (p: any, price: number) => {
+    const val = Number(p.discountValue) || 0;
+    if (val <= 0 || price <= 0) return { discountPct: 0, discountAmount: 0 };
+    const discountAmount = p.discountType === "FLAT" ? Math.min(val, price) : Math.min(price, price * val / 100);
+    const discountPct = price > 0 ? parseFloat(((discountAmount / price) * 100).toFixed(2)) : 0;
+    return { discountPct, discountAmount: parseFloat(discountAmount.toFixed(2)) };
+  };
+
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.taxPercent || 0;
     const taxLabel = taxOptionsFor(isSameState).find(o => o.value === taxPct)?.label || "NONE";
@@ -512,6 +526,8 @@ export default function SalesOrdersPage() {
     const conversions = p.conversions || [];
     const unitOptions = getUnitOptions({ baseUnit, conversions } as LineItem);
     const defaultUnit = unitOptions === UNITS ? (p.unit || "NONE") : unitOptions[0].code;
+    const rate = p.customerPrice || p.basePrice || p.price || 0;
+    const { discountPct, discountAmount } = getAutoDiscount(p, rate);
 
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
@@ -519,7 +535,9 @@ export default function SalesOrdersPage() {
         productId: p.id,
         itemSearch: p.name,
         qty: it.qty || 1,
-        rate: p.basePrice || p.price || 0,
+        rate,
+        discountPct,
+        discountAmount,
         unit: defaultUnit,
         taxPct,
         taxLabel,
@@ -1170,7 +1188,7 @@ export default function SalesOrdersPage() {
                                     <strong className="text-gray-800 dark:text-white">{p.name}</strong>
                                     <div className="text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
                                   </div>
-                                  <span className="text-[#f58220] font-mono font-bold">₹{p.basePrice || p.price || 0}</span>
+                                  <span className="text-[#f58220] font-mono font-bold">₹{p.customerPrice || p.basePrice || p.price || 0}</span>
                                 </button>
                               ))
                             )}
@@ -1326,7 +1344,7 @@ export default function SalesOrdersPage() {
                                   <strong className="text-gray-800 dark:text-white truncate block">{p.name}</strong>
                                   <div className="text-gray-400 dark:text-slate-500 text-[10px]">SKU: {p.sku || "—"}</div>
                                 </div>
-                                <span className="text-[#f58220] font-mono font-bold shrink-0">₹{p.basePrice || p.price || 0}</span>
+                                <span className="text-[#f58220] font-mono font-bold shrink-0">₹{p.customerPrice || p.basePrice || p.price || 0}</span>
                               </button>
                             ))
                           )}

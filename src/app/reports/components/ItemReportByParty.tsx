@@ -33,12 +33,12 @@ export default function ItemReportByParty() {
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
         const formatted: PartyItemRow[] = rows.map((r: any) => ({
-          partyName: r.partyName || r.customerName || r.vendorName || "—",
-          itemName: r.itemName || r.name || "—",
-          saleQuantity: Number(r.saleQuantity !== undefined ? r.saleQuantity : (r.saleQty || 0)),
-          saleAmount: Number(r.saleAmount !== undefined ? r.saleAmount : (r.saleValue || 0)),
-          purchaseQuantity: Number(r.purchaseQuantity !== undefined ? r.purchaseQuantity : (r.purchaseQty || 0)),
-          purchaseAmount: Number(r.purchaseAmount !== undefined ? r.purchaseAmount : (r.purchaseValue || 0))
+          partyName: r.partyName || "—",
+          itemName: r.itemName || "—",
+          saleQuantity: Number(r.saleQuantity || 0),
+          saleAmount: Number(r.saleAmount || 0),
+          purchaseQuantity: Number(r.purchaseQuantity || 0),
+          purchaseAmount: Number(r.purchaseAmount || 0)
         }));
 
         setReportData(formatted);

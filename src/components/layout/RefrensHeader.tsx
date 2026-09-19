@@ -73,6 +73,8 @@ export default function RefrensHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const rawRole = (user?.role as any)?.name ?? user?.role ?? "";
+  const isSuperAdmin = typeof rawRole === "string" ? rawRole.toUpperCase() === "SUPER_ADMIN" : false;
   const { toggleCollapsed, toggleMobileOpen } = useSidebar();
   const { theme, toggleTheme } = useTheme();
 
@@ -274,13 +276,23 @@ export default function RefrensHeader() {
                 </div>
 
                 <div className="px-4 py-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/[0.01]">
-                  <Link
-                    href="/alerts"
-                    onClick={() => setShowNotifications(false)}
-                    className="text-[11px] text-[#F58220] font-black uppercase text-center block tracking-wider hover:underline"
-                  >
-                    View Full System Audit Logs →
-                  </Link>
+                  {isSuperAdmin ? (
+                    <Link
+                      href="/alerts"
+                      onClick={() => setShowNotifications(false)}
+                      className="text-[11px] text-[#F58220] font-black uppercase text-center block tracking-wider hover:underline"
+                    >
+                      View Full System Audit Logs →
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/franchise/requests"
+                      onClick={() => setShowNotifications(false)}
+                      className="text-[11px] text-[#F58220] font-black uppercase text-center block tracking-wider hover:underline"
+                    >
+                      View All Stock Requests →
+                    </Link>
+                  )}
                 </div>
               </div>
             )}

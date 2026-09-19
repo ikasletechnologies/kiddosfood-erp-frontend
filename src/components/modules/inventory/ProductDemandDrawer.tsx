@@ -54,13 +54,17 @@ const STATUS_BADGES: Record<string, { bg: string; text: string; border: string; 
   },
 };
 
+import { createPortal } from "react-dom";
+
 export default function ProductDemandDrawer({ item, onClose }: ProductDemandDrawerProps) {
   if (!item) return null;
 
   const totalDemandQty = item.pendingDemandQuantity + item.approvedDemandQuantity;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white dark:bg-[#12141c] rounded-2xl sm:rounded-[2.5rem] shadow-2xl w-full max-w-2xl border border-slate-100 dark:border-white/10 max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 min-w-0">
         {/* Header */}
         <div className="p-4 sm:p-6 border-b border-slate-100 dark:border-white/5 flex items-start justify-between gap-3 bg-slate-50/50 dark:bg-white/[0.02]">
@@ -219,6 +223,7 @@ export default function ProductDemandDrawer({ item, onClose }: ProductDemandDraw
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

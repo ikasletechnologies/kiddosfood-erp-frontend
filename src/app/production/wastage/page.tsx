@@ -246,7 +246,7 @@ export default function WastagePage() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-5 w-full min-w-0">
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-6 py-4 sm:py-5 w-full min-w-0">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
 
           {/* Left Side: Stats and Log Form */}

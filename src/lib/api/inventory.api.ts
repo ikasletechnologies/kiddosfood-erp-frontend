@@ -61,7 +61,7 @@ export const inventoryApi = {
     api.post('/api/inventory/stock-in', data),
   stockOut: (data: { itemId: string, quantity: number, type: string, note?: string }) =>
     api.post('/api/inventory/stock-out', data),
-  adjustment: (data: { itemId: string, newQuantity: number, note?: string }) =>
+  adjustment: (data: { itemId: string, newQuantity: number, unit?: string, note?: string }) =>
     api.post('/api/inventory/adjustment', data),
   getMovements: (params?: any) => api.get('/api/inventory/movements', { params }),
   getAlerts: (params?: { franchiseId?: string; warehouseId?: string }) => api.get('/api/inventory/alerts', { params }),
@@ -69,10 +69,12 @@ export const inventoryApi = {
   // franchiseId/franchiseName if it's some franchise's primary warehouse,
   // both null otherwise); FRANCHISE_ADMIN gets only their own franchise's
   // primary warehouse (empty array if none is set). Enforced server-side.
-  getWarehouses: () => api.get('/api/warehouses'),
+  getWarehouses: (params?: { includeInactive?: boolean; all?: boolean; status?: string; scope?: string; forGRN?: boolean }) => 
+    api.get('/api/warehouses', { params }),
+  getNextWarehouseCode: () => api.get<{ code: string }>('/api/warehouses/next-code'),
   createWarehouse: (data: { name: string, location?: string, type?: string, code?: string, status?: string, franchiseId?: string }) => 
     api.post('/api/warehouses', data),
-  updateWarehouse: (id: string, data: { name?: string, location?: string, type?: string }) => 
+  updateWarehouse: (id: string, data: { name?: string, location?: string, type?: string, status?: string }) => 
     api.patch(`/api/warehouses/${id}`, data),
   deleteWarehouse: (id: string) =>
     api.delete(`/api/warehouses/${id}`),

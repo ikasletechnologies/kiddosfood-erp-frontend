@@ -56,6 +56,8 @@ export const salesApi = {
   createReturn: (data: any) => api.post('/api/sales/returns', data),
   updateReturnStatus: (id: string, status: string, approvedBy?: string) => 
     api.patch(`/api/sales/returns/${id}`, { status, approvedBy }),
+  refundReturn: (id: string, data: { refundMethod?: string; accountId?: string; method?: string }) =>
+    api.post(`/api/sales/returns/${id}/refund`, data),
   
   getAnalytics: (params?: any) => api.get('/api/sales/analytics', { params }),
 
@@ -80,6 +82,7 @@ export const customersApi = {
   update: (id: string, data: any) => api.patch(`/api/customers/${id}`, data),
   delete: (id: string) => api.delete(`/api/customers/${id}`),
   getLedgerSummary: (params: any = {}) => api.get('/api/customers/ledger-summary', { params }),
+  getItems: (id: string) => api.get(`/api/customers/${id}/items`),
 };
 
 // External B2B reseller master — distinct from Customer, franchise-scoped
@@ -87,8 +90,12 @@ export const customersApi = {
 // franchise's dealers; FRANCHISE_ADMIN is always forced to their own).
 export const dealersApi = {
   getAll: (params: { franchiseId?: string } = {}) => api.get('/api/dealers', { params }),
+  getById: (id: string) => api.get(`/api/dealers/${id}`),
   create: (data: any) => api.post('/api/dealers', data),
+  update: (id: string, data: any) => api.patch(`/api/dealers/${id}`, data),
   delete: (id: string) => api.delete(`/api/dealers/${id}`),
+  getTransactions: (id: string) => api.get(`/api/dealers/${id}/transactions`),
+  getItems: (id: string) => api.get(`/api/dealers/${id}/items`),
 };
 
 // --- Logistics & Transfers (Internal) ---

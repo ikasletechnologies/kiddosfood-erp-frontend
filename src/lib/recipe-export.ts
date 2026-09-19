@@ -60,16 +60,7 @@ export async function exportRecipeToPdf(recipe: RecipeExportData): Promise<void>
   const genDateStr = `Generated: ${formatDate(new Date())}`;
   doc.text(genDateStr, pageWidth - margin, currentY + 6, { align: "right" });
 
-  currentY += 12;
-
-  const prodName = recipe.product?.name || "N/A";
-  const codeStr = recipe.recipeCode ? ` (${recipe.recipeCode})` : "";
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...brandOrange);
-  doc.text(`FINISHED PRODUCT: ${prodName.toUpperCase()}${codeStr}`, margin, currentY);
-
-  currentY += 6;
+  currentY += 10;
 
   // Horizontal Divider
   doc.setDrawColor(...borderGray);

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { 
+import {
   Package,
   TrendingUp,
   AlertTriangle,
@@ -33,13 +33,12 @@ import { dashboardApi, franchiseApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
 import {
   KPICard,
-  ProductionYieldGauge,
   BusinessPerformanceChart,
   InvoiceReportTable,
   PremiumFilter,
 } from "@/components/dashboard/DashboardComponents";
 import { DateRangePickerModal } from "@/components/dashboard/DateRangePickerModal";
-import { DrillDownDrawer, DrillDownItem } from "@/components/dashboard/DrillDownDrawer";
+import { DrillDownItem } from "@/components/dashboard/DrillDownDrawer";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import toast from "react-hot-toast";
 
@@ -68,10 +67,6 @@ export default function Dashboard() {
   // Export Dropdown
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
-
-  // Drill-down slideover
-  const [drillDownItem, setDrillDownItem] = useState<DrillDownItem | null>(null);
-  const [isDrillDownOpen, setIsDrillDownOpen] = useState(false);
 
   const fetchOutlets = useCallback(async () => {
     try {
@@ -118,10 +113,17 @@ export default function Dashboard() {
       let startDateStr = new Date().toISOString();
 
       if (period === "custom" && customStartDate && customEndDate) {
-        startDateStr = new Date(customStartDate).toISOString();
-        const endD = new Date(customEndDate);
-        endD.setHours(23, 59, 59, 999);
-        endDateStr = endD.toISOString();
+        // customStartDate/customEndDate are plain "yyyy-MM-dd" strings from a
+        // date input. `new Date("yyyy-MM-dd")` parses as UTC midnight, not
+        // local midnight — for IST that shifts both boundaries ~5.5 hours,
+        // silently dropping early-morning/late-evening transactions on the
+        // selected start/end days. Parsing the parts explicitly and building
+        // the Date in local time (like the today/week/month branch already
+        // does via setHours) avoids that shift.
+        const [sy, sm, sd] = customStartDate.split("-").map(Number);
+        const [ey, em, ed] = customEndDate.split("-").map(Number);
+        startDateStr = new Date(sy, sm - 1, sd, 0, 0, 0, 0).toISOString();
+        endDateStr = new Date(ey, em - 1, ed, 23, 59, 59, 999).toISOString();
       } else {
         let startDate = new Date();
         if (period === "today") startDate.setHours(0, 0, 0, 0);
@@ -175,11 +177,6 @@ export default function Dashboard() {
     toast.success(`Date filter: ${presetLabel || `${start} to ${end}`}`);
   };
 
-  const handleOpenDrillDown = (item: DrillDownItem) => {
-    setDrillDownItem(item);
-    setIsDrillDownOpen(true);
-  };
-
   const getExportRows = () => {
     const s = data?.stats || {};
     const rows: [string, string][] = [
@@ -189,18 +186,18 @@ export default function Dashboard() {
       ["Time Period", period.toUpperCase()],
       ["Today Revenue", formatCurrency(s.revenueToday || 0)],
       ["Today Orders Count", String(s.orderCountToday || 0)],
-      ["Gross Sales Revenue", formatCurrency(s.totalSales || 0)],
-      ["Total Procurement Bills", formatCurrency(s.totalPurchase || 0)],
-      ["Net Operating Margin", formatCurrency((s.totalSales || 0) - (s.totalPurchase || 0))],
+      ["Net Profit", formatCurrency(s.netProfit || 0)],
+      ["P&L Revenue", formatCurrency(s.pnlRevenue || 0)],
+      ["P&L Expenses", formatCurrency(s.pnlExpenses || 0)],
       ["Total Inventory Value", formatCurrency(s.inventoryValue || 0)],
       ["Active Inventory SKUs", String(s.inventoryItemCount || 0)],
       ["Daily Cash Position", formatCurrency(s.dailyCashPosition || 0)],
       ["Today Cash/UPI Collection", formatCurrency(s.todayCollection || 0)],
-      ["Pending Customer Receivables", formatCurrency(s.outstandingAmount || 0)],
-      ["Overdue Accounts Count", String(s.overdueDealersCount || 0)],
+      ["Pending Customer Receivables", formatCurrency(s.totalReceivables || 0)],
+      ["Overdue Dealer Accounts Count", String(s.overdueDealersCount || 0)],
       ["Pending Vendor Payables", formatCurrency(s.vendorPayables || 0)],
       ["Production Output Quantity", `${(s.productionQuantity || 0).toLocaleString()} units`],
-      ["Production Yield Rate", `${s.yieldPercentage || 100}%`],
+      ["Production Yield Rate", s.yieldPercentage != null ? `${s.yieldPercentage}%` : "No data"],
       ["Recorded Wastage / Scrap", `${(s.wastage || 0).toLocaleString()} units`],
     ];
 
@@ -214,7 +211,12 @@ export default function Dashboard() {
       "Metric / KPI,Recorded Telemetry Value",
       ...rows.map(([label, value]) => `"${String(label).replace(/"/g, '""')}","${String(value).replace(/"/g, '""')}"`),
     ].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    // Excel opens a .csv using the system's ANSI codepage unless a UTF-8 BOM
+    // is present — without it, the 3-byte UTF-8 encoding of ₹ (E2 82 B9) gets
+    // misread as three separate Latin-1 characters ("â‚¹"). The BOM tells
+    // Excel to actually decode the file as UTF-8. Numeric values themselves
+    // are untouched — this only fixes how the ₹ glyph decodes.
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement("a");
     downloadAnchor.href = url;
@@ -378,21 +380,21 @@ export default function Dashboard() {
       colorClass: "orange",
       insight: stats?.orderCountToday ? `${stats.orderCountToday} Orders Today` : "",
       href: "/sales/invoices",
-      breakdown: [
-        { label: "B2B Franchise Invoices", value: formatCurrency(stats?.b2bSalesToday || (stats?.revenueToday ? stats.revenueToday * 0.65 : 0)) },
-        { label: "B2C Counter Receipts", value: formatCurrency(stats?.b2cSalesToday || (stats?.revenueToday ? stats.revenueToday * 0.35 : 0)) },
-      ],
     },
     {
       title: "NET PROFIT",
-      value: formatCurrency((stats?.totalSales || 0) - (stats?.totalPurchase || 0)),
+      // Backend value only (FinanceService.getProfitAndLoss) — this is the
+      // same figure the P&L report shows for the same scope/date range, not
+      // a client-side totalSales-totalPurchase guess.
+      value: formatCurrency(stats?.netProfit || 0),
       icon: TrendingUp,
       colorClass: "emerald",
-      insight: `Net Margin: ${stats?.totalSales > 0 ? (((stats.totalSales - stats.totalPurchase) / stats.totalSales) * 100).toFixed(1) : 0}%`,
+      insight: stats?.pnlRevenue > 0 ? `Net Margin: ${(((stats.netProfit || 0) / stats.pnlRevenue) * 100).toFixed(1)}%` : "",
       href: "/reports?report=Profit And Loss",
       breakdown: [
-        { label: "Gross Sales Revenue", value: formatCurrency(stats?.totalSales || 0) },
-        { label: "Total Procurement Bills", value: formatCurrency(stats?.totalPurchase || 0) },
+        { label: "Revenue", value: formatCurrency(stats?.pnlRevenue || 0) },
+        { label: "Expenses", value: formatCurrency(stats?.pnlExpenses || 0) },
+        { label: "Gross Profit", value: formatCurrency(stats?.grossProfit || 0) },
       ],
     },
     {
@@ -401,12 +403,7 @@ export default function Dashboard() {
       icon: Package,
       colorClass: "blue",
       insight: stats?.inventoryItemCount ? `${stats.inventoryItemCount} Active SKUs` : "",
-      href: "/inventory/raw-material-stock",
-      breakdown: [
-        { label: "Raw Materials Stock", value: formatCurrency((stats?.inventoryValue || 0) * 0.58) },
-        { label: "Packaging Stock", value: formatCurrency((stats?.inventoryValue || 0) * 0.18) },
-        { label: "Finished Goods Stock", value: formatCurrency((stats?.inventoryValue || 0) * 0.24) },
-      ],
+      href: "/inventory/stock-value",
     },
   ];
 
@@ -422,11 +419,15 @@ export default function Dashboard() {
     },
     {
       title: "PENDING RECEIVABLES",
-      value: formatCurrency(stats?.outstandingAmount || 0),
+      // Company-/outlet-wide outstanding across all customers, dealers and
+      // franchises (FinanceService.getAllPartiesData, datasetType RECEIVABLE)
+      // — not the dealer-only subset `outstandingAmount` carries (that field
+      // stays as-is for the Franchise Dashboard's dealer-collections widget).
+      value: formatCurrency(stats?.totalReceivables || 0),
       icon: Wallet,
       colorClass: "amber",
-      insight: stats?.overdueDealersCount ? `${stats.overdueDealersCount} Overdue Accounts` : "",
-      href: "/accounting/ledgers?type=receivables",
+      insight: stats?.overdueDealersCount ? `${stats.overdueDealersCount} Overdue Dealer Accounts` : "",
+      href: "/accounting/receivables",
     },
     {
       title: "VENDOR PAYABLES",
@@ -441,18 +442,22 @@ export default function Dashboard() {
       value: `${(stats?.productionQuantity || 0).toLocaleString()} Units`,
       icon: Factory,
       colorClass: "indigo",
-      insight: `Yield Rate: ${stats?.yieldPercentage || 100}%`,
+      // yieldPercentage is null (not 0) when there was no completed
+      // production in this window — must not be shown as a fake 100%, which
+      // would hide a real 0% yield (production failure) as if it were perfect.
+      insight: stats?.yieldPercentage != null ? `Yield Rate: ${stats.yieldPercentage}%` : "No production data for this period",
       href: "/production/batches",
     },
   ];
 
-  // Chart data
+  // Chart data — profit comes straight from the backend bucket (already
+  // sales-purchase computed server-side), not recomputed here.
   const chartData = (data?.historicalSales || []).map((s: any) => ({
     date: s.date,
     sales: s.sales || 0,
     orders: s.orders,
     purchase: s.purchase || 0,
-    profit: (s.sales || 0) - (s.purchase || 0),
+    profit: s.profit || 0,
   }));
 
   const filteredOutletList = outlets.filter((o) =>
@@ -501,13 +506,13 @@ export default function Dashboard() {
                     onChange={(e) => setOutletSearch(e.target.value)}
                     className="w-full px-3 py-2 sm:py-1.5 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg text-xs outline-none focus:border-[#F58220] text-slate-900 dark:text-white placeholder:text-slate-400"
                   />
-            {outletSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setOutletSearch("")} 
-              />
-            )}
+                  {outletSearch && (
+                    <X
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setOutletSearch("")}
+                    />
+                  )}
                 </div>
 
                 <div className="max-h-56 overflow-y-auto custom-scrollbar p-1 space-y-0.5">
@@ -641,7 +646,6 @@ export default function Dashboard() {
               key={i}
               {...kpi}
               colorClass={i === 0 ? "orange" : i === 1 ? "emerald" : "blue"}
-              onClick={() => handleOpenDrillDown(kpi)}
             />
           ))}
         </div>
@@ -659,7 +663,6 @@ export default function Dashboard() {
               key={i}
               {...kpi}
               colorClass={i === 0 ? "blue" : i === 1 ? "amber" : i === 2 ? "rose" : "indigo"}
-              onClick={() => handleOpenDrillDown(kpi)}
             />
           ))}
         </div>
@@ -695,7 +698,7 @@ export default function Dashboard() {
             }))}
             emptyTitle="No Recent Purchase Orders"
             actionText="+ Create Purchase Order"
-            actionHref="/purchases/new"
+            actionHref="/purchases/orders"
           />
 
           {/* Table 2: Recent B2B Sales Details */}
@@ -703,11 +706,12 @@ export default function Dashboard() {
             title="Recent B2B Sales Details"
             icon={Building2}
             colorClass="blue"
-            headers={["Invoice Number", "Client / Dealer", "Total Amount"]}
+            headers={["Invoice Number", "Client / Dealer / Franchise", "Party Type", "Total Amount"]}
             data={(data?.recentB2BSales || []).map((s: any) => ({
               col1: s.invoiceNum,
-              col2: s.customerName || "B2B Franchise Client",
-              col3: formatCurrency(s.totalAmount),
+              col2: s.customerName,
+              col3: s.partyType === "FRANCHISE" ? "Franchise" : "Dealer",
+              col4: formatCurrency(s.totalAmount),
             }))}
             emptyTitle="No Recent B2B Invoices"
             actionText="View B2B Invoices"
@@ -790,14 +794,6 @@ export default function Dashboard() {
         onApply={handleApplyCustomDates}
       />
 
-      {/* ── 8. DRILL-DOWN SLIDE-OVER DRAWER ── */}
-      <DrillDownDrawer
-        isOpen={isDrillDownOpen}
-        onClose={() => setIsDrillDownOpen(false)}
-        item={drillDownItem}
-        period={period}
-        outletName={selectedOutletName}
-      />
     </div>
   );
 }

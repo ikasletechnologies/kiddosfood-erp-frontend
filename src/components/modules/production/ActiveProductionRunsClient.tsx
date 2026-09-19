@@ -172,7 +172,6 @@ export default function ActiveProductionRunsClient() {
 
   const activeRuns = history.filter(h => h.status === 'IN_PROGRESS' || h.status === 'STOPPED');
   const expectedYieldVal = (batchToApprove?.quantity || 0) * (batchToApprove?.recipe?.yieldQty || 1);
-  const wasteVal = Math.max(0, expectedYieldVal - (Number(actualYield) || 0));
   const yieldUnit = batchToApprove?.recipe?.yieldUnit || "KG";
 
   return (
@@ -401,7 +400,7 @@ export default function ActiveProductionRunsClient() {
             </div>
           )}
 
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-gray-50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5 text-center">
               <span className="text-[10px] font-bold uppercase text-gray-400">Expected</span>
               <p className="text-sm font-bold font-mono text-gray-900 dark:text-white mt-0.5">
@@ -409,19 +408,10 @@ export default function ActiveProductionRunsClient() {
               </p>
             </div>
 
-            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 text-center">
-              <span className="text-[10px] font-bold uppercase text-indigo-700">Actual</span>
-              <p className="text-sm font-bold font-mono text-indigo-600 mt-0.5">
+            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-center">
+              <span className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-300">Actual</span>
+              <p className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">
                 {(Number(actualYield) || 0).toFixed(2)} {yieldUnit}
-              </p>
-            </div>
-
-            <div className={clsx("p-3 rounded-xl border text-center", wasteVal > 0 ? "bg-amber-50/60 border-amber-200" : "bg-emerald-50/60 border-emerald-200")}>
-              <span className={clsx("text-[10px] font-bold uppercase", wasteVal > 0 ? "text-amber-700" : "text-emerald-700")}>
-                Waste
-              </span>
-              <p className={clsx("text-sm font-bold font-mono mt-0.5", wasteVal > 0 ? "text-amber-800" : "text-emerald-800")}>
-                {wasteVal.toFixed(2)} {yieldUnit}
               </p>
             </div>
           </div>

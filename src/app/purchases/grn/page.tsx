@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { X,
@@ -19,13 +19,94 @@ import { X,
   ArrowRight as ArrowRightIcon,
   History as HistoryIcon,
   Plus as PlusIcon,
-  Scan as ScanIcon
+  Scan as ScanIcon,
+  RefreshCw
 } from "lucide-react";
 import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi, settingsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { useAuth } from "@/context/AuthContext";
+
+// ── MiniCalendar ──────────────────────────────────────────────────────────────
+const MONTH_NAMES = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+const DAY_NAMES = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function MiniCalendar({ value, onChange, onClose }: {
+  value: string; onChange: (v: string) => void; onClose: () => void;
+}) {
+  const today = new Date();
+  const selected = value ? new Date(value + "T00:00:00") : today;
+  const [viewYear, setViewYear] = useState(selected.getFullYear());
+  const [viewMonth, setViewMonth] = useState(selected.getMonth());
+
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const prevMonth = () => { if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); } else setViewMonth(m => m - 1); };
+  const nextMonth = () => { if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); } else setViewMonth(m => m + 1); };
+  const isSelected = (d: number) => Boolean(value) && selected.getFullYear() === viewYear && selected.getMonth() === viewMonth && selected.getDate() === d;
+  const isToday = (d: number) => today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+
+  const currentYear = today.getFullYear();
+  const years = Array.from({ length: 30 }, (_, i) => currentYear - 15 + i);
+
+  return (
+    <div className="bg-white dark:bg-[#13151f] rounded-xl shadow-2xl border border-gray-200 dark:border-white/10 p-3 w-64 select-none">
+      <div className="flex items-center justify-between mb-2 gap-1">
+        <button type="button" onClick={prevMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400 cursor-pointer">
+          <ChevronDownIcon size={14} className="rotate-90" />
+        </button>
+        <div className="flex items-center gap-1">
+          <select
+            value={viewMonth}
+            onChange={e => setViewMonth(Number(e.target.value))}
+            className="text-xs font-semibold text-gray-800 dark:text-white bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600 dark:hover:text-orange-400"
+          >
+            {MONTH_NAMES.map((m, idx) => (
+              <option key={m} value={idx} className="dark:bg-[#13151f]">{m}</option>
+            ))}
+          </select>
+          <select
+            value={viewYear}
+            onChange={e => setViewYear(Number(e.target.value))}
+            className="text-xs font-semibold text-gray-800 dark:text-white bg-transparent border-0 outline-none cursor-pointer hover:text-orange-600 dark:hover:text-orange-400"
+          >
+            {years.map(y => (
+              <option key={y} value={y} className="dark:bg-[#13151f]">{y}</option>
+            ))}
+          </select>
+        </div>
+        <button type="button" onClick={nextMonth} className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-slate-400 cursor-pointer">
+          <ChevronDownIcon size={14} className="-rotate-90" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_NAMES.map(d => <div key={d} className="text-center text-[10px] font-semibold text-gray-400 dark:text-slate-500 py-0.5">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-y-0.5">
+        {cells.map((d, i) => d === null ? <div key={i} /> : (
+          <button key={i}
+            type="button"
+            onClick={() => { onChange(`${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`); onClose(); }}
+            className={clsx("w-full aspect-square flex items-center justify-center text-xs rounded-lg font-medium transition-colors cursor-pointer",
+              isSelected(d) && "bg-orange-500 text-white",
+              !isSelected(d) && isToday(d) && "bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400",
+              !isSelected(d) && !isToday(d) && "text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-white/10"
+            )}
+          >{d}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -66,6 +147,12 @@ interface PO {
 interface GRNItem {
   materialId: string;
   quantity: number;       // ordered
+  // Authoritative remaining-receivable quantity (ordered minus cumulative
+  // received from COMPLETED GRNs) — from GRNService.getRemainingQuantities.
+  // Falls back to `quantity` if the lookup fails, so the field is always
+  // present once selectPO resolves; the backend re-validates regardless.
+  remaining?: number;
+  previouslyReceived?: number;
   receivedQty: number;
   acceptedQty: number;
   rejectedQty: number;
@@ -138,6 +225,7 @@ function computeCommercialsFromPO(
 
 export default function GRNPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [view, setView] = useState<"NEW" | "HISTORY">("NEW");
   const [step, setStep] = useState<1 | 2>(1);
   const [pos, setPOs] = useState<PO[]>([]);
@@ -148,6 +236,16 @@ export default function GRNPage() {
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [poSearch, setPoSearch] = useState("");
+  
+  // Received History Search & Date Filters
+  const [historySearch, setHistorySearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [showFromCal, setShowFromCal] = useState(false);
+  const [showToCal, setShowToCal] = useState(false);
+  const fromCalRef = useRef<HTMLDivElement>(null);
+  const toCalRef = useRef<HTMLDivElement>(null);
+
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<string>("");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
@@ -160,6 +258,34 @@ export default function GRNPage() {
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
   };
+
+  const formatLotPreview = (baseLot: string, indexOffset: number) => {
+    const match = baseLot.match(/^(LOT-\d{8}-)(\d{5})$/);
+    if (!match) return baseLot;
+    const seqNum = parseInt(match[2], 10) + indexOffset;
+    return `${match[1]}${String(seqNum).padStart(5, '0')}`;
+  };
+
+  const fmtDateDisplay = (iso: string) => {
+    if (!iso) return "—";
+    const parts = iso.split("-");
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return iso;
+  };
+
+  // Close calendar popovers on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fromCalRef.current && !fromCalRef.current.contains(e.target as Node)) {
+        setShowFromCal(false);
+      }
+      if (toCalRef.current && !toCalRef.current.contains(e.target as Node)) {
+        setShowToCal(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     settingsApi.getCompanyProfile()
@@ -179,17 +305,40 @@ export default function GRNPage() {
     setPreviewGRN(true);
   };
 
-  // Fetch Warehouses on mount
+  // Fetch Warehouses on mount (Role-aware: HQ gets HQ warehouses via forGRN scope; Franchise gets their own warehouse)
   useEffect(() => {
-    inventoryApi.getWarehouses()
+    const isFranchiseUser = !!(user?.franchiseId || (user as any)?.franchise?.id || (user?.role || (user as any)?.role?.name || "").toUpperCase() === "FRANCHISE_ADMIN");
+    const params = isFranchiseUser ? {} : { forGRN: true, scope: "HQ" };
+
+    inventoryApi.getWarehouses(params)
       .then(res => {
         const list = res.data || [];
-        setWarehouses(list);
+        const userFranchiseId = user?.franchiseId || (user as any)?.franchise?.id;
+
+        let filtered = list;
+        if (isFranchiseUser) {
+          // Franchise User: Show their own franchise warehouse(s)
+          const franchiseOnly = list.filter((w: any) =>
+            w.franchiseId === userFranchiseId ||
+            w.id === (user as any)?.primaryWarehouseId ||
+            w.isFranchise ||
+            w.type === "FRANCHISE"
+          );
+          filtered = franchiseOnly.length > 0 ? franchiseOnly : list;
+        } else {
+          // HQ / Headquarter User: Show Headquarter / Company warehouses (exclude franchise warehouses)
+          const hqOnly = list.filter((w: any) => !w.isFranchise && !w.franchiseId);
+          filtered = hqOnly.length > 0 ? hqOnly : list;
+        }
+        setWarehouses(filtered);
+        if (filtered.length > 0) {
+          setDefaultWarehouseId(prev => prev || filtered[0].id);
+        }
       })
       .catch(err => {
         console.error("Failed to fetch warehouses:", err);
       });
-  }, []);
+  }, [user]);
 
   const handleDefaultWarehouseChange = (whId: string) => {
     if (whId === "ADD_NEW") {
@@ -221,56 +370,108 @@ export default function GRNPage() {
   const [viewingGRNDetails, setViewingGRNDetails] = useState<any>(null);
   const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
 
+  // Fetch Pending POs
+  const loadPOs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await purchaseOrdersApi.getAll();
+      const orders = r.data.orders || r.data || [];
+      const pending = orders.filter(
+        (p: PO) => p.status === "PENDING" || p.status === "APPROVED" || p.status === "SENT" || p.status === "PARTIALLY_RECEIVED"
+      );
+      setPOs(pending);
+
+      // Auto-select if PO ID provided in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const poId = urlParams.get('poId');
+      if (poId) {
+        const po = pending.find((p: PO) => p.id === poId);
+        if (po) selectPO(po);
+      }
+    } catch (err) {
+      console.error("Failed to load POs:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch GRN History
+  const loadHistory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await grnApi.getAll();
+      const list = r.data || [];
+      setHistory(list);
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const grnId = urlParams.get('grnId');
+      if (grnId) {
+        const matched = list.find((g: any) => g.id === grnId);
+        if (matched) {
+          setViewingGRNDetails(matched);
+        } else {
+          grnApi.getById(grnId).then(res => {
+            if (res.data) setViewingGRNDetails(res.data);
+          }).catch(console.error);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load GRN history:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // Fetch Pending POs or History based on view
   useEffect(() => {
-    setLoading(true);
     if (view === "NEW") {
-      purchaseOrdersApi.getAll().then(r => {
-        const orders = r.data.orders || r.data || [];
-        const pending = orders.filter(
-          (p: PO) => p.status === "PENDING" || p.status === "APPROVED" || p.status === "SENT" || p.status === "PARTIALLY_RECEIVED"
-        );
-        setPOs(pending);
-
-        // Auto-select if PO ID provided in URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const poId = urlParams.get('poId');
-        if (poId) {
-          const po = pending.find((p: PO) => p.id === poId);
-          if (po) selectPO(po);
-        }
-      }).finally(() => setLoading(false));
+      loadPOs();
     } else {
-      grnApi.getAll().then(r => {
-        const list = r.data || [];
-        setHistory(list);
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        const grnId = urlParams.get('grnId');
-        if (grnId) {
-          const matched = list.find((g: any) => g.id === grnId);
-          if (matched) {
-            setViewingGRNDetails(matched);
-          } else {
-            grnApi.getById(grnId).then(res => {
-              if (res.data) setViewingGRNDetails(res.data);
-            }).catch(console.error);
-          }
-        }
-      }).finally(() => setLoading(false));
+      loadHistory();
     }
-  }, [view]);
+  }, [view, loadPOs, loadHistory]);
 
-  const selectPO = (po: PO) => {
+  const selectPO = async (po: PO) => {
     setSelectedPO(po);
+
+    // Authoritative remaining-receivable quantity per line (ordered minus
+    // cumulative received from COMPLETED GRNs) — a partially-received PO
+    // must default/cap to what's actually still outstanding, not the full
+    // original ordered quantity again. Falls back to the raw ordered
+    // quantity if the lookup fails; the backend still rejects any
+    // over-receipt on submit regardless of what the UI shows.
+    let remainingByMaterial = new Map<string, { remaining: number; previouslyReceived: number }>();
+    try {
+      const res = await grnApi.getRemainingQuantities(po.id);
+      (res.data || []).forEach((r: any) => {
+        if (r.materialId) remainingByMaterial.set(r.materialId, { remaining: r.remaining, previouslyReceived: r.previouslyReceived });
+      });
+    } catch (e) {
+      console.error("Failed to load remaining receivable quantities:", e);
+      toast.error("Could not load remaining receivable quantity for this PO — showing full ordered quantity, but the server will still block over-receiving.");
+    }
+
+    let baseLotStr = "";
+    try {
+      const res = await grnApi.generateLotNumber();
+      baseLotStr = res.data.lotNumber || "";
+    } catch (e) {
+      console.error(e);
+    }
+
     setGrnItems(
-      (po.poItems || []).map(item => {
+      (po.poItems || []).map((item, idx) => {
         const gstRate = item.gstRate ?? (item.inventoryItem as any)?.taxRate ?? (item.inventoryItem as any)?.gstRate ?? 0;
+        const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
+        const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
+        const autoLotStr = baseLotStr ? formatLotPreview(baseLotStr, idx) : "[AUTO]";
         return {
           materialId: item.inventoryItem.id,
           quantity: item.quantity,
-          receivedQty: item.quantity,
-          acceptedQty: item.quantity,
+          remaining,
+          previouslyReceived: remainingInfo?.previouslyReceived ?? 0,
+          receivedQty: remaining,
+          acceptedQty: remaining,
           rejectedQty: 0,
           price: item.price,
           poPrice: item.price,
@@ -279,7 +480,7 @@ export default function GRNPage() {
           vendorBatchNo: "",
           mfgDate: "",
           expDate: "",
-          lotNumber: "",
+          lotNumber: autoLotStr,
           warehouseId: po.warehouseId || defaultWarehouseId || "",
           inventoryItem: item.inventoryItem,
         };
@@ -295,7 +496,11 @@ export default function GRNPage() {
       const parsedVal = Math.max(0, val);
 
       if (field === "receivedQty") {
-        currentItem.receivedQty = Math.min(currentItem.quantity, parsedVal);
+        // Cap at the remaining receivable quantity, not the PO's full
+        // original ordered quantity — a partially-received PO must not let
+        // the UI offer the already-fulfilled portion again. Falls back to
+        // `quantity` only if remaining was never resolved (see selectPO).
+        currentItem.receivedQty = Math.min(currentItem.remaining ?? currentItem.quantity, parsedVal);
       } else if (field === "rejectedQty") {
         currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
       }
@@ -339,9 +544,10 @@ export default function GRNPage() {
     setGeneratingLotIdx(idx);
     try {
       const res = await grnApi.generateLotNumber();
-      updateItemStr(idx, "lotNumber", res.data.lotNumber);
+      const lotStr = res.data.lotNumber ? formatLotPreview(res.data.lotNumber, idx) : "[AUTO]";
+      updateItemStr(idx, "lotNumber", lotStr);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || "Failed to generate lot number.");
+      updateItemStr(idx, "lotNumber", "[AUTO]");
     } finally {
       setGeneratingLotIdx(null);
     }
@@ -383,25 +589,13 @@ export default function GRNPage() {
       return;
     }
 
-    // Validate Batch Number, MFG Date, and EXP Date for all items with acceptedQty > 0
+    // Validate Batch Number and EXP Date for all items with acceptedQty > 0
     for (let i = 0; i < itemsToSubmit.length; i++) {
       const item = itemsToSubmit[i];
       const itemName = item.inventoryItem?.name || selectedPO.poItems[i]?.inventoryItem?.name || `Item #${i + 1}`;
       if (item.acceptedQty > 0) {
-        if (!item.lotNumber || !item.lotNumber.trim()) {
-          toast.error(`Please provide a Batch/Lot Number for "${itemName}".`);
-          return;
-        }
-        if (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime())) {
-          toast.error(`Please select a valid Manufacturing (MFG) Date for "${itemName}".`);
-          return;
-        }
         if (!item.expDate || isNaN(new Date(item.expDate).getTime())) {
           toast.error(`Please select a valid Expiry (EXP) Date for "${itemName}".`);
-          return;
-        }
-        if (new Date(item.expDate).getTime() < new Date(item.mfgDate).getTime()) {
-          toast.error(`Expiry (EXP) Date cannot be earlier than Manufacturing (MFG) Date for "${itemName}".`);
           return;
         }
       }
@@ -459,6 +653,52 @@ export default function GRNPage() {
     p.vendor.name.toLowerCase().includes(poSearch.toLowerCase()) ||
     p.poNumber?.toLowerCase().includes(poSearch.toLowerCase())
   );
+
+  const filteredHistory = history.filter((grn) => {
+    // 1. Search filter: Vendor, Reference PO #, GRN #, items, lot numbers
+    const term = historySearch.trim().toLowerCase();
+    let matchSearch = true;
+    if (term) {
+      const vendorName = grn.procurementOrder?.vendor?.name?.toLowerCase() || "";
+      const poNumber = (grn.procurementOrder?.poNumber || grn.procurementOrder?.id || "")?.toLowerCase();
+      const grnId = grn.id?.toLowerCase() || "";
+      const grnErpNumber = formatERPNumber("GRN", grn.id, grn.createdAt)?.toLowerCase() || "";
+      const itemNames = (grn.items || [])
+        .map((i: any) => i.inventoryItem?.name?.toLowerCase() || "")
+        .join(" ");
+      const lotNumbers = (grn.items || [])
+        .map((i: any) => (i.lotNumber || i.vendorBatchNo || "")?.toLowerCase())
+        .join(" ");
+
+      matchSearch =
+        vendorName.includes(term) ||
+        poNumber.includes(term) ||
+        grnId.includes(term) ||
+        grnErpNumber.includes(term) ||
+        itemNames.includes(term) ||
+        lotNumbers.includes(term);
+    }
+
+    // 2. Date filter: use real GRN / receipt date (grn.receivedAt, fallback grn.createdAt)
+    const rawDate = grn.receivedAt || grn.createdAt;
+    let matchDate = true;
+    if (rawDate) {
+      const d = new Date(rawDate);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const grnDateStr = `${yyyy}-${mm}-${dd}`;
+
+      if (dateFrom && grnDateStr < dateFrom) {
+        matchDate = false;
+      }
+      if (dateTo && grnDateStr > dateTo) {
+        matchDate = false;
+      }
+    }
+
+    return matchSearch && matchDate;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
@@ -518,102 +758,251 @@ export default function GRNPage() {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {view === "HISTORY" ? (
           /* ── HISTORY VIEW ── */
-          <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[760px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                  <th className="px-4 py-3 text-left">GRN #</th>
-                  <th className="px-4 py-3 text-left">Vendor</th>
-                  <th className="px-4 py-3 text-left">Reference PO</th>
-                  <th className="px-4 py-3 text-left">Date</th>
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-left">Items</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center">
-                      <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
-                    </td>
-                  </tr>
-                ) : history.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-16 text-center text-gray-500 dark:text-slate-400 text-sm font-semibold">
-                      No receipt history found
-                    </td>
-                  </tr>
-                ) : history.map((grn) => (
-                  <tr key={grn.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-3 font-semibold text-xs text-gray-800 dark:text-white">
-                      {formatERPNumber("GRN", grn.id, grn.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-gray-800 dark:text-white font-semibold text-sm">{grn.procurementOrder?.vendor?.name}</div>
-                      <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Verified Shipment</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
-                      {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-slate-400 text-xs">
-                      {formatDate(grn.receivedAt || grn.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20">
-                        {grn.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {grn.items?.slice(0, 2).map((item: any) => (
-                          <span key={item.id} className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 text-xs rounded border border-gray-200 dark:border-white/10">
-                            {item.inventoryItem?.name} ({item.acceptedQty})
-                          </span>
-                        ))}
-                        {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 ml-1">+{grn.items.length - 2}</span>}
+          <div className="space-y-4">
+            {/* ── Search & Date Filter Bar ── */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+                {/* Search Vendor or PO #... */}
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Search Vendor or PO #..."
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 transition-colors"
+                  />
+                  {historySearch && (
+                    <X
+                      size={14}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setHistorySearch("")}
+                    />
+                  )}
+                </div>
+
+                {/* Date Filter: From Date → To Date */}
+                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                  {/* From Date */}
+                  <div className="relative" ref={fromCalRef}>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
+                        className="outline-none cursor-pointer"
+                      >
+                        {dateFrom ? fmtDateDisplay(dateFrom) : "From Date"}
+                      </button>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
+                          className="text-[#f58220] cursor-pointer"
+                          title="Choose from date"
+                        >
+                          <CalendarIcon size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDateFrom(""); }}
+                          className={clsx(
+                            "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all cursor-pointer",
+                            dateFrom ? "opacity-100" : "opacity-0 pointer-events-none"
+                          )}
+                          title="Clear from date"
+                        >
+                          <X size={13} />
+                        </button>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-right flex justify-end gap-2">
+                    </div>
+                    {showFromCal && (
+                      <div className="absolute left-0 top-full mt-1 z-50">
+                        <MiniCalendar value={dateFrom} onChange={v => { setDateFrom(v); setShowFromCal(false); }} onClose={() => setShowFromCal(false)} />
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="text-xs text-gray-400 dark:text-slate-500 font-medium">to</span>
+
+                  {/* To Date */}
+                  <div className="relative" ref={toCalRef}>
+                    <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
                       <button
-                        onClick={() => setViewingGRNDetails(grn)}
-                        className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded text-xs font-bold hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        type="button"
+                        onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
+                        className="outline-none cursor-pointer"
                       >
-                        View Details
+                        {dateTo ? fmtDateDisplay(dateTo) : "To Date"}
                       </button>
-                      <button
-                        onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
-                        className="px-2.5 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors cursor-pointer"
-                      >
-                        Generate Bill
-                      </button>
-                    </td>
+                      <div className="flex items-center gap-1 ml-auto">
+                        <button
+                          type="button"
+                          onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
+                          className="text-[#f58220] cursor-pointer"
+                          title="Choose to date"
+                        >
+                          <CalendarIcon size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDateTo(""); }}
+                          className={clsx(
+                            "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all cursor-pointer",
+                            dateTo ? "opacity-100" : "opacity-0 pointer-events-none"
+                          )}
+                          title="Clear to date"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                    {showToCal && (
+                      <div className="absolute left-0 top-full mt-1 z-50">
+                        <MiniCalendar value={dateTo} onChange={v => { setDateTo(v); setShowToCal(false); }} onClose={() => setShowToCal(false)} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={loadHistory}
+                className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Refresh GRN History"
+              >
+                <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+              <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+                <table className="w-full text-sm min-w-[760px]">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
+                    <th className="px-4 py-3 text-left">GRN #</th>
+                    <th className="px-4 py-3 text-left">Vendor</th>
+                    <th className="px-4 py-3 text-left">Reference PO</th>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-center">Status</th>
+                    <th className="px-4 py-3 text-left">Items</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-16 text-center">
+                        <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
+                      </td>
+                    </tr>
+                  ) : filteredHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-16 text-center text-gray-500 dark:text-slate-400 text-sm font-semibold">
+                        {history.length === 0 ? (
+                          "No receipt history found"
+                        ) : (
+                          <div className="space-y-2">
+                            <p>No receipt history matches your search or date filter</p>
+                            {(historySearch || dateFrom || dateTo) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHistorySearch("");
+                                  setDateFrom("");
+                                  setDateTo("");
+                                }}
+                                className="text-xs font-bold text-[#f58220] hover:underline cursor-pointer"
+                              >
+                                Clear all filters
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ) : filteredHistory.map((grn) => (
+                    <tr key={grn.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3 font-semibold text-xs text-gray-800 dark:text-white">
+                        {formatERPNumber("GRN", grn.id, grn.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="text-gray-800 dark:text-white font-semibold text-sm">{grn.procurementOrder?.vendor?.name}</div>
+                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Verified Shipment</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
+                        {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-slate-400 text-xs">
+                        {formatDate(grn.receivedAt || grn.createdAt)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20">
+                          {grn.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {grn.items?.slice(0, 2).map((item: any) => (
+                            <span key={item.id} className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 text-xs rounded border border-gray-200 dark:border-white/10">
+                              {item.inventoryItem?.name} ({item.acceptedQty})
+                            </span>
+                          ))}
+                          {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 ml-1">+{grn.items.length - 2}</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right flex justify-end gap-2">
+                        <button
+                          onClick={() => setViewingGRNDetails(grn)}
+                          className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded text-xs font-bold hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          View Details
+                        </button>
+                        <button
+                          onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
+                          className="px-2.5 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors cursor-pointer"
+                        >
+                          Generate Bill
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
             </div>
           </div>
         ) : step === 1 ? (
           /* ── STEP 1: SELECT PO ── */
           <div className="space-y-4">
-            <div className="relative max-w-md">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search Vendor or PO #..."
-                value={poSearch}
-                onChange={e => setPoSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-              />
-            {poSearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setPoSearch("")} 
-              />
-            )}
+            <div className="flex items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Search Vendor or PO #..."
+                  value={poSearch}
+                  onChange={e => setPoSearch(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                />
+                {poSearch && (
+                  <X 
+                    size={14} 
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
+                    onClick={() => setPoSearch("")} 
+                  />
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={loadPOs}
+                className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer shrink-0"
+                title="Refresh Purchase Orders"
+              >
+                <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+              </button>
             </div>
 
             {loading ? (
@@ -745,10 +1134,8 @@ export default function GRNPage() {
                       const isOverridden = Math.abs(variance) > 0.001;
                       const actualLineAmount = item.acceptedQty * item.price;
 
-                      const isLotMissing = item.acceptedQty > 0 && (!item.lotNumber || !item.lotNumber.trim());
-                      const isMfgMissing = item.acceptedQty > 0 && (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime()));
+                      const isAutoLot = !item.lotNumber || !item.lotNumber.trim() || item.lotNumber.trim() === "[AUTO]" || item.lotNumber.trim().toUpperCase().endsWith("-[AUTO]");
                       const isExpMissing = item.acceptedQty > 0 && (!item.expDate || isNaN(new Date(item.expDate).getTime()));
-                      const isExpBeforeMfg = item.acceptedQty > 0 && !isMfgMissing && !isExpMissing && (new Date(item.expDate!).getTime() < new Date(item.mfgDate!).getTime());
 
                       return (
                         <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
@@ -758,58 +1145,43 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="space-y-1.5 min-w-[280px]">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 w-full">
                                 <button
                                   type="button"
-                                  title="Generate a unique lot/batch number"
+                                  title="Set to Auto-Generate Lot Number on Save"
                                   disabled={generatingLotIdx === idx}
                                   onClick={() => handleAutoBatch(idx)}
-                                  className="px-2 py-1 bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 text-[#f58220] border border-orange-200 dark:border-orange-500/20 rounded text-[11px] font-semibold disabled:opacity-50 transition-colors shrink-0 cursor-pointer"
+                                  className={clsx(
+                                    "px-2 py-1 rounded text-[11px] font-semibold transition-colors shrink-0 cursor-pointer border",
+                                    isAutoLot
+                                      ? "bg-orange-500 text-white border-orange-600 shadow-sm"
+                                      : "bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 text-[#f58220] border-orange-200 dark:border-orange-500/20"
+                                  )}
                                 >
                                   {generatingLotIdx === idx ? "Generating..." : "Auto Batch"}
                                 </button>
                                 <input
                                   type="text"
-                                  placeholder="Lot Number *"
+                                  placeholder="Auto-Generated on Save"
                                   value={item.lotNumber || ""}
+                                  title={isAutoLot ? "Permanent lot number will be allocated on Save" : item.lotNumber}
                                   onChange={e => updateItemStr(idx, "lotNumber", e.target.value)}
                                   className={clsx(
-                                    "w-36 px-2.5 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs outline-none focus:border-[#f58220] text-gray-800 dark:text-white transition-colors",
-                                    isLotMissing
-                                      ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
-                                      : "border-gray-200 dark:border-white/10"
+                                    "flex-1 min-w-[170px] px-2.5 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-mono outline-none focus:border-[#f58220] transition-colors",
+                                    isAutoLot ? "text-orange-600 dark:text-orange-400 font-semibold" : "text-gray-800 dark:text-white"
                                   )}
                                 />
                               </div>
 
-                              <div className="flex flex-wrap items-center gap-1.5">
+                              <div className="flex items-center gap-1.5">
                                 <div className={clsx(
-                                  "relative flex items-center gap-1 border px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors",
-                                  isMfgMissing
-                                    ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
-                                    : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
-                                )}>
-                                  <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-tight whitespace-nowrap">Mfg Date:</span>
-                                  <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between">
-                                    {formatDisplayDate(item.mfgDate)}
-                                    <CalendarIcon size={12} className="text-gray-400 dark:text-slate-500 ml-1" />
-                                  </span>
-                                  <input
-                                    type="date"
-                                    title="Manufacturing (Start) Date"
-                                    value={item.mfgDate || ""}
-                                    onChange={e => updateItemStr(idx, "mfgDate", e.target.value)}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                  />
-                                </div>
-                                <div className={clsx(
-                                  "relative flex items-center gap-1 border px-2 py-0.5 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors",
-                                  isExpMissing || isExpBeforeMfg
+                                  "relative flex items-center gap-1.5 border px-2.5 py-1 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors w-full max-w-[270px]",
+                                  isExpMissing
                                     ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
                                     : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
                                 )}>
                                   <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
-                                  <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between">
+                                  <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between flex-1">
                                     {formatDisplayDate(item.expDate)}
                                     <CalendarIcon size={12} className="text-gray-400 dark:text-slate-500 ml-1" />
                                   </span>
@@ -823,10 +1195,10 @@ export default function GRNPage() {
                                 </div>
                               </div>
 
-                              {(isLotMissing || isMfgMissing || isExpMissing || isExpBeforeMfg) && (
+                              {isExpMissing && (
                                 <div className="pt-0.5">
                                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 px-1.5 py-0.5 rounded">
-                                    {isExpBeforeMfg ? "EXP date is before MFG date" : "Batch details incomplete"}
+                                    EXP Date required
                                   </span>
                                 </div>
                               )}
@@ -926,11 +1298,18 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-mono text-xs font-bold text-gray-600 dark:text-slate-300">{item.quantity}</span>
+                            {(item.previouslyReceived ?? 0) > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                <div className="text-[10px] text-gray-400 dark:text-slate-500">Received so far: {item.previouslyReceived}</div>
+                                <div className="text-[10px] font-semibold text-[#f58220]">Remaining: {item.remaining}</div>
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"
                               min={0}
+                              max={item.remaining ?? item.quantity}
                               value={item.receivedQty}
                               onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
                               className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
@@ -1069,9 +1448,7 @@ export default function GRNPage() {
               const hasIncompleteBatchInfo = grnItems.some(item => {
                 if (item.acceptedQty <= 0) return false;
                 if (!item.lotNumber || !item.lotNumber.trim()) return true;
-                if (!item.mfgDate || isNaN(new Date(item.mfgDate).getTime())) return true;
                 if (!item.expDate || isNaN(new Date(item.expDate).getTime())) return true;
-                if (new Date(item.expDate).getTime() < new Date(item.mfgDate).getTime()) return true;
                 return false;
               });
               const isApproveDisabled = submitting || grnItems.length === 0 || totalAccepted === 0 || hasIncompleteBatchInfo;
@@ -1084,7 +1461,7 @@ export default function GRNPage() {
                     </span>
                     {hasIncompleteBatchInfo && totalAccepted > 0 && (
                       <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/40">
-                        Batch No, MFG &amp; EXP dates required
+                        Batch No &amp; EXP date required
                       </span>
                     )}
                   </div>
@@ -1100,7 +1477,7 @@ export default function GRNPage() {
                       type="button"
                       onClick={handleCreateAndApprove}
                       disabled={isApproveDisabled}
-                      title={hasIncompleteBatchInfo ? "Please fill Batch No, MFG Date & EXP Date for all items" : "Approve GRN and synchronize stock"}
+                      title={hasIncompleteBatchInfo ? "Please fill Batch No & EXP Date for all items" : "Approve GRN and synchronize stock"}
                       className={clsx(
                         "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
                         isApproveDisabled

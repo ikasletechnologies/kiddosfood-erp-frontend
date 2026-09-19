@@ -28,7 +28,7 @@ import {
 import { clsx } from "clsx";
 import { accountingApi, reportsApi } from "@/lib/api/accounting.api";
 import { toast } from "react-hot-toast";
-import { formatDate } from "@/lib/utils";
+import { formatDate, shareText } from "@/lib/utils";
 import { exportReportToExcel } from "@/lib/excelExport";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -476,6 +476,20 @@ export default function CashFlowPage() {
     toast.success(`Exported ${filteredEntries.length} entries to Excel`);
   };
 
+  const handleShareEntry = async (entry: CashFlowEntry) => {
+    const text = `*Cash Flow Transaction Receipt*\nRef: ${entry.refNo}\nParty: ${entry.name || "—"}\nCategory: ${entry.category}\nType: ${entry.type}\nAmount: ${fmtCurrency(entry.amount)} (${entry.flow === "IN" ? "Cash In" : "Cash Out"})\nRunning Balance: ${fmtCurrency(entry.runningBalance)}\nDate: ${formatDate(entry.date || entry.createdAt)}`;
+
+    const result = await shareText(text, `Cash Flow Entry — ${entry.refNo}`);
+    if (result === "shared") {
+      toast.success("Shared cash flow details");
+      return;
+    } else if (result === "copied") {
+      toast.success("Cash flow summary copied to clipboard!");
+      return;
+    }
+    setShareEntry(entry);
+  };
+
   const handleCopyShareLink = (entry: CashFlowEntry) => {
     const text = `Cash Flow Voucher: ${entry.refNo}\nParty: ${entry.name || "—"}\nCategory: ${entry.category}\nType: ${entry.type}\nAmount: ${fmtCurrency(entry.amount)} (${entry.flow === "IN" ? "Cash In" : "Cash Out"})\nRunning Balance: ${fmtCurrency(entry.runningBalance)}\nDate: ${formatDate(entry.date || entry.createdAt)}`;
     navigator.clipboard.writeText(text);
@@ -788,9 +802,6 @@ export default function CashFlowPage() {
                     <th className="px-4 sm:px-5 py-3.5 font-bold text-center whitespace-nowrap">
                       Print / Share
                     </th>
-                    <th className="px-4 sm:px-5 py-3.5 font-bold text-right whitespace-nowrap">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
 
@@ -804,7 +815,8 @@ export default function CashFlowPage() {
                       return (
                         <tr
                           key={row.id}
-                          className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors group"
+                          onClick={() => setSelectedEntry(row)}
+                          className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors cursor-pointer group"
                         >
                           {/* 1. DATE */}
                           <td className="px-4 sm:px-5 py-3.5 text-gray-700 dark:text-slate-300 whitespace-nowrap">
@@ -890,78 +902,23 @@ export default function CashFlowPage() {
                           </td>
 
                           {/* 9. PRINT / SHARE */}
-                          <td className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap">
+                          <td className="px-4 sm:px-5 py-3.5 text-center whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handlePrintSingleRow(row)}
-                                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
                                 title="Print Voucher"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={() => setShareEntry(row)}
-                                className="p-1.5 text-gray-400 hover:text-[#f58220] dark:hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-colors"
+                                onClick={() => handleShareEntry(row)}
+                                className="p-1.5 text-gray-400 hover:text-[#f58220] dark:hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-colors cursor-pointer"
                                 title="Share Transaction"
                               >
                                 <Share2 className="h-4 w-4" />
                               </button>
                             </div>
-                          </td>
-
-                          {/* 10. ACTIONS */}
-                          <td className="px-4 sm:px-5 py-3.5 text-right relative whitespace-nowrap">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveMenuId(activeMenuId === row.id ? null : row.id);
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors inline-flex items-center"
-                              title="More Options"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-
-                            {/* Dropdown Menu */}
-                            {activeMenuId === row.id && (
-                              <div
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute right-4 top-10 w-44 bg-white dark:bg-[#181a26] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-20 py-1.5 text-left animate-in fade-in zoom-in-95 duration-100"
-                              >
-                                <button
-                                  onClick={() => {
-                                    setSelectedEntry(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 transition-colors"
-                                >
-                                  <Eye className="h-3.5 w-3.5 text-blue-500" />
-                                  <span>View Details</span>
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    handlePrintSingleRow(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 transition-colors"
-                                >
-                                  <Printer className="h-3.5 w-3.5 text-gray-500" />
-                                  <span>Print Voucher</span>
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    setShareEntry(row);
-                                    setActiveMenuId(null);
-                                  }}
-                                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 transition-colors"
-                                >
-                                  <Share2 className="h-3.5 w-3.5 text-emerald-500" />
-                                  <span>Share</span>
-                                </button>
-                              </div>
-                            )}
                           </td>
                         </tr>
                       );
@@ -969,7 +926,7 @@ export default function CashFlowPage() {
                   ) : (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={9}
                         className="px-5 py-16 text-center text-xs text-gray-400 dark:text-slate-500"
                       >
                         {searchQuery
@@ -1001,7 +958,7 @@ export default function CashFlowPage() {
               </div>
               <button
                 onClick={() => setSelectedEntry(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition"
+                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1047,17 +1004,17 @@ export default function CashFlowPage() {
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-white/10">
               <button
                 onClick={() => handlePrintSingleRow(selectedEntry)}
-                className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 transition flex items-center gap-1.5"
+                className="px-4 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-gray-700 dark:text-slate-200 bg-white dark:bg-card hover:bg-gray-50 transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Printer className="h-3.5 w-3.5" />
                 <span>Print</span>
               </button>
               <button
                 onClick={() => {
-                  setShareEntry(selectedEntry);
+                  handleShareEntry(selectedEntry);
                   setSelectedEntry(null);
                 }}
-                className="px-4 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5"
+                className="px-4 py-2 bg-[#f58220] hover:bg-[#e0751a] text-white rounded-lg text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
               >
                 <Share2 className="h-3.5 w-3.5" />
                 <span>Share</span>
@@ -1078,7 +1035,7 @@ export default function CashFlowPage() {
               </div>
               <button
                 onClick={() => setShareEntry(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 rounded-lg transition"
+                className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 rounded-lg transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1091,9 +1048,24 @@ export default function CashFlowPage() {
             </div>
 
             <div className="space-y-2">
+              {typeof navigator !== "undefined" && (navigator as any).share && (
+                <button
+                  onClick={() => {
+                    const text = `*Cash Flow Transaction Receipt*\nRef: ${shareEntry.refNo}\nParty: ${shareEntry.name || "—"}\nCategory: ${shareEntry.category}\nType: ${shareEntry.type}\nAmount: ${fmtCurrency(shareEntry.amount)} (${shareEntry.flow === "IN" ? "Cash In" : "Cash Out"})\nRunning Balance: ${fmtCurrency(shareEntry.runningBalance)}\nDate: ${formatDate(shareEntry.date || shareEntry.createdAt)}`;
+                    (navigator as any).share({ title: `Cash Flow Entry — ${shareEntry.refNo}`, text })
+                      .then(() => setShareEntry(null))
+                      .catch(() => {});
+                  }}
+                  className="w-full px-4 py-2.5 bg-[#f58220] hover:bg-[#e0751a] text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-orange-500/20 cursor-pointer"
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span>System Default Share Sheet</span>
+                </button>
+              )}
+
               <button
                 onClick={() => handleShareWhatsApp(shareEntry)}
-                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20"
+                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 shadow-sm shadow-emerald-600/20 cursor-pointer"
               >
                 <MessageCircle className="h-4 w-4" />
                 <span>Share via WhatsApp</span>
@@ -1101,7 +1073,7 @@ export default function CashFlowPage() {
 
               <button
                 onClick={() => handleCopyShareLink(shareEntry)}
-                className="w-full px-4 py-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2"
+                className="w-full px-4 py-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Copy className="h-4 w-4" />
                 <span>Copy Summary Text</span>

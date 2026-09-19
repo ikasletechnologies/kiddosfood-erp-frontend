@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { 
+import {
   Search,
   ChevronDown,
   Printer,
@@ -11,7 +11,8 @@ import {
   Receipt,
   AlertTriangle,
   X,
-  Plus
+  Plus,
+  User
 } from "lucide-react";
 import { clsx } from "clsx";
 import { exportReportToExcel } from "@/lib/excelExport";
@@ -33,8 +34,6 @@ import CentralBillWiseProfitReport from "./components/BillWiseProfitReport";
 import CentralCashFlowReport from "./components/CashFlowReport";
 import CentralTrialBalanceReport from "./components/TrialBalanceReport";
 import CentralBalanceSheetReport from "./components/BalanceSheetReport";
-import CentralPartyStatementReport from "./components/PartyStatementReport";
-import CentralPartyProfitLossReport from "./components/PartyProfitLossReport";
 import CentralAllPartiesReport from "./components/AllPartiesReport";
 import CentralPartyReportByItem from "./components/PartyReportByItem";
 import CentralSalePurchaseByParty from "./components/SalePurchaseByParty";
@@ -95,6 +94,7 @@ interface ReportData {
   error?: boolean;
   errorMessage?: string;
   statusCode?: number;
+  needsParty?: boolean;
   kpiValue: string;
   kpiSubText: string;
   kpiTrend?: string;
@@ -1487,26 +1487,39 @@ function transformBalanceSheet(data: any): ReportData {
 
 function transformPartyStatement(data: any): ReportData {
   const entries = toArr(data?.entries || data?.transactions || data);
-  const closing = Number(data?.closingBalance || data?.balance || 0);
-  const opening = Number(data?.openingBalance || 0);
+  const closing = Number(data?.closingBalance ?? data?.balance ?? 0);
+  const opening = Number(data?.openingBalance ?? 0);
+  const limit = Number(data?.limit) || 50;
+  const totalCount = Number(data?.totalEntries ?? entries.length);
   return {
     kpiValue: fmtCurrency(closing),
     kpiSubText: `Opening: ${fmtCurrency(opening)} • Closing: ${fmtCurrency(closing)}`,
+    openingBalance: opening,
+    closingBalance: closing,
+    pagination: {
+      page: Number(data?.page) || 1,
+      limit,
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+    },
     rows: entries.map((e: any) => ({
       date: fmtDate(e.date || e.createdAt),
       particular: e.particular || e.description || "—",
       voucherNo: e.voucherNo || e.referenceNo || "—",
       debit: fmtCurrency(e.debit || 0),
       credit: fmtCurrency(e.credit || 0),
-      balance: fmtCurrency(e.runningBalance || e.balance),
+      balance: fmtCurrency(e.runningBalance ?? e.balance ?? 0),
     })),
   };
 }
 
 function transformAllParties(data: any): ReportData {
   const rows = toArr(data);
-  const customers = rows.filter((r: any) => r.type === "CUSTOMER" || !r.type).length;
-  const vendors = rows.filter((r: any) => r.type === "VENDOR").length;
+  // API returns `partyType` (CUSTOMER/DEALER/FRANCHISE/VENDOR), never `type` —
+  // reading r.type here made every row (vendors included) count as a
+  // Customer, since undefined always satisfied `!r.type`.
+  const customers = rows.filter((r: any) => r.partyType === "CUSTOMER" || r.partyType === "DEALER" || r.partyType === "FRANCHISE").length;
+  const vendors = rows.filter((r: any) => r.partyType === "VENDOR").length;
   return {
     kpiValue: `${rows.length} Parties`,
     kpiSubText: `Customers: ${customers} • Vendors: ${vendors}`,
@@ -1515,7 +1528,8 @@ function transformAllParties(data: any): ReportData {
       phone: r.phone || r.mobile || "—",
       gst: r.gstNumber || r.gstin || "—",
       state: r.state || r.city || "—",
-      balance: fmtCurrency(r.balance || r.outstanding || 0),
+      // API returns `currentBalance`, not `balance`.
+      balance: fmtCurrency(r.currentBalance ?? r.balance ?? r.outstanding ?? 0),
       creditLimit: fmtCurrency(r.creditLimit || 0),
     })),
   };
@@ -1785,6 +1799,73 @@ function transformItemWiseProfitLoss(data: any): ReportData {
   };
 }
 
+function transformPartyProfitLoss(data: any): ReportData {
+  const rows = toArr(data);
+  const totalProfit = rows.reduce((s: number, r: any) => s + (Number(r.profit) || 0), 0);
+  return {
+    kpiValue: fmtCurrency(totalProfit, { decimals: 2 }),
+    kpiSubText: `${rows.length} ${rows.length === 1 ? "party" : "parties"}`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      totalSales: fmtCurrency(r.totalSales, { decimals: 2 }),
+      totalCost: r.costUnavailable ? "Cost unavailable" : fmtCurrency(r.totalCost, { decimals: 2 }),
+      profit: fmtCurrency(r.profit, { decimals: 2 }),
+      // margin is explicitly null (not 0) when totalSales is 0 — never divide
+      // by zero into Infinity/NaN, and never let that look like a real 0%.
+      margin: r.margin === null || r.margin === undefined ? "—" : `${Number(r.margin).toFixed(2)}%`,
+    })),
+  };
+}
+
+function transformPartyReportByItem(data: any): ReportData {
+  const rows = toArr(data);
+  const totalQuantity = rows.reduce((s: number, r: any) => s + (Number(r.quantity) || 0), 0);
+  const totalAmount = rows.reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+  return {
+    kpiValue: `${totalQuantity} Items`,
+    kpiSubText: `${rows.length} ${rows.length === 1 ? "transaction" : "transactions"} • ${fmtCurrency(totalAmount, { decimals: 2 })} total`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      itemName: r.itemName || "—",
+      quantity: String(r.quantity ?? 0),
+      amount: fmtCurrency(r.amount, { decimals: 2 }),
+      date: fmtDate(r.date),
+    })),
+  };
+}
+
+function transformSalePurchaseByParty(data: any): ReportData {
+  const rows = toArr(data);
+  const totalSale = rows.reduce((s: number, r: any) => s + (Number(r.totalSale) || 0), 0);
+  const totalPurchase = rows.reduce((s: number, r: any) => s + (Number(r.totalPurchase) || 0), 0);
+  return {
+    kpiValue: `${rows.length} ${rows.length === 1 ? "Record" : "Records"}`,
+    kpiSubText: `Sale: ${fmtCurrency(totalSale, { decimals: 2 })} • Purchase: ${fmtCurrency(totalPurchase, { decimals: 2 })}`,
+    rows: rows.map((r: any) => ({
+      partyName: r.partyName || "—",
+      totalSale: fmtCurrency(r.totalSale, { decimals: 2 }),
+      totalPurchase: fmtCurrency(r.totalPurchase, { decimals: 2 }),
+      net: fmtCurrency(r.net, { decimals: 2 }),
+    })),
+  };
+}
+
+function transformSalePurchaseByPartyGroup(data: any): ReportData {
+  const rows = toArr(data);
+  const totalSale = rows.reduce((s: number, r: any) => s + (Number(r.totalSale) || 0), 0);
+  const totalPurchase = rows.reduce((s: number, r: any) => s + (Number(r.totalPurchase) || 0), 0);
+  return {
+    kpiValue: `${rows.length} ${rows.length === 1 ? "Group" : "Groups"}`,
+    kpiSubText: `Sale: ${fmtCurrency(totalSale, { decimals: 2 })} • Purchase: ${fmtCurrency(totalPurchase, { decimals: 2 })}`,
+    rows: rows.map((r: any) => ({
+      groupName: r.groupName || "—",
+      totalSale: fmtCurrency(r.totalSale, { decimals: 2 }),
+      totalPurchase: fmtCurrency(r.totalPurchase, { decimals: 2 }),
+      net: fmtCurrency(r.net, { decimals: 2 }),
+    })),
+  };
+}
+
 function transformGeneric(data: any, meta?: ReportMeta): ReportData {
   const rows = toArr(data);
   const totalAmount = rows.reduce((s: number, r: any) => {
@@ -1815,6 +1896,34 @@ function transformGeneric(data: any, meta?: ReportMeta): ReportData {
         description: r.description || r.name || r.particulars || "—",
         amount: fmtCurrency(r.amount || r.total || r.value),
         status: r.status || "—",
+      };
+    }),
+  };
+}
+
+function transformItemDiscountReport(data: any, meta?: ReportMeta): ReportData {
+  const rawRows = Array.isArray(data) ? data : (data?.data || []);
+  const rows = toArr(rawRows);
+  
+  const totalDiscount = rows.reduce((s: number, r: any) => {
+    return s + (Number(r.discountAmount || r.totalDiscountAmount) || 0);
+  }, 0);
+
+  return {
+    kpiValue: rows.length > 0 ? fmtCurrency(totalDiscount) : "—",
+    kpiSubText: rows.length > 0 ? `${rows.length} records found` : "No records found",
+    rows: rows.map((r: any) => {
+      const totalSales = Number(r.totalSales || r.totalSaleAmount || 0);
+      const discountAmount = Number(r.discountAmount || r.totalDiscountAmount || 0);
+      const discountPct = r.discountPct !== undefined ? Number(r.discountPct) : (totalSales > 0 ? (discountAmount / totalSales) * 100 : 0);
+      const netAmount = r.netAmount !== undefined ? Number(r.netAmount) : Math.max(0, totalSales - discountAmount);
+
+      return {
+        itemName: r.itemName || "—",
+        totalSales: fmtCurrency(totalSales),
+        discountAmount: fmtCurrency(discountAmount),
+        discountPct: `${discountPct.toFixed(2)}%`,
+        netAmount: fmtCurrency(netAmount),
       };
     }),
   };
@@ -2093,7 +2202,7 @@ function transformPackaging(data: any): ReportData {
 
 async function fetchReport(
   label: string,
-  params: { startDate: string; endDate: string; search?: string; page?: number; limit?: number }
+  params: { startDate: string; endDate: string; search?: string; page?: number; limit?: number; partyId?: string; partyType?: string }
 ): Promise<ReportData> {
   const meta = REPORT_METADATA[label];
   try {
@@ -2228,7 +2337,7 @@ async function fetchReport(
       case "Stock Summary Report By Item Category":
         return transformGeneric((await reportsApi.getStockByCategory(params)).data, meta);
       case "Item Wise Discount":
-        return transformGeneric((await reportsApi.getItemDiscount(params)).data, meta);
+        return transformItemDiscountReport((await reportsApi.getItemDiscount(params)).data, meta);
 
       // Financial - Statements & P&L
       case "Sale":
@@ -2294,15 +2403,15 @@ async function fetchReport(
       case "Party Statement":
         return transformPartyStatement((await reportsApi.getPartyStatement(params)).data);
       case "Party wise Profit & Loss":
-        return transformGeneric((await reportsApi.getPartyProfitLoss(params)).data, meta);
+        return transformPartyProfitLoss((await reportsApi.getPartyProfitLoss(params)).data);
       case "All parties":
         return transformAllParties((await reportsApi.getAllParties()).data);
       case "Party Report By Item":
-        return transformGeneric((await reportsApi.getPartyByItem(params)).data, meta);
+        return transformPartyReportByItem((await reportsApi.getPartyByItem(params)).data);
       case "Sale Purchase By Party":
-        return transformGeneric((await reportsApi.getSalePurchaseByParty(params)).data, meta);
+        return transformSalePurchaseByParty((await reportsApi.getSalePurchaseByParty(params)).data);
       case "Sale Purchase By Party Group":
-        return transformGeneric((await reportsApi.getSalePurchaseByPartyGroup(params)).data, meta);
+        return transformSalePurchaseByPartyGroup((await reportsApi.getSalePurchaseByPartyGroup(params)).data);
       case "Franchise Dues & Balances":
         return transformFranchiseDues((await reportsApi.getFranchiseReport(params)).data);
       case "Franchise Performance Summary":
@@ -2313,8 +2422,11 @@ async function fetchReport(
     }
   } catch (err: any) {
     const status = err?.response?.status || err?.status;
+    const serverMessage = err?.response?.data?.error ? String(err.response.data.error) : undefined;
     let message = "Unable to load report data.";
-    if (status === 401) {
+    if (serverMessage) {
+      message = serverMessage;
+    } else if (status === 401) {
       message = "Your session has expired. Please sign in again.";
     } else if (status === 403) {
       message = "You do not have permission to view this report.";
@@ -2322,8 +2434,6 @@ async function fetchReport(
       message = "Report endpoint is unavailable.";
     } else if (status === 500) {
       message = "Unable to load this report. Please try again.";
-    } else if (err?.response?.data?.error) {
-      message = String(err.response.data.error);
     } else if (err?.message) {
       message = String(err.message);
     }
@@ -2356,6 +2466,16 @@ function ReportsContent() {
   const [customEndDate, setCustomEndDate] = useState("");
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Party Statement: which party the statement is for. Party Statement has no
+  // meaning without one, so the fetch effect below never calls the API while
+  // this is empty — see "needs party" branch.
+  const [selectedPartyId, setSelectedPartyId] = useState("");
+  const [selectedPartyType, setSelectedPartyType] = useState("");
+  const [selectedPartyName, setSelectedPartyName] = useState("");
+  const [partyOptions, setPartyOptions] = useState<Array<{ id: string; name: string; phone?: string; partyType: string }>>([]);
+  const [partyOptionsLoading, setPartyOptionsLoading] = useState(false);
+  const [partyPickerQuery, setPartyPickerQuery] = useState("");
 
   // Profit Loss special subview state
   const [plViewType, setPlViewType] = useState<"vyapar" | "accounting">("vyapar");
@@ -2400,6 +2520,15 @@ function ReportsContent() {
         return exists ? prev : parentDef.children[0].id;
       });
     }
+
+    // Party Statement deep links (e.g. "View Statement" from Customers/Dealers pages)
+    // carry the party directly in the URL.
+    const partyIdParam = searchParams.get("partyId");
+    const partyTypeParam = searchParams.get("partyType");
+    const partyNameParam = searchParams.get("partyName");
+    if (partyIdParam) setSelectedPartyId(partyIdParam);
+    if (partyTypeParam) setSelectedPartyType(partyTypeParam.toUpperCase());
+    if (partyNameParam) setSelectedPartyName(partyNameParam);
   }, [searchParams]);
 
   // Update browser URL query
@@ -2420,7 +2549,27 @@ function ReportsContent() {
   const handleSelectChild = (childId: string) => {
     setSelectedChildId(childId);
     setTableSearchTerm("");
+    setSelectedPartyId("");
+    setSelectedPartyType("");
+    setSelectedPartyName("");
+    setPartyPickerQuery("");
     updateUrl(selectedParentId, childId);
+  };
+
+  // Handle party selection for Party Statement — pushes to the URL too so a
+  // refresh, share, or the browser back button keeps the same statement open.
+  const handleSelectParty = (party: { id: string; name: string; partyType: string }) => {
+    setSelectedPartyId(party.id);
+    setSelectedPartyType(party.partyType);
+    setSelectedPartyName(party.name);
+    setPartyPickerQuery("");
+    const params = new URLSearchParams();
+    params.set("parent", selectedParentId);
+    if (selectedChildId) params.set("report", selectedChildId);
+    params.set("partyId", party.id);
+    params.set("partyType", party.partyType);
+    params.set("partyName", party.name);
+    router.push(`/reports?${params.toString()}`);
   };
 
   // Active Parent & Child definitions
@@ -2461,6 +2610,20 @@ function ReportsContent() {
       setReportData(null);
       return;
     }
+
+    // Party Statement has no meaning without a party — never fire the request
+    // while none is selected, and show a distinct prompt instead of an empty table.
+    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+      setLoading(false);
+      setReportData({
+        kpiValue: "—",
+        kpiSubText: "Select a party to view the statement.",
+        rows: [],
+        needsParty: true,
+      });
+      return;
+    }
+
     let cancelled = false;
     const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
     setLoading(true);
@@ -2472,6 +2635,7 @@ function ReportsContent() {
         search: tableSearchTerm.trim() || undefined,
         page: currentPage,
         limit: 50,
+        ...(activeChild.id === "Party Statement" ? { partyId: selectedPartyId, partyType: selectedPartyType } : {}),
       })
         .then((d) => {
           if (!cancelled) setReportData(d);
@@ -2488,7 +2652,43 @@ function ReportsContent() {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage]);
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage, selectedPartyId, selectedPartyType]);
+
+  // Party picker list for Party Statement — fetched once (not on every keystroke
+  // or statement fetch), reusing the same endpoint's "no partyId" browse response
+  // instead of a separate call or loading every party on each statement request.
+  const partyOptionsFetchedRef = useRef(false);
+  useEffect(() => {
+    if (!mounted || activeChild?.id !== "Party Statement" || partyOptionsFetchedRef.current) return;
+    partyOptionsFetchedRef.current = true;
+    setPartyOptionsLoading(true);
+    reportsApi
+      .getPartyStatement({})
+      .then((res) => setPartyOptions(toArr(res.data?.customers)))
+      .catch(() => setPartyOptions([]))
+      .finally(() => setPartyOptionsLoading(false));
+  }, [mounted, activeChild]);
+
+  const filteredPartyOptions = useMemo(() => {
+    const q = partyPickerQuery.trim().toLowerCase();
+    if (!q) return partyOptions;
+    return partyOptions.filter(
+      (p) => p.name.toLowerCase().includes(q) || (p.phone || "").toLowerCase().includes(q)
+    );
+  }, [partyOptions, partyPickerQuery]);
+
+  const [partyPickerOpen, setPartyPickerOpen] = useState(false);
+  const partyPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!partyPickerOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (partyPickerRef.current && !partyPickerRef.current.contains(e.target as Node)) {
+        setPartyPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [partyPickerOpen]);
 
   const currentMeta = activeChild ? REPORT_METADATA[activeChild.id] ?? DEFAULT_META : DEFAULT_META;
   const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -2562,6 +2762,10 @@ function ReportsContent() {
 
   const handleExportExcel = async () => {
     if (!activeChild) return;
+    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+      toast.error("Select a party first");
+      return;
+    }
     const toastId = toast.loading("Generating complete Excel export...");
     try {
       const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -2570,6 +2774,7 @@ function ReportsContent() {
         endDate: to,
         search: tableSearchTerm.trim() || undefined,
         limit: 10000,
+        ...(activeChild.id === "Party Statement" ? { partyId: selectedPartyId, partyType: selectedPartyType } : {}),
       });
       const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
         Object.values(row).some((val) =>
@@ -2638,6 +2843,10 @@ function ReportsContent() {
 
   const handleExportCSV = async () => {
     if (!activeChild) return;
+    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+      toast.error("Select a party first");
+      return;
+    }
     const toastId = toast.loading("Generating complete CSV export...");
     try {
       const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
@@ -2646,6 +2855,7 @@ function ReportsContent() {
         endDate: to,
         search: tableSearchTerm.trim() || undefined,
         limit: 10000,
+        ...(activeChild.id === "Party Statement" ? { partyId: selectedPartyId, partyType: selectedPartyType } : {}),
       });
       const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
         Object.values(row).some((val) =>
@@ -2727,9 +2937,30 @@ function ReportsContent() {
   }, [isGstReport, isGstRateReport, isTdsPayable, isTdsReceivable, filteredRows]);
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0">
+    <div className="flex flex-col min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 -m-3 sm:-m-4 md:-m-6 w-[calc(100%+1.5rem)] sm:w-[calc(100%+2rem)] md:w-[calc(100%+3rem)] min-w-0 print:m-0 print:p-0 print:w-full print:max-w-none print:min-h-0 print:bg-white">
+      
+      {/* ── Production PDF / Print Header ── */}
+      <div className="hidden print:block mb-4 border-b-2 border-gray-900 pb-3">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 uppercase tracking-tight m-0 p-0">
+              {currentMeta.title || reportTitle}
+            </h1>
+            <p className="text-xs font-semibold text-gray-600 mt-1 m-0 p-0">
+              Kiddos Foods ERP — {reportGroupLabel}
+            </p>
+          </div>
+          <div className="text-right text-xs text-gray-700">
+            <div className="font-bold text-gray-900">Period: {displayRange}</div>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              Printed: {new Date().toLocaleDateString("en-IN")} • {filteredRows.length} Records
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Top Header / Breadcrumb Bar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs w-full min-w-0">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3 shadow-2xs w-full min-w-0 print:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-lg shrink-0">
             <Receipt className="h-5 w-5" />
@@ -2759,213 +2990,213 @@ function ReportsContent() {
         )}
       </div>
 
-      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
+      <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0 print:p-0 print:m-0 print:max-w-none print:space-y-3">
 
         {/* ── Top Summary / KPI Cards ── */}
         {isPaymentRegister && paymentSummary ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-3 print:gap-2 print:mb-3">
             {/* 1. TOTAL AMOUNT */}
-            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate print:text-black">
                   Total Amount
                 </div>
-                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-1 truncate">
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-gray-900 dark:text-white mt-1 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency(paymentSummary.totalAmount)}
                 </div>
               </div>
             </div>
 
             {/* 2. RECEIVABLE AMOUNT */}
-            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate print:text-black">
                   Receivable Amount
                 </div>
-                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 mt-1 truncate">
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400 mt-1 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency(paymentSummary.receivableAmount)}
                 </div>
               </div>
             </div>
 
             {/* 3. BALANCE AMOUNT */}
-            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 sm:p-5 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wider truncate print:text-black">
                   Balance Amount
                 </div>
-                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-blue-600 dark:text-blue-400 mt-1 truncate">
+                <div className="text-xl sm:text-2xl font-black font-mono tracking-tight text-blue-600 dark:text-blue-400 mt-1 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency(paymentSummary.balanceAmount)}
                 </div>
               </div>
             </div>
           </div>
         ) : isGstReport && taxComplianceSummary ? (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-3 print:gap-2 print:mb-3">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Total Sale Tax
                 </div>
-                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).saleTax ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Total Purchase / Expense Tax
                 </div>
-                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).purchaseTax ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Current Period
                 </div>
-                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate print:text-xs print:text-black">
                   {displayRange}
                 </div>
               </div>
             </div>
           </div>
         ) : isGstRateReport && taxComplianceSummary ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0">
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-4 print:gap-2 print:mb-3">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Taxable Sales
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).taxableSales ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Sales GST
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).salesGst ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Taxable Purchases
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).taxablePurchases ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Purchase GST
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).purchaseGst ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
           </div>
         ) : (isTdsPayable || isTdsReceivable) && taxComplianceSummary ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0">
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-4 print:gap-2 print:mb-3">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   {isTdsPayable ? "Total TDS Payable" : "Total TDS Receivable"}
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).tdsTotal ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   {isTdsPayable ? "TDS Deducted" : "TDS Deducted by Customers"}
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : fmtCurrency((taxComplianceSummary as any).tdsTotal ?? 0, { decimals: 2 })}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Transactions
                 </div>
-                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : (taxComplianceSummary as any).transactionCount ?? 0}
                 </div>
               </div>
             </div>
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-purple-50 dark:ring-purple-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-purple-500 ring-4 ring-purple-50 dark:ring-purple-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Current Period
                 </div>
-                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate print:text-xs print:text-black">
                   {displayRange}
                 </div>
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-3 print:gap-2 print:mb-3">
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-orange-500 ring-4 ring-orange-50 dark:ring-orange-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   {currentMeta.kpiLabel}
                 </div>
-                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate">
+                <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
                   {loading ? "..." : reportData?.kpiValue || "0"}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Summary Details
                 </div>
-                <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate">
+                <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate print:text-xs print:text-black">
                   {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
                 </div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 sm:col-span-2 md:col-span-1">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0" />
+            <div className="bg-white dark:bg-card p-4 rounded-xl border border-gray-200 dark:border-white/5 shadow-2xs flex items-center gap-3.5 min-w-0 sm:col-span-2 md:col-span-1 print:border-gray-300 print:shadow-none print:p-2.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-blue-50 dark:ring-blue-500/20 shrink-0 print:hidden" />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate">
+                <div className="text-[11px] font-semibold text-gray-400 dark:text-slate-400 uppercase tracking-wider truncate print:text-black print:font-bold">
                   Current Period
                 </div>
-                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate">
+                <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 mt-0.5 truncate print:text-xs print:text-black">
                   {displayRange}
                 </div>
               </div>
@@ -2973,8 +3204,67 @@ function ReportsContent() {
           </div>
         )}
 
+        {/* ── Party Picker (Party Statement only) ── */}
+        {activeChild?.id === "Party Statement" && (
+          <div ref={partyPickerRef} className="relative w-full max-w-md print:hidden">
+            <button
+              type="button"
+              onClick={() => setPartyPickerOpen((v) => !v)}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm text-left outline-none focus:border-[#f58220] cursor-pointer"
+            >
+              <User className="h-4 w-4 text-gray-400 dark:text-slate-500 shrink-0" />
+              {selectedPartyId ? (
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="font-semibold text-gray-900 dark:text-white">{selectedPartyName || "Selected party"}</span>
+                  <span className="ml-2 text-[11px] font-medium text-gray-400 dark:text-slate-500 uppercase tracking-wide">{selectedPartyType}</span>
+                </span>
+              ) : (
+                <span className="flex-1 text-gray-400 dark:text-slate-500">Search / Select Party…</span>
+              )}
+              <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
+            </button>
+
+            {partyPickerOpen && (
+              <div className="absolute z-20 mt-1.5 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden">
+                <div className="p-2 border-b border-gray-100 dark:border-white/5">
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Search customers, dealers, vendors…"
+                    value={partyPickerQuery}
+                    onChange={(e) => setPartyPickerQuery(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md text-sm text-gray-900 dark:text-white outline-none focus:border-[#f58220]"
+                  />
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  {partyOptionsLoading ? (
+                    <div className="px-3.5 py-3 text-xs text-gray-400 dark:text-slate-500">Loading parties…</div>
+                  ) : filteredPartyOptions.length === 0 ? (
+                    <div className="px-3.5 py-3 text-xs text-gray-400 dark:text-slate-500">No matching parties.</div>
+                  ) : (
+                    filteredPartyOptions.map((p) => (
+                      <button
+                        key={`${p.partyType}-${p.id}`}
+                        type="button"
+                        onClick={() => {
+                          handleSelectParty(p);
+                          setPartyPickerOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between gap-2 px-3.5 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                      >
+                        <span className="min-w-0 truncate text-gray-900 dark:text-white">{p.name}</span>
+                        <span className="shrink-0 text-[10px] font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide">{p.partyType}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Filters Row ── */}
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0 print:hidden">
           {/* Search */}
           <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
@@ -3057,12 +3347,15 @@ function ReportsContent() {
             <button
               onClick={() => {
                 const { from, to } = getDateRange(dateFilter, customStartDate, customEndDate);
-                if (activeChild) {
+                if (activeChild && !(activeChild.id === "Party Statement" && !selectedPartyId)) {
                   setLoading(true);
                   fetchReport(activeChild.id, {
                     startDate: from,
                     endDate: to,
                     search: tableSearchTerm.trim() || undefined,
+                    page: currentPage,
+                    limit: 50,
+                    ...(activeChild.id === "Party Statement" ? { partyId: selectedPartyId, partyType: selectedPartyType } : {}),
                   })
                     .then((d) => setReportData(d))
                     .finally(() => setLoading(false));
@@ -3077,8 +3370,8 @@ function ReportsContent() {
         </div>
 
         {/* ── Unified Clean Data Table ── */}
-        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0">
-          <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02]">
+        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0 print:border-none print:shadow-none print:rounded-none">
+          <div className="px-4 sm:px-5 py-3.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between bg-gray-50/50 dark:bg-white/[0.02] print:hidden">
             <span className="text-xs font-bold text-gray-600 dark:text-slate-300 uppercase tracking-wider truncate">
               {currentMeta.tableTitle}
             </span>
@@ -3087,117 +3380,129 @@ function ReportsContent() {
             </span>
           </div>
 
-          <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+          <div className="overflow-x-auto custom-scrollbar w-full max-w-full print:overflow-visible">
             {loading ? (
               <div className="py-16 flex justify-center items-center">
                 <RefreshCw className="h-6 w-6 animate-spin text-[#f58220]" />
               </div>
             ) : (
-              <table className="w-full text-left min-w-[720px]">
+              <table className="w-full text-left min-w-[720px] print:min-w-0 print:w-full print:text-[9pt]">
                 <thead>
-                  <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
-                    {currentMeta.columns.map((col, idx) => (
-                      <th
-                        key={idx}
-                        className="px-4 sm:px-5 py-3.5 font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap"
-                      >
-                        {col.label}
-                      </th>
-                    ))}
+                  <tr className="bg-gray-50/80 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[11px] font-bold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider print:bg-slate-100 print:text-black">
+                    {currentMeta.columns.map((col, idx) => {
+                      const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k));
+                      return (
+                        <th
+                          key={idx}
+                          className={clsx(
+                            "px-4 sm:px-5 py-3.5 font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300",
+                            isNumericCol ? "text-right" : "text-left"
+                          )}
+                        >
+                          {col.label}
+                        </th>
+                      );
+                    })}
                     {!isTaxComplianceReport && !isItemReportByParty && !isItemWiseProfitLoss && (
-                      <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap">
+                      <th className="px-4 sm:px-5 py-3.5 text-right font-bold text-gray-500 dark:text-slate-400 whitespace-nowrap print:hidden">
                         Actions
                       </th>
                     )}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-medium">
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-medium print:divide-slate-300">
                   {filteredRows.length > 0 ? (
                     <>
                       {filteredRows.map((row, rowIdx) => (
                         <tr
                           key={rowIdx}
-                          className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors"
+                          className="hover:bg-orange-50/20 dark:hover:bg-orange-500/5 transition-colors print:hover:bg-transparent"
                         >
-                          {currentMeta.columns.map((col, colIdx) => (
-                            <td
-                              key={colIdx}
-                              className="px-5 py-3.5 text-gray-700 dark:text-slate-200"
-                            >
-                              {col.key === "status" || col.key === "result" ? (
-                                <span
-                                  className={clsx(
-                                    "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide",
-                                    String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED" || String(row[col.key]).toUpperCase() === "PAID"
-                                      ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
-                                      : String(row[col.key]).toUpperCase().includes("PROGRESS") || String(row[col.key]).toUpperCase() === "PARTIAL"
-                                        ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
-                                        : String(row[col.key]).toUpperCase().includes("REJECT") || String(row[col.key]).toUpperCase() === "CANCELLED"
-                                          ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
-                                          : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
-                                  )}
-                                >
-                                  {row[col.key]}
-                                </span>
-                              ) : col.key === "netProfitLoss" ? (
-                                <span className={clsx("font-mono font-bold", (row._rawNetProfitLoss ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "totalAmount" ? (
-                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "sale" || col.key === "saleAmount" ? (
-                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "purchase" || col.key === "purchaseAmount" ? (
-                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "saleReturn" || col.key === "purchaseReturn" ? (
-                                <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "taxPayable" || col.key === "taxReceivable" ? (
-                                <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "mfgCost" || col.key === "consumptionCost" ? (
-                                <span className="font-mono font-semibold text-purple-600 dark:text-purple-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "saleQuantity" || col.key === "purchaseQuantity" ? (
-                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                                  {row[col.key] ?? "0"}
-                                </span>
-                              ) : col.key === "quantityIn" ? (
-                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "quantityOut" ? (
-                                <span className="font-mono font-semibold text-rose-600 dark:text-rose-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "balance" ? (
-                                <span className="font-mono font-semibold text-gray-900 dark:text-white">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "receivableAmount" ? (
-                                <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : col.key === "balanceAmount" ? (
-                                <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">
-                                  {row[col.key] ?? "—"}
-                                </span>
-                              ) : (
-                                row[col.key] ?? "—"
-                              )}
-                            </td>
-                          ))}
+                          {currentMeta.columns.map((col, colIdx) => {
+                            const isNumericCol = ["amount", "total", "value", "cost", "price", "sale", "purchase", "tax", "debit", "credit", "balance", "receivable", "inflow", "outflow", "moneyin", "moneyout", "quantity", "qty", "count", "margin"].some(k => col.key.toLowerCase().includes(k));
+                            return (
+                              <td
+                                key={colIdx}
+                                className={clsx(
+                                  "px-5 py-3.5 text-gray-700 dark:text-slate-200 print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300",
+                                  isNumericCol ? "text-right" : "text-left"
+                                )}
+                              >
+                                {col.key === "status" || col.key === "result" ? (
+                                  <span
+                                    className={clsx(
+                                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide print:border-none print:px-0 print:py-0 print:text-black",
+                                      String(row[col.key]).toUpperCase().includes("APPROV") || String(row[col.key]).toUpperCase() === "COMPLETED" || String(row[col.key]).toUpperCase() === "PAID"
+                                        ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
+                                        : String(row[col.key]).toUpperCase().includes("PROGRESS") || String(row[col.key]).toUpperCase() === "PARTIAL"
+                                          ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
+                                          : String(row[col.key]).toUpperCase().includes("REJECT") || String(row[col.key]).toUpperCase() === "CANCELLED"
+                                            ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
+                                            : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
+                                    )}
+                                  >
+                                    {row[col.key]}
+                                  </span>
+                                ) : col.key === "netProfitLoss" ? (
+                                  <span className={clsx("font-mono font-bold print:text-black", (row._rawNetProfitLoss ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "totalAmount" ? (
+                                  <span className="font-mono font-semibold text-gray-900 dark:text-white print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "sale" || col.key === "saleAmount" ? (
+                                  <span className="font-mono font-semibold text-gray-900 dark:text-white print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "purchase" || col.key === "purchaseAmount" ? (
+                                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "saleReturn" || col.key === "purchaseReturn" ? (
+                                  <span className="font-mono font-semibold text-amber-600 dark:text-amber-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "taxPayable" || col.key === "taxReceivable" ? (
+                                  <span className="font-mono font-semibold text-blue-600 dark:text-blue-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "mfgCost" || col.key === "consumptionCost" ? (
+                                  <span className="font-mono font-semibold text-purple-600 dark:text-purple-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "saleQuantity" || col.key === "purchaseQuantity" ? (
+                                  <span className="font-mono font-semibold text-gray-900 dark:text-white print:text-black">
+                                    {row[col.key] ?? "0"}
+                                  </span>
+                                ) : col.key === "quantityIn" ? (
+                                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "quantityOut" ? (
+                                  <span className="font-mono font-semibold text-rose-600 dark:text-rose-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "balance" ? (
+                                  <span className="font-mono font-semibold text-gray-900 dark:text-white print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "receivableAmount" ? (
+                                  <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : col.key === "balanceAmount" ? (
+                                  <span className="font-mono font-semibold text-blue-600 dark:text-blue-400 print:text-black">
+                                    {row[col.key] ?? "—"}
+                                  </span>
+                                ) : (
+                                  row[col.key] ?? "—"
+                                )}
+                              </td>
+                            );
+                          })}
                           {!isTaxComplianceReport && !isItemReportByParty && !isItemWiseProfitLoss && (
-                            <td className="px-5 py-3.5 text-right">
+                            <td className="px-5 py-3.5 text-right print:hidden">
                               <button
                                 onClick={() => handlePrintRow(row)}
                                 className="p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors inline-flex items-center"
@@ -3210,88 +3515,88 @@ function ReportsContent() {
                         </tr>
                       ))}
                       {isGstReport && taxComplianceSummary && (
-                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">Total</td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 print:bg-slate-100">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left">Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).saleTax ?? 0, { decimals: 2 })}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).purchaseTax ?? 0, { decimals: 2 })}
                           </td>
                         </tr>
                       )}
                       {isGstRateReport && taxComplianceSummary && (
-                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white" colSpan={2}>Total</td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 print:bg-slate-100">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left" colSpan={2}>Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).taxableSales ?? 0, { decimals: 2 })}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).salesGst ?? 0, { decimals: 2 })}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).taxablePurchases ?? 0, { decimals: 2 })}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency((taxComplianceSummary as any).purchaseGst ?? 0, { decimals: 2 })}
                           </td>
                         </tr>
                       )}
                       {isItemReportByParty && filteredRows.length > 0 && (
-                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10">
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white" colSpan={2}>Total</td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 print:bg-slate-100">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left" colSpan={2}>Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {filteredRows.reduce((sum, r) => sum + Number(r._rawSaleQty ?? r.saleQuantity ?? 0), 0)}
                           </td>
-                          <td className="px-5 py-3.5 text-orange-600 dark:text-orange-400 font-mono">
+                          <td className="px-5 py-3.5 text-orange-600 dark:text-orange-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((sum, r) => sum + Number(r._rawSaleAmt ?? 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {filteredRows.reduce((sum, r) => sum + Number(r._rawPurchaseQty ?? r.purchaseQuantity ?? 0), 0)}
                           </td>
-                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono">
+                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((sum, r) => sum + Number(r._rawPurchaseAmt ?? 0), 0))}
                           </td>
                         </tr>
                       )}
                       {isItemWiseProfitLoss && filteredRows.length > 0 && (
-                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 text-xs">
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white">Total</td>
-                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono">
+                        <tr className="bg-gray-50/80 dark:bg-white/[0.03] font-bold border-t-2 border-gray-200 dark:border-white/10 text-xs print:bg-slate-100">
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-left">Total</td>
+                          <td className="px-5 py-3.5 text-gray-900 dark:text-white font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawSale || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono">
+                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawSaleReturn || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono">
+                          <td className="px-5 py-3.5 text-emerald-600 dark:text-emerald-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawPurchase || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono">
+                          <td className="px-5 py-3.5 text-amber-600 dark:text-amber-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawPurchaseReturn || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono">
+                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawOpeningStock || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono">
+                          <td className="px-5 py-3.5 text-gray-700 dark:text-slate-300 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawClosingStock || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono">
+                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawTaxReceivable || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono">
+                          <td className="px-5 py-3.5 text-blue-600 dark:text-blue-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawTaxPayable || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono">
+                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawMfgCost || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono">
+                          <td className="px-5 py-3.5 text-purple-600 dark:text-purple-400 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {fmtCurrency(filteredRows.reduce((s, r) => s + Number(r._rawConsumptionCost || 0), 0))}
                           </td>
-                          <td className="px-5 py-3.5 font-mono">
+                          <td className="px-5 py-3.5 font-mono print:text-black print:px-2.5 print:py-2 print:border print:border-slate-300 text-right">
                             {(() => {
                               const netTotal = filteredRows.reduce((s, r) => s + Number(r._rawNetProfitLoss || 0), 0);
                               return (
-                                <span className={netTotal >= 0 ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-rose-600 dark:text-rose-400 font-bold"}>
+                                <span className={netTotal >= 0 ? "text-emerald-600 dark:text-emerald-400 font-bold print:text-black" : "text-rose-600 dark:text-rose-400 font-bold print:text-black"}>
                                   {fmtCurrency(netTotal)}
                                 </span>
                               );
@@ -3311,11 +3616,15 @@ function ReportsContent() {
                       >
                         {reportData?.error
                           ? reportData.errorMessage || "Unable to load this report. Please try again."
-                          : tableSearchTerm
-                            ? `No entries match "${tableSearchTerm}".`
-                            : (isTdsPayable || isTdsReceivable)
-                              ? "No TDS transactions found for the selected period."
-                              : "No data records found for the selected period."}
+                          : reportData?.needsParty
+                            ? "Select a party to view the statement."
+                            : tableSearchTerm
+                              ? `No entries match "${tableSearchTerm}".`
+                              : (isTdsPayable || isTdsReceivable)
+                                ? "No TDS transactions found for the selected period."
+                                : activeChild?.id === "Party Statement"
+                                  ? `No transactions found for this party from ${fmtDisplayDate(from)} to ${fmtDisplayDate(to)}.`
+                                  : "No data records found for the selected period."}
                       </td>
                     </tr>
                   )}
@@ -3323,7 +3632,7 @@ function ReportsContent() {
               </table>
             )}
             {reportData?.pagination && reportData.pagination.totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01]">
+              <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01] print:hidden">
                 <div className="text-xs text-gray-500 dark:text-slate-400 font-medium">
                   Showing {((currentPage - 1) * (reportData.pagination.limit || 50)) + 1} to {Math.min(currentPage * (reportData.pagination.limit || 50), reportData.pagination.totalCount)} of {reportData.pagination.totalCount} entries
                 </div>

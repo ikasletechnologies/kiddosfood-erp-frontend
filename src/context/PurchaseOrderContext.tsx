@@ -508,9 +508,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     const sgst = !isInterstate ? roundMoney(totalGst - cgst) : 0;
     const igst = isInterstate ? totalGst : 0;
     
-    const grandTotalBeforeRound = roundMoney(taxableAfterDiscount + totalGst + validFreight);
-    const roundoff = roundMoney(Math.round(grandTotalBeforeRound) - grandTotalBeforeRound);
-    const finalTotal = roundMoney(grandTotalBeforeRound + roundoff);
+    const finalTotal = roundMoney(taxableAfterDiscount + totalGst + validFreight);
+    const roundoff = 0;
 
     let appliedAdvance = 0;
     if (useAdvance && selectedVendor && selectedVendor.advanceBalance > 0) {

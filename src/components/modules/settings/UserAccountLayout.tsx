@@ -14,6 +14,7 @@ export default function UserAccountLayout({ children }: UserAccountLayoutProps) 
 
   const menuItems = [
     { label: "Personal Information", href: "/settings/user/profile" },
+    { label: "Company Settings", href: "/settings/company" },
     { label: "Password & Security", href: "/settings/user/security" },
   ];
 

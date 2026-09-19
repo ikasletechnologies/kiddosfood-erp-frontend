@@ -65,6 +65,7 @@ export const reportsApi = {
   getStockByCategory: (params?: any) => api.get('/api/reports/stock-by-category', { params }),
   getItemDiscount: (params?: any) => api.get('/api/reports/item-discount', { params }),
   getStockSummary: (params?: any) => api.get('/api/reports/stock-summary', { params }),
+  getLowStockSummary: (params?: any) => api.get('/api/reports/low-stock-summary', { params }),
   getStockDetail: (params?: any) => api.get('/api/reports/stock-detail', { params }),
   getItemDetail: (params?: any) => api.get('/api/reports/item-detail', { params }),
 

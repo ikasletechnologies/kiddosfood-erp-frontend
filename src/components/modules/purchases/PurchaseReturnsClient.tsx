@@ -23,8 +23,7 @@ import { formatDate } from "@/lib/utils";
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PENDING:   { label: "Pending",   color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-900/40" },
-  APPROVED:  { label: "Approved",  color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
-  COMPLETED: { label: "Completed", color: "text-blue-600 dark:text-blue-400",    bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200 dark:border-blue-900/40" },
+  COMPLETED: { label: "Completed", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-900/40" },
   CANCELLED: { label: "Cancelled", color: "text-gray-600 dark:text-slate-400",  bg: "bg-gray-50 dark:bg-white/5",         border: "border-gray-200 dark:border-white/10" },
   REJECTED:  { label: "Rejected",  color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-950/30",    border: "border-rose-200 dark:border-rose-900/40" },
 };
@@ -99,12 +98,11 @@ export default function PurchaseReturnsClient() {
 
       <div className="p-6 space-y-4 max-w-7xl mx-auto">
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           {[
             { label: "All Returns", status: "", dot: "bg-gray-400", color: "text-gray-900 dark:text-white" },
             { label: "Pending", status: "PENDING", dot: "bg-amber-500", color: "text-amber-700 dark:text-amber-400" },
-            { label: "Approved", status: "APPROVED", dot: "bg-emerald-500", color: "text-emerald-700 dark:text-emerald-400" },
-            { label: "Completed", status: "COMPLETED", dot: "bg-blue-500", color: "text-blue-700 dark:text-blue-400" },
+            { label: "Completed", status: "COMPLETED", dot: "bg-emerald-500", color: "text-emerald-700 dark:text-emerald-400" },
             { label: "Cancelled", status: "CANCELLED", dot: "bg-rose-500", color: "text-rose-700 dark:text-rose-400" },
           ].map(s => {
             const count = s.status === "" ? returns.length : returns.filter(r => r.status === s.status).length;
@@ -153,7 +151,6 @@ export default function PurchaseReturnsClient() {
             {[
               { label: "All", value: "" },
               { label: "Pending", value: "PENDING" },
-              { label: "Approved", value: "APPROVED" },
               { label: "Completed", value: "COMPLETED" },
               { label: "Cancelled", value: "CANCELLED" },
             ].map(st => (

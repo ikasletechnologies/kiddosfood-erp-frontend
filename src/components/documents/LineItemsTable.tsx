@@ -6,6 +6,8 @@ import { usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { rawMaterialsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { toast } from "react-hot-toast";
 import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer";
 import { formatCurrency, formatQuantity, roundMoney } from "@/lib/utils";
 
@@ -41,6 +43,8 @@ function roundForDisplay(n: number): number {
 
 export default function LineItemsTable() {
   const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, setSelectedVendor, autoFilledIds, setAutoFilledIds } = usePurchaseOrder();
+  const searchParams = useSearchParams();
+  const prefillHandledRef = useRef(false);
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
   // Per-line "which unit is the operator currently entering/reading the
   // quantity in" — defaults to the material's base unit (item.unit) and is
@@ -141,6 +145,42 @@ export default function LineItemsTable() {
       });
     }
   }, [materials]);
+
+  // Deep-link from an Alerts page "Reorder" button (?materialId=...&qty=...) —
+  // drop the flagged material straight into the first empty row instead of
+  // landing on a blank PO the operator has to search for it in again.
+  useEffect(() => {
+    if (prefillHandledRef.current || loadingMaterials) return;
+    const prefillMaterialId = searchParams.get("materialId");
+    if (!prefillMaterialId) return;
+    prefillHandledRef.current = true;
+
+    const material = materials.find(m => m.id === prefillMaterialId);
+    if (!material) {
+      toast.error("That item is a finished good produced in-house. Redirecting to Production page...", { duration: 4000 });
+      setTimeout(() => {
+        window.location.href = "/production";
+      }, 1500);
+      return;
+    }
+
+    const targetId = items.find(i => !i.materialId)?.id;
+    if (!targetId) return;
+
+    const vendorPrice = getVendorPrice(material.id);
+    const prefillQty = Number(searchParams.get("qty"));
+
+    updateItem(targetId, {
+      materialId: material.id,
+      name: material.name,
+      unit: material.unit || "KG",
+      price: vendorPrice !== null ? vendorPrice : (material.price || 0),
+      gstRate: material.gstRate || 5,
+      ...(Number.isFinite(prefillQty) && prefillQty > 0 ? { quantity: prefillQty } : {}),
+    });
+    setEntryUnits(prev => ({ ...prev, [targetId]: material.unit || "KG" }));
+    if (vendorPrice !== null) setAutoFilledIds(prev => new Set(prev).add(targetId));
+  }, [materials, loadingMaterials, searchParams, items, getVendorPrice, updateItem, setAutoFilledIds]);
 
   const openAddMaterialManually = (itemId: string, defaultName: string = "") => {
     setTargetDrawerItemId(itemId);
