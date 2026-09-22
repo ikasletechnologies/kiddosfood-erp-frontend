@@ -3,46 +3,6 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
 import { roundMoney } from "@/lib/utils";
 
-// Generated purely on the client the instant a new PO screen is opened — no
-// backend round trip. Whatever this produces is what gets sent to and stored
-// by the backend on save (ProcurementService.createPurchaseOrder honors a
-// client-supplied poNumber), so what's shown on screen always matches what's
-// persisted. The running count is tracked in this browser's localStorage so
-// numbers read as a normal PO-<year>-<seq> sequence instead of a timestamp.
-function poSeqStorageKey(year: number) {
-  return `poSequenceCounter_${year}`;
-}
-
-function generateClientPoNumber(): string {
-  const year = new Date().getFullYear();
-  let next = 1;
-  try {
-    const stored = parseInt(localStorage.getItem(poSeqStorageKey(year)) || "0", 10);
-    next = (Number.isFinite(stored) ? stored : 0) + 1;
-  } catch {
-    // localStorage unavailable (e.g. private mode) — fall back to 1
-  }
-  return `PO-${year}-${String(next).padStart(3, "0")}`;
-}
-
-// Called once a PO number has actually been used to create/save an order, so
-// the next generated number doesn't repeat it. Reads the sequence back out of
-// the number itself rather than assuming it was the one just previewed, since
-// a saved draft's poNumber could be older than the current counter.
-export function commitClientPoNumber(poNumber: string) {
-  const match = poNumber.match(/^PO-(\d{4})-(\d+)$/);
-  if (!match) return;
-  const [, yearStr, seqStr] = match;
-  try {
-    const key = poSeqStorageKey(parseInt(yearStr, 10));
-    const current = parseInt(localStorage.getItem(key) || "0", 10) || 0;
-    const used = parseInt(seqStr, 10);
-    if (used > current) localStorage.setItem(key, String(used));
-  } catch {
-    // ignore
-  }
-}
-
 export interface LineItem {
   id: string;
   materialId: string;
@@ -207,16 +167,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
-      let draftPoNumber = "";
       let draftVendorId: string | null = null;
       const saved = localStorage.getItem('draftPurchaseOrder');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (parsed.poNumber) {
-            draftPoNumber = parsed.poNumber;
-            setPoNumber(parsed.poNumber);
-          }
           if (parsed.selectedVendor) {
             setSelectedVendor(parsed.selectedVendor);
             draftVendorId = parsed.selectedVendor.id || null;
@@ -254,12 +209,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         }
       }
 
-      // No backend round trip for this — generated right here so it's visible
-      // instantly, and sent back to the server as-is on save so the number on
-      // screen always matches what gets persisted.
-      if (!draftPoNumber) {
-        setPoNumber(generateClientPoNumber());
-      }
+      // poNumber intentionally stays "" here — it does not exist yet. The
+      // backend assigns it atomically inside the create transaction
+      // (ProcurementService.generatePONumber) and we pick it up from the
+      // create response once the PO is actually persisted (see
+      // PurchaseFormContent's handleCreatePO/handleSaveDraft).
 
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {

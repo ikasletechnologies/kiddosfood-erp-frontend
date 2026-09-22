@@ -32,7 +32,6 @@ export const purchaseOrdersApi = {
   getById: (id: string) => api.get(`/api/purchase-orders/${id}`),
   create: (data: {
     vendorId: string;
-    poNumber?: string;
     advancePaid?: number;
     expectedDeliveryDate?: string;
     notes?: string;

@@ -5,7 +5,7 @@ import BillingSection from "@/components/documents/BillingSection";
 import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X, ArrowLeft } from "lucide-react";
-import { PurchaseOrderProvider, usePurchaseOrder, commitClientPoNumber } from "@/context/PurchaseOrderContext";
+import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
 import { useState, useEffect } from "react";
 import { clsx } from "clsx";
 
@@ -120,11 +120,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         localStorage.removeItem('draftPurchaseOrder');
         toast.success("Purchase Order updated successfully!");
       } else {
-        // poNumber was generated client-side the moment this screen opened
-        // (see PurchaseOrderContext) — sending it here means what's on screen
-        // is exactly what gets persisted.
-        const { data: created } = await purchaseOrdersApi.create({ ...payload, poNumber });
-        if (created?.poNumber) commitClientPoNumber(created.poNumber);
+        // The backend assigns the PO number atomically inside the create
+        // transaction — the frontend never sends one. We pick up the real,
+        // persisted number from the response so anything shown after this
+        // point (toast, redirect target) reflects it.
+        const { data: created } = await purchaseOrdersApi.create(payload);
+        if (created?.poNumber) setPoNumber(created.poNumber);
         localStorage.removeItem('draftPurchaseOrder');
         toast.success(created?.poNumber ? `Purchase Order ${created.poNumber} created successfully!` : "Purchase Order created successfully!");
       }
@@ -184,8 +185,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           }))
       };
       
-      const { data: created } = await purchaseOrdersApi.create({ ...payload, poNumber });
-      if (created?.poNumber) commitClientPoNumber(created.poNumber);
+      const { data: created } = await purchaseOrdersApi.create(payload);
+      if (created?.poNumber) setPoNumber(created.poNumber);
       localStorage.removeItem('draftPurchaseOrder');
       toast.success("Draft Purchase Order saved successfully!");
       router.push("/purchases/orders");
