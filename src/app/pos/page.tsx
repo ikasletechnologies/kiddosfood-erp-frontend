@@ -735,13 +735,51 @@ export default function POSPage() {
                 onChange={e => setSearch(e.target.value)}
                 className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
               />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
-            )}
+              {search && (
+                <X 
+                  size={14} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors z-10" 
+                  onClick={() => setSearch("")} 
+                />
+              )}
+              {search && filtered.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar">
+                  {filtered.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        addToCart(p);
+                        setSearch("");
+                        searchRef.current?.focus();
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 flex items-center justify-between group transition-colors"
+                    >
+                      <div>
+                        <div className="text-sm font-bold text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2">
+                          {p.name}
+                          {formatPackSize(p.packSize) && (
+                            <span className="text-xs font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
+                          <span>{p.sku || "No SKU"}</span>
+                          {p.stock !== null && (
+                            <span className={clsx(
+                              "font-bold",
+                              p.stock === 0 ? "text-red-500" : p.stock <= 5 ? "text-amber-500" : "text-green-500"
+                            )}>
+                              · {p.stock === 0 ? "OUT OF STOCK" : `${p.stock} IN STOCK`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm font-black" style={{ color: BRAND_ORANGE }}>
+                        ₹{getPrice(p, partyType).toLocaleString()}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             <button
               onClick={() => { setShowScanner(true); setScannedProduct(null); }}
