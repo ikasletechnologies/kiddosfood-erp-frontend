@@ -342,12 +342,6 @@ function EditItemForm() {
     fetchData();
   }, [id]);
 
-  // Sync primary unit from weight variant unit for raw materials
-  useEffect(() => {
-    if (category !== "FINISHED_GOOD") {
-      setPrimaryUnit(customUnit.toLowerCase());
-    }
-  }, [customUnit, category]);
 
   // Prevent scroll change on number inputs
   useEffect(() => {
