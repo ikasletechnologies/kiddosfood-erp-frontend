@@ -282,10 +282,13 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
                     onChange={(e) => setPurchaseType(e.target.value)}
                     className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer"
                   >
+                    <option value="ALL">All</option>
                     <option value="RAW_MATERIAL">Raw Material</option>
-                    <option value="PACKAGING_MATERIAL">Packaging Material</option>
+                    <option value="PACKAGING">Packaging</option>
+                    <option value="EQUIPMENT">Equipment</option>
                     <option value="CONSUMABLES">Consumables</option>
-                    <option value="FIXED_ASSET">Fixed Asset</option>
+                    <option value="SERVICES">Services</option>
+                    <option value="OTHERS">Others</option>
                   </select>
                 </div>
                 <div>

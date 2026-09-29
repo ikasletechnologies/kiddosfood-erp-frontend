@@ -168,52 +168,6 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       });
     } else {
       let draftVendorId: string | null = null;
-      const saved = localStorage.getItem('draftPurchaseOrder');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (parsed.selectedVendor) {
-            setSelectedVendor(parsed.selectedVendor);
-            draftVendorId = parsed.selectedVendor.id || null;
-            if (draftVendorId) {
-              import('@/lib/api').then(({ vendorsApi }) => {
-                vendorsApi.getById(draftVendorId!).then((res) => {
-                  if (res.data) {
-                    const latestV = res.data;
-                    setSelectedVendor((prev: any) => ({
-                      ...(prev || {}),
-                      ...latestV,
-                      id: latestV.id,
-                      name: latestV.name,
-                      status: latestV.status,
-                      phone: latestV.phone || latestV.mobile || latestV.contact,
-                      advanceBalance: latestV.advanceBalance || (latestV.balance < 0 ? Math.abs(latestV.balance) : 0),
-                      balanceDue: latestV.balanceDue || (latestV.balance > 0 ? latestV.balance : 0)
-                    }));
-                  }
-                }).catch(err => {
-                  console.error("Failed to revalidate draft vendor status", err);
-                });
-              });
-            }
-          }
-          if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
-          if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
-          if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
-          if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
-          if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
-          if (parsed.internalNotes) setInternalNotes(parsed.internalNotes);
-          if (parsed.vendorNotes) setVendorNotes(parsed.vendorNotes);
-        } catch (e) {
-          console.error("Failed to parse draft PO", e);
-        }
-      }
-
-      // poNumber intentionally stays "" here — it does not exist yet. The
-      // backend assigns it atomically inside the create transaction
-      // (ProcurementService.generatePONumber) and we pick it up from the
-      // create response once the PO is actually persisted (see
-      // PurchaseFormContent's handleCreatePO/handleSaveDraft).
 
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {
@@ -231,10 +185,51 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             }));
             setItems(mapped);
             setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.`);
-            sessionStorage.removeItem('prefilledPoItems');
+            setTimeout(() => sessionStorage.removeItem('prefilledPoItems'), 100);
           }
         } catch (e) {
           console.error("Failed to parse prefilled PO items", e);
+        }
+      } else {
+        const saved = localStorage.getItem('draftPurchaseOrder');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.selectedVendor) {
+              setSelectedVendor(parsed.selectedVendor);
+              draftVendorId = parsed.selectedVendor.id || null;
+              if (draftVendorId) {
+                import('@/lib/api').then(({ vendorsApi }) => {
+                  vendorsApi.getById(draftVendorId!).then((res) => {
+                    if (res.data) {
+                      const latestV = res.data;
+                      setSelectedVendor((prev: any) => ({
+                        ...(prev || {}),
+                        ...latestV,
+                        id: latestV.id,
+                        name: latestV.name,
+                        status: latestV.status,
+                        phone: latestV.phone || latestV.mobile || latestV.contact,
+                        advanceBalance: latestV.advanceBalance || (latestV.balance < 0 ? Math.abs(latestV.balance) : 0),
+                        balanceDue: latestV.balanceDue || (latestV.balance > 0 ? latestV.balance : 0)
+                      }));
+                    }
+                  }).catch(err => {
+                    console.error("Failed to revalidate draft vendor status", err);
+                  });
+                });
+              }
+            }
+            if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
+            if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
+            if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
+            if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
+            if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
+            if (parsed.internalNotes) setInternalNotes(parsed.internalNotes);
+            if (parsed.vendorNotes) setVendorNotes(parsed.vendorNotes);
+          } catch (e) {
+            console.error("Failed to parse draft PO", e);
+          }
         }
       }
 

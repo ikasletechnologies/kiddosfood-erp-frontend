@@ -56,12 +56,27 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   const [form, setForm] = useState(getEmptyForm(partyType));
   const [saving, setSaving] = useState(false);
   const [fetchingGst, setFetchingGst] = useState(false);
+  const [fetchingPincode, setFetchingPincode] = useState(false);
 
   const [contactError, setContactError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [gstError, setGstError] = useState("");
 
-  const validateFieldUniqueness = async (field: 'contact' | 'email' | 'gstNumber', value: string) => {
+  const [existingParties, setExistingParties] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (partyType === 'vendor') {
+        vendorsApi.getAll().then(res => setExistingParties(res.data?.vendors || res.data || [])).catch(console.error);
+      } else {
+        customersApi.getAll().then(res => setExistingParties(res.data?.customers || res.data || [])).catch(console.error);
+      }
+    } else {
+      setExistingParties([]);
+    }
+  }, [isOpen, partyType]);
+
+  const validateFieldUniqueness = (field: 'contact' | 'email' | 'gstNumber', value: string) => {
     if (!value || !value.trim()) {
       if (field === 'contact') setContactError("");
       if (field === 'email') setEmailError("");
@@ -70,60 +85,29 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
     }
 
     try {
-      if (partyType === 'vendor') {
-        const res = await vendorsApi.getAll();
-        const allVendors = res.data?.vendors || res.data || [];
-        const duplicate = allVendors.find((v: any) => {
-          if (v.id === initialData?.id) return false;
-          if (field === 'contact') {
-            const vContact = (v.contact || v.phone || "").trim();
-            return vContact === value.trim();
-          }
-          if (field === 'email') {
-            return (v.email || "").trim().toLowerCase() === value.trim().toLowerCase();
-          }
-          if (field === 'gstNumber') {
-            return (v.gstNumber || v.gstin || "").trim().toUpperCase() === value.trim().toUpperCase();
-          }
-          return false;
-        });
-
-        if (duplicate) {
-          if (field === 'contact') setContactError("Contact number already registered.");
-          if (field === 'email') setEmailError("Email address already registered.");
-          if (field === 'gstNumber') setGstError("GST Number already registered.");
-        } else {
-          if (field === 'contact') setContactError("");
-          if (field === 'email') setEmailError("");
-          if (field === 'gstNumber') setGstError("");
+      const duplicate = existingParties.find((p: any) => {
+        if (p.id === initialData?.id) return false;
+        if (field === 'contact') {
+          const pContact = (p.contact || p.phone || "").trim();
+          return pContact === value.trim();
         }
+        if (field === 'email') {
+          return (p.email || "").trim().toLowerCase() === value.trim().toLowerCase();
+        }
+        if (field === 'gstNumber') {
+          return (p.gstNumber || p.gstin || "").trim().toUpperCase() === value.trim().toUpperCase();
+        }
+        return false;
+      });
+
+      if (duplicate) {
+        if (field === 'contact') setContactError("Contact number already registered.");
+        if (field === 'email') setEmailError("Email address already registered.");
+        if (field === 'gstNumber') setGstError("GST Number already registered.");
       } else {
-        const res = await customersApi.getAll();
-        const allCustomers = res.data?.customers || res.data || [];
-        const duplicate = allCustomers.find((c: any) => {
-          if (c.id === initialData?.id) return false;
-          if (field === 'contact') {
-            const cContact = (c.contact || c.phone || "").trim();
-            return cContact === value.trim();
-          }
-          if (field === 'email') {
-            return (c.email || "").trim().toLowerCase() === value.trim().toLowerCase();
-          }
-          if (field === 'gstNumber') {
-            return (c.gstNumber || c.gstin || "").trim().toUpperCase() === value.trim().toUpperCase();
-          }
-          return false;
-        });
-
-        if (duplicate) {
-          if (field === 'contact') setContactError("Contact number already registered.");
-          if (field === 'email') setEmailError("Email address already registered.");
-          if (field === 'gstNumber') setGstError("GST Number already registered.");
-        } else {
-          if (field === 'contact') setContactError("");
-          if (field === 'email') setEmailError("");
-          if (field === 'gstNumber') setGstError("");
-        }
+        if (field === 'contact') setContactError("");
+        if (field === 'email') setEmailError("");
+        if (field === 'gstNumber') setGstError("");
       }
     } catch (err) {
       console.error(`Unique check failed for ${field}:`, err);
@@ -162,6 +146,33 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
     }, 400);
     return () => clearTimeout(timer);
   }, [form.gstNumber, isOpen]);
+
+  useEffect(() => {
+    const fetchPincodeDetails = async () => {
+      if (form.pincode && form.pincode.length === 6) {
+        setFetchingPincode(true);
+        try {
+          const res = await fetch(`https://api.postalpincode.in/pincode/${form.pincode}`);
+          const data = await res.json();
+          if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice && data[0].PostOffice.length > 0) {
+            const postOffice = data[0].PostOffice[0];
+            setForm(prev => ({
+              ...prev,
+              state: postOffice.State || prev.state,
+              district: postOffice.District || prev.district,
+              city: postOffice.Block || postOffice.Region || postOffice.District || prev.city,
+            }));
+            toast.success("Location details auto-fetched!");
+          }
+        } catch (error) {
+          console.error("Failed to fetch pincode details:", error);
+        } finally {
+          setFetchingPincode(false);
+        }
+      }
+    };
+    fetchPincodeDetails();
+  }, [form.pincode]);
 
   // Auto-fetch GST details via our backend, which proxies GSTVerify and caches results
   const fetchGstDetails = async (gstin: string) => {
@@ -327,6 +338,11 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
       // Opening Balance validation (must be non-negative) — Vendor only
       if (partyType === 'vendor') {
+        if (!form.category || !form.category.trim()) {
+          toast.error("Material Category is required.");
+          return;
+        }
+
         if (form.openingBalance !== "") {
           const openingBalNum = Number(form.openingBalance);
           if (isNaN(openingBalNum) || openingBalNum < 0) {
@@ -483,13 +499,21 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               {partyType === 'vendor' && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Material Category</label>
-                    <input
-                      placeholder="e.g. Raw Material, Packaging"
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Material Category <span className="text-rose-500">*</span></label>
+                    <select
                       value={form.category}
                       onChange={(e) => setForm({...form, category: e.target.value})}
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors"
-                    />
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
+                    >
+                      <option value="" disabled className="dark:bg-[#13151f] text-gray-400">Select Category</option>
+                      <option value="ALL" className="dark:bg-[#13151f]">All</option>
+                      <option value="RAW_MATERIAL" className="dark:bg-[#13151f]">Raw Material</option>
+                      <option value="PACKAGING" className="dark:bg-[#13151f]">Packaging</option>
+                      <option value="EQUIPMENT" className="dark:bg-[#13151f]">Equipment</option>
+                      <option value="CONSUMABLES" className="dark:bg-[#13151f]">Consumables</option>
+                      <option value="SERVICES" className="dark:bg-[#13151f]">Services</option>
+                      <option value="OTHERS" className="dark:bg-[#13151f]">Others</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Credit Period (Payment Terms)</label>
@@ -579,7 +603,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               {/* Left Column */}
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Billing Address *</label>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">{partyType === 'customer' ? 'Customer' : 'Vendor'} Billing Address *</label>
                   <textarea
                     rows={3}
                     placeholder="Address..."
@@ -590,7 +614,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">Shipping Address *</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">{partyType === 'customer' ? 'Customer' : 'Vendor'} Shipping Address *</label>
                     <button
                       type="button"
                       onClick={() => setForm(prev => ({ ...prev, shippingAddress: prev.billingAddress }))}
