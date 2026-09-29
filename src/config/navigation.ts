@@ -262,23 +262,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         roles: SUPER_ONLY,
       },
       {
-        icon: Undo2,
-        label: "Wastage",
-        href: "/production/wastage",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: ShieldAlert,
-        label: "Batch Recall",
-        href: "/production/batch-recall",
-        roles: SUPER_ONLY,
-      },
-    ],
-  },
-  {
-    title: "PACKAGING",
-    items: [
-      {
         icon: ClipboardList,
         label: "Packaging Queue",
         href: "/packaging/queue",
@@ -294,6 +277,18 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: PackageCheck,
         label: "Confirm Packaging",
         href: "/packaging/confirm",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Undo2,
+        label: "Wastage",
+        href: "/production/wastage",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: ShieldAlert,
+        label: "Batch Recall",
+        href: "/production/batch-recall",
         roles: SUPER_ONLY,
       },
     ],
@@ -342,6 +337,23 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         icon: Clock,
         label: "Day Closing",
         href: "/pos/settlement",
+        roles: SUPER_ONLY,
+      },
+    ],
+  },
+  {
+    title: "PARTNERS",
+    items: [
+      {
+        icon: Users,
+        label: "Customers",
+        href: "/customers",
+        roles: SUPER_ONLY,
+      },
+      {
+        icon: Store,
+        label: "Dealers",
+        href: "/franchise/dealers",
         roles: SUPER_ONLY,
       },
     ],
@@ -442,23 +454,6 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         label: "Bank Accounts",
         href: "/franchise/bank-accounts",
         roles: FRANCHISE_ONLY,
-      },
-    ],
-  },
-  {
-    title: "PARTNERS",
-    items: [
-      {
-        icon: Users,
-        label: "Customers",
-        href: "/customers",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Store,
-        label: "Dealers",
-        href: "/franchise/dealers",
-        roles: SUPER_ONLY,
       },
     ],
   },
@@ -629,6 +624,23 @@ export const franchiseMenuSections: MenuSection[] = [
     ],
   },
   {
+    title: "PARTNERS",
+    items: [
+      {
+        icon: Store,
+        label: "Dealers",
+        href: "/franchise/dealers",
+        roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: Users,
+        label: "Customers",
+        href: "/customers",
+        roles: FRANCHISE_ONLY,
+      },
+    ],
+  },
+  {
     title: "SALE",
     items: [
       { icon: FileText, label: "Estimate", href: "/sales/estimation", roles: FRANCHISE_ONLY },
@@ -667,23 +679,6 @@ export const franchiseMenuSections: MenuSection[] = [
       //   href: "/franchise/supplier-ledger",
       //   roles: FRANCHISE_ONLY,
       // },
-    ],
-  },
-  {
-    title: "PARTNERS",
-    items: [
-      {
-        icon: Store,
-        label: "Dealers",
-        href: "/franchise/dealers",
-        roles: FRANCHISE_ONLY,
-      },
-      {
-        icon: Users,
-        label: "Customers",
-        href: "/customers",
-        roles: FRANCHISE_ONLY,
-      },
     ],
   },
   {

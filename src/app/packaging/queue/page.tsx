@@ -5,9 +5,10 @@ import {
   X,
   Package, AlertTriangle,
   RefreshCw, Scale, Search, Layers, Box, Play,
-  Link2, Sparkles, Plus, CheckCircle2
+  Link2, Sparkles, Plus, CheckCircle2, Trash2
 } from "lucide-react";
 import { clsx } from "clsx";
+import { Modal } from "@/components/ui/Modal";
 import { productionApi, franchiseApi, productsApi, productsFullApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { format } from "date-fns";
@@ -86,6 +87,23 @@ export default function PackagingQueuePage() {
   const [sizeUnit, setSizeUnit] = useState("g");
   const [quantityPackets, setQuantityPackets] = useState(10);
   const [submitting, setSubmitting] = useState(false);
+  const [wastingBatchId, setWastingBatchId] = useState<string | null>(null);
+  const [batchToWaste, setBatchToWaste] = useState<ProductBatch | null>(null);
+
+  const handleWasteBalance = async () => {
+    if (!batchToWaste) return;
+    setWastingBatchId(batchToWaste.id);
+    try {
+      await productionApi.wasteBalance(batchToWaste.id, "Wasted remaining balance from packaging queue");
+      toast.success("Balance moved to wastage successfully");
+      loadBatches();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err.message || "Failed to waste balance");
+    } finally {
+      setWastingBatchId(null);
+      setBatchToWaste(null);
+    }
+  };
 
   // Finished Good / Sellable Product mapping states
   const [selectedProductId, setSelectedProductId] = useState<string>("");
@@ -722,7 +740,9 @@ export default function PackagingQueuePage() {
                     const localQueued = isSelectedBatchList ? queuedWeight : 0;
                     
                     const effectivePackaged = packagedQty + batchPendingWeight + localQueued;
-                    const balanceQty = Math.max(0, approvedQty - effectivePackaged);
+                    // If explicitly marked PACKAGED (e.g. balance was wasted), remaining balance is conceptually 0
+                    const rawBalance = approvedQty - effectivePackaged;
+                    const balanceQty = batch.packagingStatus === 'PACKAGED' ? 0 : Math.max(0, rawBalance);
                     const isFullyPackaged = batch.packagingStatus === 'PACKAGED' || (isEligibleQcStatus && balanceQty <= 0.001);
                     const canPackage = isEligibleQcStatus && !isRecalled && !isFullyPackaged;
                     
@@ -782,29 +802,44 @@ export default function PackagingQueuePage() {
                               Recalled
                             </div>
                           ) : (
-                            <button
-                              disabled={!canPackage}
-                              onClick={() => {
-                                setSelectedBatch(batch);
-                                const batchUnit = batch.production?.recipe?.yieldUnit || "KG";
-                                const defaultUnit = batchUnit.toUpperCase() === "L" || batchUnit.toUpperCase() === "ML" ? "ml" : "g";
-                                setSizeValue("500");
-                                setSizeUnit(defaultUnit);
-                                const initialSize = `500${defaultUnit}`;
-                                setPacketSize(initialSize);
-                                setQuantityPackets(10);
-                                setPlans([]);
-                                updateProductMapping(batch, initialSize, products);
-                              }}
-                              className={clsx(
-                                "w-full py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all border",
-                                isSelected 
-                                  ? "bg-white dark:bg-[#13151f] text-[#f58220] border-[#f58220]"
-                                  : "bg-[#f58220] hover:bg-[#e8740e] text-white border-transparent disabled:opacity-30 disabled:hover:bg-[#f58220]"
+                            <div className="flex gap-2">
+                              <button
+                                disabled={!canPackage}
+                                onClick={() => {
+                                  setSelectedBatch(batch);
+                                  const batchUnit = batch.production?.recipe?.yieldUnit || "KG";
+                                  const defaultUnit = batchUnit.toUpperCase() === "L" || batchUnit.toUpperCase() === "ML" ? "ml" : "g";
+                                  setSizeValue("500");
+                                  setSizeUnit(defaultUnit);
+                                  const initialSize = `500${defaultUnit}`;
+                                  setPacketSize(initialSize);
+                                  setQuantityPackets(10);
+                                  setPlans([]);
+                                  updateProductMapping(batch, initialSize, products);
+                                }}
+                                className={clsx(
+                                  "flex-1 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all border",
+                                  isSelected 
+                                    ? "bg-white dark:bg-[#13151f] text-[#f58220] border-[#f58220]"
+                                    : "bg-[#f58220] hover:bg-[#e8740e] text-white border-transparent disabled:opacity-30 disabled:hover:bg-[#f58220]"
+                                )}
+                              >
+                                {isSelected ? "Currently Configuring" : "Configure Conversion"}
+                              </button>
+                              {balanceQty > 0 && !isSelected && (
+                                <button
+                                  disabled={wastingBatchId === batch.id}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setBatchToWaste(batch);
+                                  }}
+                                  title="Waste remaining balance"
+                                  className="px-3 py-2.5 rounded-lg text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 border border-red-200 dark:border-red-500/20 transition-colors flex items-center justify-center disabled:opacity-50"
+                                >
+                                  {wastingBatchId === batch.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </button>
                               )}
-                            >
-                              {isSelected ? "Currently Configuring" : "Configure Conversion"}
-                            </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -816,6 +851,41 @@ export default function PackagingQueuePage() {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={!!batchToWaste}
+        onClose={() => setBatchToWaste(null)}
+        title="Move Balance to Wastage"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3 w-full">
+            <button
+              onClick={() => setBatchToWaste(null)}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#f58220] transition-colors dark:bg-[#13151f] dark:text-gray-300 dark:border-gray-700 dark:hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleWasteBalance}
+              disabled={!!wastingBatchId}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors disabled:opacity-50 flex items-center justify-center min-w-[100px]"
+            >
+              {wastingBatchId ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Confirm Wastage"}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg flex items-start gap-3 text-red-800 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-600 dark:text-red-500" />
+            <div className="text-sm">
+              <p className="font-medium mb-1">Warning: Irreversible Action</p>
+              <p>Are you sure you want to move the remaining balance of <strong className="font-semibold">{batchToWaste?.batchCode}</strong> to wastage?</p>
+              <p className="mt-2 text-xs opacity-80">This will permanently deduct the remaining bulk stock from inventory.</p>
+            </div>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

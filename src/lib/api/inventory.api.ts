@@ -102,6 +102,7 @@ export const productionApi = {
   // Phase 1 of two-phase packaging: creates an AWAITING_CONFIRMATION ticket
   // only — bulk stock and Finished Goods are untouched until confirmPackaging.
   packageBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/package`, data),
+  wasteBalance: (id: string, note?: string) => api.post(`/api/production/batches/${id}/waste-balance`, { note }),
   // Phase 2: reports the good/damaged/spoiled split for the completed
   // physical packaging run. Only now is bulk deducted and Finished Goods created.
   verifyPackaging: (packagingId: string, data: { stickersPrinted: number; physicalChecked: boolean; goodQty: number; damagedQty: number; spoiledQty: number }) =>
