@@ -11,3 +11,4 @@ export * from './warehouse.api';
 export * from './setup.api';
 export * from './gst.api';
 export * from './alerts.api';
+export * from './ewaybill.api';

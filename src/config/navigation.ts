@@ -30,6 +30,7 @@ import {
   Barcode,
   MapPin,
   ShieldAlert,
+  FileCheck2,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -386,6 +387,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         roles: SUPER_ONLY,
       },
       {
+        icon: FileCheck2,
+        label: "E-Way Bills",
+        href: "/sales/eway-bill",
+        roles: SUPER_ONLY,
+      },
+      {
         icon: Wallet,
         label: "Payments",
         href: "/sales/payment-in",
@@ -647,6 +654,7 @@ export const franchiseMenuSections: MenuSection[] = [
       { icon: ClipboardList, label: "Sales Orders", href: "/sales/orders", roles: FRANCHISE_ONLY },
       { icon: FilePlus2, label: "Proforma Invoice", href: "/sales/proforma-invoice", roles: FRANCHISE_ONLY },
       { icon: Receipt, label: "Sale Invoice", href: "/sales/invoices", roles: FRANCHISE_ONLY },
+      { icon: FileCheck2, label: "E-Way Bills", href: "/sales/eway-bill", roles: FRANCHISE_ONLY },
       { icon: Wallet, label: "Payments", href: "/sales/payment-in", roles: FRANCHISE_ONLY },
     ],
   },
