@@ -1320,7 +1320,7 @@ export default function POSPage() {
               disabled={cart.length === 0 || loading || !accountId}
               className="flex-1 bg-emerald-200 dark:bg-emerald-600 hover:bg-emerald-300 dark:hover:bg-emerald-500 text-emerald-950 dark:text-emerald-50 disabled:opacity-50 py-3 rounded-lg text-sm font-bold transition-all shadow-sm flex flex-col items-center justify-center"
             >
-              <span>Save & Print Bill [Ctrl+P]</span>
+              <span>Save & Print Bill</span>
             </button>
           </div>
           <button
@@ -1328,7 +1328,7 @@ export default function POSPage() {
               disabled={cart.length === 0 || loading}
               className="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-slate-300 disabled:opacity-50 py-2 rounded-lg text-[11px] font-bold transition-all mt-2"
             >
-              Other/Credit Payments [Ctrl+M]
+              Other/Credit Payments
           </button>
         </div>
       </div>
