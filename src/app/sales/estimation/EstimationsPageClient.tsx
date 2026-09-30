@@ -548,7 +548,8 @@ export default function EstimationsPageClient({
       const params: Record<string, string | undefined> = {};
       if (dateFrom) params.fromDate = dateFrom;
       if (dateTo) params.toDate = dateTo;
-      if (statusFilter && statusFilter !== "ALL") params.status = statusFilter;
+      // "OPEN" spans several stored statuses (SENT/OPEN/PENDING) — filtered client-side below.
+      if (statusFilter && statusFilter !== "ALL" && statusFilter !== "OPEN") params.status = statusFilter;
       if (search.trim()) params.search = search.trim();
 
       const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
@@ -1281,6 +1282,8 @@ export default function EstimationsPageClient({
     const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
 
     let matchStatus = statusFilter === "ALL" || est.status === statusFilter;
+    // Same rule the Status column uses to show "Open" (not yet converted).
+    if (statusFilter === "OPEN") matchStatus = ["SENT", "OPEN", "PENDING"].includes(est.status);
     if (statusFilter === "Open") matchStatus = cat === "Open";
     if (statusFilter === "Overdue") matchStatus = cat === "Overdue";
     if (statusFilter === "Completed") matchStatus = cat === "Completed";
@@ -1296,7 +1299,7 @@ export default function EstimationsPageClient({
 
   const totalQuotations = filtered.reduce((s, i) => s + (i.totalAmount || 0), 0);
   const totalConverted = filtered.filter(i => i.status === "CONVERTED").reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const totalOpen = filtered.filter(i => i.status === "SENT").reduce((s, i) => s + (i.totalAmount || 0), 0);
+  const totalOpen = filtered.filter(i => ["SENT", "OPEN", "PENDING"].includes(i.status)).reduce((s, i) => s + (i.totalAmount || 0), 0);
 
   const partySourceList = partyType === "DEALER" ? dealers : (partyType === "FRANCHISE" && !isFranchiseUser) ? franchises : customers;
   const filteredCustomers = partySourceList.filter((c: any) =>
@@ -2692,7 +2695,8 @@ export default function EstimationsPageClient({
           </div>
 
           <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar bg-white dark:bg-card p-0.5 shrink-0">
-            {["ALL", "SENT", "CONVERTED", "DRAFT"].map(s => (
+            {/* "Open" (not yet converted) replaces "Sent" on both Estimate and Proforma Invoice. */}
+            {["ALL", "OPEN", "CONVERTED", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}

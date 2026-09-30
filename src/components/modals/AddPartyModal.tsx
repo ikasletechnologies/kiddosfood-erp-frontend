@@ -5,7 +5,10 @@ import { X, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import { vendorsApi, customersApi, gstApi } from "@/lib/api";
-import { INDIAN_STATES } from "@/lib/sales-ui";
+import {
+  GSTIN_RE, phoneFormatError, emailFormatError, gstinFormatError,
+  lookupPincode, matchState, stateFromGstin, StateSelect,
+} from "@/lib/party-form";
 
 export interface AddPartyModalProps {
   isOpen: boolean;
@@ -147,37 +150,40 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
     return () => clearTimeout(timer);
   }, [form.gstNumber, isOpen]);
 
-  useEffect(() => {
-    const fetchPincodeDetails = async () => {
-      if (form.pincode && form.pincode.length === 6) {
-        setFetchingPincode(true);
-        try {
-          const res = await fetch(`https://api.postalpincode.in/pincode/${form.pincode}`);
-          const data = await res.json();
-          if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice && data[0].PostOffice.length > 0) {
-            const postOffice = data[0].PostOffice[0];
-            setForm(prev => ({
-              ...prev,
-              state: postOffice.State || prev.state,
-              district: postOffice.District || prev.district,
-              city: postOffice.Block || postOffice.Region || postOffice.District || prev.city,
-            }));
-            toast.success("Location details auto-fetched!");
-          }
-        } catch (error) {
-          console.error("Failed to fetch pincode details:", error);
-        } finally {
-          setFetchingPincode(false);
-        }
-      }
-    };
-    fetchPincodeDetails();
-  }, [form.pincode]);
+  // Live format errors (derived, so they clear as soon as the value is valid);
+  // the *Error states above hold duplicate errors only.
+  const contactErr = contactError || phoneFormatError(form.contact);
+  const emailErr = emailError || emailFormatError(form.email);
+  const gstErr = gstError || gstinFormatError(form.gstNumber);
+
+  // PIN code → State / District / City (India Post). Triggered from the input
+  // (not a form.pincode effect) so opening Edit never overwrites a saved
+  // address, and the State name is mapped onto the dropdown's spelling
+  // ("Jammu & Kashmir" → "Jammu and Kashmir") so it actually shows selected.
+  const handlePincodeChange = async (raw: string) => {
+    const val = raw.replace(/\D/g, "").slice(0, 6);
+    setForm(prev => ({ ...prev, pincode: val }));
+    if (val.length !== 6) return;
+    setFetchingPincode(true);
+    const loc = await lookupPincode(val);
+    setFetchingPincode(false);
+    if (loc) {
+      setForm(prev => (prev.pincode !== val ? prev : {
+        ...prev,
+        state: loc.state || prev.state,
+        district: loc.district || prev.district,
+        city: loc.city || prev.city,
+      }));
+      toast.success("Location details auto-fetched!");
+    } else {
+      toast.error("PIN code not found — please enter State/City manually.");
+    }
+  };
 
   // Auto-fetch GST details via our backend, which proxies GSTVerify and caches results
   const fetchGstDetails = async (gstin: string) => {
     const cleanGst = gstin.trim().toUpperCase();
-    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(cleanGst)) {
+    if (!GSTIN_RE.test(cleanGst)) {
       return;
     }
 
@@ -190,7 +196,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           name: data.legalName || prev.name,
           billingAddress: data.address || prev.billingAddress,
           shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
-          state: data.state || prev.state,
+          state: matchState(data.state) || stateFromGstin(cleanGst) || prev.state,
           city: data.city || prev.city,
           pincode: data.pinCode || prev.pincode,
           gstType: "Registered Business"
@@ -199,6 +205,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
       }
     } catch (err: any) {
       console.error("Auto-fetch GST details failed:", err);
+      // The state is still known from the GSTIN's first two digits.
+      setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
       toast.error(err.response?.data?.error || "Could not auto-fetch GST details. Please enter manually.");
     } finally {
       setFetchingGst(false);
@@ -263,8 +271,12 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
   const handleConfirm = async () => {
     if (saving) return;
-    if (contactError || emailError || gstError) {
-      toast.error(contactError || emailError || gstError || "Please resolve duplicate field errors before saving.");
+    if (contactErr || emailErr || gstErr) {
+      toast.error(contactErr || emailErr || gstErr || "Please resolve duplicate field errors before saving.");
+      return;
+    }
+    if (form.gstNumber && form.gstNumber.trim() && !GSTIN_RE.test(form.gstNumber.trim().toUpperCase())) {
+      toast.error("Please enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).");
       return;
     }
     setSaving(true);
@@ -394,7 +406,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         address: form.billingAddress.trim(),
         billingAddress: form.billingAddress.trim(),
         shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : form.billingAddress.trim(),
-        state: form.state && form.state.trim() ? form.state.trim() : null,
+        state: form.state && form.state.trim() ? matchState(form.state) : null,
         district: form.district && form.district.trim() ? form.district.trim() : null,
         city: form.city && form.city.trim() ? form.city.trim() : null,
         pincode: cleanPincode,
@@ -474,11 +486,11 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   onChange={(e) => setForm({...form, contact: e.target.value.replace(/\D/g, "")})}
                   className={clsx(
                     "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5",
-                    contactError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
+                    contactErr ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
-                {contactError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{contactError}</p>
+                {contactErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{contactErr}</p>
                 )}
               </div>
               <div>
@@ -489,11 +501,11 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                   onChange={(e) => setForm({...form, email: e.target.value})}
                   className={clsx(
                     "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5",
-                    emailError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
+                    emailErr ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
-                {emailError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{emailError}</p>
+                {emailErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{emailErr}</p>
                 )}
               </div>
               {partyType === 'vendor' && (
@@ -568,7 +580,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     }}
                     className={clsx(
                       "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors uppercase font-mono pr-12 dark:bg-white/5",
-                      gstError ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
+                      gstErr ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                     )}
                   />
                   {fetchingGst ? (
@@ -577,8 +589,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 dark:text-slate-500 font-medium">{form.gstNumber.length}/15</span>
                   )}
                 </div>
-                {gstError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{gstError}</p>
+                {gstErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{gstErr}</p>
                 )}
               </div>
               <div>
@@ -637,31 +649,28 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Pincode *</label>
-                  <input
-                    placeholder="6-digit Pincode"
-                    value={form.pincode}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      setForm({...form, pincode: val});
-                    }}
-                    maxLength={6}
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
-                  />
+                  <div className="relative">
+                    <input
+                      placeholder="6-digit Pincode"
+                      inputMode="numeric"
+                      value={form.pincode}
+                      onChange={(e) => handlePincodeChange(e.target.value)}
+                      maxLength={6}
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 pr-9 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
+                    />
+                    {fetchingPincode && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 animate-spin" />}
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">State, district and city fill in automatically.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">State</label>
-                    <select
+                    <StateSelect
                       value={form.state}
-                      onChange={(e) => setForm({...form, state: e.target.value})}
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
-                    >
-                      <option value="">Select State</option>
-                      {INDIAN_STATES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
+                      onChange={(v) => setForm({...form, state: v})}
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors cursor-pointer"
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">City</label>

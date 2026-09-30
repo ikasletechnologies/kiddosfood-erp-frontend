@@ -33,8 +33,16 @@ interface DailySummary {
   collectionTotal: number;
   refundTotal: number;
   netTotal: number;
+  // Credit sales: part of today's bills left unpaid, and earlier-day credit
+  // collected today (see POSService.getDailySummary).
+  creditOutstanding?: number;
+  creditCollected?: number;
+  expectedCollection?: number;
   reconciled: boolean;
 }
+
+// ₹ amount that may be negative (a refund-only day): "−₹36.75", not "₹-36.75".
+const inr = (n: number) => `${n < 0 ? "−" : ""}₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const EMPTY_SUMMARY: DailySummary = {
   businessDate: new Date().toISOString(),
@@ -154,7 +162,8 @@ export default function SettlementPage() {
                 Business Date
               </span>
               <span className="text-slate-700 dark:text-slate-200 pl-1">
-                {formatDate(new Date())}
+                {/* The day the server is actually summarising (IST business day), not the browser clock */}
+                {formatDate(summary.businessDate)}
               </span>
             </div>
           </div>
@@ -280,26 +289,36 @@ export default function SettlementPage() {
                     ₹{summary.grandTotal.toLocaleString()}
                   </span>
                 </div>
-                {summary.refundTotal > 0 && (
-                  <>
-                    <div className="flex justify-between items-center text-sm font-semibold text-rose-600 dark:text-rose-400">
-                      <span>Refunds</span>
-                      <span className="font-bold tabular-nums">− ₹{summary.refundTotal.toLocaleString()}</span>
-                    </div>
-                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                      <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                        Net Collection
-                      </span>
-                      <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
-                        ₹{summary.netTotal.toLocaleString()}
-                      </span>
-                    </div>
-                  </>
+                {(summary.creditOutstanding ?? 0) > 0.009 && (
+                  <div className="flex justify-between items-center text-sm font-semibold text-amber-600 dark:text-amber-400">
+                    <span>Sold on Credit (unpaid)</span>
+                    <span className="font-bold tabular-nums">− {inr(summary.creditOutstanding!)}</span>
+                  </div>
                 )}
+                {(summary.creditCollected ?? 0) > 0.009 && (
+                  <div className="flex justify-between items-center text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span>Earlier Credit Collected</span>
+                    <span className="font-bold tabular-nums">+ {inr(summary.creditCollected!)}</span>
+                  </div>
+                )}
+                {summary.refundTotal > 0 && (
+                  <div className="flex justify-between items-center text-sm font-semibold text-rose-600 dark:text-rose-400">
+                    <span>Refunds</span>
+                    <span className="font-bold tabular-nums">− {inr(summary.refundTotal)}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Net Collection
+                  </span>
+                  <span className={`text-xl font-black tabular-nums ${summary.netTotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-900 dark:text-white"}`}>
+                    {inr(summary.netTotal)}
+                  </span>
+                </div>
                 {!summary.reconciled && (
                   <div className="flex items-start gap-2 p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg text-xs font-semibold text-rose-700 dark:text-rose-400">
                     <span>
-                      Settlement mismatch detected. Payment mode total ₹{summary.collectionTotal.toLocaleString()} does not match expected collection ₹{summary.grandTotal.toLocaleString()}.
+                      Settlement mismatch detected. Payment mode total {inr(summary.collectionTotal)} does not match expected collection {inr(summary.expectedCollection ?? summary.grandTotal)}.
                     </span>
                   </div>
                 )}
@@ -313,8 +332,8 @@ export default function SettlementPage() {
                   <p className="text-[11px] font-bold uppercase tracking-wider text-orange-600/70 dark:text-orange-400/70">
                     {summary.refundTotal > 0 ? "Net Collection" : "Estimated Collection"}
                   </p>
-                  <h4 className="text-3xl font-black tracking-tight text-orange-600 dark:text-orange-400 mt-1 tabular-nums">
-                    ₹{summary.netTotal.toLocaleString()}
+                  <h4 className={`text-3xl font-black tracking-tight mt-1 tabular-nums ${summary.netTotal < 0 ? "text-rose-600 dark:text-rose-400" : "text-orange-600 dark:text-orange-400"}`}>
+                    {inr(summary.netTotal)}
                   </h4>
                 </div>
                 <p className="text-[11px] font-medium text-orange-600/60 dark:text-orange-400/60 max-w-[200px]">
@@ -384,7 +403,8 @@ export default function SettlementPage() {
                   )}
                   <button
                     onClick={handleSettle}
-                    disabled={settling || loading || summary.grandTotal === 0 || !summary.reconciled}
+                    // A refund-only day (no sales, money paid out) still has to be settled.
+                    disabled={settling || loading || (summary.grandTotal === 0 && summary.refundTotal === 0 && summary.collectionTotal === 0) || !summary.reconciled}
                     title={!summary.reconciled ? "Payment-mode totals must reconcile with Gross Total before settling" : undefined}
                     className="w-full py-3 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2"
                   >

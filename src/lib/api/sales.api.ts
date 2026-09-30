@@ -39,6 +39,7 @@ export const salesApi = {
   getDeliveryChallanById: (id: string) => api.get(`/api/sales/delivery-challans/${id}`),
   createDeliveryChallan: (data: any) => api.post('/api/sales/delivery-challans', data),
   updateDeliveryChallan: (id: string, data: any) => api.patch(`/api/sales/delivery-challans/${id}`, data),
+  deleteDeliveryChallan: (id: string) => api.delete(`/api/sales/delivery-challans/${id}`),
   markDeliveryChallanDelivered: (id: string, data: { receivedBy?: string; deliveredAt?: string; podReference?: string }) =>
     api.post(`/api/sales/delivery-challans/${id}/deliver`, data),
   convertDeliveryChallanToSale: (id: string) => api.post(`/api/sales/delivery-challans/${id}/convert-to-sale`),

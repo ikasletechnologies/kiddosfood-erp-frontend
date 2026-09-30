@@ -100,7 +100,27 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   PARTIAL:  { label: "Partial",  color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
   OVERDUE:  { label: "Overdue",  color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
   CANCELLED:{ label: "Cancelled",color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
+  UNPAID:   { label: "Unpaid",   color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
 };
+
+// Paid / balance / status of one invoice row, derived from its actual
+// payments (the API merges multi-invoice receipt allocations into
+// `payments`). The stored Invoice.status isn't reliable for display — it can
+// be PENDING / UNPAID / SENT for the same "nothing paid yet" state, and the
+// old table/export used it (or missing fields) directly. Used by the table,
+// the summary strip, the OPEN filter and the Excel export so they agree.
+function invoiceFigures(inv: any): { total: number; paid: number; balance: number; status: "PAID" | "PARTIAL" | "UNPAID" | "DRAFT" | "CANCELLED" } {
+  const total = Number(inv.finalAmount ?? inv.order?.totalAmount ?? 0) || 0;
+  if (inv.status === "DRAFT") return { total, paid: 0, balance: 0, status: "DRAFT" };
+  if (inv.status === "CANCELLED" || inv.order?.status === "CANCELLED") return { total, paid: 0, balance: 0, status: "CANCELLED" };
+  const payments: any[] = Array.isArray(inv.payments) ? inv.payments : [];
+  const paid = payments.length
+    ? payments.filter(p => !p.isCancelled && (p.status === "PAID" || p.status === "SUCCESS")).reduce((s, p) => s + (Number(p.paidAmount) || 0), 0)
+    : (inv.status === "PAID" ? total : 0); // no payment rows loaded: trust a PAID flag
+  const balance = Math.max(0, Math.round((total - paid) * 100) / 100);
+  const status = balance <= 0.01 ? "PAID" : paid > 0.01 ? "PARTIAL" : "UNPAID";
+  return { total, paid: Math.min(paid, total), balance, status };
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1101,7 +1121,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     if (items.length > 1) setItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSave = async (isDraft = false) => {
+  // Returns the created invoice (posted save) or null if nothing was saved,
+  // so Save & Print / Share / New can act only on a real, successful save.
+  const handleSave = async (isDraft = false): Promise<any | null> => {
     const effectivePartyType: "CUSTOMER" | "DEALER" | "FRANCHISE" =
       partyType || (sourceFranchiseOrderId ? "FRANCHISE" : selectedCustomer?.isFranchise ? "FRANCHISE" : selectedCustomer?.isDealer ? "DEALER" : "CUSTOMER");
     const partyLabel = effectivePartyType === "FRANCHISE" ? "franchise" : effectivePartyType === "DEALER" ? "dealer" : "customer";
@@ -1109,23 +1131,24 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const hasAnyData = !!selectedCustomer || !!customerSearch.trim() || items.some(i => i.productId || i.itemSearch.trim());
     if (isDraft && !hasAnyData) {
       setView("list");
-      return;
+      return null;
     }
     if (!isDraft && !selectedCustomer && !customerSearch.trim()) {
       showToast(`Please select a ${partyLabel}`, "error");
-      return;
+      return null;
     }
 
     const validItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
-    if (!isDraft && validItems.length === 0) { showToast("Add at least one item with price", "error"); return; }
+    if (!isDraft && validItems.length === 0) { showToast("Add at least one item with price", "error"); return null; }
 
     if (!isDraft && hasInsufficientStock) {
       const details = insufficientItems
         .map((i: any) => `"${i.name}" (Available: ${i.available} ${i.unit}, Required: ${i.required} ${i.unit})`)
         .join(", ");
       showToast(`Cannot create invoice: Insufficient stock for ${details}`, "error");
-      return;
+      return null;
     }
+    let created: any = null;
 
     const itemsToSave = isDraft ? items.filter(i => i.productId || i.itemSearch.trim()) : validItems;
 
@@ -1172,7 +1195,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         if (dRes?.data?.id) setDraftId(dRes.data.id);
         showToast("Draft saved successfully", "success");
       } else {
-        await api.post("/api/sales/invoices", payload);
+        const cRes: any = await api.post("/api/sales/invoices", payload);
+        created = cRes?.data || null;
         if (draftId) {
           await draftsApi.deleteDraft(draftId).catch(() => {});
         }
@@ -1192,11 +1216,64 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       } else {
         setView("list");
       }
+      return created || (isDraft ? { draft: true } : null);
     } catch (e: any) {
       showToast(e?.response?.data?.error || "Failed to save invoice", "error");
+      return null;
     } finally {
       setSaving(false);
     }
+  };
+
+  // ── Save & Print / Share ─────────────────────────────────────────────────
+  // Both act on the SAVED invoice (full record from the API, with items and
+  // party), not the editing form — the old Print called window.print() on
+  // the form and Share shared the form page's URL.
+  const loadFullInvoice = async (created: any) => {
+    if (!created?.id) return null;
+    try {
+      const r: any = await api.get(`/api/sales/invoices/${created.id}`);
+      return r?.data || created;
+    } catch {
+      return created;
+    }
+  };
+
+  const saveAndPrint = async () => {
+    setShowShareDrop(false);
+    const full = await loadFullInvoice(await handleSave(false));
+    if (!full) return;
+    // On /sales/invoices/new, saving navigates back to the list (a remount),
+    // which would drop an in-page print dialog — open the saved invoice's
+    // view instead, where Print / Download is one click.
+    if (initialView === "create" && full.id) router.push(`/sales/invoices?id=${full.id}`);
+    else setPrintingInvoice(full);
+  };
+
+  const saveAndShareWhatsApp = async () => {
+    setShowShareDrop(false);
+    // Open the tab now (inside the click) so popup blockers allow it.
+    const win = window.open("", "_blank");
+    const full = await loadFullInvoice(await handleSave(false));
+    if (!full) { win?.close(); return; }
+    const order = full.order || {};
+    const party = getPartyDisplayName(order, full);
+    const figs = invoiceFigures(full);
+    const company = companyProfile?.companyName || companyProfile?.legalName || "";
+    const lines = [
+      `Dear ${party},`,
+      ``,
+      `Thank you for your purchase${company ? ` from ${company}` : ""}.`,
+      `Invoice: ${order.invoiceNum || "—"}`,
+      `Date: ${full.createdAt ? formatDate(full.createdAt) : formatDate(new Date())}`,
+      `Amount: ₹${figs.total.toFixed(2)}`,
+      figs.balance > 0 ? `Balance due: ₹${figs.balance.toFixed(2)}` : `Status: Paid`,
+    ];
+    const digits = String(order.customerPhone || order.customer?.phone || order.dealer?.phone || customerPhone || "").replace(/\D/g, "");
+    const phone = digits.length === 10 ? `91${digits}` : digits.length === 12 && digits.startsWith("91") ? digits : "";
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`;
+    if (win) win.location.href = url; else window.open(url, "_blank");
+    if (!phone) showToast("No valid mobile number on this invoice — pick the contact in WhatsApp", "info");
   };
 
   const handleDeleteDraft = async (id: string) => {
@@ -1259,6 +1336,63 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setView("create");
   };
 
+  // "Duplicate Invoice": a brand-new invoice pre-filled from an existing one —
+  // same party, place of supply, items, terms and notes; new number (auto),
+  // today's date, nothing paid. The original is untouched.
+  const duplicateInvoice = (inv: any) => {
+    const order = inv.order || {};
+    const lines: any[] = order.orderItems || [];
+    openCreate(); // reset everything first, exactly like "New Invoice"
+
+    const pt = (order.partyType || "CUSTOMER") as "CUSTOMER" | "DEALER" | "FRANCHISE";
+    const src = pt === "DEALER" ? order.dealer : pt === "FRANCHISE" ? order.buyerFranchise : order.customer;
+    setPartyType(pt);
+    if (src?.id) {
+      const phone = src.phone || src.contact || src.contactNum || order.customerPhone || "";
+      setSelectedCustomer({
+        id: src.id, name: src.name || order.customerName || "", contact: phone, phone,
+        state: src.state || "", gstin: src.gstin || src.gstNumber || "", gstNumber: src.gstin || src.gstNumber || "",
+        isFranchise: pt === "FRANCHISE", isDealer: pt === "DEALER", partyType: pt, raw: src,
+      });
+      setCustomerSearch(src.name || order.customerName || "");
+      setCustomerPhone(phone);
+    } else {
+      // Walk-in / party no longer on file — keep the name so the user can re-pick.
+      setCustomerSearch(order.customerName || "");
+      setCustomerPhone(order.customerPhone || "");
+    }
+    setStateOfSupply(order.stateOfSupply || src?.state || "");
+    setPaymentType(order.paymentType === "CREDIT" ? "CREDIT" : "CASH");
+
+    if (lines.length) {
+      setItems(lines.map((oi: any) => {
+        const qty = Number(oi.quantity) || 1;
+        const rate = Number(oi.price) || 0;
+        const base = qty * rate;
+        // Order lines store the tax amount, not always the rate — derive it.
+        const storedRate = oi.taxPercent ?? oi.gstRate ?? oi.product?.taxPercent;
+        const taxPct = storedRate != null ? Number(storedRate)
+          : base > 0 && oi.taxAmount != null ? Math.round((Number(oi.taxAmount) / base) * 1000) / 10 : 0;
+        const discountPct = oi.discountPct ? Number(oi.discountPct)
+          : oi.discountAmount && base > 0 ? (Number(oi.discountAmount) / base) * 100 : 0;
+        return {
+          ...makeItem(),
+          productId: oi.productId || "",
+          sku: oi.product?.sku,
+          itemSearch: oi.product?.name || oi.productName || "",
+          qty, unit: oi.unit || "NONE", rate, basePrice: rate,
+          discountPct: Math.round(discountPct * 100) / 100,
+          taxPct,
+          taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
+        };
+      }));
+    }
+    if (inv.termsAndConditions) { setTermsText(inv.termsAndConditions); setShowTerms(true); }
+    const notes = inv.description || inv.notes;
+    if (notes) { setDescription(notes); setShowDesc(true); }
+    showToast(`Copied ${order.invoiceNum || "invoice"} — review and save as a new invoice`, "success");
+  };
+
   const handlePrint = (inv: any) => {
     setPrintingInvoice(inv);
   };
@@ -1281,14 +1415,19 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const matchSearch = !search ||
       (inv.order?.invoiceNum || "").toLowerCase().includes(search.toLowerCase()) ||
       partyName.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "ALL" || inv.status === statusFilter;
+    // "OPEN" = anything still to be collected (Sent / Pending / Unpaid /
+    // Partial / Overdue) — i.e. not Paid, not a Draft, not Cancelled.
+    const st = invoiceFigures(inv).status;
+    const matchStatus = statusFilter === "ALL"
+      || (statusFilter === "OPEN" ? st === "UNPAID" || st === "PARTIAL" : st === statusFilter);
     return matchSearch && matchStatus;
   });
 
-  const nonDraft     = filtered.filter(i => i.status !== "DRAFT");
-  const totalAmt     = nonDraft.reduce((s, i) => s + (i.finalAmount || 0), 0);
-  const receivedAmt  = nonDraft.filter(i => i.status === "PAID").reduce((s, i) => s + (i.finalAmount || 0), 0);
-  const balanceAmt   = totalAmt - receivedAmt;
+  // Drafts and cancelled invoices aren't sales; partial payments count as received.
+  const billed       = filtered.map(invoiceFigures).filter(f => f.status !== "DRAFT" && f.status !== "CANCELLED");
+  const totalAmt     = billed.reduce((s, f) => s + f.total, 0);
+  const receivedAmt  = billed.reduce((s, f) => s + f.paid, 0);
+  const balanceAmt   = billed.reduce((s, f) => s + f.balance, 0);
 
   const currentPartyList = useMemo(() => {
     if (partyType === "FRANCHISE") return franchises;
@@ -1296,11 +1435,27 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     if (isFranchiseUser && user?.franchiseId) {
       return customers.filter((c: any) => c.franchiseId === user.franchiseId);
     }
-    if (selectedFranchiseId) {
-      return customers.filter((c: any) => c.franchiseId === selectedFranchiseId);
-    }
-    return customers.filter((c: any) => !c.franchiseId);
+    // HQ's customers include legacy rows saved with no franchiseId (which
+    // means HQ). Previously an empty selection (super admin whose login has
+    // no franchiseId) matched ONLY null-franchise customers, hiding every
+    // customer actually saved under HQ → "No customers found".
+    const hqId = franchises.find((f: any) => f.isHQ)?.id;
+    const scope = selectedFranchiseId || hqId || "";
+    return customers.filter((c: any) =>
+      c.franchiseId ? c.franchiseId === scope : (!scope || scope === hqId)
+    );
   }, [partyType, franchises, dealers, customers, isFranchiseUser, user?.franchiseId, selectedFranchiseId]);
+
+  // The branch <select> shows its first option (HQ) when its value is "" —
+  // make the state actually match what's displayed once branches load, so
+  // the customer list and the saved invoice both use HQ, not "no branch".
+  useEffect(() => {
+    if (isFranchiseUser || !franchises.length) return;
+    if (!selectedFranchiseId || !franchises.some((f: any) => f.id === selectedFranchiseId)) {
+      const hq = franchises.find((f: any) => f.isHQ) || franchises[0];
+      if (hq?.id) setSelectedFranchiseId(hq.id);
+    }
+  }, [franchises, isFranchiseUser, selectedFranchiseId]);
   const filteredCustomers = currentPartyList.filter((c: any) =>
     !customerSearch ||
     (c.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
@@ -1323,16 +1478,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const franchise = order.franchise || {};
     const invoice = inv;
     const payments = inv.payments || [];
-    const paidAmt = payments
-      .filter((p: any) => p.status === "PAID" && !p.isCancelled)
-      .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-    const balance = Math.max(0, (inv.finalAmount || 0) - paidAmt);
+    // Same paid / balance / status rules as the list and Excel export.
+    const figs = invoiceFigures(inv);
+    const paidAmt = figs.paid;
+    const balance = figs.balance;
+    const statusStyle = STATUS_STYLES[figs.status] || STATUS_STYLES.DRAFT;
+    const isValidPayment = (p: any) => !p.isCancelled && (p.status === "PAID" || p.status === "SUCCESS");
 
     const partyTypeLabel = order.partyType || (order.dealerId ? "DEALER" : order.franchiseId ? "FRANCHISE" : "CUSTOMER");
     const partyPhone = customer.phone || customer.contact || dealer.phone || franchise.contactNum || order.customerPhone || "—";
     const partyEmail = customer.email || dealer.email || franchise.email || "—";
-    const partyGstin = customer.gstNumber || customer.gstin || dealer.gstin || franchise.gstin || "—";
-    const partyGstType = customer.gstType || (partyGstin !== "—" ? "Registered Business" : "Unregistered / Consumer");
+    const partyGstin = customer.gstNumber || customer.gstin || dealer.gstNumber || dealer.gstin || franchise.gstin || "—";
+    const partyGstType = customer.gstType || dealer.gstType || (partyGstin !== "—" ? "Registered Business" : "Unregistered / Consumer");
     const billingAddress = customer.billingAddress || customer.address || dealer.address || franchise.location || "—";
     const shippingAddress = customer.shippingAddress || customer.address || dealer.address || franchise.location || "—";
 
@@ -1346,6 +1503,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
     const deliveryCharge = Number(order.deliveryCharge || order.shippingAmount || order.freightCost || 0);
     const discountAmount = Number(order.discountAmount || order.discount || 0);
+    // POS bills round the total up but don't store Invoice.roundOff, so
+    // derive it — otherwise ₹35 + ₹1.75 tax shows a ₹37.00 total with no
+    // visible reason.
+    const grandTotal = Number(inv.finalAmount || 0);
+    const roundOffAmt = Number(inv.roundOff || 0) !== 0
+      ? Number(inv.roundOff)
+      : Math.round((grandTotal - (Number(order.subTotal || 0) - discountAmount + deliveryCharge + totalTax)) * 100) / 100;
 
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 min-h-screen w-full min-w-0">
@@ -1366,14 +1530,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
                   Sale Invoice — {order.invoiceNum || "—"}
                 </h2>
-                <span className={clsx(
-                  "inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border",
-                  invoice.status === "PAID" ? "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20"
-                  : invoice.status === "PARTIAL" ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-                  : invoice.status === "CANCELLED" ? "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20"
-                  : "text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10"
-                )}>
-                  {invoice.status || order.paymentStatus || "UNPAID"}
+                <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0", statusStyle.color, statusStyle.bg, statusStyle.border)}>
+                  {statusStyle.label}
                 </span>
               </div>
               {order.sourceProformaInvoiceId && (
@@ -1410,7 +1568,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-4 md:p-6 space-y-4 w-full min-w-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 sm:p-4 md:p-6 w-full min-w-0">
+         <div className="max-w-6xl mx-auto space-y-4 w-full min-w-0">
           {/* Party Details & Invoice Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0">
             {/* Customer / Party Card */}
@@ -1481,13 +1640,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 </div>
                 <div className="flex justify-between pt-1 border-t border-gray-100 dark:border-white/5">
                   <span className="text-gray-500 dark:text-slate-400">Payment Status</span>
-                  <span className={clsx(
-                    "font-bold text-xs px-2 py-0.5 rounded",
-                    invoice.status === "PAID" ? "text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-500/10"
-                    : invoice.status === "PARTIAL" ? "text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-500/10"
-                    : "text-slate-700 bg-slate-100 dark:text-slate-300 dark:bg-white/5"
-                  )}>
-                    {invoice.status || order.paymentStatus || "UNPAID"}
+                  <span className={clsx("font-bold text-xs px-2 py-0.5 rounded-full border", statusStyle.color, statusStyle.bg, statusStyle.border)}>
+                    {statusStyle.label}
                   </span>
                 </div>
               </div>
@@ -1531,7 +1685,15 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                         <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.unit || it.product?.unit || "PC"}</td>
                         <td className="px-4 py-2.5 text-right font-mono text-gray-800 dark:text-slate-200">₹{Number(it.price || 0).toFixed(2)}</td>
                         <td className="px-4 py-2.5 text-right font-mono text-gray-500 dark:text-slate-400">{discountVal}</td>
-                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">{it.taxPercent ?? it.gstRate ?? "—"}%</td>
+                        <td className="px-4 py-2.5 text-center text-gray-500 dark:text-slate-400">
+                          {(() => {
+                            // Order lines often store only the tax amount — derive the rate from it.
+                            const stored = it.taxPercent ?? it.gstRate ?? it.product?.taxPercent;
+                            if (stored !== undefined && stored !== null) return `${Number(stored)}%`;
+                            const base = Number(it.price || 0) * Number(it.quantity || 0);
+                            return base > 0 && it.taxAmount != null ? `${Math.round((Number(it.taxAmount) / base) * 1000) / 10}%` : "—";
+                          })()}
+                        </td>
                         <td className="px-4 py-2.5 text-right font-mono text-gray-600 dark:text-slate-300">₹{Number(it.taxAmount || 0).toFixed(2)}</td>
                         <td className="px-4 py-2.5 text-right font-mono font-bold text-gray-900 dark:text-white">₹{Number(it.totalAmount || 0).toFixed(2)}</td>
                       </tr>
@@ -1555,17 +1717,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               ) : (
                 <div className="space-y-2">
                   {payments.map((p: any, i: number) => (
-                    <div key={i} className="flex justify-between items-center text-sm py-1.5 px-2 rounded-lg bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5">
-                      <div>
-                        <span className={clsx("font-medium text-gray-800 dark:text-slate-200 block text-xs", (p.isCancelled || p.status !== "PAID") && "line-through opacity-60")}>
-                          {p.paymentMode || p.method || "Payment"} {p.reference ? `(${p.reference})` : ""}
+                    <div key={i} className="flex justify-between items-center gap-3 text-sm py-2 px-3 rounded-lg bg-gray-50/50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5">
+                      <div className="min-w-0">
+                        <span className={clsx("font-medium text-gray-800 dark:text-slate-200 block text-xs truncate", !isValidPayment(p) && "line-through opacity-60")}>
+                          {p.paymentNumber ? `${p.paymentNumber} · ` : ""}{p.paymentMode || p.method || "Payment"} {p.reference ? `(${p.reference})` : ""}
                         </span>
                         <span className="text-[11px] text-gray-400 dark:text-slate-500">
                           {p.createdAt ? formatDate(p.createdAt) : ""}
-                          {p.isCancelled ? " • Cancelled" : p.status !== "PAID" ? ` • ${p.status}` : " • Settled"}
+                          {p.isCancelled ? " • Cancelled" : isValidPayment(p) ? " • Settled" : ` • ${p.status}`}
                         </span>
                       </div>
-                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                      <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm shrink-0">
                         ₹{Number(p.paidAmount || p.amount || 0).toFixed(2)}
                       </span>
                     </div>
@@ -1575,7 +1737,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </div>
 
             {/* Financial Summary card */}
-            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full lg:w-88 shrink-0 space-y-2.5 shadow-2xs">
+            {/* lg:w-[22rem] — the previous lg:w-88 isn't a Tailwind v3 class, so this card
+                went full-width and crushed the payments panel beside it. */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 w-full lg:w-[22rem] shrink-0 space-y-2.5 shadow-2xs">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-500 dark:text-slate-400">Subtotal</span>
                 <span className="font-mono font-semibold text-gray-700 dark:text-slate-200">₹{(order.subTotal || 0).toFixed(2)}</span>
@@ -1617,15 +1781,15 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   </div>
                 </div>
               )}
-              {Number(inv.roundOff || 0) !== 0 && (
+              {Math.abs(roundOffAmt) >= 0.01 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500 dark:text-slate-400">Round Off</span>
-                  <span className="font-mono text-gray-600 dark:text-slate-300">₹{Number(inv.roundOff || 0).toFixed(2)}</span>
+                  <span className="font-mono text-gray-600 dark:text-slate-300">{roundOffAmt > 0 ? "+" : "−"}₹{Math.abs(roundOffAmt).toFixed(2)}</span>
                 </div>
               )}
               <div className="pt-2.5 border-t border-gray-200 dark:border-white/10 flex justify-between items-center">
                 <span className="font-bold text-gray-800 dark:text-white">Grand Total</span>
-                <span className="text-lg font-bold font-mono text-[#f58220]">₹{Number(inv.finalAmount || 0).toFixed(2)}</span>
+                <span className="text-lg font-bold font-mono text-[#f58220]">₹{grandTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm pt-1">
                 <span className="text-emerald-600 dark:text-emerald-400 font-medium">Amount Paid</span>
@@ -1641,6 +1805,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               </div>
             </div>
           </div>
+         </div>
         </div>
       </div>
     );
@@ -2392,49 +2557,44 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 </button>
               </div>
               {showShareDrop && (
-                <div className="absolute bottom-full right-0 mb-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl text-xs w-44 z-50 p-1 animate-in zoom-in-95 duration-150">
-                  <button className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg cursor-pointer">Generate e-Invoice</button>
-                  <button 
-                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer"
-                    onClick={async () => {
-                      setShowShareDrop(false);
-                      if (navigator.share) {
-                        try {
-                          await navigator.share({
-                            title: 'Invoice',
-                            text: 'Please find the attached invoice.',
-                            url: window.location.href,
-                          });
-                        } catch (err) {
-                          console.log('Error sharing', err);
-                        }
-                      } else {
-                        showToast("Share API not supported in your browser.", "error");
-                      }
-                    }}
+                <div className="absolute bottom-full right-0 mb-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl text-xs w-56 z-50 p-1 animate-in zoom-in-95 duration-150">
+                  <button
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={saving || hasInsufficientStock}
+                    onClick={saveAndShareWhatsApp}
+                    title="Save the invoice and send the details on WhatsApp"
                   >
-                    <Share2 size={13} /> Share
-                  </button>
-                  <button 
-                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer"
-                    onClick={() => {
-                      setShowShareDrop(false);
-                      window.print();
-                    }}
-                  >
-                    <Printer size={13} /> Print
+                    <Share2 size={13} /> Save &amp; Share (WhatsApp)
                   </button>
                   <button
-                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={hasInsufficientStock}
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={saving || hasInsufficientStock}
+                    onClick={saveAndPrint}
+                    title="Save the invoice and print / download it"
+                  >
+                    <Printer size={13} /> Save &amp; Print
+                  </button>
+                  <button
+                    className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={saving || hasInsufficientStock}
                     onClick={async () => {
                       if (hasInsufficientStock) return;
                       setShowShareDrop(false);
-                      await handleSave(false);
-                      openCreate();
+                      // Only clear the form when the save actually succeeded.
+                      const saved = await handleSave(false);
+                      if (saved) openCreate();
                     }}
                   >
-                    Save &amp; New
+                    <Plus size={13} /> Save &amp; New
+                  </button>
+                  <div className="my-1 border-t border-gray-100 dark:border-white/5" />
+                  {/* No IRP / GSP credentials are configured, so an IRN can't be issued from here. */}
+                  <button
+                    className="w-full px-3 py-2 text-left text-gray-400 dark:text-slate-500 rounded-lg flex items-center gap-2 cursor-not-allowed"
+                    onClick={() => showToast("e-Invoice (IRN) needs the GST e-invoice portal (IRP) set up via a GSP. Not configured yet.", "info")}
+                    title="Requires GST e-invoice portal (IRP) access via a GSP — not configured"
+                  >
+                    <FileCheck size={13} /> e-Invoice (setup needed)
                   </button>
                 </div>
               )}
@@ -2535,20 +2695,30 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       { header: "Party Type", key: "partyType" },
       { header: "Payment Type", key: "paymentType" },
       { header: "Total Amount (₹)", key: "total", format: "currency" as const },
+      { header: "Received (₹)", key: "paid", format: "currency" as const },
       { header: "Balance Due (₹)", key: "balance", format: "currency" as const },
       { header: "Status", key: "status" },
     ];
 
-    const data = filtered.map((inv) => ({
-      formattedDate: inv.invoiceDate ? formatDate(inv.invoiceDate + "T00:00:00") : "—",
-      invoiceNumber: inv.invoiceNumber || "—",
-      partyName: inv.customer?.name || inv.customerName || "Walk-In Customer",
-      partyType: inv.partyType || "RETAIL",
-      paymentType: inv.paymentType || "CASH",
-      total: Number(inv.totalAmount || 0),
-      balance: Number(inv.balanceAmount || 0),
-      status: (inv.status || "SENT").toUpperCase(),
-    }));
+    // Same fields the on-screen table shows (the old mapping read invoiceDate /
+    // invoiceNumber / balanceAmount, which don't exist on these rows, and
+    // totalAmount, which is the pre-tax subtotal).
+    const data = filtered.map((inv) => {
+      const f = invoiceFigures(inv);
+      return {
+        formattedDate: inv.createdAt ? formatDate(inv.createdAt) : "—",
+        invoiceNumber: inv.order?.invoiceNum
+          ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
+          : (f.status === "DRAFT" ? "Draft (not numbered)" : "—"),
+        partyName: getPartyDisplayName(inv.order, inv),
+        partyType: inv.order?.partyType || "CUSTOMER",
+        paymentType: inv.order?.paymentType === "CREDIT" ? "CREDIT" : "CASH",
+        total: f.total,
+        paid: f.paid,
+        balance: f.balance,
+        status: STATUS_STYLES[f.status]?.label || f.status,
+      };
+    });
 
     exportReportToExcel({
       filename: `Sale-Invoices_${dateFrom}_${dateTo}.xlsx`,
@@ -2560,6 +2730,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       totals: {
         partyName: "Total",
         total: totalAmt,
+        paid: receivedAmt,
         balance: balanceAmt,
       },
     });
@@ -2643,7 +2814,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between sm:justify-end min-w-0">
             <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar p-0.5 bg-white dark:bg-card shrink-0">
-              {["ALL", "SENT", "PAID", "DRAFT"].map(s => (
+              {["ALL", "OPEN", "PAID", "DRAFT"].map(s => (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
@@ -2736,10 +2907,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {filtered.map((inv) => {
-                    const isPaid   = inv.status === "PAID";
-                    const isDraft  = inv.status === "DRAFT";
-                    const balance  = isPaid || isDraft ? 0 : (inv.finalAmount || 0);
-                    const style = STATUS_STYLES[inv.status] || STATUS_STYLES.DRAFT;
+                    const figs     = invoiceFigures(inv);
+                    const isDraft  = figs.status === "DRAFT";
+                    const balance  = figs.balance;
+                    const style = STATUS_STYLES[figs.status] || STATUS_STYLES.DRAFT;
                     return (
                       <tr 
                         key={inv.id} 
@@ -2818,7 +2989,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                 more visible shortcut for a disposable draft. */}
                             {isDraft && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteDraft(inv.id); }}
+                                onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this draft invoice? This cannot be undone.")) handleDeleteDraft(inv.id); }}
                                 className="px-2 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                                 title="Delete Draft"
                               >
@@ -2896,22 +3067,25 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                       <span>View Invoice</span>
                                     </button>
 
+                                    {/* Only drafts are editable — there is no API to change a
+                                        posted tax invoice (it has already moved stock/ledger).
+                                        Previously this opened a blank form claiming it had loaded. */}
                                     <button
-                                      disabled={inv.status === "CANCELLED"}
+                                      disabled={!isDraft}
+                                      title={isDraft ? "Edit this draft" : "Posted invoices can't be edited. Use Duplicate Invoice to re-issue, then Cancel this one."}
                                       onClick={() => {
                                         setOpenActionMenu(null);
-                                        if (isDraft) { loadDraft(inv); }
-                                        else { showToast("Edit loaded into active invoice form", "info"); setView("create"); }
+                                        if (isDraft) loadDraft(inv);
                                       }}
                                       className={clsx(
                                         "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
-                                        inv.status === "CANCELLED"
+                                        !isDraft
                                           ? "opacity-40 cursor-not-allowed text-slate-400"
                                           : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
                                       )}
                                     >
                                       <Pencil size={14} className="text-slate-400" />
-                                      <span>Edit Invoice</span>
+                                      <span>{isDraft ? "Edit Invoice" : "Edit (drafts only)"}</span>
                                     </button>
 
                                     {/* Receive Payment (Prominent when balance > 0) */}
@@ -2978,14 +3152,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                     </button>
 
                                     <button
-                                      disabled={inv.status === "CANCELLED"}
+                                      disabled={inv.status === "CANCELLED" || isDraft}
+                                      title={isDraft ? "Save the invoice before creating a return" : undefined}
                                       onClick={() => {
                                         setOpenActionMenu(null);
-                                        router.push(`/sales/returns?sourceInvoiceId=${inv.id}`);
+                                        // The Returns page reads ?orderId / ?invoiceNum (it never read sourceInvoiceId).
+                                        const oid = inv.order?.id || inv.orderId;
+                                        const num = inv.order?.invoiceNum;
+                                        router.push(`/sales/returns?${oid ? `orderId=${encodeURIComponent(oid)}` : ""}${num ? `${oid ? "&" : ""}invoiceNum=${encodeURIComponent(num)}` : ""}`);
                                       }}
                                       className={clsx(
                                         "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
-                                        inv.status === "CANCELLED"
+                                        inv.status === "CANCELLED" || isDraft
                                           ? "opacity-40 cursor-not-allowed text-slate-400"
                                           : "text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer"
                                       )}
@@ -2997,9 +3175,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                     <button
                                       onClick={() => {
                                         setOpenActionMenu(null);
-                                        openCreate();
-                                        if (inv.order?.customer) setSelectedCustomer(inv.order.customer);
-                                        showToast("Invoice duplicated as a new document draft", "success");
+                                        if (isDraft) loadDraft(inv); else duplicateInvoice(inv);
                                       }}
                                       className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
                                     >
@@ -3053,19 +3229,26 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                       <span>Cancel Invoice</span>
                                     </button>
 
+                                    {/* Only unsaved drafts can be deleted; posted tax invoices are
+                                        kept for the audit trail / GST returns and must be cancelled. */}
                                     <button
+                                      disabled={!isDraft}
+                                      title={isDraft ? "Delete this draft" : "Posted invoices can't be deleted (audit / GST record). Use Cancel Invoice."}
                                       onClick={() => {
                                         setOpenActionMenu(null);
-                                        if (isDraft) {
+                                        if (isDraft && window.confirm("Delete this draft invoice? This cannot be undone.")) {
                                           handleDeleteDraft(inv.id);
-                                        } else {
-                                          showToast("Posted invoices cannot be deleted to preserve audit history. Use Cancel Invoice instead.", "error");
                                         }
                                       }}
-                                      className="w-full text-left px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl flex items-center gap-2.5 cursor-pointer transition-colors"
+                                      className={clsx(
+                                        "w-full text-left px-3 py-2 text-xs font-semibold rounded-xl flex items-center gap-2.5 transition-colors",
+                                        isDraft
+                                          ? "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 cursor-pointer"
+                                          : "opacity-40 cursor-not-allowed text-slate-400"
+                                      )}
                                     >
-                                      <Trash2 size={14} className="text-rose-500" />
-                                      <span>Delete Invoice</span>
+                                      <Trash2 size={14} className={isDraft ? "text-rose-500" : "text-slate-400"} />
+                                      <span>{isDraft ? "Delete Draft" : "Delete (drafts only)"}</span>
                                     </button>
                                   </div>
                                 </div>

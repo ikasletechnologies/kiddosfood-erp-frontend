@@ -226,12 +226,14 @@ export default function DeliveryChallanPage() {
 
   // Navigation State
   const [view, setView] = useState<"list" | "create" | "edit" | "transit">(searchParams.get("sourceInvoiceId") ? "create" : "list");
+  const [deleteChallanId, setDeleteChallanId] = useState<string | null>(null);
   const [transitStock, setTransitStock] = useState<any[]>([]);
   const [transitLoading, setTransitLoading] = useState(false);
   const [sourceInvoiceIdState, setSourceInvoiceIdState] = useState<string | null>(searchParams.get("sourceInvoiceId"));
   const [challans, setChallans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  // ?search= pre-fills the list search (e.g. "Open" from Dispatch Tracking).
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
   const [dealers, setDealers] = useState<any[]>([]);
@@ -356,6 +358,31 @@ export default function DeliveryChallanPage() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   const [showRowMenu, setShowRowMenu] = useState<string | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; bottom: number; right: number; openUp: boolean } | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close the row ⋮ menu on outside click, Escape, scroll or resize (it's
+  // fixed-positioned, so it would otherwise float away from its row).
+  useEffect(() => {
+    if (!showRowMenu) return;
+    const close = () => setShowRowMenu(null);
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (rowMenuRef.current?.contains(t) || t.closest?.(`[data-row-menu-btn="${showRowMenu}"]`)) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [showRowMenu]);
   const [previewingChallan, setPreviewingChallan] = useState<any>(null);
   const [deliveringChallan, setDeliveringChallan] = useState<any>(null);
   const [returningChallan, setReturningChallan] = useState<any>(null);
@@ -433,29 +460,38 @@ export default function DeliveryChallanPage() {
       const mappedChallans = apiChallans.map((dc: any) => {
         let name = dc.customerName;
         let phone = dc.customerPhone || "";
+        // Full party record, kept for the printed "Billed to" block (address,
+        // GSTIN). Previously only name/phone survived, so the print showed the
+        // state of supply where the address should be.
+        let party: any = null;
         if (dc.customerId) {
           const c = customerList.find((x: any) => x.id === dc.customerId);
           if (c) {
             name = c.name;
             phone = c.phone || phone;
+            party = c;
           } else if (dc.customer) {
             name = dc.customer.name;
             phone = dc.customer.phone || phone;
+            party = dc.customer;
           }
         } else if (dc.dealerId) {
           const dl = dealerList.find((x: any) => x.id === dc.dealerId);
           if (dl) {
             name = dl.name;
             phone = dl.phone || phone;
+            party = dl;
           } else if (dc.dealer) {
             name = dc.dealer.name;
             phone = dc.dealer.phone || phone;
+            party = dc.dealer;
           }
         } else if (dc.franchiseId) {
           const f = franchiseList.find((x: any) => x.id === dc.franchiseId);
           if (f) {
             name = f.name;
-            phone = f.phone || phone;
+            phone = f.phone || f.contactNum || phone;
+            party = { ...f, address: f.location };
           }
         }
         return {
@@ -466,6 +502,7 @@ export default function DeliveryChallanPage() {
           dueDate: dc.dueDate ? dc.dueDate.split("T")[0] : dc.invoiceDate || new Date().toISOString().split("T")[0],
           customerName: name || "Unknown Party",
           customerPhone: phone,
+          party,
           finalAmount: dc.finalAmount || dc.totalAmount || 0,
         };
       });
@@ -960,8 +997,9 @@ export default function DeliveryChallanPage() {
       franchiseId: destType === "FRANCHISE" ? (selectedFranchise?.id || null) : null,
       sourceFranchiseId,
       sourceInvoiceId: sourceInvoiceIdState || undefined,
-      vehicleNo: vehicleNo || undefined,
-      driverName: driverName || undefined,
+      // null (not undefined) so clearing a field on edit actually clears it.
+      vehicleNo: vehicleNo.trim() || null,
+      driverName: driverName.trim() || null,
       status,
       challanDate: invoiceDate,
       dueDate,
@@ -1107,19 +1145,24 @@ export default function DeliveryChallanPage() {
     setView("edit");
   };
 
-  const handleDelete = (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this Delivery Challan?")) return;
+  // Deletes on the server (drafts only — the API refuses anything dispatched).
+  // Previously this only removed a localStorage copy and still said
+  // "deleted", so the challan reappeared on the next refresh.
+  // Confirmation is the Delete Confirmation Modal (deleteChallanId) — no second prompt here.
+  const handleDelete = async (id: string) => {
     try {
-      const localData = localStorage.getItem("sale_delivery_challans");
-      if (localData) {
-        let locals = JSON.parse(localData);
-        locals = locals.filter((x: any) => x.id !== id);
-        localStorage.setItem("sale_delivery_challans", JSON.stringify(locals));
-      }
+      await salesApi.deleteDeliveryChallan(id);
+      try {
+        const localData = localStorage.getItem("sale_delivery_challans");
+        if (localData) {
+          localStorage.setItem("sale_delivery_challans", JSON.stringify(JSON.parse(localData).filter((x: any) => x.id !== id)));
+        }
+      } catch {}
+      setChallans(prev => prev.filter((c: any) => c.id !== id));
       showToast("Challan deleted successfully", "success");
       fetchData();
-    } catch (e) {
-      showToast("Failed to delete challan", "error");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Failed to delete challan", "error");
     }
   };
 
@@ -2355,30 +2398,23 @@ export default function DeliveryChallanPage() {
                           {dc.status === "CLOSED" && (
                             <button
                               onClick={() => setConvertingChallan(dc)}
-                              className="px-2.5 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-500/10 rounded transition-colors cursor-pointer"
+                              className="px-2.5 py-1 text-xs font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors cursor-pointer"
                             >
                               Convert to Sale
                             </button>
                           )}
-                          {dc.status === "CONVERTED" && (
-                            <div className="flex gap-2">
-                              {dc.convertedOrderId && (
-                                <a
-                                  href={`/sales/order?search=${dc.convertedOrderId}`}
-                                  className="px-2.5 py-1 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded transition-colors"
-                                >
-                                  View Sale
-                                </a>
-                              )}
-                              {dc.convertedInvoiceId && (
-                                <a
-                                  href={`/sales/tax-invoice?search=${dc.convertedInvoiceId}`}
-                                  className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors"
-                                >
-                                  View Invoice
-                                </a>
-                              )}
-                            </div>
+                          {/* Converting a challan creates one Sale Invoice (Order + Invoice).
+                              The old "View Sale" / "View Invoice" links pointed at
+                              /sales/order and /sales/tax-invoice, which don't exist (404).
+                              /sales/invoices?id= accepts either the invoice or order id. */}
+                          {dc.status === "CONVERTED" && (dc.convertedInvoiceId || dc.convertedOrderId) && (
+                            <button
+                              onClick={() => router.push(`/sales/invoices?id=${encodeURIComponent(dc.convertedInvoiceId || dc.convertedOrderId)}`)}
+                              className="px-2.5 py-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded transition-colors cursor-pointer"
+                              title="Open the Sale Invoice created from this challan"
+                            >
+                              View Invoice
+                            </button>
                           )}
                           <button
                             onClick={() => handleEdit(dc)}
@@ -2387,36 +2423,67 @@ export default function DeliveryChallanPage() {
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowRowMenu(showRowMenu === dc.id ? null : dc.id)}
-                              className="p-1 hover:bg-gray-100 dark:hover:bg-white/5 rounded text-gray-400 dark:text-slate-500 hover:text-gray-600 dark:hover:text-slate-200 transition-colors"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                            {showRowMenu === dc.id && (
-                              <div className="absolute right-0 top-8 z-50 w-32 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg py-1 text-left">
-                                <button
-                                  onClick={() => { handleEdit(dc); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => { setPreviewingChallan(dc); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 text-xs text-gray-700 dark:text-slate-200 text-left"
-                                >
-                                  Print
-                                </button>
-                                <button
-                                  onClick={() => { handleDelete(dc.id); setShowRowMenu(null); }}
-                                  className="w-full px-3 py-2 hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 text-left border-t border-gray-100 dark:border-white/5"
-                                >
-                                  Delete
-                                </button>
-                              </div>
+                          <button
+                            data-row-menu-btn={dc.id}
+                            onClick={(e) => {
+                              if (showRowMenu === dc.id) { setShowRowMenu(null); return; }
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setRowMenuPos({ top: r.bottom, bottom: r.top, right: window.innerWidth - r.right, openUp: window.innerHeight - r.bottom < 170 });
+                              setShowRowMenu(dc.id);
+                            }}
+                            className={clsx(
+                              "p-1 rounded transition-colors",
+                              showRowMenu === dc.id
+                                ? "bg-orange-100 dark:bg-orange-500/20 text-[#f58220]"
+                                : "text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-600 dark:hover:text-slate-200"
                             )}
-                          </div>
+                            title="More actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                          {/* Rendered in a fixed-position portal: inside the table's
+                              overflow-x-auto wrapper an absolute menu was clipped and
+                              stretched the table sideways. */}
+                          {showRowMenu === dc.id && rowMenuPos && typeof document !== "undefined" && createPortal(
+                            <div
+                              ref={rowMenuRef}
+                              style={{
+                                position: "fixed",
+                                right: Math.max(8, rowMenuPos.right),
+                                ...(rowMenuPos.openUp ? { bottom: window.innerHeight - rowMenuPos.bottom + 4 } : { top: rowMenuPos.top + 4 }),
+                                zIndex: 9999,
+                              }}
+                              className="w-40 flex flex-col bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl p-1 text-left animate-in fade-in zoom-in-95 duration-100"
+                            >
+                              <button
+                                onClick={() => { setShowRowMenu(null); handleEdit(dc); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-xs font-medium text-gray-700 dark:text-slate-200 text-left"
+                              >
+                                <Pencil className="h-3.5 w-3.5 text-gray-400" /> Edit
+                              </button>
+                              <button
+                                onClick={() => { setShowRowMenu(null); setPreviewingChallan(dc); }}
+                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 text-xs font-medium text-gray-700 dark:text-slate-200 text-left"
+                              >
+                                <Printer className="h-3.5 w-3.5 text-gray-400" /> Print
+                              </button>
+                              <div className="my-1 border-t border-gray-100 dark:border-white/5" />
+                              <button
+                                disabled={dc.status !== "DRAFT"}
+                                title={dc.status === "DRAFT" ? "Delete this draft" : "Only drafts can be deleted — a dispatched challan is a stock/dispatch record"}
+                                onClick={() => { setShowRowMenu(null); setDeleteChallanId(dc.id); }}
+                                className={clsx(
+                                  "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-left",
+                                  dc.status === "DRAFT"
+                                    ? "hover:bg-red-50 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400"
+                                    : "text-gray-400 dark:text-slate-500 opacity-60 cursor-not-allowed"
+                                )}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> {dc.status === "DRAFT" ? "Delete" : "Delete (drafts only)"}
+                              </button>
+                            </div>,
+                            document.body
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2441,16 +2508,57 @@ export default function DeliveryChallanPage() {
               gstRate: it.taxPct ?? it.taxPercent ?? 0,
             })),
           }}
-          vendor={{
-            name: previewingChallan.customerName,
-            address: previewingChallan.stateOfSupply,
-            state: previewingChallan.stateOfSupply,
-            phone: previewingChallan.customerPhone,
-          }}
+          vendor={(() => {
+            // "Billed to" = the party's billing address, then city / PIN /
+            // state. Falls back to the state only when no address is on file.
+            const p = previewingChallan.party || previewingChallan.customer || previewingChallan.dealer || {};
+            const street = p.billingAddress || p.address || p.shippingAddress || p.location || "";
+            const state = p.state || previewingChallan.stateOfSupply || "";
+            const cityLine = [p.city || p.district, p.pincode || p.pinCode].filter(Boolean).join(" - ");
+            const address = [street, cityLine, state && !street.includes(state) ? state : ""].filter(Boolean).join(", ");
+            return {
+              name: previewingChallan.customerName,
+              address: address || state,
+              state,
+              phone: previewingChallan.customerPhone || p.phone || p.contactNum,
+              gstin: p.gstNumber || p.gstin || undefined,
+            };
+          })()}
           companyDetails={currentCompany}
           documentType="DELIVERY_CHALLAN"
           onClose={() => setPreviewingChallan(null)}
         />
+      )}
+
+      {/* Delete Confirmation Modal (drafts only — see handleDelete) */}
+      {deleteChallanId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setDeleteChallanId(null)}>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-slate-800 animate-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center mb-4 mx-auto">
+                <Trash2 className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white text-center mb-2">Delete Delivery Challan</h3>
+              <p className="text-sm text-gray-500 dark:text-slate-400 text-center">
+                Are you sure you want to delete this Delivery Challan? This action cannot be undone.
+              </p>
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-slate-900/50 flex gap-3 border-t border-gray-100 dark:border-slate-800">
+              <button
+                onClick={() => setDeleteChallanId(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-xl hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { const id = deleteChallanId; setDeleteChallanId(null); handleDelete(id); }}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition-colors shadow-sm shadow-red-500/20"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {deliveringChallan && (
@@ -2998,7 +3106,7 @@ function ConvertChallanToSaleModal({
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 dark:border-white/10 flex items-center justify-between bg-slate-50/50 dark:bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center font-bold">
               <Truck className="h-5 w-5" />
             </div>
             <div>
@@ -3046,7 +3154,7 @@ function ConvertChallanToSaleModal({
                   <th className="text-left px-3 py-2.5 hidden sm:table-cell">SKU</th>
                   <th className="text-right px-3 py-2.5">Dispatched</th>
                   <th className="text-right px-3 py-2.5 w-32">Return Qty</th>
-                  <th className="text-right px-3 py-2.5 font-bold text-purple-600 dark:text-purple-400">Sold Qty</th>
+                  <th className="text-right px-3 py-2.5 font-bold text-orange-600 dark:text-orange-400">Sold Qty</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
@@ -3075,7 +3183,7 @@ function ConvertChallanToSaleModal({
                             "w-full px-2.5 py-1 text-right text-xs font-semibold rounded-lg outline-none border transition-colors bg-white dark:bg-[#13151f]",
                             r.isInvalid
                               ? "border-red-500 text-red-600 focus:ring-1 focus:ring-red-500"
-                              : "border-gray-300 dark:border-white/10 text-gray-800 dark:text-white focus:border-purple-500"
+                              : "border-gray-300 dark:border-white/10 text-gray-800 dark:text-white focus:border-orange-500"
                           )}
                         />
                       </div>
@@ -3087,7 +3195,7 @@ function ConvertChallanToSaleModal({
                       <span className={clsx(
                         "font-black text-xs px-2 py-0.5 rounded",
                         r.sold > 0 
-                          ? "bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-900/40" 
+                          ? "bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-300 border border-orange-200 dark:border-orange-900/40" 
                           : "text-gray-400 dark:text-slate-500"
                       )}>
                         {r.sold} {r.item.unit || "PCS"}
@@ -3115,7 +3223,7 @@ function ConvertChallanToSaleModal({
             <div className="w-px h-6 bg-gray-200 dark:bg-white/10" />
             <div>
               <span className="text-gray-400 dark:text-slate-500 text-[10px] uppercase font-semibold block">Total Sold</span>
-              <span className="font-black text-purple-600 dark:text-purple-400">{totalSold}</span>
+              <span className="font-black text-orange-600 dark:text-orange-400">{totalSold}</span>
             </div>
           </div>
 
@@ -3132,7 +3240,7 @@ function ConvertChallanToSaleModal({
               type="button"
               onClick={handleContinue}
               disabled={saving || hasAnyInvalid || totalSold <= 0}
-              className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               {saving && <RefreshCw className="h-3.5 w-3.5 animate-spin" />}
               <span>{saving ? "Processing..." : "Continue to Sale Invoice"}</span>

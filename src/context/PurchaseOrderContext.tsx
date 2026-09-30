@@ -88,7 +88,7 @@ const PurchaseOrderContext = createContext<PurchaseOrderContextType | undefined>
 export function PurchaseOrderProvider({ children, editId }: { children: React.ReactNode, editId?: string }) {
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [items, setItems] = useState<LineItem[]>([
-    { id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }
+    { id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 0 }
   ]);
   const [contextMessage, setContextMessage] = useState<string | null>(null);
   const [autoFilledIds, setAutoFilledIds] = useState<Set<string>>(new Set());
@@ -142,7 +142,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
               quantity: item.quantity,
               unit: item.inventoryItem?.unit || "KG",
               price: item.price,
-              gstRate: item.gstRate || 5
+              // `??` — a saved 0% line must reopen as 0%, not the 5% default.
+              gstRate: item.gstRate ?? 5
             })));
           }
           if (po.purchaseType) setPurchaseType(po.purchaseType);
@@ -181,7 +182,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
               quantity: item.shortage,
               unit: item.unit || "KG",
               price: 0,
-              gstRate: 5
+              gstRate: 0
             }));
             setItems(mapped);
             setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.`);
@@ -345,18 +346,18 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
           quantity: 0,
           unit: "KG",
           price: sm.price || 0,
-          gstRate: 5
+          gstRate: 0
         }));
         setItems(newItems);
         setAutoFilledIds(new Set(newItems.map(i => i.id)));
       } else {
         // Vendor has no linked materials: reset to one blank line item
-        setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }]);
+        setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 0 }]);
         setAutoFilledIds(new Set());
       }
     } else {
       // Vendor was unselected/cleared: reset to one blank line item
-      setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }]);
+      setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 0 }]);
       setAutoFilledIds(new Set());
     }
   }, [selectedVendor, isLoaded]);
@@ -391,7 +392,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const addItem = () => {
     setItems(prev => [
       ...prev,
-      { id: Math.random().toString(36).substr(2, 9), materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }
+      { id: Math.random().toString(36).substr(2, 9), materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 0 }
     ]);
   };
 
@@ -400,7 +401,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       setItems(prev => prev.filter(item => item.id !== id));
     } else {
       // Reset the single item instead of removing
-      setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 5 }]);
+      setItems([{ id: "1", materialId: "", name: "", quantity: 0, unit: "KG", price: 0, gstRate: 0 }]);
     }
   };
 

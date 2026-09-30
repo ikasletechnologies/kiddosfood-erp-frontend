@@ -9,7 +9,7 @@ import {
   Package, Search, RefreshCw, Send, Building2,
   Clock, Truck, CheckCircle2, AlertTriangle, ExternalLink,
   Layers, Filter, Eye, LayoutGrid, List, ArrowRight, ShieldCheck,
-  Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X
+  Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X, PackageX
 } from "lucide-react";
 import { clsx } from "clsx";
 import api, {
@@ -601,6 +601,14 @@ export default function FinishedGoodsStockClient() {
     };
   }, [fetchDemandData]);
 
+  // Stock-level rules — shared by the Out of Stock / Low Stock filter tabs
+  // AND their summary cards, so a card count always equals its tab's rows.
+  const isOutOfStock = (item: InventoryDemandItem) => item.hqAvailableStock <= 0;
+  // Unknown threshold (no HQ item matched yet) is treated as "not low" —
+  // there's nothing to compare against, so it shouldn't false-alarm.
+  const isLowStock = (item: InventoryDemandItem) =>
+    item.hqMinimumStock !== undefined && item.hqAvailableStock > 0 && item.hqAvailableStock <= item.hqMinimumStock;
+
   // Filters
   const filtered = demandItems.filter((item) => {
     const q = searchTerm.toLowerCase();
@@ -613,11 +621,9 @@ export default function FinishedGoodsStockClient() {
     if (demandFilter === "IN_STOCK") {
       matchDemand = item.hqAvailableStock > 0;
     } else if (demandFilter === "OUT_OF_STOCK") {
-      matchDemand = item.hqAvailableStock <= 0;
+      matchDemand = isOutOfStock(item);
     } else if (demandFilter === "LOW_STOCK") {
-      // Unknown threshold (no HQ item matched yet) is treated as "not low" —
-      // there's nothing to compare against, so it shouldn't false-alarm.
-      matchDemand = item.hqMinimumStock !== undefined && item.hqAvailableStock > 0 && item.hqAvailableStock <= item.hqMinimumStock;
+      matchDemand = isLowStock(item);
     } else if (demandFilter === "RESERVED") {
       matchDemand = item.hqReservedStock > 0;
     } else if (demandFilter === "IN_TRANSIT") {
@@ -680,18 +686,22 @@ export default function FinishedGoodsStockClient() {
     approvedNode: renderByUnit(sumByUnit((i) => i.approvedDemandQuantity)),
     hasPendingDemand: pendingByUnit.size > 0,
     readySkuCount,
+    outOfStockCount: demandItems.filter(isOutOfStock).length,
+    lowStockCount: demandItems.filter(isLowStock).length,
   };
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 w-full min-w-0">
       {/* Top Metric Cards Strip */}
-      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 w-full min-w-0">
+      {/* 8 cards → two rows of 4 on desktop (was 6 across). */}
+      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
         <InventoryMetricCard
           label="Total Finished Goods"
           value={`${stats.totalProducts} SKU${stats.totalProducts === 1 ? "" : "s"}`}
           subtext="Catalog + packaged variants"
           icon={Package}
           colorTheme="slate"
+          onClick={() => setDemandFilter("ALL")}
         />
         <InventoryMetricCard
           label="HQ Available Stock"
@@ -699,6 +709,24 @@ export default function FinishedGoodsStockClient() {
           subtext={`${stats.readySkuCount} SKU${stats.readySkuCount === 1 ? "" : "s"} ready`}
           icon={Layers}
           colorTheme="emerald"
+          onClick={() => setDemandFilter("IN_STOCK")}
+        />
+        <InventoryMetricCard
+          label="Out of Stock"
+          value={`${stats.outOfStockCount} SKU${stats.outOfStockCount === 1 ? "" : "s"}`}
+          subtext="Nothing available at HQ"
+          icon={PackageX}
+          colorTheme="rose"
+          onClick={() => setDemandFilter("OUT_OF_STOCK")}
+        />
+        <InventoryMetricCard
+          label="Low Stock"
+          value={`${stats.lowStockCount} SKU${stats.lowStockCount === 1 ? "" : "s"}`}
+          subtext="At or below minimum stock"
+          icon={AlertTriangle}
+          colorTheme="amber"
+          badge={stats.lowStockCount > 0 ? "Reorder" : undefined}
+          onClick={() => setDemandFilter("LOW_STOCK")}
         />
         <InventoryMetricCard
           label="HQ Reserved Stock"

@@ -10,6 +10,7 @@ import { FileText, Search, RefreshCw, Calendar,
   AlertTriangle, X, Pencil } from "lucide-react";
 import { clsx } from "clsx";
 import { customersApi, productsFullApi, settingsApi, salesApi } from "@/lib/api";
+import { useAttachments, AttachmentList } from "@/components/common/Attachments";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import { formatDate, calculateSalesDocumentTotals, roundMoney } from "@/lib/utils";
@@ -253,14 +254,15 @@ export default function SalesOrdersPage() {
   // status/id so the footer can offer Confirm / Create Proforma without
   // re-fetching, and gets patched in-place after those actions succeed.
   const [readOnly, setReadOnly] = useState(false);
+  // Image / Document attachments. Editing a saved order uploads immediately;
+  // on a new order they're held until handleSave returns the new id.
+  const attachments = useAttachments("SALES_ORDER", draftId, showToast);
   const [viewOrderRef, setViewOrderRef] = useState<any>(null);
   const autoOpenedIdRef = useRef<string | null>(null);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
 
   // Status Filter Popover State
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-  const [draftSelectedStatuses, setDraftSelectedStatuses] = useState<string[]>([]);
-  const [showStatusFilterPop, setShowStatusFilterPop] = useState(false);
 
   // Dropdown floating close triggers
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
@@ -308,6 +310,8 @@ export default function SalesOrdersPage() {
         balance: o.balance ?? (o.paymentStatus === "PAID" ? 0 : (o.totalAmount ?? 0)),
         customerName: o.customerName || o.customer?.name || "Unknown Party",
         customerPhone: o.customerPhone || o.customer?.phone || "",
+        customerAddress: [o.customer?.address, o.customer?.city, o.customer?.district, o.customer?.state, o.customer?.pincode].filter(Boolean).join(", ") || "",
+        customerGstin: o.customer?.gstin || "",
       })) : [];
 
       // LocalStorage Merge
@@ -583,6 +587,7 @@ export default function SalesOrdersPage() {
 
   const resetForm = () => {
     setDraftId(null);
+    attachments.clearPending();
     setIdempotencyKey(crypto.randomUUID());
     setReadOnly(false);
     setViewOrderRef(null);
@@ -689,6 +694,9 @@ export default function SalesOrdersPage() {
         if (res?.data?.id) setDraftId(res.data.id);
         showToast("Sales Order saved successfully", "success");
       }
+      // Files picked before this order existed get uploaded now that it has an id.
+      const savedId = savedRes?.data?.id || savedRes?.data?.salesOrder?.id || draftId;
+      if (attachments.hasPending && savedId) await attachments.flush(savedId);
       setPreviewingOrder(savedRes?.data || { ...apiPayload, id: draftId || "new" });
       fetchAllData();
       setView("list");
@@ -891,15 +899,22 @@ export default function SalesOrdersPage() {
       if (statusFilter === "Completed") matchStatus = cat === "Completed";
       if (statusFilter === "Partial Open") matchStatus = cat === "Partial Open";
 
+      // o.invoiceDate is a full ISO timestamp ("2026-09-29T10:15:00.000Z"), so
+      // compare by the order's LOCAL calendar day ("2026-09-29"). Comparing the
+      // raw timestamp string against a date string excluded every order on the
+      // "To" date, never matched "Today", and could shift a day across UTC.
+      const d = new Date(o.invoiceDate);
+      const orderDay = isNaN(d.getTime()) ? "" : toLocalDateString(d);
       let matchDate = true;
       if (dateFilter === "THIS_MONTH") {
-        const d = new Date(o.invoiceDate);
         const now = new Date();
         matchDate = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
       } else if (dateFilter === "TODAY") {
-        matchDate = o.invoiceDate === new Date().toISOString().split("T")[0];
+        matchDate = orderDay === toLocalDateString(new Date());
       } else if (dateFilter === "CUSTOM") {
-        matchDate = o.invoiceDate >= dateFrom && o.invoiceDate <= dateTo;
+        // Either bound may be blank; a reversed range is treated as swapped.
+        const [lo, hi] = dateFrom && dateTo && dateFrom > dateTo ? [dateTo, dateFrom] : [dateFrom, dateTo];
+        matchDate = !!orderDay && (!lo || orderDay >= lo) && (!hi || orderDay <= hi);
       }
 
       return matchSearch && matchSelectedStatuses && matchStatus && matchDate;
@@ -1474,19 +1489,31 @@ export default function SalesOrdersPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer"
+                  onClick={attachments.pickImage}
+                  disabled={readOnly || attachments.busy}
+                  title="Attach images (JPG, PNG, WEBP, GIF · max 5 MB)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ImageIcon className="h-3.5 w-3.5" /> Image
                 </button>
                 <button
                   type="button"
-                  onClick={() => showToast("Attachment feature is active on POS terminal only.", "warning")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer"
+                  onClick={attachments.pickDocument}
+                  disabled={readOnly || attachments.busy}
+                  title="Attach documents (PDF, Word, Excel, CSV, text · max 5 MB)"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/5 rounded-lg text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <LinkIcon className="h-3.5 w-3.5" /> Document
                 </button>
+                {attachments.inputs}
               </div>
+              <AttachmentList
+                items={attachments.items}
+                busy={attachments.busy}
+                onOpen={attachments.open}
+                onRemove={attachments.remove}
+                readOnly={readOnly}
+              />
 
               {/* Payment Type */}
               <div>
@@ -1781,68 +1808,8 @@ export default function SalesOrdersPage() {
                       <th className="text-right px-4 py-3 whitespace-nowrap">TOTAL AMOUNT</th>
                       <th className="text-right px-4 py-3 whitespace-nowrap">BALANCE</th>
                       <th className="text-left px-4 py-3 whitespace-nowrap">TRANSACTION TYPE</th>
-                      <th className="text-center px-4 py-3 whitespace-nowrap relative">
-                        <div 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDraftSelectedStatuses([...selectedStatuses]);
-                            setShowStatusFilterPop(v => !v);
-                          }}
-                          className="cursor-pointer hover:text-gray-900 dark:hover:text-white"
-                        >
-                          <span>STATUS</span>
-                        </div>
-
-                        {showStatusFilterPop && (
-                          <div 
-                            onClick={(e) => e.stopPropagation()} 
-                            className="absolute right-0 top-full mt-1 w-52 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-3.5 z-50 animate-in fade-in zoom-in-95 text-left normal-case"
-                          >
-                            <div className="space-y-2 mb-3">
-                              {["Open", "Overdue", "Completed", "Partial Open"].map((st) => (
-                                <label key={st} className="flex items-center gap-2.5 text-xs font-medium text-gray-700 dark:text-slate-200 cursor-pointer hover:text-gray-900 dark:hover:text-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={draftSelectedStatuses.includes(st)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setDraftSelectedStatuses([...draftSelectedStatuses, st]);
-                                      } else {
-                                        setDraftSelectedStatuses(draftSelectedStatuses.filter(s => s !== st));
-                                      }
-                                    }}
-                                    className="w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
-                                  />
-                                  <span>{st}</span>
-                                </label>
-                              ))}
-                            </div>
-                            <div className="flex items-center justify-between gap-2 border-t border-gray-100 dark:border-white/5 pt-2.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDraftSelectedStatuses([]);
-                                  setSelectedStatuses([]);
-                                  setShowStatusFilterPop(false);
-                                }}
-                                className="px-3.5 py-1 text-xs font-medium text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 rounded-full transition-colors"
-                              >
-                                Clear
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedStatuses([...draftSelectedStatuses]);
-                                  setShowStatusFilterPop(false);
-                                }}
-                                className="px-4 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-full shadow-xs transition-colors"
-                              >
-                                Apply
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </th>
+                      {/* Status is filtered from the "All Orders" dropdown in the filter bar. */}
+                      <th className="text-center px-4 py-3 whitespace-nowrap">STATUS</th>
                       <th className="text-right px-4 py-3 whitespace-nowrap">ACTION</th>
                     </tr>
                   </thead>

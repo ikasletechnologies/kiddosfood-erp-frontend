@@ -53,6 +53,8 @@ interface ReturnOrder {
   entityId: string;
   entityName: string;
   entityPhone?: string;
+  entityAddress?: string;
+  entityGstin?: string;
   orderRefId: string;
   orderRefNumber: string;
   reason: string;
@@ -177,6 +179,8 @@ export default function SalesReturnsPage() {
       entityId: r.customerId || r.dealerId || r.franchiseId || (partyKind === 'CUSTOMER' ? 'walk-in' : ''),
       entityName,
       entityPhone: r.customer?.phone || r.dealer?.phone || '',
+      entityAddress: r.customer?.address || r.dealer?.address || r.franchise?.address || r.posOrder?.customerAddress || '',
+      entityGstin: r.customer?.gstin || r.dealer?.gstin || r.franchise?.gstin || r.posOrder?.customerGstin || '',
       orderRefId: r.posOrderId || r.salesOrderId || r.franchiseOrderId || '',
       orderRefNumber: orderRef?.invoiceNum || orderRef?.orderNumber || orderRef?.challanNumber || (r.posOrderId ? 'Sale Invoice' : 'Direct'),
       reason: r.reason || 'Not specified',
@@ -211,6 +215,7 @@ export default function SalesReturnsPage() {
         taxableValue: it.taxableValue != null ? Number(it.taxableValue) : undefined,
         taxAmount: it.taxAmount != null ? Number(it.taxAmount) : undefined,
         totalAmount: it.totalAmount != null ? Number(it.totalAmount) : (it.rate * it.quantity),
+        gstRate: it.gstRate != null ? Number(it.gstRate) : (r.gstRate != null ? Number(r.gstRate) : (r.posOrder?.items?.find((pi) => pi.productId === it.productId)?.gstRate || 0)),
       })),
     };
   };
@@ -623,7 +628,7 @@ export default function SalesReturnsPage() {
         </div>
 
         {/* Scrollable Form Workspace */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar max-w-5xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar max-w-7xl mx-auto w-full">
 
           {/* Super Admin only: Return Source toggle */}
           {!isFranchiseUser && (
@@ -1028,7 +1033,8 @@ export default function SalesReturnsPage() {
         </div>
 
         {/* Footer Toolbar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end gap-3 shrink-0">
+        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 shrink-0">
+          <div className="max-w-7xl mx-auto w-full flex items-center justify-end gap-3">
           <button
             type="button"
             onClick={() => { resetForm(); setView("list"); }}
@@ -1044,6 +1050,7 @@ export default function SalesReturnsPage() {
           >
             <Check className="h-4 w-4" /> {submitting ? "Submitting..." : "Submit Return Request"}
           </button>
+          </div>
         </div>
       </div>
     );
@@ -1567,7 +1574,7 @@ export default function SalesReturnsPage() {
               itemName: it.productName,
               quantity: it.returnQuantity,
               price: it.rate,
-              gstRate: 0,
+              gstRate: it.gstRate || 0,
             })),
           }}
           vendor={{

@@ -706,7 +706,9 @@ export default function PaymentInPage() {
   const filtered = payments.filter(p => {
     if (statusFilter !== "ALL") {
       if (statusFilter === "DRAFT" && p.status !== "DRAFT") return false;
-      if (statusFilter === "SUCCESS" && p.status === "DRAFT") return false; 
+      // "PAID" = settled receipts, matching the PAID badge in the table
+      // (SUCCESS is the same settled state); drafts and cancelled excluded.
+      if (statusFilter === "PAID" && !((p.status === "PAID" || p.status === "SUCCESS") && !p.isCancelled)) return false;
     }
     if (search) {
       const q = search.toLowerCase();
@@ -718,7 +720,7 @@ export default function PaymentInPage() {
   });
 
   const totalAmount = filtered.reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-  const totalReceived = filtered.filter((p: any) => p.status === "PAID" || p.status === "SUCCESS")
+  const totalReceived = filtered.filter((p: any) => (p.status === "PAID" || p.status === "SUCCESS") && !p.isCancelled)
     .reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
 
   const periodLabel = PERIOD_OPTIONS.find(o => o.value === period)?.label || "This Month";
@@ -1142,7 +1144,7 @@ export default function PaymentInPage() {
           </div>
 
           <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-lg overflow-hidden bg-white dark:bg-card">
-            {["ALL", "SUCCESS", "DRAFT"].map(s => (
+            {["ALL", "PAID", "DRAFT"].map(s => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}

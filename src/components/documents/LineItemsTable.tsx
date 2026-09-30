@@ -116,7 +116,7 @@ export default function LineItemsTable() {
         name: createdMaterial.name,
         unit: createdMaterial.unit || "KG",
         price: createdMaterial.price || 0,
-        gstRate: createdMaterial.gstRate || 5
+        gstRate: createdMaterial.gstRate || 0
       });
       setEntryUnits(prev => ({ ...prev, [targetDrawerItemId]: createdMaterial.unit || "KG" }));
       if (selectedVendor) {
@@ -139,7 +139,7 @@ export default function LineItemsTable() {
         if (i.materialId && (!i.name || i.name === "Material" || i.name === "Unknown Material")) {
           const m = materials.find(mat => mat.id === i.materialId);
           if (m?.name) {
-            updateItem(i.id, { name: m.name, unit: i.unit || m.unit || "KG", gstRate: i.gstRate || m.gstRate || 5 });
+            updateItem(i.id, { name: m.name, unit: i.unit || m.unit || "KG", gstRate: i.gstRate || m.gstRate || 0 });
           }
         }
       });
@@ -175,7 +175,7 @@ export default function LineItemsTable() {
       name: material.name,
       unit: material.unit || "KG",
       price: vendorPrice !== null ? vendorPrice : (material.price || 0),
-      gstRate: material.gstRate || 5,
+      gstRate: material.gstRate || 0,
       ...(Number.isFinite(prefillQty) && prefillQty > 0 ? { quantity: prefillQty } : {}),
     });
     setEntryUnits(prev => ({ ...prev, [targetId]: material.unit || "KG" }));
@@ -417,7 +417,7 @@ export default function LineItemsTable() {
                                           name: m.name,
                                           unit: m.unit || "KG",
                                           price: displayPrice,
-                                          gstRate: m.gstRate || 5
+                                          gstRate: m.gstRate || 0
                                         });
                                         setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
                                         if (vendorPrice !== null) {
@@ -566,7 +566,7 @@ export default function LineItemsTable() {
                   </td>
                   <td className="px-2 py-3.5 align-middle text-center">
                     <select
-                      className="w-full py-2 px-1.5 bg-purple-50/80 dark:bg-purple-900/20 rounded-xl outline-none text-xs font-bold text-purple-700 dark:text-purple-300 text-center border border-purple-200 dark:border-purple-800/40 focus:border-purple-400 transition-all cursor-pointer appearance-none text-center-last"
+                      className="w-full py-2 px-1.5 bg-purple-50/80 dark:bg-purple-900/20 rounded-xl outline-none text-xs font-bold text-purple-700 dark:text-purple-300 text-center border border-purple-200 dark:border-purple-800/40 focus:border-purple-400 transition-all cursor-pointer"
                       style={{ textAlignLast: 'center' }}
                       value={item.gstRate}
                       onChange={(e) => updateItem(item.id, { gstRate: parseFloat(e.target.value) || 0 })}
@@ -753,7 +753,7 @@ export default function LineItemsTable() {
                                     name: m.name,
                                     unit: m.unit || "KG",
                                     price: displayPrice,
-                                    gstRate: m.gstRate || 5
+                                    gstRate: m.gstRate || 0
                                   });
                                   setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
                                   if (vendorPrice !== null) {

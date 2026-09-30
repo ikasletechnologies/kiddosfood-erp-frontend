@@ -376,17 +376,16 @@ export default function PurchaseBillsPage() {
 
             if (grn.items && grn.items.length > 0) {
                const newItems = grn.items.map((item: any) => {
-                  let rate = item.gstRate || 0;
-                  if (rate === 0 && poItems.length > 0) {
-                     const matId = item.materialId || item.inventoryItemId || (item.inventoryItem ? item.inventoryItem.id : null);
-                     const poItem = poItems.find((pi: any) => (pi.inventoryItemId === matId || pi.id === matId));
-                     if (poItem && poItem.gstRate) {
-                        rate = poItem.gstRate;
-                     }
-                  }
-                  if (rate === 0) {
-                     rate = item.inventoryItem?.taxRate || item.inventoryItem?.gstRate || 0;
-                  }
+                  // GST rate = the rate agreed on the PO line (same source the
+                  // backend's computeCommercialsFromPO uses). A PO line at 0%
+                  // is a real 0% — previously `rate === 0` was treated as
+                  // "missing" and fell through to the item master's default
+                  // (5%), so a 0% purchase was billed at 5%. Fall back only when
+                  // no rate exists at all (`??`, not `||`).
+                  const matId = item.materialId || item.inventoryItemId || (item.inventoryItem ? item.inventoryItem.id : null);
+                  const poItem = poItems.find((pi: any) => (pi.inventoryItemId === matId || pi.id === matId));
+                  const rawRate = poItem?.gstRate ?? item.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0;
+                  const rate = Number(rawRate) || 0;
                   return {
                      id: Math.random().toString(36).slice(2),
                      name: item.inventoryItem?.name || item.itemName || "Material",
@@ -459,7 +458,7 @@ export default function PurchaseBillsPage() {
           const poItems = po.poItems || (typeof po.items === 'string' ? JSON.parse(po.items) : po.items) || [];
           if (poItems.length > 0) {
             const newItems = poItems.map((item: any) => {
-              const rate = item.gstRate ?? (item.inventoryItem?.taxRate || item.inventoryItem?.gstRate || 0);
+              const rate = Number(item.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0) || 0;
               return {
                 id: Math.random().toString(36).slice(2),
                 name: item.itemName || item.inventoryItem?.name || "Material",

@@ -304,12 +304,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/inventory/stock",
         roles: SUPER_ONLY,
       },
-      {
-        icon: Send,
-        label: "Stock Transfer",
-        href: "/franchise/transfers",
-        roles: SUPER_ONLY,
-      },
+
 
       {
         icon: Clock,

@@ -85,7 +85,7 @@ export default function PackagingQueuePage() {
   const [packetSize, setPacketSize] = useState("");
   const [sizeValue, setSizeValue] = useState("");
   const [sizeUnit, setSizeUnit] = useState("g");
-  const [quantityPackets, setQuantityPackets] = useState(10);
+  const [quantityPackets, setQuantityPackets] = useState(0); // empty until the user types a count
   const [submitting, setSubmitting] = useState(false);
   const [wastingBatchId, setWastingBatchId] = useState<string | null>(null);
   const [batchToWaste, setBatchToWaste] = useState<ProductBatch | null>(null);
@@ -294,7 +294,7 @@ export default function PackagingQueuePage() {
     // reset form fields
     setPacketSize("");
     setSizeValue("");
-    setQuantityPackets(10);
+    setQuantityPackets(0);
   };
 
   const handlePackageRun = async () => {
@@ -586,8 +586,19 @@ export default function PackagingQueuePage() {
                       <input
                         type="number"
                         min="1"
+                        step="1"
+                        inputMode="numeric"
+                        placeholder="Enter number of packets"
                         value={quantityPackets || ""}
-                        onChange={(e) => setQuantityPackets(Math.max(1, Number(e.target.value)))}
+                        // Allow the field to be empty while typing — forcing a
+                        // minimum of 1 on every keystroke meant you couldn't
+                        // clear the "1" (typing 5 gave 15). "At least 1" is
+                        // enforced by handleAddPlan on submit.
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/[^\d]/g, "");
+                          setQuantityPackets(v === "" ? 0 : parseInt(v, 10));
+                        }}
+                        onFocus={(e) => e.currentTarget.select()}
                         className="w-full border border-gray-200 dark:border-white/10 rounded-lg px-4 py-2.5 text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f]"
                       />
                     </div>
@@ -813,7 +824,7 @@ export default function PackagingQueuePage() {
                                   setSizeUnit(defaultUnit);
                                   const initialSize = `500${defaultUnit}`;
                                   setPacketSize(initialSize);
-                                  setQuantityPackets(10);
+                                  setQuantityPackets(0);
                                   setPlans([]);
                                   updateProductMapping(batch, initialSize, products);
                                 }}

@@ -5,6 +5,10 @@ import { X, Loader2 } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import api, { gstApi } from "@/lib/api";
+import {
+  GSTIN_RE, phoneFormatError, emailFormatError, gstinFormatError,
+  lookupPincode, matchState, stateFromGstin, StateSelect,
+} from "@/lib/party-form";
 
 export interface AddDealerModalProps {
   isOpen: boolean;
@@ -58,7 +62,10 @@ export default function AddDealerModal({
   const [form, setForm] = useState(getEmptyForm());
   const [saving, setSaving] = useState(false);
   const [fetchingGst, setFetchingGst] = useState(false);
+  const [fetchingPincode, setFetchingPincode] = useState(false);
 
+  // These three hold only duplicate / server errors. Format errors are
+  // derived from the current value below so they clear as soon as it's valid.
   const [phoneError, setPhoneError] = useState("");
   const [emailError, setEmailError] = useState("");
   const [gstError, setGstError] = useState("");
@@ -133,13 +140,8 @@ export default function AddDealerModal({
         return false;
       });
 
-      if (duplicate) {
-        if (field === 'phone') setPhoneError("A dealer with this contact number already exists.");
-        if (field === 'email') setEmailError("A dealer with this email address already exists.");
-      } else {
-        if (field === 'phone' && (!phoneError || phoneError.includes('already exists'))) setPhoneError("");
-        if (field === 'email' && (!emailError || emailError.includes('already exists'))) setEmailError("");
-      }
+      if (field === 'phone') setPhoneError(duplicate ? "A dealer with this contact number already exists." : "");
+      if (field === 'email') setEmailError(duplicate ? "A dealer with this email address already exists." : "");
     } catch (err) {
       console.error(`Unique check failed for ${field}:`, err);
     }
@@ -161,40 +163,37 @@ export default function AddDealerModal({
     return () => clearTimeout(timer);
   }, [form.email, isOpen]);
 
-  // Real-time phone format check
-  useEffect(() => {
-    if (!form.phone) {
-      if (!phoneError || phoneError.includes('digits') || phoneError.includes('numeric')) {
-        setPhoneError("");
-      }
-      return;
-    }
-    if (form.phone.length > 0 && form.phone.length < 10) {
-      setPhoneError("Phone number must be exactly 10 digits.");
-    } else if (form.phone.length === 10 && !/^\d{10}$/.test(form.phone)) {
-      setPhoneError("Phone number must contain only numeric digits.");
-    }
-  }, [form.phone]);
+  // What's shown/enforced: duplicate/server error first, else the live format check.
+  const phoneErr = phoneError || phoneFormatError(form.phone);
+  const emailErr = emailError || emailFormatError(form.email);
+  const gstErr = gstError || gstinFormatError(form.gstin);
 
-  // Real-time email format check
-  useEffect(() => {
-    if (!form.email || !form.email.trim()) {
-      if (!emailError || emailError.includes('valid email')) {
-        setEmailError("");
-      }
-      return;
+  // PIN code → State / District / City (India Post), same as the Vendor form.
+  // Runs on user input only, so opening Edit never overwrites a saved address.
+  const handlePincodeChange = async (raw: string) => {
+    const val = raw.replace(/\D/g, "").slice(0, 6);
+    setForm((prev) => ({ ...prev, pincode: val }));
+    if (val.length !== 6) return;
+    setFetchingPincode(true);
+    const loc = await lookupPincode(val);
+    setFetchingPincode(false);
+    if (loc) {
+      setForm((prev) => (prev.pincode !== val ? prev : {
+        ...prev,
+        state: loc.state || prev.state,
+        district: loc.district || prev.district,
+        city: loc.city || prev.city,
+      }));
+      toast.success("Location details auto-fetched!");
+    } else {
+      toast.error("PIN code not found — please enter State/City manually.");
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      setEmailError("Please enter a valid email address.");
-    }
-  }, [form.email]);
+  };
 
   // Auto-fetch GST details via our backend proxy
   const fetchGstDetails = async (gstin: string) => {
     const cleanGst = gstin.trim().toUpperCase();
-    if (cleanGst.length !== 15 || !/^[A-Z0-9]{15}$/.test(cleanGst)) {
-      return;
-    }
+    if (!GSTIN_RE.test(cleanGst)) return;
 
     setFetchingGst(true);
     try {
@@ -205,7 +204,7 @@ export default function AddDealerModal({
           name: prev.name || data.legalName || "",
           billingAddress: data.address || prev.billingAddress,
           shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
-          state: data.state || prev.state,
+          state: matchState(data.state) || stateFromGstin(cleanGst) || prev.state,
           city: data.city || prev.city,
           pincode: data.pinCode || prev.pincode,
           gstType: "Registered Business"
@@ -215,6 +214,9 @@ export default function AddDealerModal({
       }
     } catch (err: any) {
       console.error("Auto-fetch GST details failed:", err);
+      // The state is still known from the GSTIN's first two digits.
+      setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
+      toast.error(err?.response?.data?.error || "Could not auto-fetch GST details. Please enter manually.");
     } finally {
       setFetchingGst(false);
     }
@@ -223,8 +225,8 @@ export default function AddDealerModal({
   const handleConfirm = async () => {
     if (saving) return;
 
-    if (phoneError || emailError || gstError) {
-      toast.error(phoneError || emailError || gstError || "Please resolve form errors before saving.");
+    if (phoneErr || emailErr || gstErr) {
+      toast.error(phoneErr || emailErr || gstErr || "Please resolve form errors before saving.");
       return;
     }
 
@@ -240,33 +242,11 @@ export default function AddDealerModal({
       return;
     }
 
-    // Phone number validation: exactly 10 numeric digits if provided
-    if (form.phone && form.phone.trim()) {
-      const cleanPhone = form.phone.trim();
-      if (!/^\d{10}$/.test(cleanPhone)) {
-        setPhoneError("Contact Number must be exactly 10 digits.");
-        toast.error("Contact Number must be a valid 10-digit number.");
-        return;
-      }
-    }
-
-    // Email validation
-    if (form.email && form.email.trim()) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        setEmailError("Please enter a valid email address.");
-        toast.error("Please enter a valid email address.");
-        return;
-      }
-    }
-
-    // GSTIN validation: 15-character valid GST format if provided
-    if (form.gstin && form.gstin.trim()) {
-      const cleanGst = form.gstin.trim().toUpperCase();
-      if (cleanGst.length !== 15 || !/^[A-Z0-9]{15}$/.test(cleanGst)) {
-        setGstError("GST Number must be a valid 15-character alphanumeric GSTIN.");
-        toast.error("Please enter a valid 15-character GSTIN.");
-        return;
-      }
+    // Phone / email formats are already covered by phoneErr / emailErr above.
+    // GSTIN: a partially typed one (<15 chars) isn't flagged live, so check here.
+    if (form.gstin && form.gstin.trim() && !GSTIN_RE.test(form.gstin.trim().toUpperCase())) {
+      toast.error("Please enter a valid 15-character GSTIN (e.g. 33ABCDE1234F1Z5).");
+      return;
     }
 
     // Billing Address validation
@@ -292,7 +272,7 @@ export default function AddDealerModal({
         billingAddress: form.billingAddress.trim(),
         shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : form.billingAddress.trim(),
         pincode: cleanPincode,
-        state: form.state && form.state.trim() ? form.state.trim() : null,
+        state: form.state && form.state.trim() ? matchState(form.state) : null,
         city: form.city && form.city.trim() ? form.city.trim() : null,
         district: form.district && form.district.trim() ? form.district.trim() : null,
         gstin: form.gstin && form.gstin.trim() ? form.gstin.trim().toUpperCase() : null,
@@ -389,13 +369,13 @@ export default function AddDealerModal({
                   }}
                   className={clsx(
                     "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5 font-mono",
-                    phoneError 
-                      ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" 
+                    phoneErr
+                      ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400"
                       : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
-                {phoneError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{phoneError}</p>
+                {phoneErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{phoneErr}</p>
                 )}
               </div>
 
@@ -410,13 +390,13 @@ export default function AddDealerModal({
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
                   className={clsx(
                     "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors dark:bg-white/5",
-                    emailError 
-                      ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" 
+                    emailErr
+                      ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400"
                       : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                   )}
                 />
-                {emailError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{emailError}</p>
+                {emailErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{emailErr}</p>
                 )}
               </div>
 
@@ -460,8 +440,8 @@ export default function AddDealerModal({
                     }}
                     className={clsx(
                       "w-full border rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none transition-colors uppercase font-mono pr-12 dark:bg-white/5",
-                      gstError 
-                        ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400" 
+                      gstErr
+                        ? "border-rose-500 focus:border-rose-500 bg-white dark:bg-white/5 placeholder-gray-400"
                         : "border-gray-300 dark:border-white/10 focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500"
                     )}
                   />
@@ -473,8 +453,8 @@ export default function AddDealerModal({
                     </span>
                   )}
                 </div>
-                {gstError && (
-                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{gstError}</p>
+                {gstErr && (
+                  <p className="text-[11px] text-rose-500 mt-1 font-medium">{gstErr}</p>
                 )}
               </div>
 
@@ -543,17 +523,19 @@ export default function AddDealerModal({
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">
                     Pincode *
                   </label>
-                  <input
-                    type="text"
-                    placeholder="6-digit Pincode"
-                    value={form.pincode}
-                    maxLength={6}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                      setForm({ ...form, pincode: val });
-                    }}
-                    className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors font-mono"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="6-digit Pincode"
+                      value={form.pincode}
+                      maxLength={6}
+                      onChange={(e) => handlePincodeChange(e.target.value)}
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 pr-9 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors font-mono"
+                    />
+                    {fetchingPincode && <Loader2 size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-orange-500 animate-spin" />}
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">State, district and city fill in automatically.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -561,12 +543,10 @@ export default function AddDealerModal({
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">
                       State
                     </label>
-                    <input
-                      type="text"
-                      placeholder="State"
+                    <StateSelect
                       value={form.state}
-                      onChange={(e) => setForm({ ...form, state: e.target.value })}
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
+                      onChange={(v) => setForm({ ...form, state: v })}
+                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors cursor-pointer"
                     />
                   </div>
 

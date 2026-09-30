@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Truck,
   CheckCircle2,
@@ -34,40 +35,85 @@ import { useToast } from "@/context/ToastContext";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
   DELIVERED: { label: "Delivered", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", dot: "bg-emerald-500" },
+  CONVERTED: { label: "Invoiced", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200", dot: "bg-purple-500" },
   IN_TRANSIT: { label: "In Transit", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200", dot: "bg-blue-500" },
   DRAFT: { label: "Draft", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200", dot: "bg-slate-400" },
   CANCELLED: { label: "Cancelled", color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200", dot: "bg-rose-500" },
 };
-function getConf(status: string) {
-  return STATUS_CONFIG[status] ?? STATUS_CONFIG.DRAFT;
+// The API returns the Delivery Challan's own status. Delivered challans are
+// stored as CLOSED (and legacy in-transit ones as OPEN) — neither was in the
+// config above, so they fell back to the "Draft" badge, which is why a
+// delivered or converted challan showed as DRAFT here.
+function normalizeStatus(status: string): string {
+  const s = String(status || "").toUpperCase();
+  if (s === "CLOSED") return "DELIVERED";
+  if (s === "OPEN") return "IN_TRANSIT";
+  return STATUS_CONFIG[s] ? s : "DRAFT";
 }
+function getConf(status: string) {
+  return STATUS_CONFIG[normalizeStatus(status)];
+}
+const isDelivered = (s: string) => s === "DELIVERED" || s === "CONVERTED"; // converted = delivered, then invoiced
+const FILTERS: { key: string; label: string; match: (s: string) => boolean }[] = [
+  { key: "ALL", label: "All", match: () => true },
+  { key: "IN_TRANSIT", label: "In Transit", match: s => s === "IN_TRANSIT" },
+  { key: "DELIVERED", label: "Delivered", match: isDelivered },
+  { key: "CONVERTED", label: "Invoiced", match: s => s === "CONVERTED" },
+  { key: "DRAFT", label: "Draft", match: s => s === "DRAFT" },
+  { key: "CANCELLED", label: "Cancelled", match: s => s === "CANCELLED" },
+];
 
 export default function DispatchTrackingPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [dateFilter, setDateFilter] = useState("THIS_MONTH");
+  const [dateFrom, setDateFrom] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+  });
+  const [dateTo, setDateTo] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+  });
   const [markingId, setMarkingId] = useState<string | null>(null);
   const { showToast } = useToast();
+  const router = useRouter();
 
-  const fetchTracking = async () => {
-    setLoading(true);
+  // `quiet` refreshes (focus / interval) keep the table on screen instead of
+  // flashing the loading spinner.
+  const fetchTracking = async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
       const res = await salesApi.getDispatchTracking();
-      setRows((res as any).data || []);
+      const data: any[] = (res as any).data || [];
+      setRows(data.map(r => ({ ...r, status: normalizeStatus(r.status) })));
     } catch (err) {
       console.error("Failed to fetch dispatch tracking:", err);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
+  // Stay in sync with changes made on the Delivery Challan page: reload when
+  // the tab regains focus, and every 60 s while it's visible.
   useEffect(() => {
     fetchTracking();
+    const onFocus = () => { if (document.visibilityState === "visible") fetchTracking(true); };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    const timer = setInterval(onFocus, 60_000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+      clearInterval(timer);
+    };
   }, []);
 
+  const activeFilter = FILTERS.find(f => f.key === statusFilter) || FILTERS[0];
   const filtered = rows.filter((r) => {
-    if (statusFilter !== "ALL" && r.status !== statusFilter) return false;
+    if (!activeFilter.match(r.status)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -84,7 +130,7 @@ export default function DispatchTrackingPage() {
   const stats = useMemo(() => ({
     total: rows.length,
     inTransit: rows.filter(r => r.status === "IN_TRANSIT").length,
-    delivered: rows.filter(r => r.status === "DELIVERED" || r.status === "CLOSED").length,
+    delivered: rows.filter(r => isDelivered(r.status)).length,
     delayed: rows.filter(r => {
       if (r.status !== "IN_TRANSIT" || !r.expectedDeliveryDate) return false;
       const expDate = new Date(r.expectedDeliveryDate);
@@ -133,18 +179,18 @@ export default function DispatchTrackingPage() {
             )}
           </div>
           <div className="flex items-center border border-slate-200 dark:border-white/10 rounded-lg overflow-x-auto custom-scrollbar max-w-full bg-white dark:bg-card">
-            {["ALL", "IN_TRANSIT", "DELIVERED", "DRAFT"].map(s => (
+            {FILTERS.filter(f => f.key !== "CANCELLED" || rows.some(r => r.status === "CANCELLED")).map(f => (
               <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={clsx("px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap", statusFilter === s ? "bg-orange-500 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5")}
+                key={f.key}
+                onClick={() => setStatusFilter(f.key)}
+                className={clsx("px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap", statusFilter === f.key ? "bg-orange-500 text-white" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5")}
               >
-                {s === "ALL" ? "All" : getConf(s).label}
+                {f.label}
               </button>
             ))}
           </div>
           <button
-            onClick={fetchTracking}
+            onClick={() => fetchTracking()}
             title="Refresh Data"
             className="p-2 rounded-lg bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 shadow-sm transition-all duration-150 active:scale-95 shrink-0"
           >
@@ -221,6 +267,11 @@ export default function DispatchTrackingPage() {
                           <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", conf.dot, r.status === "IN_TRANSIT" && "animate-pulse")} />
                           {conf.label}
                         </span>
+                        {isDelivered(r.status) && r.deliveredAt && (
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                            {formatDate(r.deliveredAt)}{r.receivedBy ? ` · ${r.receivedBy}` : ""}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 sm:px-5 py-3 text-right">
                         {r.status === "IN_TRANSIT" ? (
@@ -231,8 +282,21 @@ export default function DispatchTrackingPage() {
                           >
                             {markingId === r.challanId ? "..." : "Mark Delivered"}
                           </button>
+                        ) : r.status === "CONVERTED" && (r.convertedInvoiceId || r.convertedOrderId) ? (
+                          <button
+                            onClick={() => router.push(`/sales/invoices?id=${encodeURIComponent(r.convertedInvoiceId || r.convertedOrderId)}`)}
+                            className="px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
+                          >
+                            View Invoice
+                          </button>
                         ) : (
-                          <span className="px-3 py-1.5 text-xs font-bold text-slate-400 dark:text-slate-600">—</span>
+                          <button
+                            onClick={() => router.push(`/sales/delivery-challan?search=${encodeURIComponent(r.challanNumber)}`)}
+                            className="px-3 py-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                            title="Open in Delivery Challans"
+                          >
+                            Open
+                          </button>
                         )}
                       </td>
                     </tr>
