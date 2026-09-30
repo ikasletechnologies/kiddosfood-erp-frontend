@@ -10,7 +10,8 @@ import {
   CheckCircle2, AlertCircle, FileText, Loader2, ArrowUpRight
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi } from "@/lib/api";
+import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi, dealersApi } from "@/lib/api";
+import AddPartyModal from "@/components/modals/AddPartyModal";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
@@ -36,7 +37,11 @@ interface CartItem {
   quantity: number;
   taxPercent: number;
   stock: number | null;
+  // ₹ per unit. Starts as the item master's Customer Retail Discount; once
+  // the cashier edits it (inline DISCOUNT cell or F3) `discountEdited` is set
+  // and the value is sent to checkout as a per-line override.
   itemDiscount: number;
+  discountEdited?: boolean;
 }
 
 // ── Receipt data ───────────────────────────────────────────────────────────────
@@ -57,6 +62,11 @@ interface ReceiptData {
   // franchise's credit ledger, not an actual payment. The receipt/print UI
   // must not claim "Payment Successful" for these (see BUG 2).
   isCredit: boolean;
+  // Customer/Dealer credit sale from "Other/Credit Payments" — partially or
+  // wholly unpaid; balanceDue is what's left outstanding on the invoice.
+  creditSale: boolean;
+  paidNow: number;
+  balanceDue: number;
   timestamp: Date;
 }
 
@@ -77,6 +87,9 @@ export default function POSPage() {
   const [partyResults, setPartyResults]   = useState<any[]>([]);
   const [selectedParty, setSelectedParty] = useState<any>(null);
   const [showPartyDrop, setShowPartyDrop] = useState(false);
+  // Quick-add Customer/Dealer from the party search box
+  const [showAddParty, setShowAddParty]   = useState(false);
+  const [addPartySeed, setAddPartySeed]   = useState<any>(undefined);
 
   // Products
   const [products, setProducts]           = useState<any[]>([]);
@@ -95,6 +108,9 @@ export default function POSPage() {
   const [accounts, setAccounts]           = useState<any[]>([]);
   const [accountId, setAccountId]         = useState("");
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  // Other/Credit Payments [Ctrl+M]
+  const [showCreditModal, setShowCreditModal] = useState(false);
+  const [creditPaidNow, setCreditPaidNow]     = useState("");
   const [newAccName, setNewAccName]       = useState("");
   const [newAccType, setNewAccType]       = useState<"CASH" | "BANK" | "UPI">("CASH");
   const [newAccBalance, setNewAccBalance] = useState("");
@@ -368,6 +384,43 @@ export default function POSPage() {
 
   // ── Party search ──────────────────────────────────────────────────────────
 
+  // Open the Add Customer/Dealer form, pre-filled from what was typed in the
+  // search box (digits → phone, otherwise → name).
+  const openAddParty = () => {
+    const q = partySearch.trim();
+    const isPhone = /^[\d\s\-+()]{6,}$/.test(q);
+    setAddPartySeed(q ? { name: isPhone ? "" : q, phone: isPhone ? q.replace(/\D/g, "") : "" } : undefined);
+    setShowPartyDrop(false);
+    setShowAddParty(true);
+  };
+
+  const saveNewParty = async (data: any) => {
+    try {
+      let created: any;
+      if (partyType === "DEALER") {
+        const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        const user = userStr ? JSON.parse(userStr) : null;
+        // Backend resolves HQ when a super admin sends no franchiseId.
+        const res = await dealersApi.create({ ...data, phone: data.contact || data.phone, franchiseId: user?.franchiseId || undefined });
+        created = (res as any).data?.dealer || (res as any).data;
+      } else {
+        const res = await customersApi.create({ ...data, phone: data.contact || data.phone });
+        created = (res as any).data;
+      }
+      toast.success(`${partyType === "DEALER" ? "Dealer" : "Customer"} "${created?.name}" added`);
+      setShowAddParty(false);
+      setAddPartySeed(undefined);
+      if (created?.id) {
+        setSelectedParty(created);
+        setPartySearch(created.name || "");
+        setPartyResults([]);
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || e?.response?.data?.message || `Failed to add ${partyType === "DEALER" ? "dealer" : "customer"}`);
+      throw e; // keep the modal open with the entered data
+    }
+  };
+
   useEffect(() => {
     if (partySearch.trim().length < 2) { setPartyResults([]); return; }
     const q = partySearch.trim();
@@ -398,7 +451,8 @@ export default function POSPage() {
   // ESC clears cart
   useEffect(() => {
     const fn = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !receipt) {
+      // Esc inside the credit popup only closes the popup (Modal handles it).
+      if (e.key === "Escape" && !receipt && !showCreditModal && !showAddParty) {
         setCart([]); setSelectedParty(null); setPartySearch(""); setDiscount(""); setPaidAmount(""); setSearch("");
         searchRef.current?.focus();
       }
@@ -408,7 +462,7 @@ export default function POSPage() {
     };
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
-  }, [receipt]);
+  }, [receipt, showCreditModal, showAddParty]);
 
   // ── Cart helpers ──────────────────────────────────────────────────────────
 
@@ -454,7 +508,8 @@ export default function POSPage() {
       const p = products.find(pr => pr.id === item.id);
       if (!p) return item;
       const price = getPrice(p, partyType);
-      const itemDiscount = getItemDiscount(p, partyType, price);
+      // Keep a cashier-edited discount (bounded to the new price).
+      const itemDiscount = item.discountEdited ? Math.min(item.itemDiscount, price) : getItemDiscount(p, partyType, price);
       return price === item.price && itemDiscount === item.itemDiscount ? item : { ...item, price, itemDiscount };
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -472,6 +527,16 @@ export default function POSPage() {
 
   const removeItem = (id: string) => setCart(prev => prev.filter(i => i.id !== id));
 
+  // Set a line's discount from the ₹ amount for the whole line (what the
+  // DISCOUNT column shows); stored per unit so qty changes scale it.
+  const setLineDiscount = (id: string, lineAmount: number) => {
+    setCart(prev => prev.map(i => {
+      if (i.id !== id) return i;
+      const perUnit = i.quantity > 0 ? Math.min(Math.max(0, lineAmount) / i.quantity, i.price) : 0;
+      return { ...i, itemDiscount: perUnit, discountEdited: true };
+    }));
+  };
+
   // ── Totals ─────────────────────────────────────────────────────────────────
 
   const subtotal   = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -480,15 +545,20 @@ export default function POSPage() {
   const manualDisc = Math.max(0, parseFloat(discount) || 0);
   const discAmt    = Math.max(0, manualDisc + productDiscounts);
   const rawTotal   = Math.max(0, subtotal + gst - discAmt);
-  const total      = Math.round(rawTotal);
+  // Round-off always goes UP to the next rupee (never down). Rounded to paise
+  // first so float noise like 220.0000001 doesn't bump an exact total.
+  // Must match POSService.checkout on the backend.
+  const total      = Math.ceil(Number(rawTotal.toFixed(2)));
   const roundOff   = parseFloat((total - rawTotal).toFixed(2));
   const changeDue  = paidAmount ? parseFloat(paidAmount) - total : 0;
 
   // ── Checkout ───────────────────────────────────────────────────────────────
 
-  const handleCheckout = async () => {
+  // `credit` = "Other/Credit Payments": bill a real Customer/Dealer and
+  // collect only `paidNow` (0..total) now; the rest stays outstanding.
+  const handleCheckout = async (credit?: { paidNow: number }) => {
     if (!cart.length) { toast.error("Cart is empty"); return; }
-    if (!accountId) { toast.error("Select a payment account"); return; }
+    if (!accountId && !(credit && credit.paidNow === 0)) { toast.error("Select a payment account"); return; }
 
     setLoading(true);
     try {
@@ -503,6 +573,7 @@ export default function POSPage() {
       let receiptGst = gst;
       let receiptDelivery = 0;
       let receiptTotal = total;
+      let serverPaid: number | undefined;
 
       if (partyType === "FRANCHISE" && selectedParty) {
         // Franchise order flow — this books an order against the
@@ -558,11 +629,24 @@ export default function POSPage() {
             unitPrice: i.price,
             totalPrice: i.price * i.quantity,
             taxPercent: i.taxPercent,
+            ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}),
           })),
+          ...(credit ? { creditSale: true, paidAmount: credit.paidNow } : {}),
         });
         orderId = res.data?.id || res.data?.orderId || "";
         invoiceNum = res.data?.invoiceNum || orderId;
+        receiptTotal = res.data?.totalAmount ?? total;
+        // Trust what the server actually saved, not what was requested.
+        const payments: any[] = Array.isArray(res.data?.payments) ? res.data.payments : [];
+        serverPaid = res.data?.paymentStatus === "PAID"
+          ? receiptTotal
+          : payments.filter(p => !p.isCancelled).reduce((s, p) => s + (Number(p.paidAmount) || 0), 0);
+        if (credit && res.data?.paymentStatus === "PAID" && credit.paidNow < receiptTotal) {
+          toast.error("The server saved this bill as FULLY PAID, not credit. The backend is running old code — restart it, then cancel/re-enter this bill.", { duration: 10000 });
+        }
       }
+
+      const paidNow = serverPaid ?? (credit ? Math.min(credit.paidNow, receiptTotal) : receiptTotal);
 
       setReceipt({
         orderId,
@@ -577,8 +661,12 @@ export default function POSPage() {
         total: receiptTotal,
         paymentMode: payMode,
         isCredit,
+        creditSale: !!credit || (!isCredit && paidNow < receiptTotal - 0.01),
+        paidNow: isCredit ? 0 : paidNow,
+        balanceDue: isCredit ? receiptTotal : Math.max(0, receiptTotal - paidNow),
         timestamp: new Date(),
       });
+      setShowCreditModal(false);
 
       // Stock numbers shown on-screen go stale after a sale (server-side
       // re-validation already prevents overselling — this is purely
@@ -592,6 +680,16 @@ export default function POSPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openCreditModal = () => {
+    if (!cart.length || loading) return;
+    if (!selectedParty) {
+      toast.error(`Select a ${partyType === "DEALER" ? "dealer" : "customer"} first — a credit bill must be against a named party`);
+      return;
+    }
+    setCreditPaidNow(paidAmount && Number(paidAmount) > 0 ? String(Math.min(Number(paidAmount), total)) : "");
+    setShowCreditModal(true);
   };
 
   const handleNewOrder = () => {
@@ -640,6 +738,7 @@ export default function POSPage() {
       ${receipt.discount > 0 ? `<div class="total"><span>Discount</span><span>-₹${receipt.discount.toLocaleString()}</span></div>` : ""}
       ${Math.abs(receipt.total - (receipt.subtotal + receipt.gst + receipt.deliveryCharge - receipt.discount)) > 0.001 ? `<div class="total"><span>Round Off</span><span>${receipt.total - (receipt.subtotal + receipt.gst + receipt.deliveryCharge - receipt.discount) > 0 ? "+" : ""}${(receipt.total - (receipt.subtotal + receipt.gst + receipt.deliveryCharge - receipt.discount)).toFixed(2)}</span></div>` : ""}
       <div class="total bold" style="border-top:1px solid #000;margin-top:6px;padding-top:6px"><span>TOTAL</span><span>₹${receipt.total.toLocaleString()}</span></div>
+      ${receipt.creditSale && receipt.balanceDue > 0 ? `<div class="total"><span>Paid</span><span>₹${receipt.paidNow.toLocaleString()}</span></div><div class="total bold"><span>BALANCE DUE</span><span>₹${receipt.balanceDue.toLocaleString()}</span></div>` : ""}
       <div class="center" style="margin-top:20px;font-size:11px;font-weight:bold">${receipt.isCredit ? "*** CREDIT ORDER — PAYMENT DUE FROM FRANCHISE ***" : "*** THANK YOU ***"}</div>
       <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}</script>
     </body></html>`);
@@ -667,10 +766,9 @@ export default function POSPage() {
   const handleF3 = useCallback(() => {
     if (cart.length === 0 || selectedRowIndex < 0 || selectedRowIndex >= cart.length) return;
     const item = cart[selectedRowIndex];
-    const disc = window.prompt(`Enter discount (₹) for ${item.name}:`, item.itemDiscount?.toString() || "0");
-    if (disc && !isNaN(Number(disc))) {
-      setCart(c => c.map((x, i) => i === selectedRowIndex ? { ...x, itemDiscount: Number(disc) } : x));
-    }
+    const current = ((item.itemDiscount || 0) * item.quantity).toFixed(2);
+    const disc = window.prompt(`Enter discount (₹) for ${item.name} (whole line, ${item.quantity} qty):`, current);
+    if (disc !== null && disc.trim() !== "" && !isNaN(Number(disc))) setLineDiscount(item.id, Number(disc));
   }, [cart, selectedRowIndex]);
 
   const handleF4 = useCallback(() => {
@@ -704,10 +802,14 @@ export default function POSPage() {
         e.preventDefault();
         if (cart.length > 0 && accountId && !loading) handleCheckout();
       }
+      if (e.ctrlKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        openCreditModal();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleF2, handleF3, handleF4, discount, cart.length, accountId, loading, handleCheckout]);
+  }, [handleF2, handleF3, handleF4, discount, cart.length, accountId, loading, handleCheckout, openCreditModal]);
 
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -723,10 +825,16 @@ export default function POSPage() {
             <div className="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
               <ShoppingBag size={28} />
             </div>
-            <div className="text-lg font-bold">{receipt.isCredit ? "Order Placed — Billed to Franchise Credit" : "Payment Successful"}</div>
+            <div className="text-lg font-bold">
+              {receipt.isCredit ? "Order Placed — Billed to Franchise Credit"
+                : receipt.creditSale && receipt.balanceDue > 0 ? (receipt.paidNow > 0 ? "Partially Paid — Credit Bill Saved" : "Credit Bill Saved")
+                : "Payment Successful"}
+            </div>
             <div className="text-2xl font-black mt-1">{fmt(receipt.total)}</div>
             <div className="text-xs opacity-80 mt-1">
-              {receipt.isCredit ? `Franchise Credit · ${receipt.partyType}` : `${receipt.paymentMode} · ${receipt.partyType}`}
+              {receipt.isCredit ? `Franchise Credit · ${receipt.partyType}`
+                : receipt.creditSale && receipt.balanceDue > 0 ? `Credit · ${receipt.partyType}`
+                : `${receipt.paymentMode} · ${receipt.partyType}`}
             </div>
           </div>
 
@@ -757,6 +865,12 @@ export default function POSPage() {
               )}
               <div className="flex justify-between text-sm font-bold text-gray-800 dark:text-white pt-1 border-t border-gray-100 dark:border-white/5"><span>Total</span><span>{fmt(receipt.total)}</span></div>
             </div>
+            {receipt.creditSale && receipt.balanceDue > 0 && (
+              <div className="space-y-1 text-xs border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 rounded-lg px-3 py-2">
+                <div className="flex justify-between text-gray-600 dark:text-slate-300"><span>Paid now</span><span className="font-mono">{fmt(receipt.paidNow)}</span></div>
+                <div className="flex justify-between font-bold text-rose-600 dark:text-rose-400"><span>Balance due</span><span className="font-mono">{fmt(receipt.balanceDue)}</span></div>
+              </div>
+            )}
             {receipt.isCredit && (
               <div className="text-[11px] text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 rounded-lg px-3 py-2">
                 This was not a cash/card/UPI payment — it was billed to the franchise's outstanding credit balance. Collect payment separately via Franchise Orders.
@@ -894,11 +1008,14 @@ export default function POSPage() {
                 </tr>
               ) : (
                 cart.map((item, idx) => {
-                  const basePrice = getPrice(item as any, partyType);
-                  const priceWithoutTax = basePrice / (1 + (item.taxPercent / 100));
-                  const taxAmt = basePrice - priceWithoutTax;
-                  const lineTotal = (basePrice * item.quantity) - (item.itemDiscount || 0);
-                  
+                  // Prices are tax-exclusive (GST is added on top — same as the
+                  // Subtotal/Tax rows and the server's checkout maths), so the
+                  // row total now agrees with PAYABLE TOTAL.
+                  const lineGross = item.price * item.quantity;
+                  const lineTax = lineGross * ((item.taxPercent || 0) / 100);
+                  const lineDisc = (item.itemDiscount || 0) * item.quantity;
+                  const lineTotal = lineGross + lineTax - lineDisc;
+
                   return (
                     <tr key={item.id} onClick={() => setSelectedRowIndex(idx)} className={clsx("border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/50 dark:hover:bg-white/5 transition-colors cursor-pointer group", selectedRowIndex === idx && "bg-orange-100/60 dark:bg-orange-500/20")}>
                       <td className="px-3 py-2.5 font-medium text-gray-500">{idx + 1}</td>
@@ -912,9 +1029,30 @@ export default function POSPage() {
                         </div>
                       </td>
                       <td className="px-3 py-2.5 text-gray-600 dark:text-slate-300">PCS</td>
-                      <td className="px-3 py-2.5 text-right font-mono">{priceWithoutTax.toFixed(2)}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-green-600">{item.itemDiscount ? item.itemDiscount.toFixed(2) : "0.00"}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-gray-500">{(taxAmt * item.quantity).toFixed(2)}</td>
+                      <td className="px-3 py-2.5 text-right font-mono">{item.price.toFixed(2)}</td>
+                      <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          key={`${item.id}-${item.quantity}-${item.itemDiscount}`}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          defaultValue={lineDisc ? Number(lineDisc.toFixed(2)) : ""}
+                          placeholder="0.00"
+                          title="Line discount (₹) — Enter or click away to apply"
+                          onFocus={(e) => { setSelectedRowIndex(idx); e.currentTarget.select(); }}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value.trim();
+                            const next = v === "" ? 0 : Number(v);
+                            if (!isNaN(next) && Math.abs(next - lineDisc) > 0.001) setLineDiscount(item.id, next);
+                          }}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") e.currentTarget.blur();
+                          }}
+                          className="w-20 text-right font-mono text-xs text-green-600 dark:text-green-400 bg-transparent border border-dashed border-gray-300 dark:border-white/15 hover:border-green-400 focus:border-green-500 focus:bg-white dark:focus:bg-[#13151f] rounded-md px-1.5 py-1 outline-none transition-colors [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-gray-500">{lineTax.toFixed(2)}</td>
                       <td className="px-3 py-2.5 text-right font-bold font-mono text-[#f58220]">{lineTotal.toFixed(2)}</td>
                     </tr>
                   );
@@ -992,8 +1130,23 @@ export default function POSPage() {
                 onClick={() => setPartySearch("")} 
               />
             )}
-              {showPartyDrop && partyResults.length > 0 && (
+              {showPartyDrop && (
                 <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
+                  <button
+                    onClick={openAddParty}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 transition-colors"
+                  >
+                    <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
+                      <Plus size={12} />
+                    </span>
+                    Add {activeTab.label}
+                    {partySearch.trim() && <span className="font-normal text-gray-400 dark:text-slate-500 truncate">“{partySearch.trim()}”</span>}
+                  </button>
+                  {partySearch.trim().length >= 2 && partyResults.length === 0 && (
+                    <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
+                      No {activeTab.label.toLowerCase()} found
+                    </div>
+                  )}
                   {partyResults.map(p => (
                     <button
                       key={p.id}
@@ -1009,11 +1162,6 @@ export default function POSPage() {
                       </div>
                     </button>
                   ))}
-                </div>
-              )}
-              {showPartyDrop && partySearch.length >= 2 && partyResults.length === 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
-                  No {activeTab.label.toLowerCase()} found
                 </div>
               )}
             </div>
@@ -1168,7 +1316,7 @@ export default function POSPage() {
           {/* Confirm button */}
           <div className="flex gap-2">
             <button
-              onClick={handleCheckout}
+              onClick={() => handleCheckout()}
               disabled={cart.length === 0 || loading || !accountId}
               className="flex-1 bg-emerald-200 dark:bg-emerald-600 hover:bg-emerald-300 dark:hover:bg-emerald-500 text-emerald-950 dark:text-emerald-50 disabled:opacity-50 py-3 rounded-lg text-sm font-bold transition-all shadow-sm flex flex-col items-center justify-center"
             >
@@ -1176,13 +1324,106 @@ export default function POSPage() {
             </button>
           </div>
           <button
-              disabled={cart.length === 0 || loading || !accountId}
+              onClick={openCreditModal}
+              disabled={cart.length === 0 || loading}
               className="w-full bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-slate-300 disabled:opacity-50 py-2 rounded-lg text-[11px] font-bold transition-all mt-2"
             >
               Other/Credit Payments [Ctrl+M]
           </button>
         </div>
       </div>
+
+      {/* ── Quick-add Customer / Dealer ── */}
+      <AddPartyModal
+        isOpen={showAddParty}
+        onClose={() => { setShowAddParty(false); setAddPartySeed(undefined); }}
+        partyType="customer"
+        title={partyType === "DEALER" ? "ADD DEALER" : "ADD CUSTOMER"}
+        initialData={addPartySeed}
+        onSave={saveNewParty}
+      />
+
+      {/* ── Other / Credit Payments [Ctrl+M] ── */}
+      <Modal
+        isOpen={showCreditModal}
+        onClose={() => !loading && setShowCreditModal(false)}
+        title="Credit / Part Payment"
+        size="sm"
+        footer={(() => {
+          const paid = Math.max(0, Number(creditPaidNow) || 0);
+          const invalid = paid > total || (paid > 0 && !accountId);
+          return (
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowCreditModal(false)}
+                disabled={loading}
+                className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleCheckout({ paidNow: paid })}
+                disabled={loading || invalid}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl disabled:opacity-50"
+              >
+                {loading && <Loader2 size={14} className="animate-spin" />}
+                {paid >= total ? "Save (Fully Paid)" : "Save Credit Bill"}
+              </button>
+            </div>
+          );
+        })()}
+      >
+        {(() => {
+          const paid = Math.max(0, Number(creditPaidNow) || 0);
+          const due = Math.max(0, total - paid);
+          return (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-orange-200 dark:border-orange-500/20 bg-orange-50/60 dark:bg-orange-500/5 px-3 py-2.5">
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">{partyType === "DEALER" ? "Dealer" : "Customer"}</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{selectedParty?.name}</p>
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">{selectedParty?.phone || selectedParty?.contactNum || ""}</p>
+              </div>
+
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500 dark:text-slate-400">Bill Total</span>
+                <span className="font-bold font-mono text-gray-900 dark:text-white">{fmt(total)}</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Amount received now (optional)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={total}
+                    autoFocus
+                    placeholder="0"
+                    value={creditPaidNow}
+                    onChange={e => setCreditPaidNow(e.target.value)}
+                    onKeyDown={e => e.stopPropagation()}
+                    className="w-full border border-gray-300 dark:border-white/10 rounded-xl pl-7 pr-3 py-2 text-sm font-semibold outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
+                  />
+                </div>
+                {paid > total && <p className="text-[11px] text-red-500 mt-1">Cannot exceed the bill total.</p>}
+                {paid > 0 && (
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400 mt-1">
+                    Collected via <b>{payMode}</b> into {accounts.find(a => a.id === accountId)?.name || <span className="text-red-500">no account selected</span>}.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-white/10">
+                <span className="text-sm font-semibold text-gray-700 dark:text-slate-200">Balance on credit</span>
+                <span className="text-lg font-bold font-mono text-rose-600 dark:text-rose-400">{fmt(due)}</span>
+              </div>
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 leading-snug">
+                The invoice is saved as {paid === 0 ? "Unpaid" : paid >= total ? "Paid" : "Partially Paid"}. Collect the balance later from Sales → Payments.
+              </p>
+            </div>
+          );
+        })()}
+      </Modal>
 
       {showScanner && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-300">
