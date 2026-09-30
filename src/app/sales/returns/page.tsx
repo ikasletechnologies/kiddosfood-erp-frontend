@@ -81,6 +81,7 @@ interface ReturnOrder {
     taxableValue?: number;
     taxAmount?: number;
     totalAmount?: number;
+    gstRate?: number;
   }>;
 }
 
@@ -215,7 +216,7 @@ export default function SalesReturnsPage() {
         taxableValue: it.taxableValue != null ? Number(it.taxableValue) : undefined,
         taxAmount: it.taxAmount != null ? Number(it.taxAmount) : undefined,
         totalAmount: it.totalAmount != null ? Number(it.totalAmount) : (it.rate * it.quantity),
-        gstRate: it.gstRate != null ? Number(it.gstRate) : (r.gstRate != null ? Number(r.gstRate) : (r.posOrder?.items?.find((pi) => pi.productId === it.productId)?.gstRate || 0)),
+        gstRate: it.gstRate != null ? Number(it.gstRate) : (r.gstRate != null ? Number(r.gstRate) : (r.posOrder?.items?.find((pi: any) => pi.productId === it.productId)?.gstRate || 0)),
       })),
     };
   };
