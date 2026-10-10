@@ -85,7 +85,8 @@ export const grnApi = {
   getRemainingQuantities: (poId: string) => api.get(`/api/grn/po/${poId}/remaining`),
   createFromPO: (poId: string, data: { items: any[], receivedBy?: string }) =>
     api.post(`/api/grn/from-po/${poId}`, data),
-  approve: (id: string) => api.patch(`/api/grn/${id}/approve`),
+  // rejectionReason: required when every received unit was rejected (finalizes a fully rejected GRN).
+  approve: (id: string, data?: { rejectionReason?: string }) => api.patch(`/api/grn/${id}/approve`, data || {}),
   cancel: (id: string) => api.patch(`/api/grn/${id}/cancel`),
 };
 

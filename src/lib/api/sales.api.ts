@@ -36,6 +36,7 @@ export const salesApi = {
   updateSalesOrder: (id: string, data: any) => api.patch(`/api/sales/orders/${id}`, data),
 
   getDeliveryChallans: (params?: any) => api.get('/api/sales/delivery-challans', { params }),
+  getDeliveryChallanPrefill: (orderId: string) => api.get(`/api/sales/delivery-challans/prefill-from-invoice/${orderId}`),
   getDeliveryChallanById: (id: string) => api.get(`/api/sales/delivery-challans/${id}`),
   createDeliveryChallan: (data: any) => api.post('/api/sales/delivery-challans', data),
   updateDeliveryChallan: (id: string, data: any) => api.patch(`/api/sales/delivery-challans/${id}`, data),
@@ -55,6 +56,7 @@ export const salesApi = {
 
   getReturns: (params?: any) => api.get('/api/sales/returns', { params }),
   createReturn: (data: any) => api.post('/api/sales/returns', data),
+  previewReturn: (data: any) => api.post('/api/sales/returns/preview', data),
   updateReturnStatus: (id: string, status: string, approvedBy?: string) => 
     api.patch(`/api/sales/returns/${id}`, { status, approvedBy }),
   refundReturn: (id: string, data: { refundMethod?: string; accountId?: string; method?: string }) =>

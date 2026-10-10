@@ -8,6 +8,8 @@ interface ExportCsvParams {
   dateTo?: string;
   statusFilter?: string;
   search?: string;
+  // Status wording as shown on the list page (falls back to the raw status).
+  statusLabelOf?: (est: any) => string;
 }
 
 /**
@@ -15,7 +17,7 @@ interface ExportCsvParams {
  * The CSV respects the current filters (date range, status, search) already applied
  * to the `filtered` array passed in.
  */
-export function exportToCsv({ documentType, filtered, L }: ExportCsvParams) {
+export function exportToCsv({ documentType, filtered, L, statusLabelOf }: ExportCsvParams) {
   // The task spec's exact required header for the document-number column is
   // "Estimate No" — the on-screen label (`L.noColumn`) is the abbreviated
   // "Est No" (or "PI No" for Proforma), which is a UI-display concern we're
@@ -39,7 +41,7 @@ export function exportToCsv({ documentType, filtered, L }: ExportCsvParams) {
     // text rather than a number, failing the "must remain numeric" import
     // requirement.
     const amtVal = Number(est.totalAmount || 0).toFixed(2);
-    const statusVal = est.status || 'DRAFT';
+    const statusVal = statusLabelOf ? statusLabelOf(est) : (est.status || 'DRAFT');
     const soRefVal = est.convertedOrderNumber || '';
     return [dateVal, noVal, partyVal, partyTypeVal, amtVal, statusVal, soRefVal];
   });

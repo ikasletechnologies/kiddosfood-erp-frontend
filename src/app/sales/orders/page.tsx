@@ -90,6 +90,21 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   CANCELLED:      { label: "Cancelled",       color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
 };
 
+// Mirror of SALES_ORDER_TRANSITIONS in the backend (sales.service.ts), which
+// enforces it — this copy only decides which action buttons to show.
+const SALES_ORDER_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ["PENDING", "CONFIRMED", "CANCELLED"],
+  PENDING: ["CONFIRMED", "CANCELLED"],
+  CONFIRMED: ["PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"],
+  PROCESSING: ["SHIPPED", "DELIVERED", "CANCELLED"],
+  SHIPPED: ["DELIVERED"],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+const canTransition = (status: string | undefined, to: string) => (SALES_ORDER_TRANSITIONS[status || ""] || []).includes(to);
+// Converted (DELIVERED) and cancelled orders are final — view/print only.
+const isEditableOrder = (status: string | undefined) => !!status && !["DELIVERED", "CANCELLED", "CLOSED", "CONVERTED"].includes(status);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -178,6 +193,7 @@ export default function SalesOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [convertingId, setConvertingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -259,6 +275,7 @@ export default function SalesOrdersPage() {
   const attachments = useAttachments("SALES_ORDER", draftId, showToast);
   const [viewOrderRef, setViewOrderRef] = useState<any>(null);
   const autoOpenedIdRef = useRef<string | null>(null);
+  const fetchSeqRef = useRef(0);
   const [loadedStatus, setLoadedStatus] = useState<string | null>(null);
 
   // Status Filter Popover State
@@ -289,12 +306,19 @@ export default function SalesOrdersPage() {
   // ── Data Syncing ─────────────────────────────────────────────────────────────
 
   const fetchAllData = useCallback(async () => {
+    // Only the latest request may update state — a slower response for a
+    // previously selected date filter must not overwrite newer results.
+    const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
       const [custRes, prodRes, ordRes, invRes, companyRes] = await Promise.allSettled([
         customersApi.getAll(),
         productsFullApi.getAll(),
-        api.get("/api/sales/orders").catch(() => ({ data: [] })),
+        // Date range is applied by the server (business-timezone days), so
+        // the list and the summary cards both come from this one result.
+        api.get("/api/sales/orders", {
+          params: { datePreset: dateFilter, ...(dateFilter === "CUSTOM" ? { dateFrom, dateTo } : {}) }
+        }).catch(() => ({ data: [] })),
         api.get("/api/sales/invoices").catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
       ]);
@@ -320,7 +344,9 @@ export default function SalesOrdersPage() {
         if (localData) {
           const locals = JSON.parse(localData);
           const apiIds = new Set(salesOrders.map((o: any) => o.id));
-          const uniqueLocals = locals.filter((l: any) => !apiIds.has(l.id));
+          // Unsaved local drafts never reach the server's date filter — flag
+          // them so the list applies the same date range to them locally.
+          const uniqueLocals = locals.filter((l: any) => !apiIds.has(l.id)).map((l: any) => ({ ...l, _local: true }));
           salesOrders = [...uniqueLocals, ...salesOrders];
         }
       } catch (err) {
@@ -354,6 +380,7 @@ export default function SalesOrdersPage() {
         };
       });
 
+      if (seq !== fetchSeqRef.current) return;
       setOrders(salesOrders);
       if (custRes.status === "fulfilled") setCustomers((custRes.value as any).data || []);
       if (prodRes.status === "fulfilled") setProducts((prodRes.value as any).data || []);
@@ -362,10 +389,12 @@ export default function SalesOrdersPage() {
         if ((companyRes.value as any).data) setCompanyProfile((companyRes.value as any).data);
       }
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
-  }, []);
+  }, [dateFilter, dateFrom, dateTo]);
 
+  // Refetch whenever the date filter changes (fetchAllData's identity
+  // changes with it), so list and cards always reflect the selected range.
   useEffect(() => {
     fetchAllData();
   }, [fetchAllData]);
@@ -804,13 +833,21 @@ export default function SalesOrdersPage() {
   // SalesService.convertSalesOrderToProforma).
   const handleConfirm = async (order: any, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (confirmingId) return; // one confirm request at a time (no double-submit)
+    setConfirmingId(order.id);
     try {
       await api.patch(`/api/sales/orders/${order.id}`, { status: "CONFIRMED" });
       showToast("Sales Order confirmed", "success");
-      fetchAllData();
+      // Reflect the new status right away (buttons switch immediately), then
+      // reload list + summary cards from the server.
+      setOrders(prev => prev.map(o => (o.id === order.id ? { ...o, status: "CONFIRMED" } : o)));
       setViewOrderRef((prev: any) => (prev && prev.id === order.id ? { ...prev, status: "CONFIRMED" } : prev));
+      fetchAllData();
     } catch (err: any) {
       showToast(err?.response?.data?.error || "Failed to confirm Sales Order", "error");
+      fetchAllData(); // e.g. already confirmed elsewhere — show the real status
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -854,17 +891,15 @@ export default function SalesOrdersPage() {
     if (e) e.stopPropagation();
     setConvertingId(order.id);
     try {
-      try {
-        const res = await api.post(`/api/sales/orders/${order.id}/convert-to-sale`, {});
-        showToast(`Sales Order #${order.orderNo} converted to Sale Invoice!`, "success");
-        const invoiceId = res?.data?.sale?.id || res?.data?.invoice?.id;
-        if (invoiceId) {
-          router.push(`/sales/invoices?id=${invoiceId}`);
-          return;
-        }
-      } catch (_apiErr) {
-        await api.patch(`/api/sales/orders/${order.id}`, { status: "CLOSED", balance: 0 });
-        showToast(`Sales Order #${order.orderNo} converted to Sale Invoice!`, "success");
+      // No fallback: a failed conversion used to PATCH the order to CLOSED
+      // anyway — marking it "converted" with no invoice and hiding the real
+      // error. The server's reason is shown instead.
+      const res = await api.post(`/api/sales/orders/${order.id}/convert-to-sale`, {});
+      showToast(`Sales Order #${order.orderNo} converted to Sale Invoice!`, "success");
+      const invoiceId = res?.data?.sale?.id || res?.data?.invoice?.id;
+      if (invoiceId) {
+        router.push(`/sales/invoices?id=${invoiceId}`);
+        return;
       }
       fetchAllData();
     } catch (err: any) {
@@ -884,11 +919,42 @@ export default function SalesOrdersPage() {
     return "Open";
   }
 
+  // Date + search scope shared by the list AND the summary cards. Server
+  // orders are already limited to the selected date range by the API; only
+  // unsaved local drafts (_local) need the date check here, by local day.
+  const matchesDateAndSearch = (o: any) => {
+    const matchSearch = !search ||
+      o.orderNo?.toLowerCase().includes(search.toLowerCase()) ||
+      o.customerName?.toLowerCase().includes(search.toLowerCase());
+    if (!matchSearch) return false;
+    if (!o._local || dateFilter === "ALL") return true;
+
+    const d = new Date(o.invoiceDate);
+    const orderDay = isNaN(d.getTime()) ? "" : toLocalDateString(d);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let lo = "", hi = "";
+    if (dateFilter === "TODAY") {
+      lo = hi = toLocalDateString(today);
+    } else if (dateFilter === "YESTERDAY") {
+      lo = hi = toLocalDateString(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1));
+    } else if (dateFilter === "THIS_WEEK") {
+      const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+      lo = toLocalDateString(monday);
+      hi = toLocalDateString(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6));
+    } else if (dateFilter === "THIS_MONTH") {
+      lo = toLocalDateString(new Date(today.getFullYear(), today.getMonth(), 1));
+      hi = toLocalDateString(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    } else if (dateFilter === "CUSTOM") {
+      // Either bound may be blank; a reversed range is treated as swapped.
+      [lo, hi] = dateFrom && dateTo && dateFrom > dateTo ? [dateTo, dateFrom] : [dateFrom, dateTo];
+    }
+    return !!orderDay && (!lo || orderDay >= lo) && (!hi || orderDay <= hi);
+  };
+
   const getFilteredOrders = () => {
     return orders.filter(o => {
-      const matchSearch = !search ||
-        o.orderNo.toLowerCase().includes(search.toLowerCase()) ||
-        o.customerName.toLowerCase().includes(search.toLowerCase());
+      if (!matchesDateAndSearch(o)) return false;
 
       const cat = getOrderCategory(o);
       const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
@@ -899,25 +965,7 @@ export default function SalesOrdersPage() {
       if (statusFilter === "Completed") matchStatus = cat === "Completed";
       if (statusFilter === "Partial Open") matchStatus = cat === "Partial Open";
 
-      // o.invoiceDate is a full ISO timestamp ("2026-09-29T10:15:00.000Z"), so
-      // compare by the order's LOCAL calendar day ("2026-09-29"). Comparing the
-      // raw timestamp string against a date string excluded every order on the
-      // "To" date, never matched "Today", and could shift a day across UTC.
-      const d = new Date(o.invoiceDate);
-      const orderDay = isNaN(d.getTime()) ? "" : toLocalDateString(d);
-      let matchDate = true;
-      if (dateFilter === "THIS_MONTH") {
-        const now = new Date();
-        matchDate = d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      } else if (dateFilter === "TODAY") {
-        matchDate = orderDay === toLocalDateString(new Date());
-      } else if (dateFilter === "CUSTOM") {
-        // Either bound may be blank; a reversed range is treated as swapped.
-        const [lo, hi] = dateFrom && dateTo && dateFrom > dateTo ? [dateTo, dateFrom] : [dateFrom, dateTo];
-        matchDate = !!orderDay && (!lo || orderDay >= lo) && (!hi || orderDay <= hi);
-      }
-
-      return matchSearch && matchSelectedStatuses && matchStatus && matchDate;
+      return matchSelectedStatuses && matchStatus;
     });
   };
 
@@ -931,11 +979,15 @@ export default function SalesOrdersPage() {
     c.phone?.includes(customerSearch)
   );
 
+  // Cards are the status breakdown of exactly the records the list draws
+  // from (same date range + search) — the status dropdown is what the cards
+  // break down, so it narrows the list but not the cards.
+  const scopedOrders = orders.filter(matchesDateAndSearch);
   const stats = {
-    total: orders.length,
-    open: orders.filter(o => getOrderCategory(o) === "Open").length,
-    overdue: orders.filter(o => getOrderCategory(o) === "Overdue").length,
-    closed: orders.filter(o => getOrderCategory(o) === "Completed").length,
+    total: scopedOrders.length,
+    open: scopedOrders.filter(o => getOrderCategory(o) === "Open").length,
+    overdue: scopedOrders.filter(o => getOrderCategory(o) === "Overdue").length,
+    closed: scopedOrders.filter(o => getOrderCategory(o) === "Completed").length,
   };
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1612,13 +1664,14 @@ export default function SalesOrdersPage() {
               >
                 Back to List
               </button>
-              {viewOrderRef?.status === "DRAFT" && (
+              {canTransition(viewOrderRef?.status, "CONFIRMED") && (
                 <button
                   type="button"
                   onClick={(e) => handleConfirm(viewOrderRef, e)}
-                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer"
+                  disabled={confirmingId === viewOrderRef?.id}
+                  className="flex items-center gap-2 px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  <Check className="h-4 w-4" /> Confirm Order
+                  <Check className="h-4 w-4" /> {confirmingId === viewOrderRef?.id ? "Confirming..." : "Confirm Order"}
                 </button>
               )}
               {viewOrderRef?.status === "CONFIRMED" && !viewOrderRef?.proformaInvoiceId && (
@@ -1736,6 +1789,9 @@ export default function SalesOrdersPage() {
             >
               <option value="THIS_MONTH">This Month</option>
               <option value="TODAY">Today</option>
+              <option value="YESTERDAY">Yesterday</option>
+              <option value="THIS_WEEK">This Week</option>
+              <option value="ALL">All Dates</option>
               <option value="CUSTOM">Custom Range</option>
             </select>
             {dateFilter === "CUSTOM" && (
@@ -1860,28 +1916,33 @@ export default function SalesOrdersPage() {
                                 Partial Open
                               </span>
                             ) : (
-                              <span className="text-[#f58220] dark:text-orange-400 font-semibold text-xs">
-                                Confirmed
+                              // The order's real status — this used to say
+                              // "Confirmed" for every other status, drafts
+                              // included, which is why a Draft row looked
+                              // confirmed while still offering Resume/Confirm.
+                              <span className={clsx("font-semibold text-xs", STATUS_STYLES[o.status]?.color || "text-[#f58220] dark:text-orange-400")}>
+                                {STATUS_STYLES[o.status]?.label || o.status || "—"}
                               </span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
                               {o.status === "DRAFT" && (
-                                <>
-                                  <button
-                                    onClick={() => handleEdit(o)}
-                                    className="px-2.5 py-1 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
-                                  >
-                                    Resume
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleConfirm(o, e)}
-                                    className="px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors"
-                                  >
-                                    Confirm
-                                  </button>
-                                </>
+                                <button
+                                  onClick={() => handleEdit(o)}
+                                  className="px-2.5 py-1 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded transition-colors"
+                                >
+                                  Resume
+                                </button>
+                              )}
+                              {canTransition(o.status, "CONFIRMED") && (
+                                <button
+                                  onClick={(e) => handleConfirm(o, e)}
+                                  disabled={confirmingId === o.id}
+                                  className="px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 rounded transition-colors disabled:opacity-50"
+                                >
+                                  {confirmingId === o.id ? "Confirming..." : "Confirm"}
+                                </button>
                               )}
                               {isClosed ? (
                                 <a
@@ -1891,7 +1952,7 @@ export default function SalesOrdersPage() {
                                 >
                                   Converted To Invoice No. {o.convertedInvoiceNumber || o.convertedInvoiceNo || o.invoiceNum || (o.convertedInvoiceId ? o.convertedInvoiceId.slice(0, 8) : o.orderNo)}
                                 </a>
-                              ) : o.status !== "DRAFT" ? (
+                              ) : canTransition(o.status, "DELIVERED") ? (
                                 <button
                                   onClick={(e) => convertToSale(o, e)}
                                   disabled={convertingId === o.id}
@@ -1900,13 +1961,23 @@ export default function SalesOrdersPage() {
                                   {convertingId === o.id ? "Converting..." : "CONVERT TO SALE"}
                                 </button>
                               ) : null}
-                              <button
-                                onClick={() => handleEdit(o)}
-                                className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                                title="Edit Order"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </button>
+                              {isEditableOrder(o.status) && !isClosed ? (
+                                <button
+                                  onClick={() => handleEdit(o)}
+                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="Edit Order"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => openOrderView(o)}
+                                  className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
+                                  title="View Order"
+                                >
+                                  <FileText className="h-4 w-4" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => handlePrintOrder(o)}
                                 className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"

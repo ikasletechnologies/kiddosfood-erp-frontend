@@ -279,7 +279,7 @@ export default function PartiesPage() {
         it.sku || "—",
         it.category || "—",
         Number(it.quantitySold || 0),
-        it.unit || "PCS",
+        it.unit || "",
         Number(it.totalValue || 0),
         Number(it.orderCount || 1),
         it.lastPurchased ? new Date(it.lastPurchased).toLocaleDateString() : "—"
@@ -1093,7 +1093,7 @@ export default function PartiesPage() {
                               {item.sku || "—"}
                             </td>
                             <td className="px-5 py-3.5 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
-                              {Number(item.quantitySold || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400 uppercase">{item.unit || "PCS"}</span>
+                              {Number(item.quantitySold || 0).toLocaleString()} <span className="text-[10px] font-normal text-slate-400 uppercase">{item.unit || ""}</span>
                             </td>
                             <td className="px-5 py-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
                               ₹ {(Number(item.totalValue) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

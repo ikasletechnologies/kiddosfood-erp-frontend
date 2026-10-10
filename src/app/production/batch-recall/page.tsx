@@ -135,7 +135,11 @@ export default function BatchRecallPage() {
   const loadBatches = useCallback(async () => {
     try {
       const res = await api.get("/api/production/batches");
-      const data: RecallBatch[] = (res.data || []).map((b: any) => ({
+      // The endpoint also returns GRN raw-material lots (batchType
+      // GRN_RAW_MATERIAL, InventoryBatch ids) for expiry tracking. Recall works
+      // on production batches only (distribution, sales block, outlet
+      // returns), so those lots are not listed here.
+      const data: RecallBatch[] = (res.data || []).filter((b: any) => b.batchType !== "GRN_RAW_MATERIAL").map((b: any) => ({
         id: b.id,
         // batchCode is the server-owned canonical business identifier. Never
         // derive a second display code from a UUID or legacy batch string.
@@ -195,8 +199,8 @@ export default function BatchRecallPage() {
       ]);
       setEligibility(eligRes.data);
       setRecall(stateRes.data);
-    } catch (e) {
-      showToast("Failed to load recall details for this batch", "error");
+    } catch (e: any) {
+      showToast(e?.response?.data?.error || "Failed to load recall details for this batch", "error");
     } finally {
       setDetailLoading(false);
     }

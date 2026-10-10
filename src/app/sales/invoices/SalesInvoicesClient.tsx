@@ -97,18 +97,29 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   DRAFT:    { label: "Draft",    color: "text-slate-600 dark:text-slate-400",   bg: "bg-slate-50 dark:bg-white/5",   border: "border-slate-200 dark:border-white/10" },
   SENT:     { label: "Sent",     color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
   PAID:     { label: "Paid",     color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
-  PARTIAL:  { label: "Partial",  color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
+  PARTIAL:  { label: "Partially Paid", color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-500/10",   border: "border-amber-200 dark:border-amber-500/20" },
   OVERDUE:  { label: "Overdue",  color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
   CANCELLED:{ label: "Cancelled",color: "text-slate-400 dark:text-slate-500",   bg: "bg-slate-100 dark:bg-white/5",  border: "border-slate-200 dark:border-white/10" },
   UNPAID:   { label: "Unpaid",   color: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-50 dark:bg-rose-500/10",    border: "border-rose-200 dark:border-rose-500/20" },
 };
+
+// List status filters. Each maps to the payment status derived by
+// invoiceFigures() — invoice lifecycle states (Sent / Pending) aren't mixed in.
+const STATUS_FILTERS = [
+  { value: "ALL",     label: "All" },
+  { value: "UNPAID",  label: "Unpaid" },
+  { value: "PARTIAL", label: "Partially Paid" },
+  { value: "PAID",    label: "Paid" },
+  { value: "DRAFT",   label: "Draft" },
+] as const;
+const STATUS_FILTER_KEY = "salesInvoices.statusFilter";
 
 // Paid / balance / status of one invoice row, derived from its actual
 // payments (the API merges multi-invoice receipt allocations into
 // `payments`). The stored Invoice.status isn't reliable for display — it can
 // be PENDING / UNPAID / SENT for the same "nothing paid yet" state, and the
 // old table/export used it (or missing fields) directly. Used by the table,
-// the summary strip, the OPEN filter and the Excel export so they agree.
+// the summary strip, the status filter and the Excel export so they agree.
 function invoiceFigures(inv: any): { total: number; paid: number; balance: number; status: "PAID" | "PARTIAL" | "UNPAID" | "DRAFT" | "CANCELLED" } {
   const total = Number(inv.finalAmount ?? inv.order?.totalAmount ?? 0) || 0;
   if (inv.status === "DRAFT") return { total, paid: 0, balance: 0, status: "DRAFT" };
@@ -140,12 +151,33 @@ interface LineItem {
   availableStock?: number;
   basePrice: number;
   batchNumber?: string;
+  // Sellable lots from /api/sales/invoices/batch-options for the seller scope
+  // recorded in batchScope; batchTracked = the item's stock is held in lots,
+  // so a valid batch must be picked before the invoice can be posted.
   batches?: any[];
+  batchTracked?: boolean;
+  batchScope?: string;
+  batchesLoading?: boolean;
   // Pack/weight variant (e.g. "450G" parsed off the SKU) — display-only
   // metadata distinguishing which SKU variant this is (APPAM 450G vs
   // APPAM 900G). Never the transaction/stocking unit — `unit` above is.
   packSize?: { qty: number; unit: string } | null;
 }
+
+// Line quantity in the item's stock (base) unit, via its unit conversions.
+function lineBaseQty(item: LineItem): number {
+  const qty = Number(item.qty || 0);
+  const u = String(item.unit || "").toUpperCase();
+  const conv = item.conversions?.find((c: any) =>
+    c.unitId === item.unit ||
+    c.unit?.code === item.unit ||
+    c.unit?.name?.toUpperCase() === u ||
+    c.unit?.shortName?.toUpperCase() === u
+  );
+  return conv && conv.multiplier ? qty * Number(conv.multiplier) : qty;
+}
+
+const INVALID_BATCH_MSG = "Invalid batch number. Please select an available batch from inventory for the selected product.";
 
 function makeItem(): LineItem {
   return {
@@ -309,7 +341,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  // Keep the selected status filter across page reloads (per tab).
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STATUS_FILTER_KEY);
+      if (saved && STATUS_FILTERS.some(f => f.value === saved)) setStatusFilter(saved);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { sessionStorage.setItem(STATUS_FILTER_KEY, statusFilter); } catch {}
+  }, [statusFilter]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
 
@@ -764,14 +806,17 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         // tab (already fully built to render them: "Not yet numbered",
         // click-to-resume via loadDraft, the Delete action below) has
         // something to show. `data` is kept on the row as-is so loadDraft
-        // can read the exact saved form state back out of it.
+        // can read the exact saved form state back out of it. `invoiceView`
+        // is the server's mapping of that saved draft into the posted-invoice
+        // shape (order.orderItems, party, totals) that View / Print read.
         const draftRows = (draftRes.status === "fulfilled" ? draftRes.value.data || [] : []).map((d: any) => ({
+          ...(d.invoiceView || {}),
           id: d.id,
           status: "DRAFT",
-          createdAt: d.updatedAt || d.createdAt,
-          finalAmount: 0,
+          createdAt: d.invoiceView?.createdAt || d.updatedAt || d.createdAt,
+          finalAmount: Number(d.invoiceView?.finalAmount) || 0,
           data: d.data,
-          customerName: d.data?.selectedCustomer?.name || d.data?.customerSearch || d.name || "Draft Invoice",
+          customerName: d.invoiceView?.customerName || d.data?.selectedCustomer?.name || d.data?.customerSearch || "Draft Invoice",
         }));
         setInvoices([...draftRows, ...(invRes.value.data || [])]);
       }
@@ -1009,10 +1054,6 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
-    const validBatches = Array.isArray(p.batches)
-      ? p.batches.filter((b: any) => (b.quantity || b.currentStock || 0) > 0)
-      : [];
-    const firstBatch = validBatches.length > 0 ? validBatches[0].batchCode : "";
     const resolvedRate = getChannelPrice(p, partyType);
 
     setItems(prev => prev.map((it, i) =>
@@ -1030,8 +1071,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         availableStock: p.currentStock !== undefined ? p.currentStock : (p.stock || 0),
         taxPct,
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
-        batchNumber: firstBatch,
-        batches: validBatches,
+        // Lots are loaded for the new product by the batch-options effect below.
+        batchNumber: "",
+        batches: [],
+        batchTracked: undefined,
+        batchScope: undefined,
+        batchesLoading: false,
       } : it
     ));
     setOpenItemDrop(null);
@@ -1040,6 +1085,45 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
+
+  // Load sellable batches for every product line whose lots haven't been
+  // fetched for the current seller scope (new product, copied/converted
+  // invoice, or a branch/party change). Lots come from the inventory batch
+  // records the server validates against, never typed free-hand.
+  const batchFranchiseId = isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined);
+  const batchScopeKey = `${batchFranchiseId || ""}|${partyType}`;
+  useEffect(() => {
+    const pending = items.filter(it => it.productId && !it.batchesLoading && it.batchScope !== batchScopeKey);
+    if (!pending.length) return;
+    const ids = new Set(pending.map(it => it.id));
+    setItems(prev => prev.map(it => ids.has(it.id) ? { ...it, batchesLoading: true, batchScope: batchScopeKey } : it));
+    pending.forEach(async (line) => {
+      let batchTracked = false;
+      let batches: any[] = [];
+      try {
+        const res: any = await api.get("/api/sales/invoices/batch-options", {
+          params: { productId: line.productId, franchiseId: batchFranchiseId, partyType },
+        });
+        batchTracked = !!res?.data?.batchTracked;
+        batches = Array.isArray(res?.data?.batches) ? res.data.batches : [];
+      } catch {
+        // Leave the line unresolved; the server still validates on save.
+      }
+      setItems(prev => prev.map(it => {
+        if (it.id !== line.id || it.productId !== line.productId || it.batchScope !== batchScopeKey) return it;
+        const current = (it.batchNumber || "").trim();
+        return {
+          ...it,
+          batchesLoading: false,
+          batchTracked,
+          batches,
+          // Default to the oldest sellable lot (same order the server uses
+          // for FIFO); keep an existing pick so an invalid one stays visible.
+          batchNumber: current || (batchTracked && batches.length ? batches[0].batchCode : ""),
+        };
+      }));
+    });
+  }, [items, batchScopeKey, batchFranchiseId, partyType]);
 
   // Line items are priced at selection-time; if the party channel changes
   // after items are already picked, re-derive each line's rate against the
@@ -1080,18 +1164,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const checkItemStockInsufficiency = useCallback((item: LineItem) => {
     if (!item.productId || item.qty <= 0) return null;
 
-    let req = Number(item.qty || 0);
-    const u = String(item.unit || "").toUpperCase();
-    const conv = item.conversions?.find((c: any) =>
-      c.unitId === item.unit ||
-      c.unit?.code === item.unit ||
-      c.unit?.name?.toUpperCase() === u ||
-      c.unit?.shortName?.toUpperCase() === u
-    );
-    if (conv && conv.multiplier) {
-      req = req * Number(conv.multiplier);
-    }
-
+    const req = lineBaseQty(item);
     const available = Number(item.availableStock ?? 0);
     const baseName = item.baseUnit?.shortName || item.baseUnit?.name || item.unit || "Units";
 
@@ -1148,6 +1221,37 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       showToast(`Cannot create invoice: Insufficient stock for ${details}`, "error");
       return null;
     }
+
+    // Batch validation before posting (drafts may hold an incomplete pick).
+    // The server re-checks all of this; this just stops a doomed save early.
+    if (!isDraft) {
+      const batchClaims = new Map<string, number>();
+      for (const it of validItems) {
+        const name = it.itemSearch || "Product";
+        const batch = (it.batchNumber || "").trim();
+        if (it.productId && it.batchesLoading) {
+          showToast(`Loading batches for "${name}" — please try again in a moment`, "error");
+          return null;
+        }
+        if (!it.productId || !it.batchScope) {
+          if (batch && !it.productId) { showToast(`"${name}": ${INVALID_BATCH_MSG}`, "error"); return null; }
+          continue;
+        }
+        if (!batch) {
+          if (it.batchTracked) { showToast(`Select a batch for "${name}"`, "error"); return null; }
+          continue;
+        }
+        const option = (it.batches || []).find((b: any) => b.batchCode === batch);
+        if (!option) { showToast(`"${name}" batch "${batch}": ${INVALID_BATCH_MSG}`, "error"); return null; }
+        const key = `${it.productId}|${batch}`;
+        const claimed = (batchClaims.get(key) || 0) + lineBaseQty(it);
+        batchClaims.set(key, claimed);
+        if (claimed > Number(option.quantity || 0) + 0.0001) {
+          showToast(`Insufficient stock in batch "${batch}" for "${name}" (Available: ${option.quantity}, Required: ${claimed})`, "error");
+          return null;
+        }
+      }
+    }
     let created: any = null;
 
     const itemsToSave = isDraft ? items.filter(i => i.productId || i.itemSearch.trim()) : validItems;
@@ -1167,6 +1271,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         stateOfSupply: stateOfSupply || undefined,
         paymentType,
         deliveryCharge: deliveryChargeNum,
+        // The server derives the round-off amount itself from its own total.
+        roundOffEnabled,
         sourceFranchiseOrderId: sourceFranchiseOrderId || undefined,
         sourceDeliveryChallanId: sourceDeliveryChallanId || undefined,
         isDraft,
@@ -1305,10 +1411,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setCustomerPhone(rawState.customerPhone || raw.customerPhone || raw.customer?.phone || "");
     setInvoiceDate(rawState.invoiceDate || raw.invoiceDate || new Date().toISOString().split("T")[0]);
     setStateOfSupply(rawState.stateOfSupply || raw.stateOfSupply || "");
-    setInvoiceNumber(rawState.invoiceNumber || raw.invoiceNum || "");
+    // handleSave stores the typed number as `invoiceNum` (the API payload key).
+    setInvoiceNumber(rawState.invoiceNumber || rawState.invoiceNum || raw.invoiceNum || "");
     setPaymentType(rawState.paymentType || raw.paymentType || "CASH");
+    setDeliveryCharge(Number(rawState.deliveryCharge ?? raw.deliveryCharges ?? 0) || 0);
     if (rawState.items && rawState.items.length > 0) {
-      setItems(rawState.items);
+      // Re-fetch lots for a restored draft — stock may have moved since it was saved.
+      setItems(rawState.items.map((it: LineItem) => ({ ...it, batchScope: undefined, batchesLoading: false })));
     } else if (raw.orderItems && raw.orderItems.length > 0) {
       setItems(raw.orderItems.map((oi: any) => ({
         id: Math.random().toString(36).slice(2),
@@ -1415,11 +1524,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const matchSearch = !search ||
       (inv.order?.invoiceNum || "").toLowerCase().includes(search.toLowerCase()) ||
       partyName.toLowerCase().includes(search.toLowerCase());
-    // "OPEN" = anything still to be collected (Sent / Pending / Unpaid /
-    // Partial / Overdue) — i.e. not Paid, not a Draft, not Cancelled.
-    const st = invoiceFigures(inv).status;
-    const matchStatus = statusFilter === "ALL"
-      || (statusFilter === "OPEN" ? st === "UNPAID" || st === "PARTIAL" : st === statusFilter);
+    // Match on the payment status derived from confirmed payments, so the
+    // filter always agrees with the Status column.
+    const matchStatus = statusFilter === "ALL" || invoiceFigures(inv).status === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -1465,6 +1572,58 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     (c.location && String(c.location).toLowerCase().includes(customerSearch.toLowerCase())) ||
     (c.address && String(c.address).toLowerCase().includes(customerSearch.toLowerCase()))
   );
+
+  // ── Print / Download dialog ──────────────────────────────────────────────
+  // Built once and rendered by EVERY view below (list, invoice details,
+  // create). It used to live only in the list view's JSX, so Print /
+  // Download on the invoice details page (an early return) set
+  // printingInvoice and nothing rendered — the button appeared dead.
+  // Lines carry the saved values (discount %, unit, SKU, the GST rate the
+  // saved tax was charged at) and the saved total is passed through, so the
+  // document matches the invoice exactly. Read-only: printing never writes.
+  const printDialog = printingInvoice ? (() => {
+    const pOrder = printingInvoice.order || {};
+    const figs = invoiceFigures(printingInvoice);
+    const statusLabel = figs.status === "PAID" ? "Paid" : figs.status === "PARTIAL" ? "Partially Paid" : figs.status === "UNPAID" ? "Unpaid" : figs.status === "CANCELLED" ? "Cancelled" : "Draft";
+    return (
+      <GSTInvoice
+        order={{
+          ...printingInvoice,
+          id: printingInvoice.id,
+          stateOfSupply: pOrder.stateOfSupply,
+          poNumber: pOrder.invoiceNum ? (pOrder.invoiceNum.startsWith('INV') ? pOrder.invoiceNum : `INV-${pOrder.invoiceNum}`) : undefined,
+          createdAt: printingInvoice.createdAt,
+          items: (pOrder.orderItems || []).map((it: any) => {
+            const gross = (Number(it.quantity) || 0) * (Number(it.price) || 0);
+            const taxable = gross * (1 - (Number(it.discountPct) || 0) / 100);
+            return {
+              itemName: it.product?.name || "Unknown Item",
+              sku: it.product?.sku || undefined,
+              quantity: it.quantity,
+              unit: it.unit && it.unit !== "NONE" ? it.unit : undefined,
+              price: it.price,
+              discountPct: Number(it.discountPct) || 0,
+              // Rate the saved line tax was actually charged at.
+              gstRate: it.product?.taxPercent ?? (taxable > 0 ? Math.round((Number(it.taxAmount) || 0) / taxable * 10000) / 100 : 0),
+              hsnCode: it.product?.hsnCode || '—'
+            };
+          })
+        }}
+        vendor={
+          pOrder.partyType === "FRANCHISE"
+            ? (pOrder.franchise || { name: pOrder.customerName || 'Franchise', contactNum: pOrder.franchise?.contactNum, gstin: pOrder.franchise?.gstin, location: pOrder.franchise?.location })
+            : pOrder.partyType === "DEALER"
+            ? (pOrder.dealer || { name: pOrder.customerName || 'Dealer', phone: pOrder.dealer?.phone, address: pOrder.dealer?.address })
+            : (pOrder.customer || { name: pOrder.customerName || 'Walk-In Customer' })
+        }
+        companyDetails={companyProfile || FALLBACK_COMPANY}
+        documentType="TAX_INVOICE"
+        savedGrandTotal={figs.total}
+        paymentSummary={{ status: statusLabel, paid: figs.paid, balance: figs.balance }}
+        onClose={() => setPrintingInvoice(null)}
+      />
+    );
+  })() : null;
 
   // ══════════════════════════════════════════════════════════════════════════
   // TAX INVOICE DEEP-LINK VIEW (read-only, populated from ?id= param)
@@ -1528,7 +1687,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
-                  Sale Invoice — {order.invoiceNum || "—"}
+                  Sale Invoice — {order.invoiceNum || (figs.status === "DRAFT" ? "Draft" : "—")}
                 </h2>
                 <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0", statusStyle.color, statusStyle.bg, statusStyle.border)}>
                   {statusStyle.label}
@@ -1559,12 +1718,22 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 Record Payment
               </button>
             )}
-            <button
-              onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.id}`)}
-              className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
-            >
-              Create Delivery Challan
-            </button>
+            {figs.status === "DRAFT" ? (
+              // A draft isn't posted yet — there's no invoice to raise a challan against.
+              <button
+                onClick={() => { setViewInvoice(null); loadDraft(inv); }}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+              >
+                Edit Draft
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${order.id || inv.orderId}`)}
+                className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+              >
+                Create Delivery Challan
+              </button>
+            )}
           </div>
         </div>
 
@@ -1624,7 +1793,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-slate-400">Invoice Number</span>
-                  <span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || "—"}</span>
+                  <span className="font-mono font-bold text-gray-900 dark:text-white">{order.invoiceNum || (figs.status === "DRAFT" ? "Not yet numbered" : "—")}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500 dark:text-slate-400">Invoice Date</span>
@@ -1807,6 +1976,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
          </div>
         </div>
+        {printDialog}
       </div>
     );
   }
@@ -2234,28 +2404,50 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
                         {/* BATCH NO */}
                         <td className="px-2 py-2.5">
-                          {item.batches && item.batches.length > 0 ? (
-                            <select
-                              value={item.batchNumber || ""}
-                              onChange={e => updateItem(idx, "batchNumber", e.target.value)}
-                              className="w-full text-xs text-gray-700 dark:text-slate-200 outline-none bg-transparent cursor-pointer border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1"
-                            >
-                              <option value="" className="dark:bg-card">Select Batch</option>
-                              {item.batches.map((b: any) => (
-                                <option key={b.id} value={b.batchCode} className="dark:bg-card">
-                                  {b.batchCode}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              type="text"
-                              placeholder="Batch No."
-                              value={item.batchNumber || ""}
-                              onChange={e => updateItem(idx, "batchNumber", e.target.value)}
-                              className="w-full text-xs text-gray-700 dark:text-white text-center outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1"
-                            />
-                          )}
+                          {(() => {
+                            // Only lots from inventory can be picked — no free-text entry.
+                            const batches = item.batches || [];
+                            const current = (item.batchNumber || "").trim();
+                            const currentInvalid = !!current && !!item.batchScope && !item.batchesLoading
+                              && !batches.some((b: any) => b.batchCode === current);
+                            if (!item.productId) {
+                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500">—</div>;
+                            }
+                            if (item.batchesLoading || !item.batchScope) {
+                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500">Loading…</div>;
+                            }
+                            if (!item.batchTracked && !current) {
+                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500" title="This item's stock isn't tracked in batches">Not required</div>;
+                            }
+                            return (
+                              <>
+                                <select
+                                  value={current}
+                                  onChange={e => updateItem(idx, "batchNumber", e.target.value)}
+                                  title={currentInvalid ? INVALID_BATCH_MSG : undefined}
+                                  className={clsx(
+                                    "w-full text-xs text-gray-700 dark:text-slate-200 outline-none bg-transparent cursor-pointer border rounded-lg px-2 py-1",
+                                    currentInvalid || (item.batchTracked && !current) ? "border-rose-400 dark:border-rose-500/60" : "border-gray-200 dark:border-white/10"
+                                  )}
+                                >
+                                  <option value="" className="dark:bg-card">
+                                    {batches.length ? "Select Batch" : "No sellable batch"}
+                                  </option>
+                                  {currentInvalid && (
+                                    <option value={current} disabled className="dark:bg-card">{current} (invalid)</option>
+                                  )}
+                                  {batches.map((b: any) => (
+                                    <option key={b.batchCode} value={b.batchCode} className="dark:bg-card">
+                                      {b.batchCode} · {Number(b.quantity)} left{b.expDate ? ` · Exp ${formatDate(b.expDate)}` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                                {currentInvalid && (
+                                  <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 leading-tight">Invalid batch</div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </td>
 
                         {/* QTY */}
@@ -2673,6 +2865,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
         )}
 
+        {printDialog}
       </div>
     );
   }
@@ -2814,7 +3007,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between sm:justify-end min-w-0">
             <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar p-0.5 bg-white dark:bg-card shrink-0">
-              {["ALL", "OPEN", "PAID", "DRAFT"].map(s => (
+              {STATUS_FILTERS.map(({ value: s, label }) => (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
@@ -2823,7 +3016,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                     statusFilter === s ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
                   )}
                 >
-                  {s === "ALL" ? "All" : s}
+                  {label}
                 </button>
               ))}
             </div>
@@ -3138,7 +3331,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                       disabled={inv.status === "CANCELLED"}
                                       onClick={() => {
                                         setOpenActionMenu(null);
-                                        router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId || inv.id}`);
+                                        router.push(`/sales/delivery-challan?sourceInvoiceId=${inv.order?.id || inv.orderId}`);
                                       }}
                                       className={clsx(
                                         "w-full text-left px-3 py-2 text-xs font-medium rounded-xl flex items-center gap-2.5 transition-colors",
@@ -3265,33 +3458,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
         )}
 
-        {printingInvoice && (
-          <GSTInvoice
-            order={{
-              ...printingInvoice,
-              id: printingInvoice.id,
-              poNumber: printingInvoice.order?.invoiceNum ? (printingInvoice.order.invoiceNum.startsWith('INV') ? printingInvoice.order.invoiceNum : `INV-${printingInvoice.order.invoiceNum}`) : undefined,
-              createdAt: printingInvoice.createdAt,
-              items: (printingInvoice.order?.orderItems || []).map((it: any) => ({
-                itemName: it.product?.name || "Unknown Item",
-                quantity: it.quantity,
-                price: it.price,
-                gstRate: it.taxAmount > 0 && it.quantity && it.price ? ((it.taxAmount / (it.quantity * it.price)) * 100).toFixed(0) : 0,
-                hsnCode: it.product?.hsnCode || '—'
-              }))
-            }}
-            vendor={
-              printingInvoice.order?.partyType === "FRANCHISE"
-                ? (printingInvoice.order?.franchise || { name: printingInvoice.order?.customerName || 'Franchise', contactNum: printingInvoice.order?.franchise?.contactNum, gstin: printingInvoice.order?.franchise?.gstin, location: printingInvoice.order?.franchise?.location })
-                : printingInvoice.order?.partyType === "DEALER"
-                ? (printingInvoice.order?.dealer || { name: printingInvoice.order?.customerName || 'Dealer', phone: printingInvoice.order?.dealer?.phone, address: printingInvoice.order?.dealer?.address })
-                : (printingInvoice.order?.customer || { name: printingInvoice.order?.customerName || 'Walk-In Customer' })
-            }
-            companyDetails={companyProfile || FALLBACK_COMPANY}
-            documentType="TAX_INVOICE"
-            onClose={() => setPrintingInvoice(null)}
-          />
-        )}
+        {printDialog}
 
         {/* ── Receive Payment Modal ── */}
         {paymentModalInv && (

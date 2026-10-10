@@ -65,6 +65,7 @@ interface ReturnOrder {
   sgst?: number;
   igst?: number;
   taxAmount?: number;
+  roundOffAmount?: number;
   refundMethod: string;
   status: 'PENDING' | 'APPROVED' | 'COMPLETED' | 'REJECTED';
   createdAt: string;
@@ -191,12 +192,13 @@ export default function SalesReturnsPage() {
       sgst: r.sgst != null ? Number(r.sgst) : undefined,
       igst: r.igst != null ? Number(r.igst) : undefined,
       taxAmount: r.taxAmount != null ? Number(r.taxAmount) : undefined,
+      roundOffAmount: Number(r.roundOffAmount) || 0,
       refundAmount: (() => {
         const rawRefund = Number(r.refundAmount) || 0;
         const taxVal = r.taxableValue != null ? Number(r.taxableValue) : undefined;
         const taxAmt = r.taxAmount != null ? Number(r.taxAmount) : undefined;
         if (taxAmt != null && taxAmt > 0 && taxVal != null && Math.abs(rawRefund - taxVal) < 0.01) {
-          return Math.round((taxVal + taxAmt) * 100) / 100;
+          return Math.round((taxVal + taxAmt + (Number(r.roundOffAmount) || 0)) * 100) / 100;
         }
         return rawRefund;
       })(),
@@ -595,7 +597,49 @@ export default function SalesReturnsPage() {
     const itemUnitTax = it.unitTax != null ? it.unitTax : (it.rate * ((it.taxPercent || 0) / 100));
     return acc + (it.returnQuantity * itemUnitTax);
   }, 0);
-  const estimatedRefund = Math.round((totalBaseAmount + totalGstAmount) * 100) / 100;
+  // Server-computed return credit (same calculation the saved return uses:
+  // original line values, GST reversal and invoice round-off). The local
+  // figures above are only a fallback while it loads or if it fails.
+  const [returnPreview, setReturnPreview] = useState<any>(null);
+  const previewItemsKey = JSON.stringify(
+    returnItems.filter(it => it.returnQuantity > 0).map(it => [it.productId, it.productName, it.returnQuantity, it.condition])
+  );
+  useEffect(() => {
+    const activeItems = returnItems.filter(it => it.returnQuantity > 0);
+    if (view !== "create" || !selectedOrder?.id || activeItems.length === 0) {
+      setReturnPreview(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      const isCustomer = selectedEntity?._kind === 'CUSTOMER' && selectedEntity?.id !== 'walk-in';
+      const isDealer = selectedEntity?._kind === 'DEALER';
+      (salesApi as any).previewReturn({
+        reason: reason.trim() || 'preview',
+        posOrderId: selectedOrder.id,
+        ...(isCustomer ? { customerId: selectedEntity.id } : {}),
+        ...(isDealer ? { dealerId: selectedEntity.id } : {}),
+        items: activeItems.map(i => ({
+          productId: i.productId,
+          productName: i.productName,
+          quantity: i.returnQuantity,
+          rate: i.rate,
+          condition: i.condition
+        }))
+      })
+        .then((res: any) => { if (!cancelled) setReturnPreview(res.data); })
+        .catch(() => { if (!cancelled) setReturnPreview(null); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, selectedOrder?.id, selectedEntity?.id, previewItemsKey]);
+
+  const previewBase = returnPreview ? Number(returnPreview.taxableValue) || 0 : totalBaseAmount;
+  const previewGst = returnPreview ? Number(returnPreview.taxAmount) || 0 : totalGstAmount;
+  const previewRoundOff = returnPreview ? Number(returnPreview.roundOffAmount) || 0 : 0;
+  const estimatedRefund = returnPreview
+    ? Number(returnPreview.refundAmount) || 0
+    : Math.round((totalBaseAmount + totalGstAmount) * 100) / 100;
 
   const isInvoiceFullyReturned = selectedOrder && returnItems.length > 0 && returnItems.every(i => i.returnableQuantity === 0);
 
@@ -978,10 +1022,15 @@ export default function SalesReturnsPage() {
                     Total Return Units: <span className="font-bold text-gray-900 dark:text-white">{returnItems.reduce((s, i) => s + i.returnQuantity, 0)}</span>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
-                    {totalGstAmount > 0 && (
+                    {(previewGst > 0 || Math.abs(previewRoundOff) > 0.001) && (
                       <div className="text-gray-500">
-                        Base: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{totalBaseAmount.toFixed(2)}</span>
-                        {' '}+ GST: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{totalGstAmount.toFixed(2)}</span>
+                        Base: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{previewBase.toFixed(2)}</span>
+                        {' '}+ GST: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{previewGst.toFixed(2)}</span>
+                        {Math.abs(previewRoundOff) > 0.001 && (
+                          <>
+                            {' '}{previewRoundOff >= 0 ? '+' : '−'} Round-off reversal: <span className="font-mono font-bold text-gray-800 dark:text-slate-200">₹{Math.abs(previewRoundOff).toFixed(2)}</span>
+                          </>
+                        )}
                       </div>
                     )}
                     <div className="flex items-center gap-2 text-sm">
@@ -1338,6 +1387,14 @@ export default function SalesReturnsPage() {
                       + ₹{refundingReturn.taxAmount.toFixed(2)}
                     </span>
                   </div>
+                  {Math.abs(refundingReturn.roundOffAmount || 0) > 0.001 && (
+                    <div className="flex justify-between">
+                      <span>Round-off Reversal:</span>
+                      <span className="font-mono font-semibold text-gray-800 dark:text-slate-200">
+                        {(refundingReturn.roundOffAmount || 0) >= 0 ? '+' : '−'} ₹{Math.abs(refundingReturn.roundOffAmount || 0).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1350,6 +1407,7 @@ export default function SalesReturnsPage() {
                   {refundingReturn.taxableValue != null && refundingReturn.taxAmount != null && refundingReturn.taxAmount > 0 && (
                     <div className="text-[10px] text-gray-400 font-normal">
                       ₹{refundingReturn.taxableValue.toFixed(2)} + ₹{refundingReturn.taxAmount.toFixed(2)} GST
+                      {Math.abs(refundingReturn.roundOffAmount || 0) > 0.001 && ` ${(refundingReturn.roundOffAmount || 0) >= 0 ? '+' : '−'} ₹${Math.abs(refundingReturn.roundOffAmount || 0).toFixed(2)} round-off`}
                     </div>
                   )}
                 </div>

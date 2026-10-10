@@ -97,7 +97,7 @@ export default function AddDealerModal({
           gstin: initialData.gstin || initialData.taxNumber || initialData.gstNumber || "",
           gstType: initialData.gstType || "Unregistered/Consumer",
           billingAddress: initialData.address || initialData.billingAddress || "",
-          shippingAddress: initialData.shippingAddress || initialData.address || initialData.billingAddress || "",
+          shippingAddress: initialData.shippingAddress || "",
           pincode: initialData.pincode || initialData.pinCode || "",
           state: initialData.state || "",
           city: initialData.city || "",
@@ -203,7 +203,8 @@ export default function AddDealerModal({
           ...prev,
           name: prev.name || data.legalName || "",
           billingAddress: data.address || prev.billingAddress,
-          shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
+          // Shipping address is always typed by the user — the GSTIN lookup fills billing only.
+          shippingAddress: prev.shippingAddress,
           state: matchState(data.state) || stateFromGstin(cleanGst) || prev.state,
           city: data.city || prev.city,
           pincode: data.pinCode || prev.pincode,
@@ -270,7 +271,7 @@ export default function AddDealerModal({
         email: form.email && form.email.trim() ? form.email.trim().toLowerCase() : null,
         address: form.billingAddress.trim(),
         billingAddress: form.billingAddress.trim(),
-        shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : form.billingAddress.trim(),
+        shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : null,
         pincode: cleanPincode,
         state: form.state && form.state.trim() ? matchState(form.state) : null,
         city: form.city && form.city.trim() ? form.city.trim() : null,
@@ -499,13 +500,6 @@ export default function AddDealerModal({
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">
                       Shipping Address
                     </label>
-                    <button
-                      type="button"
-                      onClick={() => setForm(prev => ({ ...prev, shippingAddress: prev.billingAddress }))}
-                      className="text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 font-medium hover:underline cursor-pointer"
-                    >
-                      Same as Billing Address
-                    </button>
                   </div>
                   <textarea
                     rows={3}

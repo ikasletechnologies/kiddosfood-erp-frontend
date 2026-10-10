@@ -8,9 +8,11 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { useSearchParams } from "next/navigation";
-import { customersApi, dealersApi, franchiseApi, draftsApi } from "@/lib/api";
+import { customersApi, dealersApi, franchiseApi, draftsApi, settingsApi } from "@/lib/api";
+import PaymentReceipt, { ReceiptData } from "@/components/documents/PaymentReceipt";
+import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/context/ToastContext";
-import { formatERPNumber, formatDate, shareText } from "@/lib/utils";
+import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -34,6 +36,23 @@ function normalizeParty(partyType: "CUSTOMER" | "DEALER" | "FRANCHISE", raw: any
     return { id: raw.id, name: raw.name, phone: raw.phone || "", raw };
   }
   return { id: raw.id, name: raw.name, phone: raw.phone || "", raw };
+}
+
+// Paid-so-far / outstanding of a Tax Invoice by the server's own rule
+// (FinanceService.getInvoicePaidAmount, which guards against overpayment):
+// direct PAID payments plus this invoice's share of multi-invoice receipts.
+// Counting direct payments alone overstated the outstanding of any invoice
+// settled through a multi-invoice receipt.
+function invoicePaidAndOutstanding(inv: any): { paidSoFar: number; outstanding: number } {
+  // Rows from /api/finance/invoices/outstanding carry the server's figures.
+  if (typeof inv?.outstanding === "number") return { paidSoFar: Number(inv.paidSoFar) || 0, outstanding: inv.outstanding };
+  const valid = (p: any) => !!p && p.status === "PAID" && !p.isCancelled;
+  const direct = (inv?.payments || []).filter(valid).reduce((s: number, p: any) => s + (Number(p.paidAmount) || 0), 0);
+  const allocated = (inv?.allocations || [])
+    .filter((a: any) => valid(a.payment) && a.payment.invoiceId !== inv.id)
+    .reduce((s: number, a: any) => s + (Number(a.amount) || 0), 0);
+  const paidSoFar = Math.round((direct + allocated) * 100) / 100;
+  return { paidSoFar, outstanding: Math.max(0, Math.round(((Number(inv?.finalAmount) || 0) - paidSoFar) * 100) / 100) };
 }
 
 const PERIOD_OPTIONS = [
@@ -211,6 +230,9 @@ export default function PaymentInPage() {
   const [description, setDescription] = useState("");
   const [chequeNo, setChequeNo] = useState("");
   const [showShareDrop, setShowShareDrop] = useState(false);
+  // Receipt document opened from a row's Print / Share action.
+  const [receiptView, setReceiptView] = useState<{ receipt: ReceiptData; autoPrint: boolean } | null>(null);
+  const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
@@ -278,12 +300,33 @@ export default function PaymentInPage() {
   // against a specific invoice (see FinanceService.createPayment's
   // invoiceId-driven paid/outstanding recompute); without this the page had
   // no invoice concept at all.
+  // Loaded per selected party from the server, which also computes each
+  // invoice's paid/outstanding by the same rule its overpayment guard uses.
+  // (Previously every branch invoice was loaded once at page open and
+  // filtered here, with failures swallowed silently.)
+  const [invoicesFor, setInvoicesFor] = useState<string | null>(null); // "TYPE:id" the list belongs to
+  const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+  const partyKey = selectedCustomer?.id ? `${partyType}:${selectedCustomer.id}` : null;
   const fetchInvoices = useCallback(async () => {
+    if (!partyKey) { setInvoices([]); setInvoicesFor(null); setInvoicesError(null); return; }
+    const [pt, pid] = partyKey.split(":");
+    setInvoicesLoading(true);
+    setInvoicesError(null);
     try {
-      const res = await api.get("/api/finance/invoices");
-      setInvoices((res as any).data || []);
-    } catch {}
-  }, []);
+      const res = await api.get("/api/finance/invoices/outstanding", { params: { partyType: pt, partyId: pid } });
+      // Same shape the allocation table already reads (order.invoiceNum).
+      setInvoices(((res as any).data || []).map((i: any) => ({ ...i, order: { id: i.orderId, invoiceNum: i.invoiceNum } })));
+      setInvoicesFor(partyKey);
+    } catch (e: any) {
+      setInvoices([]);
+      setInvoicesFor(null);
+      setInvoicesError(e?.response?.data?.message || "Could not load this party's outstanding invoices.");
+    } finally {
+      setInvoicesLoading(false);
+    }
+  }, [partyKey]);
+  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
 
   // Cash/Bank/UPI accounts a payment can actually be posted to — the same
   // list AccountService.validateAccountForPayment checks against server-side.
@@ -297,9 +340,14 @@ export default function PaymentInPage() {
     } catch {}
   }, []);
 
+  // Company header for printed/shared receipts.
   useEffect(() => {
-    fetchPayments(); fetchCustomers(); fetchDealers(); fetchFranchises(); fetchInvoices(); fetchAccounts();
-  }, [fetchPayments, fetchCustomers, fetchDealers, fetchFranchises, fetchInvoices, fetchAccounts]);
+    settingsApi.getCompanyProfile().then(res => setCompanyProfile(res.data || null)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchPayments(); fetchCustomers(); fetchDealers(); fetchFranchises(); fetchAccounts();
+  }, [fetchPayments, fetchCustomers, fetchDealers, fetchFranchises, fetchAccounts]);
 
   // Mirrors AccountService.validateAccountForPayment's mode→account-type
   // eligibility exactly, so the dropdown never offers an account the
@@ -330,25 +378,21 @@ export default function PaymentInPage() {
   // A Tax Invoice's party is identified by partyId+partyType (Order's
   // generic fields), not customerId — customerId is only ever populated
   // for partyType CUSTOMER.
-  const customerInvoices = selectedCustomer
-    ? invoices.filter((inv: any) => {
-        const order = inv.order || {};
-        const invPartyType = order.partyType || "CUSTOMER";
-        const invPartyId = invPartyType === "CUSTOMER" ? (order.partyId || order.customerId) : order.partyId;
-        return invPartyType === partyType && invPartyId === selectedCustomer.id && inv.status !== "PAID" && inv.status !== "CANCELLED";
-      })
-    : [];
+  // Only ever the list fetched for the CURRENT party (never a stale one
+  // from the previous selection while the new fetch is in flight).
+  const customerInvoices = partyKey && invoicesFor === partyKey ? invoices : [];
 
   // Deep-link from the Tax Invoice view's "Record Payment" button
   // (?invoiceId=&partyType=&partyId=). Runs once invoices/parties are
   // loaded so the matching invoice/party rows actually exist to select.
   const searchParamsHook = useSearchParams();
+  const deepLinkHandledRef = useRef(false);
   useEffect(() => {
     const linkedInvoiceId = searchParamsHook.get("invoiceId");
     const linkedPartyType = searchParamsHook.get("partyType") as "CUSTOMER" | "DEALER" | "FRANCHISE" | null;
     const linkedPartyId = searchParamsHook.get("partyId");
     if (!linkedInvoiceId || !linkedPartyId) return;
-    if (invoices.length === 0) return;
+    if (deepLinkHandledRef.current) return;
     if (customers.length === 0 && dealers.length === 0 && franchises.length === 0) return;
 
     const pt = linkedPartyType || "CUSTOMER";
@@ -356,21 +400,19 @@ export default function PaymentInPage() {
     const party = sourceList.find((p: any) => p.id === linkedPartyId);
     if (!party) return;
 
+    deepLinkHandledRef.current = true;
     setPartyType(pt);
     setSelectedCustomer(party);
     setCustomerSearch(party.name);
     setView("create");
-    // Deferred one tick below once `customerInvoices` for this party has
-    // actually been computed, so the outstanding default is correct.
+    // Applied below once this party's invoices have been fetched, so the
+    // outstanding default is correct.
     setPendingDeepLinkInvoiceId(linkedInvoiceId);
-  }, [searchParamsHook, invoices, customers, dealers, franchises]);
+  }, [searchParamsHook, customers, dealers, franchises]);
 
   // Per-invoice paid-so-far / outstanding — same calc as before, now run
   // once per row instead of once for a single selected invoice.
-  const invoiceOutstandingOf = (inv: any) => {
-    const paidSoFar = (inv?.payments || []).filter((p: any) => p.status === "PAID" && !p.isCancelled).reduce((s: number, p: any) => s + (p.paidAmount || 0), 0);
-    return { paidSoFar, outstanding: Math.max(0, (inv?.finalAmount || 0) - paidSoFar) };
-  };
+  const invoiceOutstandingOf = (inv: any) => invoicePaidAndOutstanding(inv);
 
   const selectedInvoiceIds = allocations.map(a => a.invoiceId);
   // Rows for the allocation table — dropped (not shown) if the invoice is no
@@ -414,7 +456,13 @@ export default function PaymentInPage() {
     if (!invoiceId || selectedInvoiceIds.includes(invoiceId)) return;
     const inv = customerInvoices.find((i: any) => i.id === invoiceId);
     const { outstanding } = invoiceOutstandingOf(inv);
-    setAllocations(prev => [...prev, { invoiceId, amount: outstanding > 0 ? outstanding.toFixed(2) : "" }]);
+    // If an amount was already entered, apply what is left of it (never more
+    // than this invoice's outstanding) — e.g. ₹63 received against a ₹204.75
+    // invoice applies ₹63; otherwise default to settling the invoice.
+    const received = Number(amount) || 0;
+    const unapplied = Math.round((received - totalAllocation) * 100) / 100;
+    const apply = received > 0 && unapplied > 0 ? Math.min(outstanding, unapplied) : outstanding;
+    setAllocations(prev => [...prev, { invoiceId, amount: apply > 0 ? apply.toFixed(2) : "" }]);
     setAddInvoiceSel("");
   };
   const removeInvoiceFromAllocations = (invoiceId: string) => {
@@ -545,7 +593,7 @@ export default function PaymentInPage() {
         Card: "CARD",
         "Bank Transfer": "BANK_TRANSFER",
       };
-      await api.post("/api/accounting/payments", {
+      const savedRes = await api.post("/api/accounting/payments", {
         amount: Number(amount),
         flow: "IN",
         status: "PAID",
@@ -587,6 +635,7 @@ export default function PaymentInPage() {
       }
 
       showToast("Payment recorded successfully", "success");
+      setJustSavedPaymentId((savedRes as any)?.data?.id || null);
       resetForm();
       fetchPayments();
       setView("list");
@@ -639,6 +688,42 @@ export default function PaymentInPage() {
     setIdempotencyKey(crypto.randomUUID());
   };
 
+  // ── Leaving the form (Back / Payment History / Cancel) ─────────────────
+  // Unsaved changes = the form differs from how it looked when it opened
+  // (fresh or a loaded draft). The auto-picked account is left out — it is
+  // selected by the page itself, not typed by the user.
+  const formSnapshot = JSON.stringify({
+    partyType, party: selectedCustomer?.id || null, customerSearch, allocations,
+    amount, paymentMode, description, chequeNo, receiptDate,
+  });
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
+  useEffect(() => {
+    setFormBaseline(view === "create" ? formSnapshot : null);
+    if (view === "create") setJustSavedPaymentId(null);
+    // Baseline is taken once per entry into the form, not on every edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+  const isFormDirty = view === "create" && formBaseline !== null && formSnapshot !== formBaseline;
+
+  // Browser-level guard (reload / close tab) while there are unsaved changes.
+  useEffect(() => {
+    if (!isFormDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isFormDirty]);
+
+  const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
+  const backToPayments = () => { resetForm(); setView("list"); };
+  // Runs `action` straight away when nothing was changed; otherwise asks first.
+  const guardLeave = (action: () => void) => {
+    if (isFormDirty) setPendingLeave(() => action);
+    else action();
+  };
+
+  // Receipt just saved — offered from the list so the user can open it.
+  const [justSavedPaymentId, setJustSavedPaymentId] = useState<string | null>(null);
+
 
   const handleDeleteDraft = async (id: string) => {
     try {
@@ -650,18 +735,30 @@ export default function PaymentInPage() {
     }
   };
 
-  const handleShareRow = async (p: any) => {
-    const summary = [
-      `Payment Receipt: ${p.paymentNumber ? formatERPNumber("RCPT", p.paymentNumber, p.createdAt) : "—"}`,
-      `Party: ${(typeof p.entity === "string" ? p.entity : p.entity?.name) || p.entityId || "—"}`,
-      `Amount: ₹${(p.paidAmount || 0).toLocaleString("en-IN")}`,
-      `Payment Mode: ${p.paymentMode || "—"}`,
-      `Date: ${formatDate(p.createdAt)}`
-    ].join("\n");
-
-    const result = await shareText(summary, "Payment Receipt");
-    if (result === "copied") showToast("Payment receipt details copied to clipboard!", "success");
-    else if (result === "unsupported") showToast("Sharing is not supported in this browser", "error");
+  // Opens the receipt document for THIS row's payment (Print goes straight to
+  // the print dialog; Share shows the share options). Built only from the
+  // row the user clicked — the list is already scoped to the user's branch.
+  const openReceipt = (p: any, autoPrint: boolean) => {
+    if (!p?.id || !p.paymentNumber) {
+      showToast("This payment has no receipt number yet, so a receipt can't be generated.", "error");
+      return;
+    }
+    setReceiptView({
+      autoPrint,
+      receipt: {
+        receiptNo: formatERPNumber("RCPT", p.paymentNumber, p.createdAt),
+        date: p.createdAt,
+        partyName: p.partyName || (typeof p.entity === "string" ? p.entity : p.entity?.name) || "—",
+        partyType: p.entityType,
+        amount: Number(p.paidAmount) || 0,
+        paymentMode: p.paymentMode,
+        status: p.status,
+        invoiceNums: Array.isArray(p.invoiceNums) ? p.invoiceNums : (p.invoiceNum ? [p.invoiceNum] : []),
+        reference: p.reference || null,
+        accountName: p.accountName,
+        isCancelled: !!p.isCancelled,
+      },
+    });
   };
 
   const loadDraft = (p: any) => {
@@ -671,8 +768,13 @@ export default function PaymentInPage() {
     setPartyType(pt);
 
     const list = pt === "DEALER" ? dealers : pt === "FRANCHISE" ? franchises : customers;
-    const rawParty = raw.selectedCustomer || p.entity || list.find((x: any) => x.id === (p.partyId || p.customerId)) || null;
-    const party = rawParty ? normalizeParty(pt, rawParty) : null;
+    // Resolve the party record by id first — `entity` can be a plain name
+    // string, which used to yield a party with no id/name ("…found for .")
+    // and matched no invoices.
+    const partyId = raw.selectedCustomer?.id || p.entityId || p.partyId || p.customerId;
+    const fromList = partyId ? list.find((x: any) => x.id === partyId) : null;
+    const rawParty = fromList?.raw || fromList || raw.selectedCustomer || (p.entity && typeof p.entity === "object" ? p.entity : null);
+    const party = rawParty && rawParty.id ? normalizeParty(pt, rawParty) : null;
 
     setSelectedCustomer(party);
     setCustomerSearch(raw.customerSearch || (party ? party.name : "") || p.customerName || "");
@@ -731,11 +833,27 @@ export default function PaymentInPage() {
       <div className="flex flex-col bg-[#f1f5f9] dark:bg-background overflow-hidden text-slate-800 dark:text-slate-100" style={{ height: 'calc(100vh - 104px)' }}>
 
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-slate-200 dark:border-white/5 px-6 py-3 flex items-center justify-between shrink-0 shadow-sm">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-slate-800 dark:text-white">Payment-In</h2>
+        <div className="bg-white dark:bg-card border-b border-slate-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 shrink-0 shadow-sm">
+          <div className="min-w-0">
+            <button
+              type="button"
+              onClick={() => guardLeave(backToPayments)}
+              className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-[#f58220] transition-colors"
+            >
+              <ArrowLeft size={14} /> Back to Payments
+            </button>
+            <h2 className="text-lg font-bold text-slate-800 dark:text-white mt-0.5">Payment-In</h2>
           </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Receipt No: <strong className="text-[#f58220] font-bold">Auto</strong></span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">Receipt No: <strong className="text-[#f58220] font-bold">Auto</strong></span>
+            <button
+              type="button"
+              onClick={() => guardLeave(backToPayments)}
+              className="px-3 py-1.5 text-xs font-semibold border border-slate-200 dark:border-white/10 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+            >
+              View Payment History
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -785,7 +903,18 @@ export default function PaymentInPage() {
                     className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} by Name/Phone`}
                     value={customerSearch}
-                    onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
+                    onChange={e => {
+                      setCustomerSearch(e.target.value);
+                      setShowCustomerDrop(true);
+                      // Editing the text away from the chosen party un-selects
+                      // it — otherwise its invoices/allocations stayed active
+                      // behind an empty or different party field.
+                      if (selectedCustomer && e.target.value !== selectedCustomer.name) {
+                        setSelectedCustomer(null);
+                        setAllocations([]);
+                        setAddInvoiceSel("");
+                      }
+                    }}
                     onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
                   />
                 </div>
@@ -858,11 +987,22 @@ export default function PaymentInPage() {
               A receipt can be split across several Tax Invoices for this
               party; each gets its own "Pay Now" amount, defaulting to its
               outstanding balance. */}
-          {selectedCustomer && (
+          {(
             <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm p-6 space-y-3">
               <div className="text-sm font-semibold text-gray-700 dark:text-slate-200 border-b border-gray-100 dark:border-white/5 pb-2">Sale Invoices</div>
-              {customerInvoices.length === 0 ? (
-                <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding Sale Invoices found for {selectedCustomer.name}.</p>
+              {!partyKey ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">
+                  Select a party to view outstanding invoices.
+                </p>
+              ) : invoicesLoading || (invoicesFor !== partyKey && !invoicesError) ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">Loading outstanding invoices…</p>
+              ) : invoicesError ? (
+                <div className="flex flex-wrap items-center gap-3 text-xs text-rose-600 dark:text-rose-400">
+                  <span>{invoicesError}</span>
+                  <button type="button" onClick={fetchInvoices} className="font-semibold underline hover:no-underline">Retry</button>
+                </div>
+              ) : customerInvoices.length === 0 ? (
+                <p className="text-xs text-gray-400 dark:text-slate-500">No outstanding invoices available.</p>
               ) : (
                 <>
                   <select
@@ -875,7 +1015,7 @@ export default function PaymentInPage() {
                       .filter((inv: any) => !selectedInvoiceIds.includes(inv.id))
                       .map((inv: any) => (
                         <option key={inv.id} value={inv.id}>
-                          {inv.order?.invoiceNum} — ₹{inv.finalAmount} ({inv.status})
+                          {inv.order?.invoiceNum} · {inv.createdAt ? formatDate(inv.createdAt) : ""} · Total ₹{Number(inv.finalAmount || 0).toFixed(2)} · Due ₹{invoiceOutstandingOf(inv).outstanding.toFixed(2)}
                         </option>
                       ))}
                   </select>
@@ -936,6 +1076,20 @@ export default function PaymentInPage() {
                       </table>
                     </div>
                   )}
+                  {allocationRows.length > 0 && (() => {
+                    const received = Number(amount) || 0;
+                    const unallocated = Math.round((received - totalAllocation) * 100) / 100;
+                    return (
+                      <div className="flex flex-wrap justify-end gap-x-6 gap-y-1 text-xs">
+                        <span className="text-gray-500 dark:text-slate-400">Total Received: <b className="text-gray-800 dark:text-white">₹{received.toFixed(2)}</b></span>
+                        <span className="text-gray-500 dark:text-slate-400">Total Allocated: <b className="text-gray-800 dark:text-white">₹{totalAllocation.toFixed(2)}</b></span>
+                        <span className={Math.abs(unallocated) > 0.009 ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-gray-500 dark:text-slate-400"}>
+                          Unallocated: ₹{unallocated.toFixed(2)}
+                          {Math.abs(unallocated) > 0.009 && (unallocated > 0 ? " — allocate it to an invoice or reduce the amount (customer advances aren't supported)" : " — reduce the applied amounts")}
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>
@@ -984,7 +1138,8 @@ export default function PaymentInPage() {
                 </label>
                 {eligibleAccounts.length === 0 ? (
                   <div className="w-full border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 rounded px-3 py-2 text-xs text-rose-600 dark:text-rose-400">
-                    No active account configured for this mode.
+                    No active {paymentMode === "Cash" ? "Cash" : paymentMode === "UPI" || paymentMode === "Card" ? "UPI or Bank" : "Bank"} account is set up for {paymentMode} payments.
+                    {paymentMode !== "Cash" && " Choose Cash if received in cash, or"} Add one under Banking → Accounts.
                   </div>
                 ) : (
                   <select
@@ -1039,7 +1194,7 @@ export default function PaymentInPage() {
 
         {/* Bottom action bar */}
         <div className="bg-white dark:bg-card border-t border-slate-200 dark:border-white/5 px-6 py-3 flex items-center justify-end gap-3 shrink-0 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
-          <button onClick={() => { resetForm(); setView("list"); }} className="px-4 py-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">
+          <button onClick={() => guardLeave(backToPayments)} className="px-4 py-1.5 text-sm text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200">
             Cancel
           </button>
 
@@ -1086,6 +1241,34 @@ export default function PaymentInPage() {
             {saving ? "Saving..." : "Save"}
           </button>
         </div>
+
+        {/* Unsaved-changes confirmation (Back / Payment History / Cancel) */}
+        <Modal
+          isOpen={!!pendingLeave}
+          onClose={() => setPendingLeave(null)}
+          title="Leave this payment?"
+          size="sm"
+          footer={
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingLeave(null)}
+                className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5"
+              >
+                Stay on Page
+              </button>
+              <button
+                type="button"
+                onClick={() => { const go = pendingLeave; setPendingLeave(null); go?.(); }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg text-white bg-rose-600 hover:bg-rose-700"
+              >
+                Leave Page
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm text-gray-600 dark:text-slate-300">You have unsaved changes. Are you sure you want to leave?</p>
+        </Modal>
       </div>
     );
   }
@@ -1095,6 +1278,29 @@ export default function PaymentInPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+
+      {/* Just-saved receipt: open it straight from here (the list below
+          already includes it after the post-save refresh). */}
+      {justSavedPaymentId && (() => {
+        const saved = payments.find((p: any) => p.id === justSavedPaymentId);
+        return (
+          <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-800 dark:text-emerald-300">
+            <span>
+              Payment {saved?.paymentNumber ? formatERPNumber("RCPT", saved.paymentNumber, saved.createdAt) : ""} saved.
+            </span>
+            <span className="flex items-center gap-3">
+              {saved && (
+                <button type="button" onClick={() => openReceipt(saved, false)} className="font-semibold underline hover:no-underline">
+                  View Receipt
+                </button>
+              )}
+              <button type="button" onClick={() => setJustSavedPaymentId(null)} className="text-emerald-700/70 dark:text-emerald-300/70 hover:text-emerald-900" title="Dismiss">
+                <X size={14} />
+              </button>
+            </span>
+          </div>
+        );
+      })()}
 
       {/* ── Page Header Toolbar ── */}
       <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
@@ -1280,9 +1486,13 @@ export default function PaymentInPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={(e) => { e.stopPropagation(); loadDraft(p); }}
+                            // A posted payment has no edit path on the server
+                            // — re-saving the form posted a SECOND payment.
+                            // Drafts open for editing; posted ones open their
+                            // receipt (read-only).
+                            onClick={(e) => { e.stopPropagation(); if (isDraft) loadDraft(p); else openReceipt(p, false); }}
                             className="p-1 text-gray-400 hover:text-[#f58220] hover:bg-orange-50 dark:hover:bg-white/5 rounded transition-colors"
-                            title="Edit Payment"
+                            title={isDraft ? "Edit Payment" : "View Payment (posted payments can't be edited — cancel and re-enter instead)"}
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -1298,12 +1508,13 @@ export default function PaymentInPage() {
                             <>
                               <button
                                 className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
+                                onClick={(e) => { e.stopPropagation(); openReceipt(p, true); }}
                                 title="Print"
                               >
                                 <Printer className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={(e) => { e.stopPropagation(); handleShareRow(p); }}
+                                onClick={(e) => { e.stopPropagation(); openReceipt(p, false); }}
                                 className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded transition-colors"
                                 title="Share"
                               >
@@ -1321,6 +1532,20 @@ export default function PaymentInPage() {
           </div>
         )}
       </div>
+      {receiptView && (
+        <PaymentReceipt
+          receipt={receiptView.receipt}
+          autoPrint={receiptView.autoPrint}
+          companyDetails={{
+            name: companyProfile?.companyName || companyProfile?.name || "Kiddos Foods",
+            address: companyProfile?.address,
+            gstin: companyProfile?.gstNumber || companyProfile?.gstin,
+            phone: companyProfile?.phone,
+            email: companyProfile?.email,
+          }}
+          onClose={() => setReceiptView(null)}
+        />
+      )}
     </div>
   );
 }

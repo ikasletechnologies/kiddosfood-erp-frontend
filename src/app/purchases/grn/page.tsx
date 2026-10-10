@@ -249,6 +249,11 @@ export default function GRNPage() {
   const [warehouses, setWarehouses] = useState<{ id: string; name: string }[]>([]);
   const [defaultWarehouseId, setDefaultWarehouseId] = useState<string>("");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
+  // Full-rejection confirmation (every received unit rejected).
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  // Product-wise summary shown before a normal approval.
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [previewGRN, setPreviewGRN] = useState(false);
 
@@ -553,7 +558,7 @@ export default function GRNPage() {
     }
   };
 
-  const handleCreateAndApprove = async () => {
+  const handleCreateAndApprove = async (rejectionReason?: string, confirmed?: boolean) => {
     if (!selectedPO) return;
 
     // If defaultWarehouseId is set, auto-assign to any items missing warehouseId
@@ -601,12 +606,22 @@ export default function GRNPage() {
       }
     }
 
+    // Everything checks out — show the product-wise summary for verification
+    // first; the summary's Confirm calls back here with confirmed = true.
+    // (A full rejection has its own confirmation with the rejection reason.)
+    if (!rejectionReason && !confirmed) {
+      setShowApproveConfirm(true);
+      return;
+    }
+
     setSubmitting(true);
     try {
       // 1. Create and Approve GRN (Impacts Inventory)
       const res = await grnApi.createFromPO(selectedPO.id, { items: itemsToSubmit });
       const grnId = res.data.id;
-      await grnApi.approve(grnId);
+      // A fully rejected receipt is finalized as REJECTED server-side (reason
+      // required, no stock or vendor bill posted).
+      await grnApi.approve(grnId, rejectionReason ? { rejectionReason } : undefined);
       setApprovedId(grnId);
 
       // 2. Handle Rejections (Auto-create Purchase Return & Credit Adjustment)
@@ -618,7 +633,7 @@ export default function GRNPage() {
           // Create Purchase Return document
           await purchaseReturnsApi.create({
             vendorId,
-            reason: "AUTO-GENERATED FROM GRN REJECTION",
+            reason: rejectionReason ? `GRN FULL REJECTION: ${rejectionReason}` : "AUTO-GENERATED FROM GRN REJECTION",
             returnSource: "GRN_REJECTION",
             items: rejectedItems.map(item => ({
               itemName: item.inventoryItem?.name || "Unknown Material",
@@ -633,7 +648,12 @@ export default function GRNPage() {
         }
       }
 
-      toast.success("GRN Approved successfully! Stock updated and rejections processed.");
+      toast.success(rejectionReason
+        ? "Shipment fully rejected. GRN recorded as Fully Rejected — no stock added."
+        : "GRN Approved successfully! Stock updated and rejections processed.");
+      setShowRejectConfirm(false);
+      setShowApproveConfirm(false);
+      setRejectReason("");
 
       setTimeout(() => {
         setView("HISTORY");
@@ -939,8 +959,16 @@ export default function GRNPage() {
                         {formatDate(grn.receivedAt || grn.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20">
-                          {grn.status}
+                        <span
+                          title={grn.status === "REJECTED" && grn.rejectionReason ? `Rejected: ${grn.rejectionReason}` : undefined}
+                          className={clsx(
+                            "inline-block px-2 py-0.5 rounded text-[11px] font-semibold border",
+                            grn.status === "REJECTED"
+                              ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
+                              : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+                          )}
+                        >
+                          {grn.status === "REJECTED" ? "Fully Rejected" : grn.status}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -1411,7 +1439,54 @@ export default function GRNPage() {
                       </span>
                     </div>
 
-                    <div className="space-y-1.5 text-xs text-gray-600 dark:text-slate-300 pt-1">
+                    {/* Product-wise lines — same per-line math as computeCommercialsFromPO
+                        (accepted qty × actual price, GST on that), so they add up to the totals below. */}
+                    {(() => {
+                      const fmtAmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                      const lines = grnItems
+                        .filter(gi => (Number(gi.acceptedQty) || 0) > 0)
+                        .map(gi => {
+                          const qty = Number(gi.acceptedQty) || 0;
+                          const price = Number(gi.price) || 0;
+                          const rate = Number(gi.gstRate ?? 0);
+                          const taxable = qty * price;
+                          const tax = (taxable * rate) / 100;
+                          return { key: gi.materialId, name: gi.inventoryItem?.name || "Item", unit: gi.inventoryItem?.unit || "", qty, price, rate, tax, total: taxable + tax };
+                        });
+                      if (lines.length === 0) {
+                        return <p className="text-xs text-gray-400 dark:text-slate-500 italic pt-1">No accepted items yet.</p>;
+                      }
+                      return (
+                        <div className="overflow-x-auto custom-scrollbar -mx-1 pt-1">
+                          <table className="w-full text-[11px] min-w-[420px]">
+                            <thead>
+                              <tr className="text-[10px] uppercase tracking-wider text-gray-500 dark:text-slate-400 border-b border-gray-200 dark:border-white/10">
+                                <th className="text-left font-semibold px-1 py-1.5">Product</th>
+                                <th className="text-right font-semibold px-1 py-1.5">Accepted</th>
+                                <th className="text-right font-semibold px-1 py-1.5">Unit Price</th>
+                                <th className="text-right font-semibold px-1 py-1.5">GST</th>
+                                <th className="text-right font-semibold px-1 py-1.5">Line Total</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-gray-700 dark:text-slate-300">
+                              {lines.map(l => (
+                                <tr key={l.key}>
+                                  <td className="px-1 py-1.5 font-medium text-gray-800 dark:text-slate-200 max-w-[140px] truncate" title={l.name}>{l.name}</td>
+                                  <td className="px-1 py-1.5 text-right font-mono whitespace-nowrap">{l.qty} {l.unit}</td>
+                                  <td className="px-1 py-1.5 text-right font-mono whitespace-nowrap">₹{fmtAmt(l.price)}</td>
+                                  <td className="px-1 py-1.5 text-right font-mono whitespace-nowrap">
+                                    ₹{fmtAmt(l.tax)} <span className="text-gray-400 dark:text-slate-500">({l.rate}%)</span>
+                                  </td>
+                                  <td className="px-1 py-1.5 text-right font-mono font-semibold text-gray-900 dark:text-white whitespace-nowrap">₹{fmtAmt(l.total)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="space-y-1.5 text-xs text-gray-600 dark:text-slate-300 pt-1 border-t border-gray-100 dark:border-white/5">
                       <div className="flex justify-between">
                         <span className="text-gray-500 dark:text-slate-400">Accepted Goods Value</span>
                         <span className="font-mono font-semibold text-gray-700 dark:text-slate-300">₹{commercials.goodsValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -1451,7 +1526,11 @@ export default function GRNPage() {
                 if (!item.expDate || isNaN(new Date(item.expDate).getTime())) return true;
                 return false;
               });
-              const isApproveDisabled = submitting || grnItems.length === 0 || totalAccepted === 0 || hasIncompleteBatchInfo;
+              const totalReceived = grnItems.reduce((s, i) => s + (Number(i.receivedQty) || 0), 0);
+              // Goods arrived but every unit was rejected: finalized through
+              // the full-rejection confirmation instead of a dead button.
+              const isFullRejection = grnItems.length > 0 && totalReceived > 0 && totalAccepted === 0;
+              const isApproveDisabled = submitting || grnItems.length === 0 || (totalAccepted === 0 && !isFullRejection) || hasIncompleteBatchInfo;
 
               return (
                 <div className="bg-white dark:bg-card px-6 py-4 rounded-lg border border-gray-200 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1475,18 +1554,20 @@ export default function GRNPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={handleCreateAndApprove}
+                      onClick={() => (isFullRejection ? setShowRejectConfirm(true) : handleCreateAndApprove())}
                       disabled={isApproveDisabled}
-                      title={hasIncompleteBatchInfo ? "Please fill Batch No & EXP Date for all items" : "Approve GRN and synchronize stock"}
+                      title={hasIncompleteBatchInfo ? "Please fill Batch No & EXP Date for all items" : isFullRejection ? "Every received unit is rejected — finalize the rejection" : "Approve GRN and synchronize stock"}
                       className={clsx(
                         "px-5 py-2 text-sm font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5",
                         isApproveDisabled
                           ? "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed shadow-none"
+                          : isFullRejection
+                          ? "bg-rose-600 hover:bg-rose-700 text-white active:scale-95 cursor-pointer"
                           : "bg-[#f58220] hover:bg-[#e8740e] text-white active:scale-95 cursor-pointer"
                       )}
                     >
                       {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
-                      Approve & Sync
+                      {isFullRejection ? "Finalize Rejection" : "Approve & Sync"}
                     </button>
                   </div>
                 </div>
@@ -1495,6 +1576,144 @@ export default function GRNPage() {
           </div>
         )}
       </div>
+
+      {/* ── Approval Confirmation (product-wise summary) ── */}
+      {showApproveConfirm && selectedPO && (() => {
+        // Same figures the Purchase Bill Preview shows and approval posts.
+        const c = computeCommercialsFromPO(selectedPO, grnItems);
+        const money = (n: number) => `₹${(Number(n) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const lines = grnItems.filter(i => (Number(i.receivedQty) || 0) > 0);
+        return (
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[999999] p-4" onClick={() => !submitting && setShowApproveConfirm(false)}>
+            <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h3 className="font-bold text-base text-gray-900 dark:text-white">Confirm GRN approval</h3>
+                <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                  PO {selectedPO.poNumber} · {selectedPO.vendor?.name} — verify before stock and the vendor bill are posted.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-gray-100 dark:border-white/5">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-white/[0.02] text-[10px] uppercase font-semibold text-gray-500 dark:text-slate-400">
+                      <th className="text-left px-3 py-2">Product</th>
+                      <th className="text-right px-2 py-2">Accepted</th>
+                      <th className="text-right px-2 py-2">Rejected</th>
+                      <th className="text-right px-2 py-2">Unit Price</th>
+                      <th className="text-right px-2 py-2">GST</th>
+                      <th className="text-right px-3 py-2">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 dark:divide-white/5">
+                    {lines.map((i, idx) => {
+                      const accepted = Number(i.acceptedQty) || 0;
+                      const value = accepted * (Number(i.price) || 0);
+                      const rate = Number(i.gstRate ?? 0);
+                      const gst = (value * rate) / 100;
+                      const unit = i.inventoryItem?.unit || "";
+                      return (
+                        <tr key={idx}>
+                          <td className="px-3 py-2 font-medium text-gray-800 dark:text-white">
+                            {i.inventoryItem?.name || "Material"}
+                            {Math.abs((Number(i.price) || 0) - (Number(i.poPrice) || 0)) > 0.001 && (
+                              <span className="block text-[10px] font-normal text-amber-600">PO price {money(i.poPrice)} — changed at receipt</span>
+                            )}
+                          </td>
+                          <td className="px-2 py-2 text-right text-emerald-600 dark:text-emerald-400 font-semibold">{accepted} {unit}</td>
+                          <td className="px-2 py-2 text-right text-rose-600 dark:text-rose-400">{Number(i.rejectedQty) || 0} {unit}</td>
+                          <td className="px-2 py-2 text-right font-mono">{money(i.price)}</td>
+                          <td className="px-2 py-2 text-right font-mono">{money(gst)} <span className="text-gray-400">({rate}%)</span></td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold">{money(value + gst)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="ml-auto max-w-xs space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Accepted Goods Value</span><span className="font-mono">{money(c.goodsValue)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">GST (Total)</span><span className="font-mono">+{money(c.taxAmount)}</span></div>
+                {c.discountAmount > 0 && <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Discount</span><span className="font-mono">-{money(c.discountAmount)}</span></div>}
+                {c.freightCost > 0 && <div className="flex justify-between"><span className="text-gray-500 dark:text-slate-400">Freight Cost</span><span className="font-mono">+{money(c.freightCost)}</span></div>}
+                <div className="flex justify-between pt-1.5 border-t border-gray-200 dark:border-white/10 font-bold">
+                  <span className="uppercase tracking-wider text-gray-900 dark:text-white">Total Payable</span>
+                  <span className="font-mono text-[#f58220] text-sm">{money(c.finalPayable)}</span>
+                </div>
+              </div>
+
+              {lines.some(i => (Number(i.rejectedQty) || 0) > 0) && (
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">Rejected quantities are not added to stock or billed; a purchase return is raised for vendor tracking.</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100 dark:border-white/5">
+                <button type="button" disabled={submitting} onClick={() => setShowApproveConfirm(false)} className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5">
+                  Back to Edit
+                </button>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => handleCreateAndApprove(undefined, true)}
+                  className="px-4 py-2 text-sm font-semibold rounded-lg text-white bg-[#f58220] hover:bg-[#e8740e] disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
+                  Confirm & Approve
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Full Rejection Confirmation ── */}
+      {showRejectConfirm && selectedPO && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center z-[999999] p-4" onClick={() => !submitting && setShowRejectConfirm(false)}>
+          <div className="bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+            <div>
+              <h3 className="font-bold text-base text-gray-900 dark:text-white">Reject entire shipment?</h3>
+              <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                PO {selectedPO.poNumber} · {selectedPO.vendor?.name}
+              </p>
+            </div>
+            <ul className="text-xs text-gray-700 dark:text-slate-200 space-y-1 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3">
+              {grnItems.filter(i => (Number(i.receivedQty) || 0) > 0).map((i, idx) => (
+                <li key={idx} className="flex justify-between gap-3">
+                  <span>{i.inventoryItem?.name || "Material"}</span>
+                  <span className="font-semibold text-rose-600 dark:text-rose-400">{i.rejectedQty} {i.inventoryItem?.unit || ""} rejected</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-gray-500 dark:text-slate-400">
+              The GRN will be recorded as <b>Fully Rejected</b>. No stock is added to inventory and no vendor bill is created; the PO quantity stays open for a replacement delivery. A purchase return is raised for vendor tracking.
+            </p>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 dark:text-slate-300 block mb-1">Rejection reason *</label>
+              <textarea
+                rows={3}
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                placeholder="e.g. Damaged packaging, failed quality check, wrong material"
+                className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white outline-none focus:border-rose-400 bg-white dark:bg-white/5 resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button type="button" disabled={submitting} onClick={() => setShowRejectConfirm(false)} className="px-4 py-2 text-sm font-semibold border border-gray-200 dark:border-white/10 rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-white/5">
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={submitting || rejectReason.trim().length < 3}
+                onClick={() => handleCreateAndApprove(rejectReason.trim())}
+                className="px-4 py-2 text-sm font-semibold rounded-lg text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {submitting && <Loader2Icon size={14} className="animate-spin" />}
+                Confirm Full Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Purchase Order Label Scanner Modal ── */ }
       {showScanner && (
@@ -1697,9 +1916,15 @@ export default function GRNPage() {
                 </div>
                 <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Status</p>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                    {viewingGRNDetails.status}
+                  <span className={clsx(
+                    "inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold border",
+                    viewingGRNDetails.status === "REJECTED" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  )}>
+                    {viewingGRNDetails.status === "REJECTED" ? "Fully Rejected" : viewingGRNDetails.status}
                   </span>
+                  {viewingGRNDetails.status === "REJECTED" && viewingGRNDetails.rejectionReason && (
+                    <p className="text-[11px] text-rose-600 mt-1.5">Reason: {viewingGRNDetails.rejectionReason}</p>
+                  )}
                 </div>
                 <div className="bg-slate-50 dark:bg-white/5 p-4 rounded-2xl">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Received By</p>

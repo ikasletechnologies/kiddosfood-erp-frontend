@@ -68,6 +68,13 @@ interface GSTInvoiceProps {
   // the buttons remain available (and so a failed auto-share, or a
   // dismissed print dialog, has a visible retry point).
   autoAction?: 'print' | 'download' | 'share';
+  // The document's saved payable total. When given, the printed Total is
+  // exactly this figure and the gap from the computed line totals is shown
+  // as the round-off (or, if ₹1 or more, as an adjustment) — so a printed
+  // invoice can never disagree with the saved one.
+  savedGrandTotal?: number;
+  // Payment position, printed under the total (sales invoices).
+  paymentSummary?: { status: string; paid: number; balance: number };
 }
 
 // Basic number to words converter for INR
@@ -90,7 +97,7 @@ function numberToWords(num: number): string {
   return str.trim();
 }
 
-export default function GSTInvoice({ order, vendor, companyDetails, onClose, documentType = "TAX_INVOICE", dueDateDays = 15, terms, notes, autoAction }: GSTInvoiceProps) {
+export default function GSTInvoice({ order, vendor, companyDetails, onClose, documentType = "TAX_INVOICE", dueDateDays = 15, terms, notes, autoAction, savedGrandTotal, paymentSummary }: GSTInvoiceProps) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const docRef = useRef<HTMLDivElement>(null);
@@ -169,8 +176,13 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
   const finalIgst = round(taxBreakdown.igst);
 
   const totalTax = round(finalCgst + finalSgst + finalIgst);
-  const roundOff = calcResult.roundOff;
-  const grandTotal = round(calcResult.finalTotal + freightCost);
+  const hasSavedTotal = typeof savedGrandTotal === 'number' && Number.isFinite(savedGrandTotal);
+  // With a saved total the residual is whatever the saved invoice added on
+  // top of its lines; under ₹1 that is its round-off.
+  const savedResidual = hasSavedTotal ? round(savedGrandTotal! - (calcResult.totalBeforeRound + freightCost)) : 0;
+  const roundOff = hasSavedTotal ? (Math.abs(savedResidual) < 1 ? savedResidual : 0) : calcResult.roundOff;
+  const adjustment = hasSavedTotal && Math.abs(savedResidual) >= 1 ? savedResidual : 0;
+  const grandTotal = hasSavedTotal ? round(savedGrandTotal!) : round(calcResult.finalTotal + freightCost);
 
   const invoiceNo =
     order.poNumber ||
@@ -374,6 +386,11 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
             <p className="text-xs text-gray-600 mb-4 leading-relaxed max-w-[200px]">
               {vendor?.address || vendor?.location || order.franchise?.location || order.customer?.address || 'No address provided'}
             </p>
+            {vendor?.shippingAddress && vendor.shippingAddress !== (vendor?.address || vendor?.location) && (
+              <p className="text-xs text-gray-600 -mt-2 mb-4 leading-relaxed max-w-[200px]">
+                <span className="text-gray-500">Ship to: </span>{vendor.shippingAddress}
+              </p>
+            )}
             <div className="flex items-center gap-2 text-xs">
               <span className="font-bold text-gray-900">GSTIN</span>
               <span className="text-gray-600 font-mono">{vendor?.gstin || vendor?.gstNumber || order.franchise?.gstin || order.customer?.gstNumber || '-'}</span>
@@ -437,6 +454,7 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                   </td>
                   <td className="py-3 px-3 text-gray-900 font-medium">
                     {itemName}
+                    {item.sku && <div className="text-[10px] text-gray-500 font-mono">SKU: {item.sku}</div>}
                   </td>
                   <td className="py-3 px-2 text-center text-gray-600 font-mono text-[11px] truncate max-w-[65px]" title={item.hsnCode || '—'}>
                     {item.hsnCode || '—'}
@@ -549,17 +567,40 @@ export default function GSTInvoice({ order, vendor, companyDetails, onClose, doc
                 <span className="font-semibold text-gray-900">₹ {fmt(finalIgst)}</span>
               </div>
             )}
+            {Math.abs(adjustment) >= 0.005 && (
+              <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                <span className="text-gray-600">{adjustment >= 0 ? "Other Charges" : "Invoice Discount"}</span>
+                <span className="font-semibold text-gray-900">{adjustment >= 0 ? "+" : "-"} ₹ {fmt(Math.abs(adjustment))}</span>
+              </div>
+            )}
             {Math.abs(roundOff) >= 0.005 && (
               <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
                 <span className="text-gray-600">Round Off</span>
                 <span className="font-semibold text-gray-900">{roundOff >= 0 ? "+" : "-"} ₹ {fmt(Math.abs(roundOff))}</span>
               </div>
             )}
-            
+
             <div className="flex justify-between py-4 border-b-2 border-gray-100 mt-2">
               <span className="text-xl font-medium text-gray-600">Total</span>
               <span className="text-2xl font-bold text-gray-900">₹ {fmt(grandTotal)}</span>
             </div>
+
+            {paymentSummary && (
+              <>
+                <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-600">Amount Paid</span>
+                  <span className="font-semibold text-gray-900">₹ {fmt(paymentSummary.paid)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-600">Balance Due</span>
+                  <span className="font-bold text-gray-900">₹ {fmt(paymentSummary.balance)}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-600">Payment Status</span>
+                  <span className="font-semibold text-gray-900">{paymentSummary.status}</span>
+                </div>
+              </>
+            )}
 
             <div className="py-4 border-b border-gray-100">
               <p className="text-[10px] text-gray-400 mb-1">{docTitle} Total (in words)</p>

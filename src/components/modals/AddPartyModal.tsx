@@ -195,7 +195,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           ...prev,
           name: data.legalName || prev.name,
           billingAddress: data.address || prev.billingAddress,
-          shippingAddress: prev.shippingAddress || data.address || prev.billingAddress,
+          // Shipping address is always typed by the user — the GSTIN lookup fills billing only.
+          shippingAddress: prev.shippingAddress,
           state: matchState(data.state) || stateFromGstin(cleanGst) || prev.state,
           city: data.city || prev.city,
           pincode: data.pinCode || prev.pincode,
@@ -245,7 +246,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           contact: initialData.contact || initialData.phone || "",
           email: initialData.email || "",
           billingAddress: initialData.address || initialData.billingAddress || "",
-          shippingAddress: initialData.shippingAddress || initialData.address || initialData.billingAddress || "",
+          shippingAddress: initialData.shippingAddress || "",
           state: initialData.state || "",
           district: initialData.district || "",
           city: initialData.city || "",
@@ -405,7 +406,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         email: form.email && form.email.trim() ? form.email.trim() : null,
         address: form.billingAddress.trim(),
         billingAddress: form.billingAddress.trim(),
-        shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : form.billingAddress.trim(),
+        shippingAddress: form.shippingAddress && form.shippingAddress.trim() ? form.shippingAddress.trim() : null,
         state: form.state && form.state.trim() ? matchState(form.state) : null,
         district: form.district && form.district.trim() ? form.district.trim() : null,
         city: form.city && form.city.trim() ? form.city.trim() : null,
@@ -627,13 +628,6 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-medium text-gray-500 dark:text-slate-400">{partyType === 'customer' ? 'Customer' : 'Vendor'} Shipping Address *</label>
-                    <button
-                      type="button"
-                      onClick={() => setForm(prev => ({ ...prev, shippingAddress: prev.billingAddress }))}
-                      className="text-[11px] text-orange-600 dark:text-orange-400 hover:text-orange-700 font-medium hover:underline"
-                    >
-                      Same as Billing Address
-                    </button>
                   </div>
                   <textarea
                     rows={3}

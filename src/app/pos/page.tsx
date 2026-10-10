@@ -33,6 +33,7 @@ const BRAND_ORANGE = "#f58220";
 interface CartItem {
   id: string;
   name: string;
+  sku?: string | null; // variant SKU, carried for display/receipt
   price: number;
   quantity: number;
   taxPercent: number;
@@ -337,14 +338,17 @@ export default function POSPage() {
         const mapped = data.map(p => ({
           id: p.id,
           name: p.name,
-          price: p.inventoryBasePrice ?? p.basePrice ?? p.price ?? 0,
-          franchisePrice: p.franchisePrice,
-          dealerPrice: p.dealerPrice,
-          customerPrice: p.customerPrice,
+          // The variant's configured SKU: Product.sku (kept in sync with Item
+          // Master), else the SKU of the Stock Hub item it resolved to; null
+          // only when neither has one.
+          sku: [p.sku, p.inventorySku].map((s: any) => (typeof s === "string" ? s.trim() : "")).find(Boolean) || null,
+          // Applicable price per channel, resolved by the backend with the
+          // same rule checkout charges with (null = not billable).
+          sellingPrices: (p.sellingPrices || {}) as Record<string, number | null>,
+          price: p.sellingPrices?.CUSTOMER ?? 0,
           taxPercent: p.taxPercent ?? p.gstRate ?? 0,
           category: p.category || p.categoryName || "General",
           stock: p.currentStock ?? p.stock ?? null,
-          noPrice: (p.inventoryBasePrice ?? p.basePrice ?? p.price ?? 0) <= 0,
           packSize: p.packSize as { qty: number; unit: string } | null | undefined,
           discountType: p.discountType || "PERCENT",
           discountValue: p.discountValue || 0,
@@ -469,11 +473,11 @@ export default function POSPage() {
   // Channel prices default to 0 (unconfigured, not "genuinely free") on
   // items that predate these fields — only a positive value counts as
   // configured, otherwise fall back to the generic base price.
-  const getPrice = (p: any, type: string) => {
-    if (type === "CUSTOMER" && p.customerPrice > 0) return p.customerPrice;
-    if (type === "DEALER" && p.dealerPrice > 0) return p.dealerPrice;
-    if (type === "FRANCHISE" && p.franchisePrice > 0) return p.franchisePrice;
-    return p.price || 0;
+  // Search display, add-to-cart and the channel re-price below all read the
+  // same backend-resolved price, so a displayed price is always billable.
+  const getPrice = (p: any, type: string): number => {
+    const v = Number(p.sellingPrices?.[type]);
+    return Number.isFinite(v) && v > 0 ? v : 0;
   };
 
   // "Customer Retail Discount" is exactly that — a customer-channel-only
@@ -486,7 +490,7 @@ export default function POSPage() {
   };
 
   const addToCart = (p: any) => {
-    if (p.noPrice) { toast.error(`"${p.name}" has no selling price`); return; }
+    if (!(getPrice(p, partyType) > 0)) { toast.error(`"${p.name}" has no selling price`); return; }
     const ex = cart.find(i => i.id === p.id);
     const cur = ex?.quantity || 0;
     if (p.stock !== null && cur >= p.stock) { toast.error(`Only ${p.stock} left in stock`); return; }
@@ -494,7 +498,7 @@ export default function POSPage() {
     const itemDiscount = getItemDiscount(p, partyType, actualPrice);
     setCart(prev => ex
       ? prev.map(i => i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i)
-      : [...prev, { id: p.id, name: p.name, price: actualPrice, quantity: 1, taxPercent: p.taxPercent, stock: p.stock, itemDiscount }]
+      : [...prev, { id: p.id, name: p.name, sku: p.sku, price: actualPrice, quantity: 1, taxPercent: p.taxPercent, stock: p.stock, itemDiscount }]
     );
   };
 
@@ -559,6 +563,10 @@ export default function POSPage() {
   const handleCheckout = async (credit?: { paidNow: number }) => {
     if (!cart.length) { toast.error("Cart is empty"); return; }
     if (!accountId && !(credit && credit.paidNow === 0)) { toast.error("Select a payment account"); return; }
+    if (!credit && partyType !== "FRANCHISE" && !((Number(paidAmount) || 0) >= total - 0.01)) {
+      toast.error(`Paid amount ₹${Number(paidAmount) || 0} is less than the bill total ₹${total}. Collect the full amount or use Credit Payment.`);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -631,7 +639,11 @@ export default function POSPage() {
             taxPercent: i.taxPercent,
             ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}),
           })),
-          ...(credit ? { creditSale: true, paidAmount: credit.paidNow } : {}),
+          // A normal sale must carry the amount actually collected — the
+          // server rejects it if that doesn't cover the bill.
+          ...(credit
+            ? { creditSale: true, paidAmount: credit.paidNow }
+            : { paidAmount: paidAmount.trim() === "" ? undefined : Number(paidAmount) }),
         });
         orderId = res.data?.id || res.data?.orderId || "";
         invoiceNum = res.data?.invoiceNum || orderId;
@@ -747,10 +759,12 @@ export default function POSPage() {
 
   // ── Filtered products ──────────────────────────────────────────────────────
 
-  const filtered = products.filter(p =>
-    (activeCategory === "All" || p.category === activeCategory) &&
-    p.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Matches by product name or SKU.
+  const filtered = products.filter(p => {
+    const q = search.toLowerCase().trim();
+    return (activeCategory === "All" || p.category === activeCategory) &&
+      (p.name.toLowerCase().includes(q) || (!!p.sku && p.sku.toLowerCase().includes(q)));
+  });
 
   // ── Keyboard Shortcuts & Actions ──────────────────────────────────────────
   
@@ -957,7 +971,7 @@ export default function POSPage() {
                         </div>
                       </div>
                       <div className="text-sm font-black" style={{ color: BRAND_ORANGE }}>
-                        ₹{getPrice(p, partyType).toLocaleString()}
+                        {getPrice(p, partyType) > 0 ? `₹${getPrice(p, partyType).toLocaleString()}` : "No price"}
                       </div>
                     </button>
                   ))}
@@ -1479,7 +1493,7 @@ export default function POSPage() {
                 <div>
                   <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Product Decoded</p>
                   <h4 className="text-lg font-black text-white uppercase">{scannedProduct.name}</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Price: ₹{scannedProduct.price} · Stock: {scannedProduct.stock ?? "N/A"}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Price: {getPrice(scannedProduct, partyType) > 0 ? `₹${getPrice(scannedProduct, partyType)}` : "No price"} · Stock: {scannedProduct.stock ?? "N/A"}</p>
                 </div>
               </div>
             )}

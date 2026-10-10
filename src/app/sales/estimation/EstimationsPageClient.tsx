@@ -18,6 +18,7 @@ import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { formatDate, roundMoney, calculateSalesDocumentTotals, formatERPNumber } from "@/lib/utils";
+import { loadUnicodeFont } from "@/lib/pdfFonts";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -85,11 +86,19 @@ const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; 
   ACCEPTED: { label: "Accepted", color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-500/10", border: "border-emerald-200 dark:border-emerald-500/20" },
   REJECTED: { label: "Rejected", color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-500/10", border: "border-rose-200 dark:border-rose-500/20" },
   CONVERTED: { label: "Converted", color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-500/10", border: "border-orange-200 dark:border-orange-500/20" },
+  CANCELLED: { label: "Cancelled", color: "text-slate-400 dark:text-slate-500", bg: "bg-slate-100 dark:bg-white/5", border: "border-slate-200 dark:border-white/10" },
 };
 
 // Proforma Invoice shares this exact Estimate/Quotation form and backend model —
 // only the on-screen wording changes depending on which sidebar entry brought the user here.
 export type DocumentType = "ESTIMATE" | "PROFORMA";
+
+// Whether a saved document may still be edited — mirrors the backend rules
+// that reject the save otherwise: a Proforma Invoice only while DRAFT
+// (updateProformaInvoice; Save finalizes it to SENT), an Estimate until it is
+// CONVERTED (updateQuotation). A brand-new document (no status) is editable.
+const canEditDocument = (type: DocumentType, status?: string | null) =>
+  !status || (type === "PROFORMA" ? status === "DRAFT" : status !== "CONVERTED");
 
 const DOC_LABELS: Record<DocumentType, {
   formHeading: string;
@@ -956,6 +965,8 @@ export default function EstimationsPageClient({
     // check makes handleSave itself idempotent against re-entrant calls,
     // regardless of which caller forgot to gate on `saving`.
     if (saving) return;
+    // A finalized document is view-only (the backend would reject the save).
+    if (!canEditDocument(documentType, loadedStatus)) return;
 
     // A draft's whole point is to hold whatever's been typed so far, even
     // an item with no price yet — the strict qty/rate>0 filter below is
@@ -1297,9 +1308,40 @@ export default function EstimationsPageClient({
     return matchSearch && matchSelectedStatuses && matchStatus && matchDate;
   });
 
-  const totalQuotations = filtered.reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const totalConverted = filtered.filter(i => i.status === "CONVERTED").reduce((s, i) => s + (i.totalAmount || 0), 0);
-  const totalOpen = filtered.filter(i => ["SENT", "OPEN", "PENDING"].includes(i.status)).reduce((s, i) => s + (i.totalAmount || 0), 0);
+  // One amount per document, used by the table rows, the summary cards and
+  // the export alike: the server's stored final total (GST, discounts and
+  // round-off included once). The rows used to recompute it in the browser
+  // while the cards summed the stored figure, so the two could disagree.
+  const documentAmount = (est: any): number => Number(est.totalAmount) || 0;
+
+  // Status wording as the list's Status column shows it (exports use this
+  // too, so a document never reads "Sent" in the PDF and "Open" on screen).
+  const documentStatusLabel = (est: any): string => {
+    if (est.status === "CONVERTED") return "Converted";
+    if (["SENT", "OPEN", "PENDING"].includes(est.status)) {
+      return documentType === "PROFORMA" ? (STATUS_STYLES[est.status]?.label || est.status) : "Open";
+    }
+    if (est.status === "DRAFT" || !est.status) return "Draft";
+    return STATUS_STYLES[est.status]?.label || est.status;
+  };
+
+  // What a converted document turned into — the real linked Sale Invoice,
+  // else the Sales Order (same precedence as the list). null when unknown;
+  // never a guessed number.
+  const conversionReference = (est: any): string | null => {
+    if (est.convertedInvoiceNumber || est.convertedInvoiceId) {
+      return `Invoice ${formatERPNumber("INV", est.convertedInvoiceNumber || est.convertedInvoiceId, est.createdAt)}`;
+    }
+    if (est.convertedOrderNumber || est.convertedOrderId) {
+      return `SO ${formatERPNumber("SO", est.convertedOrderNumber || est.convertedOrderId, est.createdAt)}`;
+    }
+    return null;
+  };
+  const sumAmounts = (list: any[]) => Math.round(list.reduce((s, i) => s + documentAmount(i), 0) * 100) / 100;
+
+  const totalQuotations = sumAmounts(filtered);
+  const totalConverted = sumAmounts(filtered.filter(i => i.status === "CONVERTED"));
+  const totalOpen = sumAmounts(filtered.filter(i => ["SENT", "OPEN", "PENDING"].includes(i.status)));
 
   const partySourceList = partyType === "DEALER" ? dealers : (partyType === "FRANCHISE" && !isFranchiseUser) ? franchises : customers;
   const filteredCustomers = partySourceList.filter((c: any) =>
@@ -1321,6 +1363,7 @@ export default function EstimationsPageClient({
       dateTo,
       statusFilter,
       search,
+      statusLabelOf: documentStatusLabel,
     });
   };
 
@@ -1329,6 +1372,8 @@ export default function EstimationsPageClient({
     try {
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      // Unicode font so "₹" renders (and lines containing it keep normal spacing).
+      const { family: pdfFont, rupee } = await loadUnicodeFont(doc);
       const margin = 12;
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -1340,20 +1385,20 @@ export default function EstimationsPageClient({
         { header: L.noColumn, width: 28, align: "left" },
         { header: "Party Name", width: 42, align: "left" },
         { header: "Party Type", width: 20, align: "left" },
-        { header: "Amount (₹)", width: 24, align: "right" },
+        { header: `Amount (${rupee})`, width: 24, align: "right" },
         { header: "Status", width: 22, align: "center" },
-        { header: "SO Ref", width: 28, align: "left" },
+        { header: "Converted To", width: 28, align: "left" },
       ];
 
       // Title + active filter summary, so the exported PDF is self-describing
       // about which slice of data it represents (matches the filters the
       // list screen currently has applied).
-      doc.setFont("helvetica", "bold");
+      doc.setFont(pdfFont, "bold");
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42);
       doc.text(`${L.docWord} Report`, margin, margin + 4);
 
-      doc.setFont("helvetica", "normal");
+      doc.setFont(pdfFont, "normal");
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139);
       const filterParts = [
@@ -1369,7 +1414,7 @@ export default function EstimationsPageClient({
       const drawTableHeader = (y: number) => {
         doc.setFillColor(245, 130, 32);
         doc.rect(margin, y, contentWidth, 7, "F");
-        doc.setFont("helvetica", "bold");
+        doc.setFont(pdfFont, "bold");
         doc.setFontSize(7.5);
         doc.setTextColor(255, 255, 255);
 
@@ -1390,13 +1435,13 @@ export default function EstimationsPageClient({
       currentY += 7;
 
       if (filtered.length === 0) {
-        doc.setFont("helvetica", "italic");
+        doc.setFont(pdfFont, "normal");
         doc.setFontSize(9);
         doc.setTextColor(100, 116, 139);
         doc.text("No records found matching the selected criteria.", pageWidth / 2, currentY + 10, { align: "center" });
         currentY += 18;
       } else {
-        doc.setFont("helvetica", "normal");
+        doc.setFont(pdfFont, "normal");
         doc.setFontSize(7.5);
 
         filtered.forEach((est: any, idx: number) => {
@@ -1427,9 +1472,10 @@ export default function EstimationsPageClient({
           const noVal = est.quotationNumber || est.proformaNumber || "—";
           const partyVal = est.customer?.name || est.customerName || "—";
           const partyTypeVal = est.partyType || (est.customerId ? "CUSTOMER" : "—");
-          const amtVal = `${Number(est.totalAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-          const statusVal = STATUS_STYLES[est.status]?.label || est.status || "DRAFT";
-          const soRefVal = est.convertedOrderNumber || "—";
+          const amtVal = `${documentAmount(est).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          // Same status wording and conversion reference as the list page.
+          const statusVal = documentStatusLabel(est);
+          const soRefVal = conversionReference(est) || "—";
 
           let x = margin;
           // Col 0: Date
@@ -1437,10 +1483,10 @@ export default function EstimationsPageClient({
           x += cols[0].width;
 
           // Col 1: No
-          doc.setFont("helvetica", "bold");
+          doc.setFont(pdfFont, "bold");
           doc.setTextColor(245, 130, 32);
           doc.text(noVal, x + 2, currentY + 4.8);
-          doc.setFont("helvetica", "normal");
+          doc.setFont(pdfFont, "normal");
           doc.setTextColor(30, 41, 59);
           x += cols[1].width;
 
@@ -1454,9 +1500,9 @@ export default function EstimationsPageClient({
           x += cols[3].width;
 
           // Col 4: Amount
-          doc.setFont("helvetica", "bold");
+          doc.setFont(pdfFont, "bold");
           doc.text(amtVal, x + cols[4].width - 2, currentY + 4.8, { align: "right" });
-          doc.setFont("helvetica", "normal");
+          doc.setFont(pdfFont, "normal");
           x += cols[4].width;
 
           // Col 5: Status
@@ -1486,23 +1532,23 @@ export default function EstimationsPageClient({
       doc.setDrawColor(203, 213, 225);
       doc.rect(margin, currentY, contentWidth, 14, "S");
 
-      doc.setFont("helvetica", "bold");
+      doc.setFont(pdfFont, "bold");
       doc.setFontSize(8);
       doc.setTextColor(15, 23, 42);
       doc.text(`Total Records: ${filtered.length}`, margin + 4, currentY + 5.5);
-      doc.text(`Total Amount: ₹ ${totalQuotations.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 5.5);
-      doc.text(`Converted: ₹ ${totalConverted.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 125, currentY + 5.5);
+      doc.text(`Total Amount: ${rupee} ${totalQuotations.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 5.5);
+      doc.text(`Converted: ${rupee} ${totalConverted.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 125, currentY + 5.5);
 
-      doc.setFont("helvetica", "normal");
+      doc.setFont(pdfFont, "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(100, 116, 139);
-      doc.text(`Open / Sent: ₹ ${totalOpen.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 10.5);
+      doc.text(`${documentType === "PROFORMA" ? "Sent" : "Open"}: ${rupee} ${totalOpen.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, margin + 50, currentY + 10.5);
 
       // Page Footers
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFont("helvetica", "normal");
+        doc.setFont(pdfFont, "normal");
         doc.setFontSize(7.5);
         doc.setTextColor(148, 163, 184);
         doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 7, { align: "center" });
@@ -2107,6 +2153,12 @@ export default function EstimationsPageClient({
             Cancel
           </button>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            {!canEditDocument(documentType, loadedStatus) && (
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {documentType === "PROFORMA" ? "Proforma Invoice" : "Estimate"} is {STATUS_STYLES[loadedStatus || ""]?.label || loadedStatus} — view only, it can no longer be edited.
+              </span>
+            )}
+            {canEditDocument(documentType, loadedStatus) && (
             <button
               onClick={() => handleSave(true)}
               disabled={saving}
@@ -2114,6 +2166,7 @@ export default function EstimationsPageClient({
             >
               Save Draft
             </button>
+            )}
             <div className="relative" ref={shareDropRef}>
               <button
                 onClick={() => setShowShareDrop(v => !v)}
@@ -2129,6 +2182,7 @@ export default function EstimationsPageClient({
                 </div>
               )}
             </div>
+            {canEditDocument(documentType, loadedStatus) && (
             <button
               onClick={() => handleSave(false)}
               disabled={saving}
@@ -2136,6 +2190,7 @@ export default function EstimationsPageClient({
             >
               <Check className="h-4 w-4" /> <span>{saving ? "Saving..." : "Save"}</span>
             </button>
+            )}
           </div>
         </div>
 
@@ -2663,7 +2718,7 @@ export default function EstimationsPageClient({
           {[
             { label: L.statLabel, value: `₹${totalQuotations.toLocaleString("en-IN")}`, color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
             { label: "Converted", value: `₹${totalConverted.toLocaleString("en-IN")}`, color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-            { label: "Open", value: `₹${totalOpen.toLocaleString("en-IN")}`, color: "text-[#f58220]", dot: "bg-[#f58220]" },
+            { label: documentType === "PROFORMA" ? "Sent" : "Open", value: `₹${totalOpen.toLocaleString("en-IN")}`, color: "text-[#f58220]", dot: "bg-[#f58220]" },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-3.5 sm:px-4 py-3 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
               <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
@@ -2705,7 +2760,7 @@ export default function EstimationsPageClient({
                   statusFilter === s ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
-                {s === "ALL" ? "All" : s}
+                {s === "ALL" ? "All" : s === "OPEN" && documentType === "PROFORMA" ? "SENT" : s}
               </button>
             ))}
           </div>
@@ -2878,9 +2933,7 @@ export default function EstimationsPageClient({
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {filtered.map((est, index) => {
                     const isDraft = est.status === "DRAFT";
-                    const totalDocAmount = est.items && est.items.length > 0
-                      ? calculateSalesDocumentTotals(est.items, est._rawState?.priceMode, est._rawState?.roundOffEnabled ?? true, est.discountAmount || 0).finalTotal
-                      : (est.totalAmount || 0);
+                    const totalDocAmount = documentAmount(est);
                     const isConverted = est.status === "CONVERTED";
                     const isLastRow = index >= filtered.length - 2;
 
@@ -2956,7 +3009,10 @@ export default function EstimationsPageClient({
                             )
                           ) : est.status === "SENT" || est.status === "OPEN" || est.status === "PENDING" ? (
                             <span className="text-[#f58220] font-semibold text-xs sm:text-sm">
-                              Open
+                              {/* A Proforma Invoice shows its real status: a SENT one is
+                                  finalized and no longer editable, so calling it "Open"
+                                  misled users into editing it. */}
+                              {documentType === "PROFORMA" ? (STATUS_STYLES[est.status]?.label || est.status) : "Open"}
                             </span>
                           ) : isDraft ? (
                             <span className="text-slate-500 dark:text-slate-400 font-semibold text-xs sm:text-sm">
@@ -3110,8 +3166,8 @@ export default function EstimationsPageClient({
                                     onClick={() => { setOpenMoreMenu(null); loadDraft(est); }}
                                     className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors"
                                   >
-                                    <Pencil size={14} className="text-slate-400" />
-                                    <span>Edit Document</span>
+                                    {canEditDocument(documentType, est.status) ? <Pencil size={14} className="text-slate-400" /> : <FileText size={14} className="text-slate-400" />}
+                                    <span>{canEditDocument(documentType, est.status) ? "Edit Document" : "View Document"}</span>
                                   </button>
                                   <button
                                     onClick={() => { setOpenMoreMenu(null); handlePrintEstimate(est); }}

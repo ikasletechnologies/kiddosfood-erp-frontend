@@ -12,7 +12,7 @@ import {
   Loader2
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi, posApi } from "@/lib/api";
+import { customersApi, dealersApi, productsFullApi, franchiseApi, inventoryApi, salesApi, productBatchesApi, settingsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
@@ -580,63 +580,68 @@ export default function DeliveryChallanPage() {
     return () => { cancelled = true; };
   }, [view]);
 
-  // Load from Tax Invoice if creating via sourceInvoiceId
+  // Load from Tax Invoice if creating via sourceInvoiceId (an Order id).
+  // The server prefill resolves the real party for its type (an Order has no
+  // dealer relation, and order.franchise is the SELLING branch, not the
+  // buyer), and lists each invoice line with the quantity still left to
+  // dispatch after earlier challans — so the form opens with exactly what
+  // can still be delivered. Vehicle/driver stay blank for the user to enter.
   useEffect(() => {
-    if (sourceInvoiceIdState && view === "create" && !loading) {
-      posApi.getOrderById(sourceInvoiceIdState).then((res: any) => {
-        const order = res.data;
-        if (!order) return;
-        
-        const pType = order.partyType || (order.customerId ? "CUSTOMER" : "UNKNOWN");
-        setDestType(pType === "UNKNOWN" ? "CUSTOMER" : pType);
-        
-        if (pType === "CUSTOMER" && order.customer) {
-          setSelectedCustomer(order.customer);
-          setCustomerSearch(order.customer.name);
-          setCustomerPhone(order.customer.phone || "");
-        } else if (pType === "DEALER" && order.dealer) {
-          setSelectedDealer(order.dealer);
-          setCustomerSearch(order.dealer.name);
-          setCustomerPhone(order.dealer.phone || "");
-        } else if (pType === "FRANCHISE" && order.franchise) {
-          setSelectedFranchise(order.franchise);
-          setCustomerSearch(order.franchise.name);
-          setCustomerPhone(order.franchise.phone || "");
-        } else if (order.customerId) {
-           // fallback if relation was not joined
-           customersApi.getById(order.customerId).then((cRes: any) => {
-             if (cRes.data) {
-                setSelectedCustomer(cRes.data);
-                setCustomerSearch(cRes.data.name);
-                setCustomerPhone(cRes.data.phone || "");
-             }
-           });
-        }
-        
-        setStateOfSupply(order.stateOfSupply || "");
-        
-        if (order.orderItems && order.orderItems.length > 0) {
-          const newItems = order.orderItems.map((it: any) => {
-            const taxPct = (it.taxAmount / (it.quantity * it.price)) * 100 || 0;
-            return {
-              id: Math.random().toString(36).slice(2),
-              productId: it.productId,
-              itemSearch: it.product?.name || "",
-              qty: it.quantity,
-              unit: it.unit || "NONE",
-              rate: it.price,
-              taxPct: isNaN(taxPct) ? 0 : Math.round(taxPct),
-              taxLabel: isNaN(taxPct) ? "NONE" : "GST",
-              batchNumber: it.batchNumber || "",
-              remarks: "",
-            };
-          });
-          setItems(newItems);
-        }
-      }).catch(err => {
-        console.error("Failed to fetch source invoice:", err);
-      });
-    }
+    if (!(sourceInvoiceIdState && view === "create" && !loading)) return;
+    let cancelled = false;
+    salesApi.getDeliveryChallanPrefill(sourceInvoiceIdState).then((res: any) => {
+      if (cancelled) return;
+      const pre = res.data;
+      if (!pre) return;
+
+      const pType: "CUSTOMER" | "DEALER" | "FRANCHISE" = pre.partyType || "CUSTOMER";
+      setDestType(pType);
+      const party = pre.party;
+      if (party) {
+        if (pType === "DEALER") setSelectedDealer(party);
+        else if (pType === "FRANCHISE") setSelectedFranchise(party);
+        else setSelectedCustomer(party);
+        setCustomerSearch(party.name || pre.partyName || "");
+        setCustomerPhone(party.phone || party.contact || party.contactNum || "");
+      } else {
+        // Walk-in / party record no longer on file: keep the name, user picks the party.
+        setCustomerSearch(pre.partyName || "");
+        showToast(`Invoice ${pre.invoice?.invoiceNum || ""} has no ${pType.toLowerCase()} record on file — select the party.`, "info");
+      }
+      setStateOfSupply(pre.stateOfSupply || "");
+      // Dispatch from the branch that made the sale (HQ users choose; a
+      // branch user is always their own branch).
+      if (!isFranchiseUser && pre.invoice?.sellingFranchiseId) setSourceFranchiseId(pre.invoice.sellingFranchiseId);
+
+      const lines = (pre.items || []).filter((it: any) => it.remainingQty > 0);
+      if (pre.fullyDispatched || lines.length === 0) {
+        showToast(`All items on invoice ${pre.invoice?.invoiceNum || ""} have already been dispatched on other delivery challans.`, "info");
+        setItems([makeItem()]);
+        return;
+      }
+      setItems(lines.map((it: any) => {
+        const taxPct = Number(it.taxPercent) || 0;
+        return {
+          id: Math.random().toString(36).slice(2),
+          productId: it.productId,
+          itemSearch: it.productName || "",
+          qty: it.remainingQty,
+          unit: it.unit || "NONE",
+          rate: it.rate,
+          discountPct: Number(it.discountPct) || 0,
+          discountAmount: 0,
+          taxPct,
+          taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
+          batchNumber: it.batchNumber || "",
+          remarks: it.dispatchedQty > 0 ? `${it.dispatchedQty} of ${it.invoiceQty} already dispatched` : "",
+        };
+      }));
+    }).catch((err: any) => {
+      if (cancelled) return;
+      showToast(err?.response?.data?.error || "Could not load the source invoice for this delivery challan.", "error");
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceInvoiceIdState, view, loading]);
 
   // Resume an in-progress challan after a round trip to /customers/add,
