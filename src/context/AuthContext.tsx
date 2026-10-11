@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { authApi, setupApi } from '@/lib/api';
 
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logout]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     loading,
     login,
@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setupStatus,
     setupStatusLoading,
     refreshSetupStatus,
-  };
+  }), [user, loading, login, logout, refreshUser, setupStatus, setupStatusLoading, refreshSetupStatus]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

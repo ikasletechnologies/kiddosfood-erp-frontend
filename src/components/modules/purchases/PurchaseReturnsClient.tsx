@@ -34,6 +34,9 @@ export default function PurchaseReturnsClient() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [view, setView] = useState<"RETURNS" | "HISTORY">("RETURNS");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
   const [showNewForm, setShowNewForm] = useState(false);
 
   // Details view
@@ -48,7 +51,24 @@ export default function PurchaseReturnsClient() {
         api.get("/api/purchase/returns", { params: { search, status: statusFilter } }),
         api.get("/api/vendors")
       ]);
-      setReturns(rRes.data || []);
+      const rawReturns = rRes.data || [];
+      const uniqueReturns = new Map<string, any>();
+      for (const purchaseReturn of rawReturns) {
+        if (purchaseReturn.returnSource !== "GRN_REJECTION") {
+          uniqueReturns.set(purchaseReturn.id, purchaseReturn);
+          continue;
+        }
+        const itemSignature = (purchaseReturn.items || [])
+          .map((item: any) => `${String(item.itemName || "").toLowerCase().trim()}:${Number(item.quantity)}`)
+          .sort()
+          .join("|");
+        const key = `${purchaseReturn.procurementOrderId || purchaseReturn.vendorId}:${itemSignature}`;
+        const current = uniqueReturns.get(key);
+        if (!current || (current.status !== "COMPLETED" && purchaseReturn.status === "COMPLETED")) {
+          uniqueReturns.set(key, purchaseReturn);
+        }
+      }
+      setReturns(Array.from(uniqueReturns.values()));
       setVendors(vRes.data || []);
     } catch (e) {
       console.error(e);
@@ -59,9 +79,9 @@ export default function PurchaseReturnsClient() {
 
   useEffect(() => { loadData(); }, [search, statusFilter]);
 
-  async function updateStatus(id: string, status: string) {
+  async function updateStatus(id: string, status: string, reason?: string) {
     try {
-      await api.patch(`/api/purchase/returns/${id}`, { status });
+      await api.patch(`/api/purchase/returns/${id}`, { status, ...(reason ? { reason } : {}) });
       showToast(`Return marked as ${status}`, "success");
       if (selectedReturn?.id === id) {
         setSelectedReturn(null);
@@ -73,11 +93,14 @@ export default function PurchaseReturnsClient() {
   }
 
   const filteredReturns = returns.filter(r => {
-    const matchSearch = !search ||
-      r.returnNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      r.vendor?.name?.toLowerCase().includes(search.toLowerCase());
+    const query = search.toLowerCase();
+    const matchSearch = !search || r.returnNumber?.toLowerCase().includes(query) || r.vendor?.name?.toLowerCase().includes(query) || r.procurementOrder?.poNumber?.toLowerCase().includes(query) || r.reason?.toLowerCase().includes(query);
     const matchStatus = !statusFilter || r.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchView = view === "RETURNS" ? r.status === "PENDING" : r.status !== "PENDING";
+    const createdDate = (r.updatedAt || r.createdAt) ? new Date(r.updatedAt || r.createdAt) : null;
+    const matchFrom = view !== "HISTORY" || !historyFrom || (createdDate && createdDate >= new Date(`${historyFrom}T00:00:00`));
+    const matchTo = view !== "HISTORY" || !historyTo || (createdDate && createdDate <= new Date(`${historyTo}T23:59:59.999`));
+    return matchSearch && matchStatus && matchView && matchFrom && matchTo;
   });
 
   return (
@@ -86,7 +109,7 @@ export default function PurchaseReturnsClient() {
       <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
         <div>
           <h1 className="text-base font-semibold text-gray-800 dark:text-white">Purchase Returns</h1>
-          <p className="text-xs text-gray-500 dark:text-slate-400">Manage vendor returns & GRN rejections</p>
+          <p className="text-xs text-gray-500 dark:text-slate-400">Manage pending product returns and submitted return history</p>
         </div>
         <button
           onClick={() => setShowNewForm(true)}
@@ -96,9 +119,16 @@ export default function PurchaseReturnsClient() {
         </button>
       </div>
 
-      <div className="p-6 space-y-4 max-w-7xl mx-auto">
+      <div className="px-4 sm:px-6 pt-3 bg-white dark:bg-card border-b border-gray-200 dark:border-white/5">
+        <div className="flex items-center gap-6 w-full">
+          <button type="button" onClick={() => { setView("RETURNS"); setStatusFilter(""); }} className={clsx("pb-2.5 text-xs font-semibold border-b-2 transition-colors", view === "RETURNS" ? "border-[#f58220] text-[#f58220]" : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-white")}>Product Returns</button>
+          <button type="button" onClick={() => { setView("HISTORY"); setStatusFilter(""); }} className={clsx("pb-2.5 text-xs font-semibold border-b-2 transition-colors", view === "HISTORY" ? "border-[#f58220] text-[#f58220]" : "border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-white")}>Return History</button>
+        </div>
+      </div>
+
+      <div className="w-full min-w-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4">
         {/* ── KPI Cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 w-full">
           {[
             { label: "All Returns", status: "", dot: "bg-gray-400", color: "text-gray-900 dark:text-white" },
             { label: "Pending", status: "PENDING", dot: "bg-amber-500", color: "text-amber-700 dark:text-amber-400" },
@@ -110,7 +140,7 @@ export default function PurchaseReturnsClient() {
             return (
               <div
                 key={s.label}
-                onClick={() => setStatusFilter(s.status)}
+                onClick={() => { setStatusFilter(s.status); if (s.status === "PENDING") setView("RETURNS"); if (s.status === "COMPLETED" || s.status === "CANCELLED") setView("HISTORY"); }}
                 className={clsx(
                   "bg-white dark:bg-card rounded-lg border px-4 py-3 flex items-center gap-3 shadow-sm cursor-pointer transition-colors",
                   isActive
@@ -129,8 +159,16 @@ export default function PurchaseReturnsClient() {
         </div>
 
         {/* ── Search & Filter Controls ── */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+        {view === "HISTORY" && (
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl p-4 flex flex-wrap items-end justify-end gap-3 shadow-sm w-full">
+            <div><label className="block text-[10px] font-semibold text-gray-500 dark:text-slate-400 mb-1">From date</label><input type="date" value={historyFrom} onChange={(e) => setHistoryFrom(e.target.value)} className="h-9 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]" /></div>
+            <div><label className="block text-[10px] font-semibold text-gray-500 dark:text-slate-400 mb-1">To date</label><input type="date" value={historyTo} onChange={(e) => setHistoryTo(e.target.value)} className="h-9 px-3 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]" /></div>
+            {(historyFrom || historyTo) && <button type="button" onClick={() => { setHistoryFrom(""); setHistoryTo(""); }} className="h-9 px-3 text-xs font-semibold text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg">Clear dates</button>}
+            <div className="ml-auto text-xs text-gray-500 dark:text-slate-400"><span className="font-bold text-gray-800 dark:text-white">{filteredReturns.length}</span> history records</div>
+          </div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3 w-full">
+          <div className="relative w-full sm:w-[320px] sm:flex-none lg:w-[360px]">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               value={search}
@@ -153,7 +191,7 @@ export default function PurchaseReturnsClient() {
               { label: "Pending", value: "PENDING" },
               { label: "Completed", value: "COMPLETED" },
               { label: "Cancelled", value: "CANCELLED" },
-            ].map(st => (
+            ].filter(st => view === "RETURNS" ? ["", "PENDING"].includes(st.value) : ["", "COMPLETED", "CANCELLED"].includes(st.value)).map(st => (
               <button
                 key={st.label}
                 onClick={() => setStatusFilter(st.value)}
@@ -171,7 +209,7 @@ export default function PurchaseReturnsClient() {
 
           <button
             onClick={loadData}
-            className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors ml-auto cursor-pointer"
+            className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer self-end sm:self-auto"
             title="Refresh"
           >
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
@@ -187,7 +225,7 @@ export default function PurchaseReturnsClient() {
         ) : filteredReturns.length === 0 ? (
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-12 text-center shadow-sm">
             <RotateCcw className="h-10 w-10 text-gray-300 dark:text-slate-600 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-1">No Purchase Returns Found</p>
+            <p className="text-sm font-semibold text-gray-600 dark:text-slate-300 mb-1">{view === "HISTORY" ? "No Return History Found" : "No Pending Purchase Returns"}</p>
             <p className="text-xs text-gray-400 dark:text-slate-500 mb-4">Process vendor returns or GRN rejections.</p>
             <button
               onClick={() => setShowNewForm(true)}
@@ -246,7 +284,7 @@ export default function PurchaseReturnsClient() {
                         ₹ {(r.refundAmount || 0).toLocaleString("en-IN")}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
-                        {formatDate(r.createdAt)}
+                        {formatDate(view === "HISTORY" ? (r.updatedAt || r.createdAt) : r.createdAt)}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style.color, style.bg, style.border)}>

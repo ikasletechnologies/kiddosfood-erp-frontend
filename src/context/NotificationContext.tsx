@@ -1,7 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { io, Socket } from "socket.io-client";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { io } from "socket.io-client";
 import { useAuth } from "./AuthContext";
 import toast from "react-hot-toast";
 
@@ -36,7 +36,6 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:5000"
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [socket, setSocket] = useState<Socket | null>(null);
 
   // Compute tenant-scoped storage key
   const getStorageKey = useCallback((u: any) => {
@@ -180,7 +179,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         franchiseId: userFranchiseId,
       },
     });
-    setSocket(newSocket);
 
     newSocket.on("connect", () => {
       console.log("🔌 Connected to Notification System");
@@ -658,31 +656,33 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     };
   }, [user, addNotification]);
 
-  const markAsRead = (id: string) => {
+  const markAsRead = useCallback((id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-  };
+  }, []);
 
-  const markAllAsRead = () => {
+  const markAllAsRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  };
+  }, []);
 
-  const removeNotification = (id: string) => {
+  const removeNotification = useCallback((id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
+  }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.reduce((count, notification) => count + (notification.read ? 0 : 1), 0),
+    [notifications]
+  );
+  const value = useMemo(() => ({
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    removeNotification,
+    addNotification,
+  }), [notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, addNotification]);
 
   return (
-    <NotificationContext.Provider
-      value={{
-        notifications,
-        unreadCount,
-        markAsRead,
-        markAllAsRead,
-        removeNotification,
-        addNotification,
-      }}
-    >
+    <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
   );

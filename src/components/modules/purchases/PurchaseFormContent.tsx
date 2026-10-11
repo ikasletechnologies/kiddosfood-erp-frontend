@@ -23,10 +23,10 @@ const formatDateToDMY = (dateStr: string) => {
 };
 
 export function NewPurchaseContent({ editId }: { editId?: string }) {
-  const { 
-    poNumber, setPoNumber, 
-    invoiceNo, setInvoiceNo, 
-    purchaseDate, setPurchaseDate, 
+  const {
+    poNumber, setPoNumber,
+    invoiceNo, setInvoiceNo,
+    purchaseDate, setPurchaseDate,
     dueDate, setDueDate,
     expectedDeliveryDate, setExpectedDeliveryDate,
     warehouseId, setWarehouseId,
@@ -42,7 +42,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     selectedVendor, items, totals, notes,
     contextMessage, setContextMessage
   } = usePurchaseOrder();
-  
+
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<"items" | "notes">("items");
@@ -60,6 +60,11 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     };
     fetchWarehouses();
   }, []);
+
+  const handleCancel = () => {
+    if (!editId) localStorage.removeItem('draftPurchaseOrder');
+    router.push("/purchases/orders");
+  };
 
   const handleCreatePO = async () => {
     if (!selectedVendor) {
@@ -87,7 +92,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("Please fill in all required fields and resolve errors.");
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -156,7 +161,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("Discount cannot exceed subtotal.");
       return;
     }
-    
+
     setIsSubmitting(true);
     try {
       const payload = {
@@ -184,7 +189,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             gstRate: item.gstRate
           }))
       };
-      
+
       const { data: created } = await purchaseOrdersApi.create(payload);
       if (created?.poNumber) setPoNumber(created.poNumber);
       localStorage.removeItem('draftPurchaseOrder');
@@ -233,291 +238,95 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             <p className="text-xs text-slate-400 font-mono">{poNumber ? `#${poNumber}` : "Auto-generated on save"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleCreatePO}
-            disabled={!isValid || isSubmitting}
-            className="flex items-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2 text-xs font-bold uppercase tracking-wider bg-[#f58220] hover:bg-[#e8740e] text-white rounded-xl transition-all shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-          >
-            <CheckCircle2 size={15} /> {isSubmitting ? (editId ? "Updating..." : "Creating...") : (editId ? "Update PO" : "Create PO")}
-          </button>
-        </div>
+
       </div>
 
-      <div className="p-3 sm:p-4 md:p-6 max-w-[1600px] mx-auto space-y-4 sm:space-y-5 w-full min-w-0">
+      <div className="p-3 sm:p-4 md:p-5 max-w-[1600px] mx-auto space-y-3.5 w-full min-w-0 pb-24">
         {contextMessage && (
-          <div className="bg-orange-50/80 border border-orange-200 p-3.5 sm:p-4 rounded-xl flex items-center justify-between shadow-2xs gap-3">
+          <div className="bg-orange-50/80 border border-orange-200 p-3.5 rounded-xl flex items-center justify-between shadow-sm gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 bg-[#f58220] text-white rounded-lg shadow-2xs shrink-0">
-                <Package size={16} />
-              </div>
+              <div className="p-2 bg-[#f58220] text-white rounded-lg shrink-0"><Package size={16} /></div>
               <div className="min-w-0">
                 <h3 className="text-xs font-bold text-orange-950 uppercase tracking-tight">{contextMessage}</h3>
-                <p className="text-xs text-orange-700 mt-0.5">The quantities have been pre-filled with the calculated shortage amount. Please select a vendor and confirm the price.</p>
+                <p className="text-xs text-orange-700 mt-0.5">Quantities are pre-filled from the shortage. Select a vendor and confirm the price.</p>
               </div>
             </div>
-            <button 
-              onClick={() => setContextMessage(null)}
-              className="text-orange-400 hover:text-orange-600 p-1 hover:bg-orange-100 rounded-lg transition-colors"
-            >
-              <X size={15} />
-            </button>
+            <button type="button" onClick={() => setContextMessage(null)} className="text-orange-400 hover:text-orange-600 p-1 hover:bg-orange-100 rounded-lg"><X size={15} /></button>
           </div>
         )}
 
-        <div className="grid grid-cols-12 gap-4 sm:gap-5 w-full min-w-0">
-          {/* Left Main Content */}
-          <div className="col-span-12 lg:col-span-9 space-y-4 sm:space-y-5 min-w-0">
-
-            {/* Meta Information Card */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-2xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Tag size={13} className="text-[#f58220]" /> Purchase Type
-                  </label>
-                  <select
-                    value={purchaseType}
-                    onChange={(e) => setPurchaseType(e.target.value)}
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer"
-                  >
-                    <option value="ALL">All</option>
-                    <option value="RAW_MATERIAL">Raw Material</option>
-                    <option value="PACKAGING">Packaging</option>
-                    <option value="EQUIPMENT">Equipment</option>
-                    <option value="CONSUMABLES">Consumables</option>
-                    <option value="SERVICES">Services</option>
-                    <option value="OTHERS">Others</option>
-                  </select>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                      <Warehouse size={13} className="text-[#f58220]" /> Warehouse
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setShowWarehouseModal(true)}
-                      className="text-[10px] font-bold text-[#f58220] hover:text-[#e8740e] flex items-center gap-0.5 uppercase tracking-wide"
-                    >
-                      + Add New
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={warehouseId}
-                      onChange={(e) => {
-                        if (e.target.value === "ADD_NEW") {
-                          setShowWarehouseModal(true);
-                        } else {
-                          setWarehouseId(e.target.value);
-                        }
-                      }}
-                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer truncate"
-                    >
-                      <option value="">Select Warehouse</option>
-                      {warehouses.map(w => (
-                        <option key={w.id} value={w.id}>{w.name}</option>
-                      ))}
-                      <option value="ADD_NEW" className="font-bold text-orange-500">+ Add New Warehouse...</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => setShowWarehouseModal(true)}
-                      className="p-2 border border-slate-200 dark:border-slate-700 hover:border-[#f58220] hover:bg-orange-50 text-slate-500 hover:text-[#f58220] rounded-lg transition-all shrink-0"
-                      title="Add New Warehouse"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Calendar size={13} className="text-[#f58220]" /> Expected Delivery <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="relative flex items-center">
-                    <input
-                      type="date"
-                      value={expectedDeliveryDate}
-                      onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                      className={clsx(
-                        "w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded-lg py-2 text-xs font-bold outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all pl-3",
-                        expectedDeliveryDate ? "pr-16 text-transparent" : "pr-8 text-slate-800 dark:text-white"
-                      )}
-                    />
-                    {expectedDeliveryDate && (
-                      <span className="absolute left-3 pointer-events-none text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {formatDateToDMY(expectedDeliveryDate)}
-                      </span>
-                    )}
-                    <div className="absolute right-2.5 flex items-center gap-1">
-                      {expectedDeliveryDate && (
-                        <button
-                          type="button"
-                          onClick={() => setExpectedDeliveryDate("")}
-                          className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-colors"
-                          title="Clear Date"
-                        >
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <CreditCard size={13} className="text-[#f58220]" /> Payment Terms
-                  </label>
-                  <select
-                    value={paymentTerms}
-                    onChange={(e) => setPaymentTerms(e.target.value)}
-                    className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-900 outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all cursor-pointer"
-                  >
-                    <option value="">Select Terms</option>
-                    <option value="IMMEDIATE">Immediate</option>
-                    <option value="ADVANCE_100">Advance Payment (100%)</option>
-                    <option value="ADVANCE_PARTIAL">Advance Payment (Partial)</option>
-                    <option value="NET_7">Net 7 Days</option>
-                    <option value="NET_15">Net 15 Days</option>
-                    <option value="NET_30">Net 30 Days</option>
-                    <option value="NET_45">Net 45 Days</option>
-                    <option value="NET_60">Net 60 Days</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Purchase Order No.</label>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white font-mono bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded-lg inline-block border border-slate-200 dark:border-slate-700">
-                    {poNumber || "Auto-generated on save"}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <Calendar size={13} className="text-[#f58220]" /> Purchase Date
-                  </label>
-                  <div className="relative flex items-center">
-                    <input
-                      type="date"
-                      value={purchaseDate}
-                      onChange={(e) => setPurchaseDate(e.target.value)}
-                      className={clsx(
-                        "w-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 rounded-lg py-2 text-xs font-bold outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all pl-3",
-                        purchaseDate ? "pr-16 text-transparent" : "pr-8 text-slate-800 dark:text-white"
-                      )}
-                    />
-                    {purchaseDate && (
-                      <span className="absolute left-3 pointer-events-none text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {formatDateToDMY(purchaseDate)}
-                      </span>
-                    )}
-                    <div className="absolute right-2.5 flex items-center gap-1">
-                      {purchaseDate && (
-                        <button
-                          type="button"
-                          onClick={() => setPurchaseDate("")}
-                          className="p-0.5 text-slate-400 hover:text-slate-600 rounded transition-colors"
-                          title="Clear Date"
-                        >
-                          <X size={13} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+        {/* Order details */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Order details</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase type</label>
+              <select value={purchaseType} onChange={(e) => setPurchaseType(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100">
+                <option value="ALL">All</option><option value="RAW_MATERIAL">Raw Material</option><option value="PACKAGING">Packaging</option><option value="EQUIPMENT">Equipment</option><option value="CONSUMABLES">Consumables</option><option value="SERVICES">Services</option><option value="OTHERS">Others</option>
+              </select>
             </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase date</label>
+              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Expected delivery <span className="text-rose-500">*</span></label>
+              <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Payment terms</label>
+              <select value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100">
+                <option value="">Select terms</option><option value="IMMEDIATE">Immediate</option><option value="ADVANCE_100">Advance Payment (100%)</option><option value="ADVANCE_PARTIAL">Advance Payment (Partial)</option><option value="NET_7">Net 7 Days</option><option value="NET_15">Net 15 Days</option><option value="NET_30">Net 30 Days</option><option value="NET_45">Net 45 Days</option><option value="NET_60">Net 60 Days</option>
+              </select>
+            </div>
+          </div>
+        </section>
 
-            {/* Vendor & Entity Selection */}
-            <BillingSection
-              fromLabel="Billed To (Entity)"
-              fromSubLabel="Your Details"
-              toLabel="Billed By (Vendor)"
-              toSubLabel="Vendor's Details"
-              targetType="vendor"
-              onAddTarget={() => {
-                if (typeof window !== "undefined") {
-                  router.push(`/vendors?action=new&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-                } else {
-                  router.push(`/vendors?action=new&returnTo=/purchases/new`);
-                }
-              }}
-            />
-
-            {/* Section 3: Material Table & Accordions */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs overflow-visible">
-              <div className="flex bg-slate-50/70 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 rounded-t-xl overflow-hidden px-2">
-                <button 
-                  type="button"
-                  onClick={() => setActiveTab("items")}
-                  className={clsx(
-                    "px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer",
-                    activeTab === "items" 
-                      ? "border-[#f58220] text-[#f58220]" 
-                      : "border-transparent text-slate-400 hover:text-slate-600"
-                  )}
-                >
-                  <Package size={14} /> Material Items
-                  <span className={clsx(
-                    "px-1.5 py-0.2 text-[10px] rounded font-bold",
-                    activeTab === "items" ? "bg-orange-100 text-[#f58220]" : "bg-slate-200 text-slate-500"
-                  )}>
-                    {items.filter(i => i.materialId).length}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("notes")}
-                  className={clsx(
-                    "px-5 py-3 text-xs font-bold uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer",
-                    activeTab === "notes" 
-                      ? "border-[#f58220] text-[#f58220]" 
-                      : "border-transparent text-slate-400 hover:text-slate-600"
-                  )}
-                >
-                  <FileText size={14} /> Notes & Terms
-                </button>
+        {/* Vendor and billing */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Vendor &amp; billing</h2>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] gap-4">
+            <BillingSection fromLabel="Bill to" fromSubLabel="Your Details" toLabel="Vendor" toSubLabel="Vendor Details" targetType="vendor" onAddTarget={() => { if (typeof window !== "undefined") { router.push(`/vendors?action=new&returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`); } else { router.push(`/vendors?action=new&returnTo=/purchases/new`); } }} />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Delivery warehouse</label>
+                <button type="button" onClick={() => setShowWarehouseModal(true)} className="text-[11px] font-semibold text-[#f58220] hover:text-[#e8740e]">+ New</button>
               </div>
-              <div className="p-0">
-                {activeTab === "items" && <LineItemsTable />}
-                {activeTab === "notes" && (
-                  <div className="p-5 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Internal Remarks</label>
-                        <textarea 
-                          value={internalNotes}
-                          onChange={(e) => setInternalNotes(e.target.value)}
-                          placeholder="Internal collaboration notes for team..."
-                          className="w-full min-h-[140px] p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all resize-none"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">Supplier Instructions</label>
-                        <textarea 
-                          value={vendorNotes}
-                          onChange={(e) => setVendorNotes(e.target.value)}
-                          placeholder="Delivery instructions, shipping terms, packaging requirements..."
-                          className="w-full min-h-[140px] p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] focus:bg-white focus:ring-2 focus:ring-orange-100 transition-all resize-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="min-h-[96px] p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center">
+                <select value={warehouseId} onChange={(e) => { if (e.target.value === "ADD_NEW") setShowWarehouseModal(true); else setWarehouseId(e.target.value); }} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100">
+                  <option value="">Select warehouse</option>{warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}<option value="ADD_NEW">+ Add New Warehouse...</option>
+                </select>
               </div>
             </div>
           </div>
+        </section>
 
-          {/* Right Sticky Sidebar */}
-          <div className="col-span-12 lg:col-span-3 min-w-0">
-            <div className="sticky top-20 space-y-4">
-              <DocumentSummary />
-            </div>
+        {/* Material items */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
+          <div className="flex items-center gap-2 px-4 sm:px-5 py-3.5 border-b border-slate-200 dark:border-slate-800">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Material items</h2>
+            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">{items.filter(i => i.materialId).length} items</span>
           </div>
+          <LineItemsTable />
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.9fr)] gap-3.5 items-start">
+          <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Notes &amp; terms</h2>
+            <div className="space-y-4">
+              <div><label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Notes</label><textarea value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} placeholder="Add purchase order notes..." className="w-full min-h-[90px] p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100 resize-y" /></div>
+              <div><label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Terms &amp; conditions</label><textarea value={vendorNotes} onChange={(e) => setVendorNotes(e.target.value)} placeholder="Add terms and conditions..." className="w-full min-h-[90px] p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100 resize-y" /></div>
+            </div>
+          </section>
+          <DocumentSummary />
         </div>
+      </div>
+
+      {/* Bottom actions */}
+      <div className="sticky bottom-0 z-30 bg-white/95 dark:bg-[#0B0D14]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-end gap-2">
+        <button type="button" onClick={handleCancel} disabled={isSubmitting} className="px-5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">Cancel</button>
+        <button type="button" onClick={handleCreatePO} disabled={!isValid || isSubmitting} className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"><CheckCircle2 size={15} /> {isSubmitting ? (editId ? "Updating..." : "Creating...") : (editId ? "Update PO" : "Create PO")}</button>
       </div>
     </div>
   );
 }
-

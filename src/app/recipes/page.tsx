@@ -79,7 +79,18 @@ export default function RecipesPage() {
       });
       setRecipes(sortedRecipes);
       setProducts(pRes.data ?? []);
-      setMaterials(mRes.data ?? []);
+      const recipeOutputNames = new Set<string>(
+        rawList.flatMap((recipe: any) => [recipe.name, recipe.product?.name])
+          .filter(Boolean)
+          .map((name: string) => name.toLowerCase().trim())
+      );
+      const ingredientMaterials = (mRes.data ?? []).filter((material: any) => {
+        const category = String(material.category || "").toUpperCase();
+        const isRecipeOutput = recipeOutputNames.has(String(material.name || "").toLowerCase().trim());
+        const isNonIngredientCategory = ["FINISHED_GOOD", "FINISHED_PRODUCT", "FINISHED", "RECIPE", "BULK", "SEMI_FINISHED", "PRODUCT"].includes(category);
+        return !isRecipeOutput && !isNonIngredientCategory;
+      });
+      setMaterials(ingredientMaterials);
       setCategories(cRes.data ?? []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }

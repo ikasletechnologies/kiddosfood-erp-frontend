@@ -1352,7 +1352,7 @@ export default function PurchaseBillsPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground">
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end">
         <button onClick={openCreate}
           className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-all"
         >
@@ -1360,9 +1360,9 @@ export default function PurchaseBillsPage() {
         </button>
       </div>
 
-      <div className="p-6 space-y-4 max-w-7xl mx-auto">
+      <div className="w-full min-w-0 px-4 sm:px-6 py-4 sm:py-5 space-y-4">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full">
           {[
             { label: "Total Purchases",  value: `₹ ${totalBillAmt.toLocaleString("en-IN")}`,  dot: "bg-blue-500",    color: "text-gray-900 dark:text-white" },
             { label: "Paid",             value: `₹ ${totalPaid.toLocaleString("en-IN")}`,     dot: "bg-emerald-500", color: "text-emerald-700 dark:text-emerald-400" },
@@ -1379,8 +1379,8 @@ export default function PurchaseBillsPage() {
         </div>
 
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-xs">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3 w-full">
+          <div className="relative w-full sm:w-[320px] sm:flex-none lg:w-[360px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search bill no. or vendor..."
@@ -1405,7 +1405,7 @@ export default function PurchaseBillsPage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
             <div className="relative" ref={fromCalRef}>
               <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
                 <button
@@ -1483,7 +1483,7 @@ export default function PurchaseBillsPage() {
             </div>
           </div>
 
-          <button onClick={fetchData} className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors ml-auto" title="Refresh">
+          <button onClick={fetchData} className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors self-end sm:self-auto" title="Refresh">
             <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
           </button>
         </div>
@@ -1503,7 +1503,7 @@ export default function PurchaseBillsPage() {
         ) : (
           <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-sm w-full min-w-0">
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[760px]">
+              <table className="w-full table-auto text-sm min-w-[840px]">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.02] text-left text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="px-4 py-3">Date</th>

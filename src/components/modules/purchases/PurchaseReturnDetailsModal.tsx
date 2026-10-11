@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { X } from "lucide-react";
 import { clsx } from "clsx";
 
-export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStatus }: { data: any, onClose: () => void, onUpdateStatus: (id: string, status: string) => void }) {
+export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStatus }: { data: any, onClose: () => void, onUpdateStatus: (id: string, status: string, reason?: string) => void }) {
   const isGRN = data.returnSource === "GRN_REJECTION";
+  const [returnReason, setReturnReason] = useState(data.reason === "PENDING_RETURN_REASON" ? "" : (data.reason || ""));
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm animate-in fade-in">
@@ -67,6 +69,29 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
              )}
           </div>
 
+          {isGRN && (
+            <div className="space-y-2">
+              <label className="block text-xs font-black tracking-widest text-gray-500 dark:text-slate-400 uppercase">
+                Return Reason {data.status === "PENDING" && <span className="text-rose-500">*</span>}
+              </label>
+              {data.status === "PENDING" ? (
+                <>
+                  <textarea
+                    value={returnReason}
+                    onChange={(event) => setReturnReason(event.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    placeholder="Enter the damage / rejection reason before submitting the vendor return..."
+                    className="w-full resize-none rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] px-3 py-2.5 text-sm text-gray-900 dark:text-white outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 dark:focus:ring-purple-950/40"
+                  />
+                  <p className="text-[11px] text-gray-500 dark:text-slate-400">This reason will appear in Purchase Returns and the vendor profile history.</p>
+                </>
+              ) : (
+                <p className="rounded-xl border border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 px-3 py-2.5 text-sm text-gray-800 dark:text-slate-200">{returnReason || "—"}</p>
+              )}
+            </div>
+          )}
+
           {/* Items */}
           <div>
             <h3 className="text-xs font-black tracking-widest text-gray-400 dark:text-slate-400 uppercase mb-4">Return Items</h3>
@@ -112,10 +137,11 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
             </button>
             {isGRN ? (
               <button 
-                onClick={() => onUpdateStatus(data.id, "COMPLETED")}
-                className="flex-[2] py-4 text-xs font-black uppercase tracking-widest text-white bg-purple-600 shadow-lg shadow-purple-600/20 rounded-xl hover:bg-purple-700 transition-all"
+                onClick={() => onUpdateStatus(data.id, "COMPLETED", returnReason.trim())}
+                disabled={!returnReason.trim()}
+                className="flex-[2] py-4 text-xs font-black uppercase tracking-widest text-white bg-purple-600 shadow-lg shadow-purple-600/20 rounded-xl hover:bg-purple-700 transition-all disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Confirm Vendor Return
+                Submit Product Return
               </button>
             ) : (
               <button 

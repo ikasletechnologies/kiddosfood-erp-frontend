@@ -224,10 +224,20 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
             if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
             if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
+            if (parsed.purchaseDate) setPurchaseDate(parsed.purchaseDate);
+            if (parsed.dueDate) setDueDate(parsed.dueDate);
             if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
             if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
-            if (parsed.internalNotes) setInternalNotes(parsed.internalNotes);
-            if (parsed.vendorNotes) setVendorNotes(parsed.vendorNotes);
+            if (parsed.invoiceNo) setInvoiceNo(parsed.invoiceNo);
+            if (parsed.quotationNo) setQuotationNo(parsed.quotationNo);
+            if (parsed.poStatus) setPoStatus(parsed.poStatus);
+            if (parsed.discountAmount !== undefined) setDiscountAmount(Number(parsed.discountAmount) || 0);
+            if (parsed.freightCost !== undefined) setFreightCost(Number(parsed.freightCost) || 0);
+            if (parsed.useAdvance !== undefined) setUseAdvance(Boolean(parsed.useAdvance));
+            if (parsed.notes !== undefined) setNotes(parsed.notes || "");
+            if (parsed.internalNotes !== undefined) setInternalNotes(parsed.internalNotes || "");
+            if (parsed.vendorNotes !== undefined) setVendorNotes(parsed.vendorNotes || "");
+            if (parsed.contextMessage !== undefined) setContextMessage(parsed.contextMessage || null);
           } catch (e) {
             console.error("Failed to parse draft PO", e);
           }
@@ -362,14 +372,14 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     }
   }, [selectedVendor, isLoaded]);
 
-  // Initialize dates on mount to avoid hydration mismatch
+  // Initialize defaults only when a restored draft/edit has not supplied dates.
   useEffect(() => {
     const today = new Date();
-    setPurchaseDate(today.toISOString().split('T')[0]);
-    
+    setPurchaseDate((current) => current || today.toISOString().split('T')[0]);
+
     const due = new Date();
     due.setDate(due.getDate() + 15);
-    setDueDate(due.toISOString().split('T')[0]);
+    setDueDate((current) => current || due.toISOString().split('T')[0]);
   }, []);
 
   // Save draft to localStorage whenever fields change (only when creating new PO)
@@ -377,17 +387,27 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     if (!isLoaded || editId) return;
     const draft = {
       poNumber,
+      invoiceNo,
+      quotationNo,
       selectedVendor,
       items,
-      purchaseType,
-      warehouseId,
+      purchaseDate,
+      dueDate,
       expectedDeliveryDate,
+      warehouseId,
+      purchaseType,
       paymentTerms,
+      poStatus,
+      discountAmount,
+      freightCost,
+      useAdvance,
+      notes,
       internalNotes,
-      vendorNotes
+      vendorNotes,
+      contextMessage,
     };
     localStorage.setItem('draftPurchaseOrder', JSON.stringify(draft));
-  }, [poNumber, selectedVendor, items, purchaseType, warehouseId, expectedDeliveryDate, paymentTerms, internalNotes, vendorNotes, isLoaded, editId]);
+  }, [poNumber, invoiceNo, quotationNo, selectedVendor, items, purchaseDate, dueDate, expectedDeliveryDate, warehouseId, purchaseType, paymentTerms, poStatus, discountAmount, freightCost, useAdvance, notes, internalNotes, vendorNotes, contextMessage, isLoaded, editId]);
 
   const addItem = () => {
     setItems(prev => [

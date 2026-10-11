@@ -67,7 +67,7 @@ export const procurementApi = {
 // --- Purchase Returns ---
 export const purchaseReturnsApi = {
   getAll: (params: any = {}) => api.get('/api/purchase/returns', { params }),
-  create: (data: { vendorId: string; reason: string; items: any[]; returnSource?: string }) =>
+  create: (data: { vendorId: string; reason: string; items: any[]; returnSource?: string; procurementOrderId?: string; status?: 'PENDING' | 'COMPLETED' }) =>
     api.post('/api/purchase/returns', data),
   updateStatus: (id: string, status: string) =>
     api.patch(`/api/purchase/returns/${id}`, { status }),

@@ -87,6 +87,7 @@ export default function PurchaseOrdersClient() {
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [poView, setPoView] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
 
   // Payment Modal State
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -277,11 +278,19 @@ export default function PurchaseOrdersClient() {
     });
   };
 
+  const historyStatuses = ["RECEIVED", "CLOSED", "CANCELLED", "REJECTED"];
   const filtered = orders.filter((o) => {
-    const matchesSearch = !search || o.vendor?.name?.toLowerCase().includes(search.toLowerCase()) || o.id?.toLowerCase().includes(search.toLowerCase());
+    const term = search.trim().toLowerCase();
+    const matchesSearch = !term
+      || o.vendor?.name?.toLowerCase().includes(term)
+      || o.poNumber?.toLowerCase().includes(term)
+      || o.id?.toLowerCase().includes(term);
+    const isHistory = historyStatuses.includes(o.status);
+    const matchesView = poView === "HISTORY" ? isHistory : !isHistory;
     const matchesStatus = filterStatus === "ALL" || o.status === filterStatus;
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesView && matchesStatus;
   });
+  const historyCount = orders.filter((order) => historyStatuses.includes(order.status)).length;
 
   const totalSpend = orders.reduce((s, o) => s + (o.totalAmount ?? 0), 0);
   const totalPaid = orders.reduce((s, o) => s + (o.paid ?? 0), 0);
@@ -380,8 +389,12 @@ export default function PurchaseOrdersClient() {
   return (
     <div className={clsx("min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground", (showPaymentModal || viewingDetailsPO) && "relative z-[10000]")}>
       {/* ── Page Header Toolbar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-end">
-        <div className="flex items-center gap-2">
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 flex items-end justify-between gap-3">
+        <div className="flex items-end gap-1">
+          <button type="button" onClick={() => { setPoView("ACTIVE"); setFilterStatus("ALL"); }} className={clsx("px-4 py-3 text-xs font-semibold border-b-2 transition-colors", poView === "ACTIVE" ? "border-[#f58220] text-[#f58220]" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-white")}>Purchase Orders</button>
+          <button type="button" onClick={() => { setPoView("HISTORY"); setFilterStatus("ALL"); }} className={clsx("px-4 py-3 text-xs font-semibold border-b-2 transition-colors flex items-center gap-1.5", poView === "HISTORY" ? "border-[#f58220] text-[#f58220]" : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-white")}>PO History <span className="px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-white/10 text-[9px]">{historyCount}</span></button>
+        </div>
+        <div className="flex items-center gap-2 py-2">
           <button
             type="button"
             onClick={() => setShowSettings(true)}
@@ -400,7 +413,6 @@ export default function PurchaseOrdersClient() {
           </button>
           <Link
             href="/purchases/new"
-            onClick={() => localStorage.removeItem('draftPurchaseOrder')}
             className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-sm transition-colors"
           >
             <Plus className="h-4 w-4" /> New PO
@@ -426,9 +438,9 @@ export default function PurchaseOrdersClient() {
           ))}
         </div>
 
-        {/* ── Filters Row ── */}
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+        {/* ── Search & Filters ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
+          <div className="relative w-full sm:w-[360px] lg:w-[420px] shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               value={search}
@@ -445,8 +457,8 @@ export default function PurchaseOrdersClient() {
             )}
           </div>
 
-          <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto custom-scrollbar bg-white dark:bg-card max-w-full">
-            {["ALL", "PENDING_APPROVAL", "APPROVED", "RECEIVED", "CLOSED"].map(s => (
+          <div className="flex items-center self-end sm:ml-auto border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto custom-scrollbar bg-white dark:bg-card max-w-full">
+            {(poView === "HISTORY" ? ["ALL", "RECEIVED", "CLOSED", "CANCELLED", "REJECTED"] : ["ALL", "DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "PARTIALLY_RECEIVED"]).map(s => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -455,7 +467,7 @@ export default function PurchaseOrdersClient() {
                   filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
-                {s === "ALL" ? "All" : s === "PENDING_APPROVAL" ? "Pending Approval" : s.charAt(0) + s.slice(1).toLowerCase()}
+                {s === "ALL" ? "All" : s.split("_").map((word) => word.charAt(0) + word.slice(1).toLowerCase()).join(" ")}
               </button>
             ))}
           </div>
@@ -500,11 +512,9 @@ export default function PurchaseOrdersClient() {
                         <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-[#f58220]">
                           <ShoppingCart className="h-6 w-6" />
                         </div>
-                        <p className="text-gray-800 dark:text-white font-semibold text-sm">No Purchase Orders Found</p>
-                        <p className="text-gray-500 dark:text-slate-400 text-xs">Create your first PO to start ordering raw materials.</p>
-                        <Link href="/purchases/new" onClick={() => localStorage.removeItem('draftPurchaseOrder')} className="mt-2 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs font-semibold rounded-lg transition-colors">
-                          Create New PO
-                        </Link>
+                        <p className="text-gray-800 dark:text-white font-semibold text-sm">{poView === "HISTORY" ? "No Purchase Order History Found" : "No Purchase Orders Found"}</p>
+                        <p className="text-gray-500 dark:text-slate-400 text-xs">{poView === "HISTORY" ? "Completed or cancelled purchase orders will appear here." : "No purchase orders match the current search or filter."}</p>
+
                       </div>
                     </td>
                   </tr>
@@ -974,6 +984,27 @@ export default function PurchaseOrdersClient() {
                           const grandTotal = hasActual ? viewingDetailsPO.actualTotalAmount : viewingDetailsPO.totalAmount;
                           const balanceDue = hasActual ? viewingDetailsPO.actualBalanceDue : (viewingDetailsPO.balanceDue ?? viewingDetailsPO.balance ?? 0);
                           const originalDiffers = hasActual && Math.abs(grandTotal - viewingDetailsPO.totalAmount) > 0.01;
+                          const completedReturns = (viewingDetailsPO.purchaseReturns || []).filter(
+                            (purchaseReturn: any) => purchaseReturn.status === "COMPLETED"
+                          );
+                          const returnTaxableValue = completedReturns.reduce(
+                            (sum: number, purchaseReturn: any) => sum + Number(purchaseReturn.taxableValue ?? purchaseReturn.refundAmount ?? 0),
+                            0
+                          );
+                          const returnCgst = completedReturns.reduce((sum: number, purchaseReturn: any) => sum + Number(purchaseReturn.cgst || 0), 0);
+                          const returnSgst = completedReturns.reduce((sum: number, purchaseReturn: any) => sum + Number(purchaseReturn.sgst || 0), 0);
+                          const returnIgst = completedReturns.reduce((sum: number, purchaseReturn: any) => sum + Number(purchaseReturn.igst || 0), 0);
+                          const returnTax = completedReturns.reduce(
+                            (sum: number, purchaseReturn: any) => sum + Number(
+                              purchaseReturn.taxAmount ??
+                              (Number(purchaseReturn.cgst || 0) + Number(purchaseReturn.sgst || 0) + Number(purchaseReturn.igst || 0))
+                            ),
+                            0
+                          );
+                          const purchaseReturnTotal = returnTaxableValue + returnTax;
+                          const reconciledPayable = completedReturns.length > 0
+                            ? Math.max(0, Number(viewingDetailsPO.totalAmount || 0) - purchaseReturnTotal)
+                            : grandTotal;
 
                           const companyState = (currentCompany?.state || "").toLowerCase().trim();
                           const vendorState = (viewingDetailsPO.vendor?.state || "").toLowerCase().trim();
@@ -1039,6 +1070,40 @@ export default function PurchaseOrdersClient() {
                                 <span className="font-bold text-slate-800 dark:text-white">{formatCurrency(freight)}</span>
                               </div>
 
+                              {completedReturns.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-dashed border-slate-300 dark:border-white/15 space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Purchase Return Adjustment</span>
+                                    <span className="text-[10px] font-bold text-slate-400">{completedReturns.length} return{completedReturns.length > 1 ? "s" : ""}</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span className="text-slate-500 dark:text-slate-400 font-medium">Returned Taxable Value</span>
+                                    <span className="font-bold text-rose-600 dark:text-rose-400">-{formatCurrency(returnTaxableValue)}</span>
+                                  </div>
+                                  {returnCgst + returnSgst > 0 ? (
+                                    <>
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-500 dark:text-slate-400 font-medium">Return CGST</span>
+                                        <span className="font-bold text-rose-600 dark:text-rose-400">-{formatCurrency(returnCgst)}</span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-500 dark:text-slate-400 font-medium">Return SGST</span>
+                                        <span className="font-bold text-rose-600 dark:text-rose-400">-{formatCurrency(returnSgst)}</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="flex justify-between items-center text-sm">
+                                      <span className="text-slate-500 dark:text-slate-400 font-medium">Return IGST</span>
+                                      <span className="font-bold text-rose-600 dark:text-rose-400">-{formatCurrency(returnIgst || returnTax)}</span>
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between items-center text-sm font-black">
+                                    <span className="text-slate-700 dark:text-slate-300">Purchase Return Total</span>
+                                    <span className="text-rose-600 dark:text-rose-400">-{formatCurrency(purchaseReturnTotal)}</span>
+                                  </div>
+                                </div>
+                              )}
+
                               <div className="pt-3 border-t border-slate-200 dark:border-white/10">
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">
@@ -1050,6 +1115,12 @@ export default function PurchaseOrdersClient() {
                                   <div className="flex justify-between items-center mt-1">
                                     <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Original PO Value</span>
                                     <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">{formatCurrency(viewingDetailsPO.totalAmount)}</span>
+                                  </div>
+                                )}
+                                {completedReturns.length > 0 && (
+                                  <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed border-slate-200 dark:border-white/10">
+                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest font-black">Net Vendor Payable</span>
+                                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(reconciledPayable)}</span>
                                   </div>
                                 )}
                               </div>

@@ -10,8 +10,9 @@ import { Toaster } from "react-hot-toast";
 
 const inter = Inter({
   subsets: ["latin"],
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
-  variable: '--font-sans'
+  variable: '--font-sans',
+  display: 'swap',
+  preload: true
 });
 //
 export const metadata: Metadata = {

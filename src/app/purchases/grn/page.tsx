@@ -236,9 +236,13 @@ export default function GRNPage() {
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
   const [poSearch, setPoSearch] = useState("");
-  
+  const [warehouseFilter, setWarehouseFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+
   // Received History Search & Date Filters
   const [historySearch, setHistorySearch] = useState("");
+  const [historyWarehouseFilter, setHistoryWarehouseFilter] = useState("ALL");
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [showFromCal, setShowFromCal] = useState(false);
@@ -262,6 +266,21 @@ export default function GRNPage() {
     const parts = dateStr.split("-");
     if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
     return dateStr;
+  };
+
+  const formatDeliveryDate = (dateStr?: string) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      return `${day} ${month} ${year}`;
+    } catch {
+      return dateStr;
+    }
   };
 
   const formatLotPreview = (baseLot: string, indexOffset: number) => {
@@ -381,9 +400,21 @@ export default function GRNPage() {
     try {
       const r = await purchaseOrdersApi.getAll();
       const orders = r.data.orders || r.data || [];
-      const pending = orders.filter(
+      const statusCandidates = orders.filter(
         (p: PO) => p.status === "PENDING" || p.status === "APPROVED" || p.status === "SENT" || p.status === "PARTIALLY_RECEIVED"
       );
+      // Status can be stale for older GRNs. Keep a PO in the receipt queue only
+      // while the backend reports at least one genuinely receivable unit.
+      const remainingChecks = await Promise.all(statusCandidates.map(async (po: PO) => {
+        try {
+          const remainingResponse = await grnApi.getRemainingQuantities(po.id);
+          const hasRemaining = (remainingResponse.data || []).some((item: any) => Number(item.remaining) > 0.0001);
+          return hasRemaining ? po : null;
+        } catch {
+          return po; // Preserve access if the advisory lookup is temporarily unavailable.
+        }
+      }));
+      const pending = remainingChecks.filter((po): po is PO => po !== null);
       setPOs(pending);
 
       // Auto-select if PO ID provided in URL
@@ -407,7 +438,7 @@ export default function GRNPage() {
       const r = await grnApi.getAll();
       const list = r.data || [];
       setHistory(list);
-      
+
       const urlParams = new URLSearchParams(window.location.search);
       const grnId = urlParams.get('grnId');
       if (grnId) {
@@ -500,17 +531,17 @@ export default function GRNPage() {
       const currentItem = { ...next[idx] };
       const parsedVal = Math.max(0, val);
 
-      if (field === "receivedQty") {
-        // Cap at the remaining receivable quantity, not the PO's full
-        // original ordered quantity — a partially-received PO must not let
-        // the UI offer the already-fulfilled portion again. Falls back to
-        // `quantity` only if remaining was never resolved (see selectPO).
-        currentItem.receivedQty = Math.min(currentItem.remaining ?? currentItem.quantity, parsedVal);
+      if (field === "acceptedQty") {
+        // The operator enters the usable quantity. The balance of this PO
+        // receipt is damaged/rejected and is sent to Purchase Returns.
+        const receiptQty = currentItem.remaining ?? currentItem.quantity;
+        currentItem.receivedQty = receiptQty;
+        currentItem.acceptedQty = Math.min(receiptQty, parsedVal);
+        currentItem.rejectedQty = Math.max(0, receiptQty - currentItem.acceptedQty);
       } else if (field === "rejectedQty") {
         currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
+        currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
       }
-
-      currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
       next[idx] = currentItem;
       return next;
     });
@@ -625,16 +656,18 @@ export default function GRNPage() {
       setApprovedId(grnId);
 
       // 2. Handle Rejections (Auto-create Purchase Return & Credit Adjustment)
-      const rejectedItems = grnItems.filter(item => item.rejectedQty > 0);
+      const rejectedItems = itemsToSubmit.filter(item => item.rejectedQty > 0);
       if (rejectedItems.length > 0) {
         const vendorId = selectedPO.vendorId || selectedPO.vendor?.id;
 
         if (vendorId) {
           // Create Purchase Return document
           await purchaseReturnsApi.create({
+            procurementOrderId: selectedPO.id,
             vendorId,
-            reason: rejectionReason ? `GRN FULL REJECTION: ${rejectionReason}` : "AUTO-GENERATED FROM GRN REJECTION",
+            reason: rejectionReason ? `GRN FULL REJECTION: ${rejectionReason}` : "PENDING_RETURN_REASON",
             returnSource: "GRN_REJECTION",
+            status: "PENDING",
             items: rejectedItems.map(item => ({
               itemName: item.inventoryItem?.name || "Unknown Material",
               quantity: item.rejectedQty,
@@ -650,7 +683,9 @@ export default function GRNPage() {
 
       toast.success(rejectionReason
         ? "Shipment fully rejected. GRN recorded as Fully Rejected — no stock added."
-        : "GRN Approved successfully! Stock updated and rejections processed.");
+        : rejectedItems.length > 0
+          ? `GRN approved: accepted stock posted and ${rejectedItems.reduce((sum, item) => sum + item.rejectedQty, 0)} rejected unit(s) sent to Purchase Returns for reason confirmation.`
+          : "GRN approved successfully! Accepted stock and vendor bill updated.");
       setShowRejectConfirm(false);
       setShowApproveConfirm(false);
       setRejectReason("");
@@ -669,10 +704,28 @@ export default function GRNPage() {
     }
   };
 
-  const filteredPOs = pos.filter(p =>
-    p.vendor.name.toLowerCase().includes(poSearch.toLowerCase()) ||
-    p.poNumber?.toLowerCase().includes(poSearch.toLowerCase())
-  );
+  const filteredPOs = pos.filter(p => {
+    const term = poSearch.trim().toLowerCase();
+    const matchSearch =
+      !term ||
+      p.vendor.name.toLowerCase().includes(term) ||
+      (p.poNumber || "").toLowerCase().includes(term);
+
+    const matchWarehouse =
+      warehouseFilter === "ALL" ||
+      p.warehouseId === warehouseFilter ||
+      (p as any).warehouse?.id === warehouseFilter ||
+      (p as any).warehouse?.name === warehouseFilter;
+
+    const isPartial = p.status === "PARTIALLY_RECEIVED";
+    const matchStatus =
+      statusFilter === "ALL" ||
+      (statusFilter === "PARTIALLY_RECEIVED" && isPartial) ||
+      (statusFilter === "NOT_RECEIVED" && !isPartial) ||
+      p.status === statusFilter;
+
+    return matchSearch && matchWarehouse && matchStatus;
+  });
 
   const filteredHistory = history.filter((grn) => {
     // 1. Search filter: Vendor, Reference PO #, GRN #, items, lot numbers
@@ -717,60 +770,98 @@ export default function GRNPage() {
       }
     }
 
-    return matchSearch && matchDate;
+    const historyWarehouseId = grn.warehouseId || grn.procurementOrder?.warehouseId || grn.items?.[0]?.warehouseId || grn.items?.[0]?.warehouse?.id;
+    const matchWarehouse = historyWarehouseFilter === "ALL" || historyWarehouseId === historyWarehouseFilter;
+    const matchStatus = historyStatusFilter === "ALL"
+      || (historyStatusFilter === "APPROVED" ? ["APPROVED", "COMPLETED"].includes(grn.status) : grn.status === historyStatusFilter);
+    return matchSearch && matchDate && matchWarehouse && matchStatus;
   });
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
+  const exportHistory = () => {
+    const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = filteredHistory.map((grn) => {
+      const warehouseName = grn.warehouse?.name || grn.procurementOrder?.warehouse?.name || grn.items?.[0]?.warehouse?.name || "";
+      return [
+        formatERPNumber("GRN", grn.id, grn.createdAt),
+        formatDate(grn.receivedAt || grn.createdAt),
+        grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : "",
+        grn.procurementOrder?.vendor?.name || "",
+        warehouseName,
+        grn.status || "",
+      ];
+    });
+    const csv = [["GRN No.", "Receipt date", "PO No.", "Vendor", "Warehouse", "Status"], ...rows]
+      .map((row) => row.map(escapeCsv).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `GRN_History_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
       <WarehouseFormSidebar
         isOpen={showWarehouseModal}
         onClose={() => setShowWarehouseModal(false)}
         onSuccess={handleWarehouseCreated}
       />
 
-      {/* ── Page Header ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              if (step === 2) {
-                setStep(1);
-                setSelectedPO(null);
-              } else {
-                router.back();
-              }
-            }}
-            className="p-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-            title="Back"
-          >
-            <ArrowLeftIcon className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex p-1 bg-gray-100 dark:bg-[#13151f] rounded-lg border border-gray-200 dark:border-white/10">
+      {/* ── Top Header / Tab Bar ── */}
+      <div className="bg-white dark:bg-[#13151f] border-b border-gray-200 dark:border-white/5 px-4 sm:px-6">
+        <div className="max-w-[1600px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
-              onClick={() => { setView("NEW"); setStep(1); }}
-              className={clsx(
-                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer",
-                view === "NEW"
-                  ? "bg-white dark:bg-card text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-white/10"
-                  : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              )}
+              type="button"
+              onClick={() => {
+                if (step === 2) {
+                  setStep(1);
+                  setSelectedPO(null);
+                } else {
+                  router.back();
+                }
+              }}
+              className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer mr-1"
+              title="Go Back"
             >
-              New Receipt
+              <ArrowLeftIcon className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setView("HISTORY")}
-              className={clsx(
-                "px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer",
-                view === "HISTORY"
-                  ? "bg-white dark:bg-card text-gray-900 dark:text-white shadow-sm border border-gray-200 dark:border-white/10"
-                  : "text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white"
-              )}
-            >
-              Received History
-            </button>
+
+            {step === 1 ? (
+              <div className="flex items-center gap-8">
+                <button
+                  type="button"
+                  onClick={() => { setView("NEW"); setStep(1); }}
+                  className={clsx(
+                    "py-3.5 text-sm font-bold transition-all relative cursor-pointer border-b-2",
+                    view === "NEW"
+                      ? "text-[#f58220] border-[#f58220]"
+                      : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white border-transparent"
+                  )}
+                >
+                  New Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView("HISTORY")}
+                  className={clsx(
+                    "py-3.5 text-sm font-bold transition-all relative cursor-pointer border-b-2",
+                    view === "HISTORY"
+                      ? "text-[#f58220] border-[#f58220]"
+                      : "text-gray-500 dark:text-slate-400 hover:text-gray-800 dark:hover:text-white border-transparent"
+                  )}
+                >
+                  Received History
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 py-3.5">
+                <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Step 2:</span>
+                <span className="text-sm font-bold text-gray-900 dark:text-white">Verify Shipment Content</span>
+                <span className="text-xs text-orange-600 dark:text-orange-400 font-mono font-semibold ml-1">({selectedPO?.poNumber})</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -778,304 +869,241 @@ export default function GRNPage() {
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
         {view === "HISTORY" ? (
           /* ── HISTORY VIEW ── */
-          <div className="space-y-4">
-            {/* ── Search & Date Filter Bar ── */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-                {/* Search Vendor or PO #... */}
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+          <div className="space-y-3.5">
+            <div>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-white">Goods Receipt (GRN)</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage incoming materials and receipt history</p>
+            </div>
+
+            <div className="bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_180px_170px] gap-3 items-end shadow-sm">
+              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Search</label><div className="relative"><SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search GRN, PO or vendor" className="w-full h-10 pl-9 pr-9 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />{historySearch && <button type="button" onClick={() => setHistorySearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X size={14} /></button>}</div></div>
+              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Date range</label><div className="grid grid-cols-2 gap-1"><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="min-w-0 h-10 px-2 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-[10px] outline-none focus:border-[#f58220]" /><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="min-w-0 h-10 px-2 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-[10px] outline-none focus:border-[#f58220]" /></div></div>
+              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Warehouse</label><select value={historyWarehouseFilter} onChange={(e) => setHistoryWarehouseFilter(e.target.value)} className="w-full h-10 px-3 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]"><option value="ALL">All warehouses</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></div>
+              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Status</label><select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value)} className="w-full h-10 px-3 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]"><option value="ALL">All statuses</option><option value="PENDING">Pending approval</option><option value="APPROVED">Approved</option><option value="REJECTED">Fully rejected</option></select></div>
+            </div>
+
+            <section className="bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 flex items-center justify-between border-b border-slate-200 dark:border-white/10"><h2 className="text-sm font-bold text-slate-900 dark:text-white">GRN History</h2><div className="flex items-center gap-3"><span className="text-[10px] text-slate-400">{filteredHistory.length} receipts</span><button type="button" onClick={exportHistory} disabled={filteredHistory.length === 0} className="px-3 py-1.5 border border-slate-200 dark:border-white/10 rounded-md text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:border-[#f58220] hover:text-[#f58220] disabled:opacity-40">Export</button><button type="button" onClick={loadHistory} className="p-1.5 text-slate-400 hover:text-[#f58220]" title="Refresh"><RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} /></button></div></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-xs"><thead><tr className="bg-slate-50 dark:bg-white/[0.03] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-white/10"><th className="px-4 py-2.5 text-left">GRN No.</th><th className="px-4 py-2.5 text-left">Receipt date</th><th className="px-4 py-2.5 text-left">PO No.</th><th className="px-4 py-2.5 text-left">Vendor</th><th className="px-4 py-2.5 text-left">Warehouse</th><th className="px-4 py-2.5 text-left">Status</th><th className="px-4 py-2.5 text-right">Action</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">{loading ? <tr><td colSpan={7} className="py-14 text-center"><Loader2Icon className="mx-auto h-5 w-5 animate-spin text-[#f58220]" /></td></tr> : filteredHistory.length === 0 ? <tr><td colSpan={7} className="py-14 text-center text-slate-500">No GRN history matches the current filters.</td></tr> : filteredHistory.map((grn) => { const warehouseName = grn.warehouse?.name || grn.procurementOrder?.warehouse?.name || grn.items?.[0]?.warehouse?.name || "—"; const isPending = grn.status === "PENDING" || grn.status === "DRAFT"; const isRejected = grn.status === "REJECTED"; return <tr key={grn.id} className={clsx("hover:bg-slate-50 dark:hover:bg-white/[0.02]", isPending && "bg-orange-50/40 dark:bg-orange-500/[0.03]")}><td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">{formatERPNumber("GRN", grn.id, grn.createdAt)}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(grn.receivedAt || grn.createdAt)}</td><td className="px-4 py-3 text-slate-700 dark:text-slate-300">{grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : "—"}</td><td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{grn.procurementOrder?.vendor?.name || "—"}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{warehouseName}</td><td className="px-4 py-3"><span className={clsx("inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium", isRejected ? "bg-rose-100 text-rose-700" : isPending ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{isRejected ? "Fully rejected" : isPending ? "Pending approval" : "Approved"}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setViewingGRNDetails(grn)} className="text-[11px] font-semibold text-blue-600 hover:underline">View details</button></td></tr>; })}</tbody>
+              </table></div>
+            </section>
+          </div>        ) : step === 1 ? (
+          /* ── STEP 1: SELECT PO ── */
+          <div className="space-y-5">
+            {/* ── Filters Bar (Matching Screenshot) ── */}
+            <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4 w-full">
+              {/* Search Box */}
+              <div className="flex-1 min-w-[260px]">
+                <div className="relative">
+                  <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
                   <input
                     type="text"
-                    placeholder="Search Vendor or PO #..."
-                    value={historySearch}
-                    onChange={e => setHistorySearch(e.target.value)}
-                    className="w-full pl-9 pr-8 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 transition-colors"
+                    placeholder="Search vendor or PO number..."
+                    value={poSearch}
+                    onChange={e => setPoSearch(e.target.value)}
+                    className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-2xs transition-colors"
                   />
-                  {historySearch && (
+                  {poSearch && (
                     <X
                       size={14}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                      onClick={() => setHistorySearch("")}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      onClick={() => setPoSearch("")}
                     />
                   )}
                 </div>
+              </div>
 
-                {/* Date Filter: From Date → To Date */}
-                <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                  {/* From Date */}
-                  <div className="relative" ref={fromCalRef}>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
-                      <button
-                        type="button"
-                        onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
-                        className="outline-none cursor-pointer"
-                      >
-                        {dateFrom ? fmtDateDisplay(dateFrom) : "From Date"}
-                      </button>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <button
-                          type="button"
-                          onClick={() => { setShowFromCal(v => !v); setShowToCal(false); }}
-                          className="text-[#f58220] cursor-pointer"
-                          title="Choose from date"
-                        >
-                          <CalendarIcon size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDateFrom(""); }}
-                          className={clsx(
-                            "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all cursor-pointer",
-                            dateFrom ? "opacity-100" : "opacity-0 pointer-events-none"
-                          )}
-                          title="Clear from date"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    {showFromCal && (
-                      <div className="absolute left-0 top-full mt-1 z-50">
-                        <MiniCalendar value={dateFrom} onChange={v => { setDateFrom(v); setShowFromCal(false); }} onClose={() => setShowFromCal(false)} />
-                      </div>
-                    )}
-                  </div>
-
-                  <span className="text-xs text-gray-400 dark:text-slate-500 font-medium">to</span>
-
-                  {/* To Date */}
-                  <div className="relative" ref={toCalRef}>
-                    <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg text-xs font-medium text-gray-700 dark:text-slate-300 hover:border-[#f58220] transition-colors">
-                      <button
-                        type="button"
-                        onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
-                        className="outline-none cursor-pointer"
-                      >
-                        {dateTo ? fmtDateDisplay(dateTo) : "To Date"}
-                      </button>
-                      <div className="flex items-center gap-1 ml-auto">
-                        <button
-                          type="button"
-                          onClick={() => { setShowToCal(v => !v); setShowFromCal(false); }}
-                          className="text-[#f58220] cursor-pointer"
-                          title="Choose to date"
-                        >
-                          <CalendarIcon size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDateTo(""); }}
-                          className={clsx(
-                            "text-gray-400 hover:text-gray-600 dark:hover:text-white transition-all cursor-pointer",
-                            dateTo ? "opacity-100" : "opacity-0 pointer-events-none"
-                          )}
-                          title="Clear to date"
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    {showToCal && (
-                      <div className="absolute left-0 top-full mt-1 z-50">
-                        <MiniCalendar value={dateTo} onChange={v => { setDateTo(v); setShowToCal(false); }} onClose={() => setShowToCal(false)} />
-                      </div>
-                    )}
-                  </div>
+              {/* Warehouse Dropdown */}
+              <div className="w-full md:w-56">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Warehouse
+                </label>
+                <div className="relative">
+                  <select
+                    value={warehouseFilter}
+                    onChange={e => setWarehouseFilter(e.target.value)}
+                    className="w-full appearance-none pl-3.5 pr-9 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <option value="ALL" className="dark:bg-[#13151f]">All warehouses</option>
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id} className="dark:bg-[#13151f]">{w.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDownIcon size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" />
                 </div>
               </div>
 
-              {/* Refresh Button */}
-              <button
-                type="button"
-                onClick={loadHistory}
-                className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer shrink-0"
-                title="Refresh GRN History"
-              >
-                <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
-              </button>
+              {/* Status Dropdown */}
+              <div className="w-full md:w-52">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1.5">
+                  Status
+                </label>
+                <div className="relative">
+                  <select
+                    value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value)}
+                    className="w-full appearance-none pl-3.5 pr-9 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-sm font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <option value="ALL" className="dark:bg-[#13151f]">All statuses</option>
+                    <option value="PARTIALLY_RECEIVED" className="dark:bg-[#13151f]">Partially received</option>
+                    <option value="NOT_RECEIVED" className="dark:bg-[#13151f]">Not received</option>
+                  </select>
+                  <ChevronDownIcon size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Action Buttons: Scanner & Refresh */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="p-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card hover:border-[#f58220] rounded-xl text-gray-600 dark:text-slate-300 hover:text-[#f58220] transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
+                  title="Scan PO Barcode"
+                >
+                  <ScanIcon className="h-4 w-4" />
+                  <span className="hidden xl:inline">Scan</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={loadPOs}
+                  className="p-2.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-xl text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors cursor-pointer shadow-2xs"
+                  title="Refresh Purchase Orders"
+                >
+                  <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+                </button>
+              </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+            {/* ── Purchase Orders Table Card (Matching Screenshot) ── */}
+            <div className="bg-white dark:bg-[#13151f] rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs">
+              <div className="px-5 sm:px-6 py-4 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight">
+                  Purchase orders ready to receive
+                </h2>
+                <span className="text-xs font-semibold text-gray-400 dark:text-slate-500">
+                  {filteredPOs.length} {filteredPOs.length === 1 ? "order" : "orders"}
+                </span>
+              </div>
+
               <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-                <table className="w-full text-sm min-w-[760px]">
-                <thead>
-                  <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                    <th className="px-4 py-3 text-left">GRN #</th>
-                    <th className="px-4 py-3 text-left">Vendor</th>
-                    <th className="px-4 py-3 text-left">Reference PO</th>
-                    <th className="px-4 py-3 text-left">Date</th>
-                    <th className="px-4 py-3 text-center">Status</th>
-                    <th className="px-4 py-3 text-left">Items</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-16 text-center">
-                        <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
-                      </td>
+                <table className="w-full text-sm min-w-[860px]">
+                  <thead>
+                    <tr className="bg-gray-50/70 dark:bg-white/[0.02] text-gray-400 dark:text-slate-500 text-xs font-semibold border-b border-gray-100 dark:border-white/5">
+                      <th className="px-5 py-3.5 text-left font-medium w-12">#</th>
+                      <th className="px-5 py-3.5 text-left font-medium">PO number</th>
+                      <th className="px-5 py-3.5 text-left font-medium">Vendor</th>
+                      <th className="px-5 py-3.5 text-left font-medium">Warehouse</th>
+                      <th className="px-5 py-3.5 text-left font-medium">Expected delivery</th>
+                      <th className="px-5 py-3.5 text-center font-medium">Items</th>
+                      <th className="px-5 py-3.5 text-left font-medium">Status</th>
+                      <th className="px-5 py-3.5 text-right font-medium">Action</th>
                     </tr>
-                  ) : filteredHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-16 text-center text-gray-500 dark:text-slate-400 text-sm font-semibold">
-                        {history.length === 0 ? (
-                          "No receipt history found"
-                        ) : (
-                          <div className="space-y-2">
-                            <p>No receipt history matches your search or date filter</p>
-                            {(historySearch || dateFrom || dateTo) && (
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={8} className="py-16 text-center">
+                          <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
+                        </td>
+                      </tr>
+                    ) : filteredPOs.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-16 text-center text-gray-500 dark:text-slate-400">
+                          <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-[#f58220]">
+                            <PackageIcon className="h-6 w-6" />
+                          </div>
+                          <p className="text-sm font-semibold text-gray-800 dark:text-white">No Purchase Orders Found</p>
+                          <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
+                            {pos.length === 0
+                              ? "There are no approved purchase orders ready for receiving."
+                              : "No purchase orders match your filter criteria."}
+                          </p>
+                          {(poSearch || warehouseFilter !== "ALL" || statusFilter !== "ALL") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPoSearch("");
+                                setWarehouseFilter("ALL");
+                                setStatusFilter("ALL");
+                              }}
+                              className="mt-3 text-xs font-bold text-[#f58220] hover:underline cursor-pointer"
+                            >
+                              Reset filters
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredPOs.map((po, index) => {
+                        const isPartial = po.status === "PARTIALLY_RECEIVED";
+                        const warehouseName =
+                          warehouses.find(w => w.id === po.warehouseId)?.name ||
+                          (po as any).warehouse?.name ||
+                          "Main Warehouse";
+                        const deliveryDate = formatDeliveryDate(
+                          (po as any).expectedDeliveryDate || (po as any).deliveryDate || (po as any).expectedDate || po.createdAt
+                        );
+                        const itemsCount = po.poItems?.length || 0;
+
+                        return (
+                          <tr
+                            key={po.id}
+                            className={clsx(
+                              "transition-colors",
+                              index === 0
+                                ? "bg-orange-50/40 dark:bg-orange-950/10 hover:bg-orange-50/60 dark:hover:bg-orange-950/20"
+                                : "hover:bg-gray-50/70 dark:hover:bg-white/[0.02]"
+                            )}
+                          >
+                            <td className="px-5 py-4 text-xs font-medium text-gray-400 dark:text-slate-500">
+                              {String(index + 1).padStart(2, "0")}
+                            </td>
+                            <td className="px-5 py-4 font-semibold text-xs text-gray-900 dark:text-white">
+                              {po.poNumber || "PO-PENDING"}
+                            </td>
+                            <td className="px-5 py-4 font-semibold text-sm text-gray-900 dark:text-white">
+                              {po.vendor?.name}
+                            </td>
+                            <td className="px-5 py-4 font-semibold text-xs text-gray-900 dark:text-white">
+                              {warehouseName}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-medium text-gray-700 dark:text-slate-300">
+                              {deliveryDate}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-semibold text-center text-gray-700 dark:text-slate-300">
+                              {itemsCount}
+                            </td>
+                            <td className="px-5 py-4">
+                              {isPartial ? (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100/70 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                  Partially received
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100/70 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                  Not received
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-right">
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setHistorySearch("");
-                                  setDateFrom("");
-                                  setDateTo("");
-                                }}
-                                className="text-xs font-bold text-[#f58220] hover:underline cursor-pointer"
+                                onClick={() => selectPO(po)}
+                                className="inline-flex items-center justify-center px-4 py-1.5 border border-[#f58220] text-[#f58220] hover:bg-[#f58220] hover:text-white rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer shadow-2xs active:scale-95"
                               >
-                                Clear all filters
+                                Receive Items
                               </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ) : filteredHistory.map((grn) => (
-                    <tr key={grn.id} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
-                      <td className="px-4 py-3 font-semibold text-xs text-gray-800 dark:text-white">
-                        {formatERPNumber("GRN", grn.id, grn.createdAt)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="text-gray-800 dark:text-white font-semibold text-sm">{grn.procurementOrder?.vendor?.name}</div>
-                        <div className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">Verified Shipment</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-medium text-gray-700 dark:text-slate-300">
-                        {grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : 'N/A'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 dark:text-slate-400 text-xs">
-                        {formatDate(grn.receivedAt || grn.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <span
-                          title={grn.status === "REJECTED" && grn.rejectionReason ? `Rejected: ${grn.rejectionReason}` : undefined}
-                          className={clsx(
-                            "inline-block px-2 py-0.5 rounded text-[11px] font-semibold border",
-                            grn.status === "REJECTED"
-                              ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-500/20"
-                              : "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
-                          )}
-                        >
-                          {grn.status === "REJECTED" ? "Fully Rejected" : grn.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {grn.items?.slice(0, 2).map((item: any) => (
-                            <span key={item.id} className="px-2 py-0.5 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 text-xs rounded border border-gray-200 dark:border-white/10">
-                              {item.inventoryItem?.name} ({item.acceptedQty})
-                            </span>
-                          ))}
-                          {grn.items?.length > 2 && <span className="text-xs font-semibold text-gray-400 dark:text-slate-500 ml-1">+{grn.items.length - 2}</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right flex justify-end gap-2">
-                        <button
-                          onClick={() => setViewingGRNDetails(grn)}
-                          className="px-2.5 py-1 bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 border border-gray-200 dark:border-white/10 rounded text-xs font-bold hover:bg-gray-200 dark:hover:bg-white/10 transition-colors cursor-pointer"
-                        >
-                          View Details
-                        </button>
-                        <button
-                          onClick={() => router.push(`/purchases/invoices?grnId=${grn.id}`)}
-                          className="px-2.5 py-1 bg-orange-50 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors cursor-pointer"
-                        >
-                          Generate Bill
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-        ) : step === 1 ? (
-          /* ── STEP 1: SELECT PO ── */
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-md">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Search Vendor or PO #..."
-                  value={poSearch}
-                  onChange={e => setPoSearch(e.target.value)}
-                  className="w-full pl-9 pr-8 py-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                />
-                {poSearch && (
-                  <X 
-                    size={14} 
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                    onClick={() => setPoSearch("")} 
-                  />
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={loadPOs}
-                className="p-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors cursor-pointer shrink-0"
-                title="Refresh Purchase Orders"
-              >
-                <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
-              </button>
-            </div>
-
-            {loading ? (
-              <div className="py-16 text-center"><Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" /></div>
-            ) : filteredPOs.length === 0 ? (
-              <div className="py-20 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 text-center text-gray-500 dark:text-slate-400">
-                <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-[#f58220]">
-                  <PackageIcon className="h-6 w-6" />
-                </div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-white">No Pending Purchase Orders</p>
-                <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">There are no approved purchase orders ready for receiving.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredPOs.map(po => (
-                  <div
-                    key={po.id}
-                    onClick={() => selectPO(po)}
-                    className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg p-4 hover:border-[#f58220] dark:hover:border-[#f58220] transition-colors cursor-pointer flex flex-col justify-between group space-y-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] text-xs font-semibold rounded border border-orange-200 dark:border-orange-500/20">
-                        {po.poNumber || "PO-PENDING"}
-                      </span>
-                      <span className="text-xs text-gray-500 dark:text-slate-400">{formatDate(po.createdAt)}</span>
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white group-hover:text-[#f58220] transition-colors truncate">
-                        {po.vendor.name}
-                      </h3>
-                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Ready for receiving</p>
-                    </div>
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 dark:border-white/5">
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-slate-400 block">Total Value</span>
-                        <span className="text-sm font-bold text-gray-800 dark:text-white">₹{po.totalAmount.toLocaleString()}</span>
-                      </div>
-                      <span className="text-xs font-semibold text-[#f58220] flex items-center gap-1 group-hover:underline">
-                        Select PO <ArrowRightIcon size={14} />
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         ) : (
           /* ── STEP 2: VERIFY QUANTITIES ── */
@@ -1149,9 +1177,9 @@ export default function GRNPage() {
                       <th className="px-4 py-3 text-left">Warehouse</th>
                       <th className="px-4 py-3 text-left">Pricing</th>
                       <th className="px-4 py-3 text-center">Ordered</th>
-                      <th className="px-4 py-3 text-center">Received</th>
-                      <th className="px-4 py-3 text-center">Rejected</th>
-                      <th className="px-4 py-3 text-center">Accepted</th>
+                      <th className="px-4 py-3 text-center">Accepted / Good</th>
+                      <th className="px-4 py-3 text-center">Damaged / Return</th>
+                      <th className="px-4 py-3 text-center">Total Receipt</th>
                       <th className="px-4 py-3 text-center"></th>
                     </tr>
                   </thead>
@@ -1338,8 +1366,8 @@ export default function GRNPage() {
                               type="number"
                               min={0}
                               max={item.remaining ?? item.quantity}
-                              value={item.receivedQty}
-                              onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
+                              value={item.acceptedQty}
+                              onChange={e => updateItem(idx, "acceptedQty", Number(e.target.value))}
                               className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
                             />
                           </td>
@@ -1355,7 +1383,7 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-mono text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-md">
-                              {item.acceptedQty}
+                              {item.receivedQty}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-center">

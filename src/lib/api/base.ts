@@ -47,7 +47,8 @@ api.interceptors.request.use((config) => {
 // production builds don't spam the browser console (or leak response data
 // into it). Runs after the auth interceptor above so it's registered second
 // and therefore fires second on the way out, first on the way back in.
-const LOGGING_ENABLED = process.env.NODE_ENV !== 'production';
+// Verbose payload logging is expensive for large ERP tables. Keep it opt-in.
+const LOGGING_ENABLED = process.env.NEXT_PUBLIC_API_DEBUG === 'true';
 const redactBody = (body: any) => {
   if (!body || typeof body !== 'object') return body;
   const REDACTED_KEYS = ['password', 'accessToken', 'refreshToken', 'token'];
