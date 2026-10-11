@@ -699,25 +699,6 @@ export default function BatchRecallPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Live Recall Audit Log */}
-                {recall?.events && recall.events.length > 0 && (
-                  <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-5 space-y-3">
-                    <h4 className="text-xs font-semibold text-[#f58220] uppercase tracking-wide flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#f58220] animate-pulse" />
-                      Recall Audit Log
-                    </h4>
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
-                      {recall.events.map((ev) => (
-                        <div key={ev.id} className="text-xs font-mono text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 px-3 py-2 rounded-lg">
-                          [{new Date(ev.createdAt).toLocaleTimeString()}] {ev.event.replace(/_/g, " ")}
-                          {ev.details?.message ? ` — ${ev.details.message}` : ""}
-                          {typeof ev.affectedQty === "number" && ev.affectedQty > 0 ? ` (${ev.affectedQty} ${eligibility?.batch.unit || ""})` : ""}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </>
             ) : (
               <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Loader2 } from "lucide-react";
+import { X, Loader2, ArrowLeft, ArrowRight } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
 import { vendorsApi, customersApi, gstApi } from "@/lib/api";
@@ -60,6 +60,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   const [saving, setSaving] = useState(false);
   const [fetchingGst, setFetchingGst] = useState(false);
   const [fetchingPincode, setFetchingPincode] = useState(false);
+  const [vendorStep, setVendorStep] = useState<1 | 2>(1);
 
   const [contactError, setContactError] = useState("");
   const [emailError, setEmailError] = useState("");
@@ -202,13 +203,27 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           pincode: data.pinCode || prev.pincode,
           gstType: "Registered Business"
         }));
-        toast.success(`Successfully auto-filled details for "${data.legalName}"`);
+        if (data.legalName) {
+          toast.success(`Successfully auto-filled details for "${data.legalName}"`);
+        }
+      } else {
+        setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
       }
     } catch (err: any) {
-      console.error("Auto-fetch GST details failed:", err);
-      // The state is still known from the GSTIN's first two digits.
+      console.warn("GST auto-fill unavailable; continuing with manual entry.", err);
+      // Provider outages must not block vendor creation. The State can still be
+      // inferred reliably from the first two digits of a valid GSTIN.
       setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
-      toast.error(err.response?.data?.error || "Could not auto-fetch GST details. Please enter manually.");
+
+      const status = err?.response?.status;
+      const providerMessage = String(err?.response?.data?.error || err?.message || "").toLowerCase();
+      const providerUnavailable = status === 401 || status === 403 || status >= 500
+        || providerMessage.includes("authentication")
+        || providerMessage.includes("provider");
+
+      if (!providerUnavailable) {
+        toast.error("GST details could not be auto-filled. Please enter them manually.");
+      }
     } finally {
       setFetchingGst(false);
     }
@@ -216,6 +231,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
   useEffect(() => {
     if (isOpen) {
+      setVendorStep(1);
       if (initialData) {
         const bal = Number(initialData.openingBalance) || 0;
         let mappedBalanceType = partyType === 'customer' ? "receive" : "pay";
@@ -453,6 +469,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4 sm:space-y-6 min-w-0">
 
+          {(partyType !== 'vendor' || vendorStep === 1) && (
+            <>
           {/* Target Scope — read-only */}
           {scopeLabel && (
             <div>
@@ -539,18 +557,6 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       <option value="NET_7" className="dark:bg-[#13151f]">7 Days (Net 7)</option>
                       <option value="NET_30" className="dark:bg-[#13151f]">30 Days (Net 30)</option>
                       <option value="ADVANCE" className="dark:bg-[#13151f]">Advance Payment</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Status</label>
-                    <select
-                      value={form.status}
-                      onChange={(e) => setForm({...form, status: e.target.value})}
-                      className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 transition-colors"
-                    >
-                      <option value="ACTIVE" className="dark:bg-[#13151f]">Active</option>
-                      <option value="BLOCKED" className="dark:bg-[#13151f]">Blocked</option>
-                      <option value="BLACKLISTED" className="dark:bg-[#13151f]">Blacklisted</option>
                     </select>
                   </div>
                 </>
@@ -690,8 +696,11 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
             </div>
           </div>
 
+            </>
+          )}
+
           {/* SECTION: Credit & Balance (Vendor Only) */}
-          {partyType === 'vendor' && (
+          {partyType === 'vendor' && vendorStep === 2 && (
             <div>
               <label className={sectionLabelClass}>Credit & Balance</label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -763,18 +772,24 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         {/* Footer Actions */}
         <div className="px-4 sm:px-6 py-3 sm:py-4 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 shrink-0 border-t border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-[#0e1017]">
           <button
-            onClick={onClose}
+            onClick={partyType === 'vendor' && vendorStep === 2 ? () => setVendorStep(1) : onClose}
             className="px-4 py-2 text-xs sm:text-sm font-medium text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white transition-colors text-center"
           >
-            Cancel
+            {partyType === 'vendor' && vendorStep === 2 ? (
+              <span className="flex items-center justify-center gap-2"><ArrowLeft size={15} /> Back</span>
+            ) : 'Cancel'}
           </button>
 
           <button
-            onClick={handleConfirm}
+            onClick={partyType === 'vendor' && vendorStep === 1 ? () => setVendorStep(2) : handleConfirm}
             disabled={saving}
             className="px-6 py-2.5 sm:py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
           >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : saveLabel}
+            {saving ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : partyType === 'vendor' && vendorStep === 1 ? (
+              <>Next <ArrowRight size={15} /></>
+            ) : saveLabel}
           </button>
         </div>
       </div>
