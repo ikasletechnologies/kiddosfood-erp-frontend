@@ -160,10 +160,10 @@ input[type="number"] {
 
 /* ─── Page header ───────────────────────────────────────────── */
 .page-header {
-  @apply flex items-center justify-between mb-6;
+  @apply mb-5 flex flex-col items-stretch justify-between gap-3 sm:mb-6 sm:flex-row sm:items-center;
 }
 .page-title {
-  @apply text-xl font-bold text-gray-900 dark:text-white;
+  @apply text-lg font-bold tracking-tight text-gray-900 dark:text-white sm:text-xl;
 }
 .page-subtitle {
   @apply text-sm text-muted-foreground mt-0.5;

@@ -53,3 +53,12 @@ next-env.d.ts
 /patch_*.js
 /*.log
 /pnpm-lock.yaml.*
+
+*.bak
+*.backup
+**/scratch/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
