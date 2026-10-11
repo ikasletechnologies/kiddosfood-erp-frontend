@@ -1,719 +1,909 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ShieldAlert, Search, Package, Store, AlertTriangle,
-  CheckCircle2, XCircle, Truck, Clock, RefreshCw,
-  ChevronRight, MapPin, FileText, ArrowRight, X, Undo2, Ban
+  ShieldAlert, RefreshCw, Search, AlertTriangle, CheckCircle2, ChevronRight, X,
+  Paperclip, Undo2, Trash2, ClipboardCheck, Lock, Ban, Package, MapPin, History,
+  XCircle, FileText, Truck, Store, Receipt, Box, Plus,
 } from "lucide-react";
 import { clsx } from "clsx";
-import api from "@/lib/api/base";
-import { recallApi } from "@/lib/api";
-import { useToast } from "@/context/ToastContext";
-import { formatDate } from "@/lib/utils";
+import { format } from "date-fns";
+import { toast } from "react-hot-toast";
+import { Modal } from "@/components/ui/Modal";
+import { recallApi, productionApi, attachmentsApi } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
+import { getBatchStage } from "@/config/production-features";
 
-interface RecallBatch {
-  id: string;
-  batchCode: string;
-  productName: string;
-  productionDate: string;
-  expiryDate: string;
-  producedQty: number;
-  approvedQty: number;
-  rejectedQty: number;
-  packagedQty: number;
-  cartonedQty: number;
-  unit: string;
-  status: string;
-  qcStatus: string;
-  recallStatus: "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | null;
-  recallStep: string | null;
+const REASONS = ["Failed safety test", "Contamination", "Packaging defect", "Incorrect labeling", "Customer complaint", "Expiry issue", "Other"];
+const SEVERITIES = [
+  { value: "CRITICAL", label: "Critical", hint: "Serious health risk", cls: "bg-rose-600 text-white border-rose-600" },
+  { value: "HIGH", label: "High", hint: "Possible health risk", cls: "bg-orange-500 text-white border-orange-500" },
+  { value: "MEDIUM", label: "Medium", hint: "Unlikely health risk", cls: "bg-amber-400 text-amber-950 border-amber-400" },
+  { value: "LOW", label: "Low", hint: "Quality / precautionary", cls: "bg-slate-500 text-white border-slate-500" },
+];
+const LIFECYCLE: Record<string, { label: string; cls: string }> = {
+  INITIATED: { label: "Initiated", cls: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" },
+  IN_PROGRESS: { label: "In Progress", cls: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:border-orange-500/20" },
+  RECONCILED: { label: "Reconciled", cls: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20" },
+  CLOSED: { label: "Closed", cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20" },
+  CANCELLED: { label: "Cancelled", cls: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-white/5 dark:text-slate-400 dark:border-white/10" },
+};
+// Recall Workflow Pipeline — progress comes from the recall's own event log.
+const PIPELINE = [
+  { event: "RECALL_INITIATED", label: "Identify Defective Batch", icon: Search },
+  { event: "DISTRIBUTION_LOCATED", label: "Locate Distribution", icon: MapPin },
+  { event: "SALES_BLOCKED", label: "Block Sales", icon: XCircle },
+  { event: "REPORT_GENERATED", label: "Generate Recall Report", icon: FileText },
+  { event: "RETURN_COLLECTED", label: "Collect Returned Stock", icon: Package },
+];
+const EVENT_LABEL: Record<string, string> = {
+  RECALL_INITIATED: "Recall initiated — stock quarantined",
+  DISTRIBUTION_LOCATED: "Distribution traced",
+  SALES_BLOCKED: "Sale / dispatch block confirmed",
+  REPORT_GENERATED: "Recall report generated",
+  RETURN_COLLECTED: "Stock recovered",
+  STOCK_DISPOSED: "Quarantined stock disposed",
+  RECALL_RECONCILED: "Reconciliation recorded",
+  RECALL_COMPLETED: "Recall closed",
+  RECALL_CANCELLED: "Recall cancelled — stock released",
+};
+const QC_LABEL: Record<string, string> = {
+  APPROVED: "Approved", PARTIALLY_APPROVED: "Partially approved", REJECTED: "Rejected",
+  QC_NOT_REQUIRED: "Not required", PENDING: "Pending",
+};
+
+const fmt = (n: number) => (Number.isFinite(n) ? Number(n).toLocaleString("en-IN", { maximumFractionDigits: 3 }) : "0");
+const fmtDate = (d?: string | null, withTime = false) => (d ? format(new Date(d), withTime ? "dd MMM yyyy, HH:mm" : "dd/MM/yyyy") : "—");
+const inputCls = "w-full border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-800 dark:text-white bg-white dark:bg-[#13151f] outline-none focus:border-[#f58220]";
+const labelCls = "block text-[11px] font-bold text-gray-600 dark:text-slate-300 mb-1";
+const EVIDENCE_ACCEPT = "image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt";
+
+// Sum a SKU field per unit — SKUs in different units are never added together.
+function byUnit(skus: any[], key: string): string {
+  const totals: Record<string, number> = {};
+  for (const s of skus) totals[s.unit] = (totals[s.unit] || 0) + (s[key] || 0);
+  const parts = Object.entries(totals).filter(([, v]) => v > 0).map(([u, v]) => `${fmt(v)} ${u}`);
+  return parts.length ? parts.join(" · ") : "0";
 }
 
-interface EligibilityResponse {
-  eligible: boolean;
-  reasons: string[];
-  batch: {
-    id: string;
-    batchCode: string;
-    productName: string;
-    qcStatus: string;
-    unit: string;
-    producedQty: number;
-    approvedQty: number;
-    rejectedQty: number;
-    packagedQty: number;
-    cartonedQty: number;
-    availableQty: number;
-    distributedQty: number;
-    wastedQty: number;
+function SeverityBadge({ value }: { value?: string | null }) {
+  const s = SEVERITIES.find((x) => x.value === value);
+  if (!s) return null;
+  return <span className={clsx("inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase border", s.cls)}>{s.label}</span>;
+}
+function LifecycleBadge({ value }: { value?: string }) {
+  const l = LIFECYCLE[value || ""] || LIFECYCLE.IN_PROGRESS;
+  return <span className={clsx("inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border", l.cls)}>{l.label}</span>;
+}
+
+function batchRecallBadge(b: any): { label: string; cls: string } {
+  const st = b.recall?.status;
+  if (st === "IN_PROGRESS") return { label: "Recall Active", cls: "text-rose-700 bg-rose-50 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20" };
+  if (st === "COMPLETED") return { label: "Recalled", cls: "text-rose-700 bg-white border-rose-300 dark:bg-transparent dark:text-rose-300" };
+  if (st === "CANCELLED") return { label: "Recall Cancelled", cls: "text-gray-600 bg-gray-50 border-gray-200 dark:bg-white/5 dark:text-slate-400 dark:border-white/10" };
+  const stage = getBatchStage(b);
+  return {
+    label: stage.label,
+    cls: stage.key === "STOCK_UPDATED" ? "text-blue-700 bg-blue-50 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20"
+      : stage.key === "READY_FOR_PACKAGING" || stage.key === "PARTIALLY_PACKED" ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+      : "text-amber-700 bg-amber-50 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20",
   };
-  recall: RecallRow | null;
 }
 
-interface RecallEvent {
-  id: string;
-  event: string;
-  status: string;
-  actor: string | null;
-  affectedQty: number | null;
-  details: any;
-  createdAt: string;
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
 }
 
-interface RecallRow {
-  id: string;
-  productBatchId: string;
-  status: "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
-  step: "INITIATED" | "DISTRIBUTION_LOCATED" | "SALES_BLOCKED" | "REPORT_GENERATED" | "RETURN_COLLECTED" | "COMPLETED";
-  reason: string;
-  reasonNotes: string | null;
-  distributedQty: number;
-  returnedQty: number;
-  affectedLocations: { type: string; label: string; qty: number }[] | null;
-  initiatedBy: string | null;
-  initiatedAt: string;
-  completedAt: string | null;
-  cancelledAt: string | null;
-  events?: RecallEvent[];
+async function uploadEvidence(recallId: string, files: File[]) {
+  for (const f of files) {
+    if (f.size > 5 * 1024 * 1024) { toast.error(`${f.name} is larger than 5 MB`); continue; }
+    await attachmentsApi.upload({
+      entityType: "BATCH_RECALL", entityId: recallId,
+      kind: f.type.startsWith("image/") ? "IMAGE" : "DOCUMENT",
+      fileName: f.name, mimeType: f.type || "application/octet-stream", dataBase64: await fileToBase64(f),
+    });
+  }
 }
 
-const STEP_ORDER = ["INITIATED", "DISTRIBUTION_LOCATED", "SALES_BLOCKED", "REPORT_GENERATED", "RETURN_COLLECTED"] as const;
+function Section({ title, icon: Icon, children, right }: { title: string; icon: any; children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02] flex items-center justify-between gap-2">
+        <h4 className="text-[11px] font-bold text-gray-700 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5"><Icon className="h-3.5 w-3.5 text-[#f58220]" /> {title}</h4>
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
 
-const STEPS: { key: typeof STEP_ORDER[number]; label: string; icon: any }[] = [
-  { key: "INITIATED", label: "Identify Defective Batch", icon: Search },
-  { key: "DISTRIBUTION_LOCATED", label: "Locate Distribution", icon: MapPin },
-  { key: "SALES_BLOCKED", label: "Block Sales", icon: XCircle },
-  { key: "REPORT_GENERATED", label: "Generate Recall Report", icon: FileText },
-  { key: "RETURN_COLLECTED", label: "Collect Returned Stock", icon: Package },
-];
+function SkuTable({ skus, showRecall }: { skus: any[]; showRecall: boolean }) {
+  if (!skus.length) {
+    return <p className="text-xs text-gray-500 dark:text-slate-400 p-4">No stock has been created from this batch yet (nothing packed). A recall keeps its bulk out of packaging.</p>;
+  }
+  const cols = showRecall
+    ? ["Packed", "Quarantined", "Sold / Dispatched", "Recovered", "Disposed", "Outstanding"]
+    : ["Packed", "On hand", "Sold / Dispatched"];
+  return (
+    <div className="overflow-x-auto custom-scrollbar">
+      <table className="w-full text-sm min-w-[620px]">
+        <thead>
+          <tr className="text-[10px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100 dark:border-white/5">
+            <th className="text-left px-4 py-2">SKU</th>
+            {cols.map((c) => <th key={c} className="text-right px-3 py-2">{c}</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+          {skus.map((s) => (
+            <tr key={s.inventoryItemId}>
+              <td className="px-4 py-2">
+                <div className="font-semibold text-gray-900 dark:text-white">{s.name}</div>
+                <div className="text-[10px] font-mono text-gray-400">
+                  {s.sku || "—"} · {s.category === "SEMI_FINISHED" ? "Bulk" : "Finished good"}
+                  {s.crossBatch && <span className="ml-1 text-amber-600 font-bold">· via shared bulk</span>}
+                </div>
+                {s.destinations?.length > 0 && (
+                  <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">{s.destinations.map((d: any) => `${d.label}: ${fmt(d.qty)}`).join(" · ")}</div>
+                )}
+              </td>
+              {(showRecall
+                ? [s.packedQty, s.quarantinedQty, s.distributedQty, s.recoveredQty, s.disposedQty, s.outstandingQty]
+                : [s.packedQty, s.onHandQty, s.distributedQty]
+              ).map((v: number, i: number) => (
+                <td key={i} className={clsx("px-3 py-2 text-right tabular-nums font-semibold",
+                  showRecall && i === 1 && v > 0 && "text-rose-600",
+                  showRecall && i === 5 && v > 0 && "text-amber-600",
+                  showRecall && i === 5 && v === 0 && "text-emerald-600")}>
+                  {fmt(v)} <span className="text-[10px] font-normal text-gray-400">{s.unit}</span>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-const RECALL_REASONS = [
-  "Failed safety test",
-  "Contamination",
-  "Packaging defect",
-  "Incorrect labeling",
-  "Customer complaint",
-  "Expiry issue",
-  "Other",
-];
+function LocationTable({ lots }: { lots: any[] }) {
+  const held = lots.filter((l) => l.currentQty > 0);
+  if (!held.length) return <p className="text-xs text-gray-500 dark:text-slate-400 p-4">No stock of this batch is held anywhere right now.</p>;
+  return (
+    <div className="overflow-x-auto custom-scrollbar">
+      <table className="w-full text-sm min-w-[560px]">
+        <thead>
+          <tr className="text-[10px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100 dark:border-white/5">
+            <th className="text-left px-4 py-2">Location</th>
+            <th className="text-left px-3 py-2">SKU / Lot</th>
+            <th className="text-center px-3 py-2">Status</th>
+            <th className="text-right px-4 py-2">Qty</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+          {held.map((l) => (
+            <tr key={l.id}>
+              <td className="px-4 py-2">
+                <div className="font-semibold text-gray-800 dark:text-white">{l.scope}</div>
+                <div className="text-[11px] text-gray-500">{l.warehouse || "No warehouse"}</div>
+              </td>
+              <td className="px-3 py-2">
+                <div className="text-gray-800 dark:text-slate-200">{l.name}</div>
+                <div className="text-[10px] font-mono text-gray-400">{l.lotNumber || l.id.slice(0, 8)}{l.returnLot ? " · recovered" : ""}{l.crossBatch ? ` · ${l.productBatchCode}` : ""}</div>
+              </td>
+              <td className="px-3 py-2 text-center">
+                <span className={clsx("inline-block px-2 py-0.5 rounded text-[10px] font-bold border",
+                  l.status === "APPROVED" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/20")}>
+                  {l.status === "APPROVED" ? "Saleable" : l.status === "RETURNED" ? "Quarantined (returned)" : "Quarantined"}
+                </span>
+              </td>
+              <td className="px-4 py-2 text-right font-bold tabular-nums">{fmt(l.currentQty)} <span className="text-[10px] font-normal text-gray-400">{l.unit}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-const QC_STYLES: Record<string, { color: string; bg: string; border: string }> = {
-  APPROVED: { color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  PARTIALLY_APPROVED: { color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
-  REJECTED: { color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200" },
-  PENDING: { color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
-};
-const DEFAULT_QC_STYLE = { color: "text-gray-600", bg: "bg-gray-50", border: "border-gray-200" };
+// ── Recall Workflow Pipeline ───────────────────────────────────────────────
+function Pipeline({ details }: { details: any | null }) {
+  const recall = details?.recall;
+  const events: any[] = details?.events || [];
+  const initiatedAt = [...events].reverse().find((e) => e.event === "RECALL_INITIATED")?.createdAt;
+  const done = new Set(events.filter((e) => !initiatedAt || e.createdAt >= initiatedAt).map((e) => e.event));
+  const active = recall?.status === "IN_PROGRESS" || recall?.status === "COMPLETED";
+  const firstOpen = PIPELINE.findIndex((p) => !done.has(p.event));
+  return (
+    <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 className="text-xs font-bold text-gray-700 dark:text-slate-200 uppercase tracking-wide">Recall Workflow Pipeline</h3>
+        {recall && (
+          <span className="flex items-center gap-2 text-[11px] text-gray-500">
+            <span className="font-mono font-bold text-gray-800 dark:text-white">{recall.recallNumber}</span>
+            <LifecycleBadge value={recall.lifecycle} />
+          </span>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {PIPELINE.map((p, i) => {
+          const isDone = active && done.has(p.event);
+          const isCurrent = active && recall?.status === "IN_PROGRESS" && i === firstOpen;
+          return (
+            <div key={p.event} className="flex items-center gap-2">
+              <span className={clsx("flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold",
+                isDone ? "bg-[#f58220] text-white border-[#f58220]"
+                  : isCurrent ? "border-[#f58220] text-[#f58220] bg-orange-50 dark:bg-orange-500/10"
+                  : "border-gray-200 dark:border-white/10 text-gray-500 dark:text-slate-400")}>
+                {isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : <p.icon className="h-3.5 w-3.5" />} {p.label}
+              </span>
+              {i < PIPELINE.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-gray-300 shrink-0" />}
+            </div>
+          );
+        })}
+      </div>
+      {!recall && <p className="text-[11px] text-gray-400 mt-2">Initiating a recall quarantines the batch&apos;s stock immediately — distribution, blocking and the report follow automatically.</p>}
+    </div>
+  );
+}
 
-const RECALL_STYLES: Record<string, { color: string; bg: string; border: string; label: string }> = {
-  IN_PROGRESS: { color: "text-[#f58220]", bg: "bg-orange-50", border: "border-orange-200", label: "Recall In Progress" },
-  COMPLETED: { color: "text-rose-600", bg: "bg-rose-50", border: "border-rose-200", label: "Recalled" },
-  CANCELLED: { color: "text-gray-500", bg: "bg-gray-50", border: "border-gray-200", label: "Recall Cancelled" },
-};
-
-export default function BatchRecallPage() {
-  const [batches, setBatches] = useState<RecallBatch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
-
-  const [eligibility, setEligibility] = useState<EligibilityResponse | null>(null);
-  const [recall, setRecall] = useState<RecallRow | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  const [showReasonForm, setShowReasonForm] = useState(false);
+// ── Inline Initiate Recall form ────────────────────────────────────────────
+function InitiateForm({ batch, details, onCancel, onDone }: { batch: any; details: any; onCancel: () => void; onDone: () => void }) {
   const [reason, setReason] = useState("");
-  const [reasonNotes, setReasonNotes] = useState("");
-  const [returnQtyInput, setReturnQtyInput] = useState("");
+  const [severity, setSeverity] = useState("");
+  const [description, setDescription] = useState("");
+  const [touched, setTouched] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const errors = {
+    reason: !reason ? "Select a recall reason" : "",
+    severity: !severity ? "Select a severity" : "",
+    description: description.trim().length < 10 ? "Describe the issue (at least 10 characters)" : "",
+  };
+  const valid = !errors.reason && !errors.severity && !errors.description;
+  const onHand = (details?.skus || []).filter((s: any) => s.onHandQty > 0);
 
-  const [runningAction, setRunningAction] = useState<string | null>(null);
-  const [failedStep, setFailedStep] = useState<string | null>(null);
-
-  const { showToast } = useToast();
-
-  const loadBatches = useCallback(async () => {
+  const submit = async () => {
+    setSubmitting(true);
     try {
-      const res = await api.get("/api/production/batches");
-      // The endpoint also returns GRN raw-material lots (batchType
-      // GRN_RAW_MATERIAL, InventoryBatch ids) for expiry tracking. Recall works
-      // on production batches only (distribution, sales block, outlet
-      // returns), so those lots are not listed here.
-      const data: RecallBatch[] = (res.data || []).filter((b: any) => b.batchType !== "GRN_RAW_MATERIAL").map((b: any) => ({
-        id: b.id,
-        // batchCode is the server-owned canonical business identifier. Never
-        // derive a second display code from a UUID or legacy batch string.
-        batchCode: b.batchCode || "—",
-        // b.recipe doesn't exist on this batch shape — the recipe lives at
-        // b.production.recipe. That wrong path is why this always fell
-        // through to "Unknown Product" whenever the batch had no directly
-        // linked Product (the normal case for bulk-manufacturing recipes).
-        productName: b.product?.name || b.production?.recipe?.name || "Unknown Product",
-        productionDate: b.production?.startTime || b.mfgDate || b.createdAt,
-        expiryDate: b.expiryDate || "",
-        producedQty: b.quantity || 0,
-        approvedQty: b.approvedQty || 0,
-        rejectedQty: b.rejectionQty || 0,
-        packagedQty: b.packagedQty || 0,
-        cartonedQty: b.cartonedQty || 0,
-        unit: b.production?.recipe?.yieldUnit || "KG",
-        status: b.production?.status || "COMPLETED",
-        qcStatus: b.qcStatus || "PENDING",
-        recallStatus: b.recall?.status || null,
-        recallStep: b.recall?.step || null,
-      }));
-      setBatches(data);
+      const recall = (await recallApi.initiate(batch.id, { reason, severity, description: description.trim() })).data;
+      // Stock is already quarantined by the initiation itself; the remaining
+      // pipeline stages run automatically.
+      try {
+        await recallApi.locateDistribution(batch.id);
+        await recallApi.blockSales(batch.id);
+        await recallApi.generateReport(batch.id);
+      } catch (err: any) {
+        toast.error(err?.response?.data?.error || "Recall created; use Trace distribution to finish the pipeline");
+      }
+      toast.success(`${recall.recallNumber} initiated — affected stock quarantined`);
+      onDone();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Recall could not be initiated");
+    } finally {
+      setSubmitting(false);
+      setConfirming(false);
+    }
+  };
+
+  const err = (k: keyof typeof errors) => touched && errors[k] ? <p className="text-[11px] text-rose-600 mt-1">{errors[k]}</p> : null;
+
+  return (
+    <div className="rounded-xl border border-orange-200 dark:border-orange-500/30 bg-orange-50/50 dark:bg-orange-500/5 p-4 space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Recall Reason (required)</label>
+          <select value={reason} onChange={(e) => setReason(e.target.value)} className={clsx(inputCls, "cursor-pointer")}>
+            <option value="">Select a reason…</option>
+            {REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          {err("reason")}
+        </div>
+        <div>
+          <label className={labelCls}>Severity (required)</label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {SEVERITIES.map((s) => (
+              <button key={s.value} type="button" title={s.hint} onClick={() => setSeverity(s.value)}
+                className={clsx("py-2 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer",
+                  severity === s.value ? s.cls : "bg-white dark:bg-transparent text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-gray-400")}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {err("severity")}
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>Recall Description / Remarks (required)</label>
+        <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
+          placeholder="What was found, how it was detected, affected scope…" className={clsx(inputCls, "resize-none")} />
+        {err("description")}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={() => { setTouched(true); if (valid) setConfirming(true); }}
+          className="px-4 py-2 rounded-lg bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-bold shadow-sm">Confirm Initiate Recall</button>
+        <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-transparent text-sm font-semibold text-gray-700 dark:text-slate-300">Cancel</button>
+      </div>
+
+      <Modal isOpen={confirming} onClose={() => !submitting && setConfirming(false)} title="Confirm batch recall" size="md"
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <button onClick={() => setConfirming(false)} disabled={submitting} className="px-4 py-2 rounded-lg border border-gray-200 dark:border-white/10 text-sm font-semibold">Go back</button>
+            <button onClick={submit} disabled={submitting} className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold min-w-[150px] flex items-center justify-center gap-1.5">
+              {submitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />} Initiate Recall
+            </button>
+          </div>
+        }>
+        <div className="space-y-3 text-sm">
+          <div className="flex gap-3 p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <p>All stock of <strong>{batch.batchCode}</strong> is quarantined immediately and blocked from POS, sales, dispatch, delivery challans, stock transfers and packaging. Other batches are not affected.</p>
+          </div>
+          {onHand.length > 0 ? (
+            <ul className="text-xs space-y-1">
+              {onHand.map((s: any) => <li key={s.inventoryItemId} className="flex justify-between"><span>{s.name}</span><strong>{fmt(s.onHandQty)} {s.unit}</strong></li>)}
+            </ul>
+          ) : <p className="text-xs text-gray-500">No stock of this batch is on hand — nothing to quarantine, but its bulk will be kept out of packaging.</p>}
+          <p className="text-xs text-gray-500 flex items-center gap-2"><SeverityBadge value={severity} /> {reason}</p>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ── Recall management actions (shown when the batch has a recall) ─────────
+type ActionKind = "recover" | "dispose" | "reconcile" | "close" | "cancel";
+
+function RecallActions({ batchId, details, reload }: { batchId: string; details: any; reload: () => Promise<void> }) {
+  const [action, setAction] = useState<ActionKind | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [skuId, setSkuId] = useState("");
+  const [lotId, setLotId] = useState("");
+  const [qty, setQty] = useState("");
+  const [note, setNote] = useState("");
+  const [unavailable, setUnavailable] = useState<Record<string, string>>({});
+  const recall = details.recall;
+  const skus: any[] = details.skus || [];
+  const traced = recall.step !== "INITIATED";
+  const recoverable = skus.filter((s) => s.outstandingQty > 0);
+  const quarantinedLots = (details.lots || []).filter((l: any) => (l.status === "BLOCKED" || l.status === "RETURNED") && l.currentQty > 0);
+  const recon = recall.reconciliation;
+  const canClose = recall.lifecycle === "RECONCILED" && (recon?.outstandingTotal || 0) === 0;
+  const reconOutstanding = skus.reduce((t, s) => t + Math.max(0, s.outstandingQty - Number(unavailable[s.inventoryItemId] || 0)), 0);
+
+  const open = (k: ActionKind) => {
+    setAction(k); setQty(""); setNote("");
+    if (k === "recover") setSkuId(recoverable[0]?.inventoryItemId || "");
+    if (k === "dispose") setLotId(quarantinedLots[0]?.id || "");
+    if (k === "reconcile") {
+      const prev: any[] = recon?.lines || [];
+      setUnavailable(Object.fromEntries(skus.map((s) => [s.inventoryItemId, String(prev.find((l) => l.inventoryItemId === s.inventoryItemId)?.unavailableQty ?? 0)])));
+    }
+  };
+  const run = async (fn: () => Promise<any>, ok: string) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); setAction(null); await reload(); }
+    catch (err: any) { toast.error(err?.response?.data?.error || "Action failed"); }
+    finally { setBusy(false); }
+  };
+  const submit = () => {
+    if (action === "recover") {
+      const lots: any[] = details.lots || [];
+      const lot = lots.find((l) => l.inventoryItemId === skuId && !l.returnLot) || lots.find((l) => l.inventoryItemId === skuId);
+      if (!lot) return toast.error("Select a SKU");
+      return run(() => recallApi.recover(batchId, { inventoryBatchId: lot.id, returnedQty: Number(qty), note: note.trim() || undefined }), "Recovered stock recorded in quarantine");
+    }
+    if (action === "dispose") return run(() => recallApi.dispose(batchId, { inventoryBatchId: lotId, quantity: Number(qty), note: note.trim() }), "Disposal recorded");
+    if (action === "reconcile") {
+      return run(() => recallApi.reconcile(batchId, {
+        lines: skus.map((s) => ({ inventoryItemId: s.inventoryItemId, unavailableQty: Number(unavailable[s.inventoryItemId] || 0) })),
+        notes: note.trim(),
+      }), "Reconciliation recorded");
+    }
+    if (action === "close") return run(() => recallApi.complete(batchId, note.trim()), "Recall closed");
+    if (action === "cancel") return run(() => recallApi.cancel(batchId, note.trim()), "Recall cancelled — blocked stock released");
+  };
+  const retryTrace = () => run(async () => {
+    await recallApi.locateDistribution(batchId);
+    await recallApi.blockSales(batchId);
+    await recallApi.generateReport(batchId);
+  }, "Distribution traced");
+
+  const btn = "px-3 py-1.5 rounded-lg border border-gray-200 dark:border-white/10 text-xs font-bold flex items-center gap-1 disabled:opacity-40 hover:border-[#f58220]";
+  return (
+    <>
+      <div className="flex flex-wrap gap-2">
+        {!traced && <button onClick={retryTrace} disabled={busy} className="px-3 py-1.5 rounded-lg bg-[#f58220] text-white text-xs font-bold flex items-center gap-1"><RefreshCw className="h-3.5 w-3.5" /> Trace distribution</button>}
+        {traced && <button onClick={() => open("recover")} disabled={!recoverable.length} className={btn}><Undo2 className="h-3.5 w-3.5" /> Record Recovery</button>}
+        <button onClick={() => open("dispose")} disabled={!quarantinedLots.length} className={btn}><Trash2 className="h-3.5 w-3.5" /> Dispose</button>
+        {traced && <button onClick={() => open("reconcile")} className={clsx(btn, "text-blue-700 dark:text-blue-300")}><ClipboardCheck className="h-3.5 w-3.5" /> Reconcile</button>}
+        <button onClick={() => open("close")} disabled={!canClose} title={!canClose ? "Reconcile with nothing outstanding first" : undefined}
+          className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 disabled:opacity-40"><Lock className="h-3.5 w-3.5" /> Close Recall</button>
+        <button onClick={() => open("cancel")} className="px-3 py-1.5 rounded-lg text-gray-500 hover:text-rose-600 text-xs font-bold flex items-center gap-1"><Ban className="h-3.5 w-3.5" /> Cancel Recall</button>
+      </div>
+      {recon && (
+        <p className={clsx("mt-2 text-xs flex items-center gap-1.5", recon.current ? "text-blue-700 dark:text-blue-300" : "text-amber-700 dark:text-amber-400")}>
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          {recon.current
+            ? `Reconciled ${fmtDate(recon.at, true)} — ${recon.outstandingTotal > 0 ? `${fmt(recon.outstandingTotal)} still outstanding` : "nothing outstanding, ready to close"}.`
+            : "Stock has changed since the last reconciliation — reconcile again before closing."}
+        </p>
+      )}
+
+      <Modal isOpen={!!action} onClose={() => !busy && setAction(null)} size={action === "reconcile" ? "lg" : "md"}
+        title={action === "recover" ? "Record recovered stock" : action === "dispose" ? "Dispose quarantined stock" : action === "reconcile" ? "Reconcile recall" : action === "close" ? "Close recall" : "Cancel recall & release stock"}
+        footer={
+          <div className="flex justify-end gap-2 w-full">
+            <button onClick={() => setAction(null)} disabled={busy} className="px-4 py-2 rounded-lg border border-gray-200 dark:border-white/10 text-sm font-semibold">Back</button>
+            <button onClick={submit} disabled={busy}
+              className={clsx("px-4 py-2 rounded-lg text-white text-sm font-bold min-w-[120px] flex items-center justify-center gap-1.5",
+                action === "cancel" || action === "dispose" ? "bg-rose-600 hover:bg-rose-700" : action === "close" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-[#f58220] hover:bg-[#e8740e]")}>
+              {busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Confirm
+            </button>
+          </div>
+        }>
+        <div className="space-y-3 text-sm">
+          {action === "recover" && (
+            <>
+              <p className="text-xs text-gray-500">Recovered units come back into quarantine — they are never made saleable automatically.</p>
+              <div><label className={labelCls}>SKU</label>
+                <select value={skuId} onChange={(e) => setSkuId(e.target.value)} className={inputCls}>
+                  {recoverable.map((s) => <option key={s.inventoryItemId} value={s.inventoryItemId}>{s.name} — {fmt(s.outstandingQty)} {s.unit} outstanding</option>)}
+                </select></div>
+              <div><label className={labelCls}>Quantity recovered</label><input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Recovered from (customer / franchise / distributor)</label><input value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} /></div>
+            </>
+          )}
+          {action === "dispose" && (
+            <>
+              <p className="text-xs text-gray-500">Deducts the stock and records it as recall wastage. Only quarantined stock can be disposed.</p>
+              <div><label className={labelCls}>Quarantined lot</label>
+                <select value={lotId} onChange={(e) => setLotId(e.target.value)} className={inputCls}>
+                  {quarantinedLots.map((l: any) => <option key={l.id} value={l.id}>{l.name} · {l.warehouse || l.scope} — {fmt(l.currentQty)} {l.unit}{l.returnLot ? " (recovered)" : ""}</option>)}
+                </select></div>
+              <div><label className={labelCls}>Quantity disposed</label><input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Disposal method / witness *</label><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Destroyed under supervision of QA head" className={inputCls} /></div>
+            </>
+          )}
+          {action === "reconcile" && (
+            <>
+              <p className="text-xs text-gray-500">For each SKU, enter how much distributed stock can no longer be recovered (sold and consumed). Outstanding must be 0 to close.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[560px]">
+                  <thead><tr className="text-[10px] uppercase text-gray-400 border-b border-gray-100 dark:border-white/5">
+                    <th className="text-left py-2">SKU</th><th className="text-right">Dispatched</th><th className="text-right">Recovered</th><th className="text-right">Disposed</th><th className="text-right">Quarantined</th><th className="text-right w-28">Unavailable</th><th className="text-right">Outstanding</th>
+                  </tr></thead>
+                  <tbody>
+                    {skus.map((s) => {
+                      const out = Math.max(0, s.outstandingQty - Number(unavailable[s.inventoryItemId] || 0));
+                      return (
+                        <tr key={s.inventoryItemId} className="border-b border-gray-50 dark:border-white/5">
+                          <td className="py-2 font-semibold">{s.name}<span className="block text-[10px] text-gray-400">{s.unit}</span></td>
+                          <td className="text-right tabular-nums">{fmt(s.distributedQty)}</td>
+                          <td className="text-right tabular-nums">{fmt(s.recoveredQty)}</td>
+                          <td className="text-right tabular-nums">{fmt(s.disposedQty)}</td>
+                          <td className="text-right tabular-nums">{fmt(s.quarantinedQty)}</td>
+                          <td className="text-right">
+                            <input type="number" min="0" max={s.outstandingQty} step="any" disabled={s.outstandingQty <= 0}
+                              value={unavailable[s.inventoryItemId] ?? "0"} onChange={(e) => setUnavailable((p) => ({ ...p, [s.inventoryItemId]: e.target.value }))}
+                              className="w-24 border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-right bg-white dark:bg-[#13151f] disabled:opacity-40" />
+                          </td>
+                          <td className={clsx("text-right font-bold tabular-nums", out > 0 ? "text-amber-600" : "text-emerald-600")}>{fmt(out)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className={clsx("text-xs font-semibold", reconOutstanding > 0 ? "text-amber-700" : "text-emerald-700")}>
+                {reconOutstanding > 0 ? `${fmt(reconOutstanding)} will remain outstanding — the recall cannot be closed yet.` : "Nothing outstanding — the recall can be closed after this."}
+              </p>
+              <div><label className={labelCls}>Reconciliation notes *</label><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="How unavailable quantities were confirmed, decision on remaining quarantined stock…" className={clsx(inputCls, "resize-none")} /></div>
+            </>
+          )}
+          {action === "close" && (
+            <>
+              <p className="text-xs text-gray-500">Closing documents the recall as complete. Any stock still quarantined stays blocked and can never be sold or packed.</p>
+              <div><label className={labelCls}>Closure note *</label><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Outcome, regulator / customer notifications sent…" className={clsx(inputCls, "resize-none")} /></div>
+            </>
+          )}
+          {action === "cancel" && (
+            <>
+              <div className="flex gap-2 p-3 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-xs text-rose-800 dark:text-rose-300">
+                <AlertTriangle className="h-4 w-4 shrink-0" /> Releases blocked stock of this batch back to sale. Recovered (returned) stock stays quarantined. Use only when the recall is withdrawn on documented evidence.
+              </div>
+              <div><label className={labelCls}>Documented reason *</label><textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Lab retest negative — report ref…" className={clsx(inputCls, "resize-none")} /></div>
+            </>
+          )}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+// ── Right panel: Batch Details ─────────────────────────────────────────────
+function BatchDetails({ batch, details, eligibility, loading, reload }: { batch: any; details: any; eligibility: any; loading: boolean; reload: () => Promise<void> }) {
+  const { user } = useAuth();
+  const isSuper = user?.role === "SUPER_ADMIN";
+  const [showForm, setShowForm] = useState(false);
+  useEffect(() => { setShowForm(false); }, [batch.id]);
+
+  if (loading && !details) {
+    return <div className="py-24 flex justify-center"><RefreshCw className="h-7 w-7 animate-spin text-orange-400" /></div>;
+  }
+  if (!details) return <p className="p-6 text-sm text-gray-500">Could not load this batch.</p>;
+
+  const b = details.batch;
+  const skus: any[] = details.skus || [];
+  const recall = details.recall;
+  const hasRecall = !!recall && recall.status !== "CANCELLED";
+  const active = recall?.status === "IN_PROGRESS";
+  const eligible = !!eligibility?.eligible;
+  const qcHistorical = b.qcStatus === "APPROVED" || b.qcStatus === "PARTIALLY_APPROVED";
+
+  const stats: { label: string; value: string; cls?: string }[] = [
+    { label: "Produced Qty", value: `${fmt(b.producedQty)} ${b.unit}` },
+    { label: qcHistorical ? "Approved Qty" : "Released Qty", value: b.qcStatus === "PENDING" ? "—" : `${fmt(b.releasedQty)} ${b.unit}` },
+    { label: "QC Status", value: QC_LABEL[b.qcStatus] || b.qcStatus || "—" },
+    { label: "Production Date", value: fmtDate(b.mfgDate) },
+    { label: "Rejected Qty", value: `${fmt(b.rejectedQty)} ${b.unit}` },
+    { label: "Packed Qty", value: `${fmt(b.packagedQty)} ${b.unit}` },
+    { label: "Wasted Qty", value: byUnit(skus, "wastedQty") },
+    { label: "Dispatched Qty", value: byUnit(skus, "distributedQty") },
+    { label: hasRecall ? "Available (Warehouse, quarantined)" : "Available (Warehouse)", value: byUnit(skus, "onHandQty"), cls: hasRecall ? "text-rose-600" : undefined },
+  ];
+  if (b.expiryDate) stats.splice(4, 0, { label: "Expiry Date", value: fmtDate(b.expiryDate) });
+
+  const dests = skus.flatMap((s) => (s.destinations || []).map((d: any) => ({ ...d, unit: s.unit })));
+  const outlet = dests.filter((d) => d.type === "FRANCHISE_DISPATCH" || d.type === "TRANSFER");
+  const sales = dests.filter((d) => d.type === "POS_SALE" || d.type === "DELIVERY_CHALLAN" || d.type === "SALE");
+  const sumDest = (list: any[]) => {
+    const t: Record<string, number> = {};
+    for (const d of list) t[d.unit] = (t[d.unit] || 0) + d.qty;
+    return Object.entries(t).map(([u, v]) => `${fmt(v)} ${u}`).join(" · ");
+  };
+  const tracks = [
+    { icon: Truck, title: "Batch Movement", sub: "GRN → Production → Warehouse → DC", value: `${details.lots.filter((l: any) => l.currentQty > 0).length} stock location(s) · ${details.packagings.length} packaging run(s)` },
+    { icon: Store, title: "Outlet Distribution", sub: "Franchise outlets that actually received this batch", value: outlet.length ? `${outlet.length} outlet(s) · ${sumDest(outlet)}` : "Not dispatched to outlets" },
+    { icon: Receipt, title: "Sales Linkage", sub: "POS invoices and challans referencing this batch", value: sales.length ? `${sales.length} reference(s) · ${sumDest(sales)}` : "No sales recorded" },
+    { icon: Undo2, title: "Return Quantity", sub: "Collected stock from affected outlets", value: byUnit(skus, "recoveredQty") === "0" ? "Nothing recovered" : `${byUnit(skus, "recoveredQty")} recovered` },
+  ];
+
+  const openFile = async (id: string) => {
+    try { window.open(URL.createObjectURL((await attachmentsApi.getFile(id)).data as Blob), "_blank"); }
+    catch { toast.error("Could not open file"); }
+  };
+  const addEvidence = async (files: FileList | null) => {
+    if (!files?.length || !recall) return;
+    try { await uploadEvidence(recall.id, Array.from(files)); toast.success("Evidence added"); await reload(); }
+    catch (err: any) { toast.error(err?.response?.data?.error || "Upload failed"); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-3 border-b border-gray-100 dark:border-white/5">
+        <div className="min-w-0">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white font-mono">{b.batchCode}</h2>
+          <p className="text-xs text-gray-500">{b.productName}</p>
+          {hasRecall && (
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="font-mono text-xs font-bold text-rose-600">{recall.recallNumber}</span>
+              <LifecycleBadge value={recall.lifecycle} />
+              <SeverityBadge value={recall.severity} />
+              <span className="text-[11px] text-gray-500">{recall.reason}</span>
+            </div>
+          )}
+        </div>
+        {!hasRecall && isSuper && !showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            disabled={!eligible}
+            title={!eligible ? (eligibility?.reasons || []).join(" ") : undefined}
+            className="px-4 py-2 rounded-lg bg-[#f58220] hover:bg-[#e8740e] text-white text-sm font-bold flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+            <ShieldAlert className="h-4 w-4" /> Initiate Recall
+          </button>
+        )}
+      </div>
+      {!hasRecall && eligibility && !eligible && (
+        <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5"><AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {(eligibility.reasons || []).join(" ")}</p>
+      )}
+      {recall?.status === "CANCELLED" && (
+        <p className="text-xs text-gray-500">A previous recall ({recall.recallNumber}) was cancelled and its stock released.</p>
+      )}
+
+      {/* Quantities */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-xl border border-gray-200 dark:border-white/10 bg-gray-50/50 dark:bg-white/[0.02] px-3.5 py-2.5">
+            <p className="text-[11px] text-gray-500 dark:text-slate-400">{s.label}</p>
+            <p className={clsx("text-sm font-bold mt-0.5 tabular-nums", s.cls || "text-gray-900 dark:text-white")}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {showForm && !hasRecall && (
+        <InitiateForm batch={b} details={details} onCancel={() => setShowForm(false)} onDone={async () => { setShowForm(false); await reload(); }} />
+      )}
+
+      {hasRecall && (
+        <>
+          {recall.description && <p className="text-xs text-gray-600 dark:text-slate-300 bg-gray-50 dark:bg-white/[0.03] rounded-lg px-3 py-2">{recall.description}<span className="block text-[10px] text-gray-400 mt-0.5">Initiated {fmtDate(recall.initiatedAt, true)}{recall.initiatedBy ? ` by ${recall.initiatedBy}` : ""}</span></p>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {[
+              { label: "Quarantined", key: "quarantinedQty", cls: "text-rose-600" },
+              { label: "Recovered", key: "recoveredQty", cls: "text-blue-600" },
+              { label: "Disposed", key: "disposedQty" },
+              { label: "Outstanding", key: "outstandingQty", cls: "text-amber-600" },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl border border-rose-100 dark:border-rose-500/20 bg-rose-50/30 dark:bg-rose-500/5 px-3.5 py-2.5">
+                <p className="text-[11px] text-gray-500">{s.label}</p>
+                <p className={clsx("text-sm font-bold tabular-nums mt-0.5", s.cls || "text-gray-900 dark:text-white")}>{byUnit(skus, s.key)}</p>
+              </div>
+            ))}
+          </div>
+          {active && isSuper && <RecallActions batchId={b.id} details={details} reload={reload} />}
+          {details.crossBatchCount > 0 && (
+            <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5"><AlertTriangle className="h-3.5 w-3.5" /> {details.crossBatchCount} other batch(es) drew on this batch&apos;s bulk while packing — their stock is included and quarantined too.</p>
+          )}
+        </>
+      )}
+
+      <Section title={`Affected SKUs (${skus.length})`} icon={Box}><SkuTable skus={skus} showRecall={hasRecall} /></Section>
+      <Section title="Location-wise Tracking" icon={MapPin}><LocationTable lots={details.lots} /></Section>
+
+      <div>
+        <h4 className="text-[11px] font-bold text-gray-700 dark:text-slate-200 uppercase tracking-wide mb-2">ERP Tracks</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          {tracks.map((t) => (
+            <div key={t.title} className="rounded-xl border border-gray-200 dark:border-white/10 p-3 flex gap-3">
+              <div className="p-2 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-[#f58220] h-fit"><t.icon className="h-4 w-4" /></div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-800 dark:text-white">{t.title}</p>
+                <p className="text-[11px] text-gray-500">{t.sub}</p>
+                <p className="text-xs font-semibold text-gray-700 dark:text-slate-200 mt-1">{t.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {hasRecall && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          <Section title="Stock Activity" icon={History}>
+            {details.activity.length === 0 ? <p className="p-4 text-xs text-gray-500">No sales, dispatches, recoveries or disposals recorded.</p> : (
+              <ul className="divide-y divide-gray-100 dark:divide-white/5 max-h-72 overflow-y-auto custom-scrollbar">
+                {[...details.activity].reverse().map((a: any) => (
+                  <li key={a.id} className="px-4 py-2 text-xs flex items-start justify-between gap-2">
+                    <span className="min-w-0">
+                      <span className={clsx("font-bold", a.kind === "RECOVERED" ? "text-blue-600" : a.kind === "DISPOSED" ? "text-rose-600" : "text-gray-700 dark:text-slate-200")}>{a.kind.charAt(0) + a.kind.slice(1).toLowerCase()}</span>
+                      {" · "}{a.name}<span className="block text-[11px] text-gray-500 truncate">{a.reference}{a.by ? ` · ${a.by}` : ""}</span>
+                    </span>
+                    <span className="text-right shrink-0"><span className="font-bold tabular-nums">{fmt(a.qty)} {a.unit}</span><span className="block text-[10px] text-gray-400">{fmtDate(a.at, true)}</span></span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
+          <Section title="Recall Activity History" icon={ShieldAlert}>
+            <ul className="divide-y divide-gray-100 dark:divide-white/5 max-h-72 overflow-y-auto custom-scrollbar">
+              {[...details.events].reverse().map((e: any) => (
+                <li key={e.id} className="px-4 py-2 text-xs">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-bold text-gray-800 dark:text-slate-200">{EVENT_LABEL[e.event] || e.event}</span>
+                    <span className="text-[10px] text-gray-400 shrink-0">{fmtDate(e.createdAt, true)}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {e.actorName || "System"}
+                    {e.details?.message ? ` — ${e.details.message}` : ""}
+                    {e.details?.note ? ` — “${e.details.note}”` : ""}
+                    {e.details?.notes ? ` — “${e.details.notes}”` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Section>
+          <div className="xl:col-span-2">
+            <Section title="Supporting Evidence" icon={Paperclip} right={isSuper ? (
+              <label className="text-[11px] font-bold text-[#f58220] cursor-pointer flex items-center gap-1"><Plus className="h-3 w-3" /> Add
+                <input type="file" multiple className="hidden" accept={EVIDENCE_ACCEPT} onChange={(e) => addEvidence(e.target.files)} />
+              </label>
+            ) : null}>
+              {details.attachments.length === 0 ? <p className="p-4 text-xs text-gray-500">No evidence attached.</p> : (
+                <ul className="divide-y divide-gray-100 dark:divide-white/5">
+                  {details.attachments.map((f: any) => (
+                    <li key={f.id} className="px-4 py-2 text-xs flex items-center justify-between gap-2">
+                      <button onClick={() => openFile(f.id)} className="text-[#f58220] font-semibold hover:underline truncate">{f.fileName}</button>
+                      <span className="text-gray-400 shrink-0">{Math.round(f.size / 1024)} KB · {fmtDate(f.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────
+const FILTERS = [
+  { key: "ALL", label: "All" },
+  { key: "ACTIVE", label: "Recall Active" },
+  { key: "RECALLED", label: "Recalled" },
+  { key: "NONE", label: "No Recall" },
+] as const;
+
+function BatchRecallContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const selectedId = searchParams.get("batch") || "";
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("ALL");
+  const [details, setDetails] = useState<any>(null);
+  const [eligibility, setEligibility] = useState<any>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Production batches only — raw-material GRN lots are not recalled here.
+  const loadBatches = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await productionApi.getAllBatches();
+      setBatches((res.data || []).filter((b: any) => b.production && (b.quantity || 0) > 0));
     } catch {
-      setBatches([]);
+      toast.error("Failed to load production batches");
     } finally {
       setLoading(false);
     }
   }, []);
-
   useEffect(() => { loadBatches(); }, [loadBatches]);
 
-  const filtered = useMemo(() => batches.filter(
-    (b) =>
-      b.batchCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.productName.toLowerCase().includes(searchQuery.toLowerCase())
-  ), [batches, searchQuery]);
-
-  // If the selected batch falls out of the filtered result set (e.g. the
-  // search narrows past it), the inspector must not keep showing it or
-  // leave its actions live — reset to the idle state instead.
-  useEffect(() => {
-    if (selectedBatchId && !filtered.some((b) => b.id === selectedBatchId)) {
-      setSelectedBatchId(null);
-      setEligibility(null);
-      setRecall(null);
-      setShowReasonForm(false);
-    }
-  }, [filtered, selectedBatchId]);
-
-  const loadDetail = useCallback(async (batchId: string) => {
-    setDetailLoading(true);
+  const loadDetails = useCallback(async () => {
+    if (!selectedId) { setDetails(null); setEligibility(null); return; }
+    setDetailsLoading(true);
     try {
-      const [eligRes, stateRes] = await Promise.all([
-        recallApi.getEligibility(batchId),
-        recallApi.getState(batchId),
+      const [d, e] = await Promise.all([
+        recallApi.getDetails(selectedId),
+        recallApi.getEligibility(selectedId).catch(() => ({ data: null })),
       ]);
-      setEligibility(eligRes.data);
-      setRecall(stateRes.data);
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Failed to load recall details for this batch", "error");
+      setDetails(d.data);
+      setEligibility(e.data);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || "Failed to load batch");
+      setDetails(null);
     } finally {
-      setDetailLoading(false);
+      setDetailsLoading(false);
     }
-  }, [showToast]);
+  }, [selectedId]);
+  useEffect(() => { setDetails(null); loadDetails(); }, [loadDetails]);
 
-  const selectBatch = (batchId: string) => {
-    setSelectedBatchId(batchId);
-    setShowReasonForm(false);
-    setReason("");
-    setReasonNotes("");
-    setReturnQtyInput("");
-    setFailedStep(null);
-    // Clear stale data from whatever batch was previously selected so the
-    // inspector never shows one batch's numbers/actions under another
-    // batch's header while the new detail fetch is in flight.
-    setEligibility(null);
-    setRecall(null);
-    loadDetail(batchId);
+  const reload = useCallback(async () => { await Promise.all([loadDetails(), loadBatches()]); }, [loadDetails, loadBatches]);
+
+  const select = (id: string) => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set("batch", id);
+    router.push(`/production/batch-recall?${p}`, { scroll: false });
   };
 
-  const refreshAfterAction = async () => {
-    if (selectedBatchId) await loadDetail(selectedBatchId);
-    await loadBatches();
-  };
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return batches.filter((b) => {
+      const st = b.recall?.status;
+      const matchFilter = filter === "ALL"
+        || (filter === "ACTIVE" && st === "IN_PROGRESS")
+        || (filter === "RECALLED" && st === "COMPLETED")
+        || (filter === "NONE" && (!st || st === "CANCELLED"));
+      const name = (b.product?.name || b.production?.recipe?.name || "").toLowerCase();
+      return matchFilter && (!q || b.batchCode?.toLowerCase().includes(q) || name.includes(q));
+    });
+  }, [batches, search, filter]);
 
-  const runInitiate = async () => {
-    if (!selectedBatchId) return;
-    if (!reason) { showToast("Select a recall reason", "error"); return; }
-    if (reason === "Other" && !reasonNotes.trim()) { showToast("Notes are required when reason is Other", "error"); return; }
-
-    setRunningAction("INITIATED");
-    setFailedStep(null);
-    try {
-      await recallApi.initiate(selectedBatchId, { reason, reasonNotes: reasonNotes.trim() || undefined });
-      setShowReasonForm(false);
-      await refreshAfterAction();
-      // Locate → Block → Report are pure read/derive steps with no extra
-      // user input, so they auto-chain — each one is still a real, awaited
-      // backend call whose result drives the UI, not a timer.
-      await runStep("DISTRIBUTION_LOCATED", () => recallApi.locateDistribution(selectedBatchId));
-      await runStep("SALES_BLOCKED", () => recallApi.blockSales(selectedBatchId));
-      await runStep("REPORT_GENERATED", () => recallApi.generateReport(selectedBatchId));
-    } catch (e: any) {
-      setFailedStep("INITIATED");
-      showToast(e?.response?.data?.error || "Failed to initiate recall", "error");
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const runStep = async (step: string, call: () => Promise<any>) => {
-    setRunningAction(step);
-    setFailedStep(null);
-    try {
-      await call();
-      await refreshAfterAction();
-    } catch (e: any) {
-      setFailedStep(step);
-      showToast(e?.response?.data?.error || `Failed at step: ${step.replace(/_/g, " ")}`, "error");
-      throw e;
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const submitReturn = async () => {
-    if (!selectedBatchId) return;
-    const qty = Number(returnQtyInput);
-    if (!Number.isFinite(qty) || qty < 0) { showToast("Enter a valid return quantity", "error"); return; }
-    setRunningAction("RETURN_COLLECTED");
-    setFailedStep(null);
-    try {
-      await recallApi.collectReturn(selectedBatchId, qty);
-      setReturnQtyInput("");
-      await refreshAfterAction();
-      showToast("Return recorded", "success");
-    } catch (e: any) {
-      setFailedStep("RETURN_COLLECTED");
-      showToast(e?.response?.data?.error || "Failed to record return", "error");
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const completeRecall = async () => {
-    if (!selectedBatchId) return;
-    setRunningAction("COMPLETE");
-    try {
-      await recallApi.complete(selectedBatchId);
-      await refreshAfterAction();
-      showToast("Recall completed", "success");
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Failed to complete recall", "error");
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const cancelRecall = async () => {
-    if (!selectedBatchId) return;
-    setRunningAction("CANCEL");
-    try {
-      await recallApi.cancel(selectedBatchId);
-      await refreshAfterAction();
-      showToast("Recall cancelled", "success");
-    } catch (e: any) {
-      showToast(e?.response?.data?.error || "Failed to cancel recall", "error");
-    } finally {
-      setRunningAction(null);
-    }
-  };
-
-  const selectedBatch = selectedBatchId ? batches.find((b) => b.id === selectedBatchId) : null;
-  const stepIdx = recall ? STEP_ORDER.indexOf(recall.step as any) : -1;
-  const isActive = recall?.status === "IN_PROGRESS";
-  const pendingReturnQty = recall ? Math.max(0, recall.distributedQty - recall.returnedQty) : 0;
-  const canComplete = isActive && recall!.step !== "INITIATED" && recall!.step !== "DISTRIBUTION_LOCATED" && recall!.step !== "SALES_BLOCKED"
-    ? pendingReturnQty <= 0.001
-    : false;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <RefreshCw className="h-8 w-8 animate-spin text-orange-400 opacity-50" />
-          <p className="text-xs text-gray-400 dark:text-slate-500">Loading batch registry...</p>
-        </div>
-      </div>
-    );
-  }
+  const selectedBatch = batches.find((b) => b.id === selectedId) || (details ? { id: selectedId } : null);
+  const activeCount = batches.filter((b) => b.recall?.status === "IN_PROGRESS").length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
-      {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-col md:flex-row md:items-center justify-end gap-3 w-full min-w-0">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search batch code or product..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-white/5 text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-          />
-            {searchQuery && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearchQuery("")} 
-              />
-            )}
+    <div className="min-h-screen bg-gray-50 dark:bg-background">
+      {/* Top bar */}
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <ShieldAlert className="h-5 w-5 text-rose-600" />
+          <div>
+            <h1 className="text-sm font-bold text-gray-900 dark:text-white">Batch Recall</h1>
+            <p className="text-[11px] text-gray-500">{activeCount} active recall{activeCount === 1 ? "" : "s"}</p>
+          </div>
+        </div>
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search batch code or product…" className={clsx(inputCls, "pl-9 pr-8")} />
+          {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 cursor-pointer" onClick={() => setSearch("")} />}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4 sm:space-y-5 w-full min-w-0">
-        {/* Recall Workflow Steps */}
-        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full min-w-0">
-          <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-3">Recall Workflow Pipeline</h3>
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 overflow-x-auto custom-scrollbar max-w-full">
-            {STEPS.map((step, idx) => {
-              const Icon = step.icon;
-              const isFailed = recall && failedStep === step.key;
-              const isDone = !!recall && idx < stepIdx;
-              const isCurrent = !!recall && idx === stepIdx && isActive;
-              const isRunning = runningAction === step.key;
-              return (
-                <div key={step.key} className="flex flex-col lg:flex-row items-center gap-2 w-full lg:w-auto shrink-0">
-                  <div
-                    className={clsx(
-                      "flex items-center gap-2 px-3 py-2 rounded-lg border w-full lg:w-auto transition-all text-xs font-medium",
-                      isFailed && "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400",
-                      !isFailed && isDone && "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-600 dark:text-emerald-400",
-                      !isFailed && isCurrent && "bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20 text-[#f58220]",
-                      !isFailed && !isDone && !isCurrent && "bg-gray-50 dark:bg-white/[0.02] border-gray-200 dark:border-white/5 text-gray-400 dark:text-slate-500"
-                    )}
-                  >
-                    {isFailed ? <XCircle className="h-3.5 w-3.5" /> : isDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : isRunning ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
-                    <span>{step.label}</span>
-                  </div>
-                  {idx < STEPS.length - 1 && (
-                    <ArrowRight className="text-gray-300 dark:text-slate-600 rotate-90 lg:rotate-0 shrink-0 h-3.5 w-3.5" />
-                  )}
+      <div className="max-w-[1400px] mx-auto px-3 sm:px-4 md:px-6 py-5 space-y-5">
+        <Pipeline details={details} />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Batch Registry */}
+          <div className="lg:col-span-4 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-100 dark:border-white/5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-700 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5"><Package className="h-4 w-4 text-[#f58220]" /> Batch Registry</h3>
+                  <p className="text-[11px] text-gray-400">{filtered.length} batch{filtered.length === 1 ? "" : "es"} found</p>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 sm:gap-5 w-full min-w-0">
-          {/* Batch Selection List */}
-          <div className="xl:col-span-5 bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 dark:border-white/5 bg-gray-50 dark:bg-white/[0.02]">
-              <h3 className="text-xs font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
-                <Package className="h-3.5 w-3.5 text-[#f58220]" /> Batch Registry
-              </h3>
-              <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">{filtered.length} batches found</p>
-            </div>
-            <div className="max-h-[500px] overflow-y-auto divide-y divide-gray-100 dark:divide-white/5">
-              {filtered.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <AlertTriangle className="h-8 w-8 text-gray-300 dark:text-slate-600 mb-3" />
-                  <p className="text-sm text-gray-400 dark:text-slate-500">No batches found</p>
-                </div>
-              ) : (
-                filtered.map((batch) => {
-                  const recallStyle = batch.recallStatus ? RECALL_STYLES[batch.recallStatus] : null;
-                  const qcStyle = QC_STYLES[batch.qcStatus] || DEFAULT_QC_STYLE;
-                  const badge = recallStyle || qcStyle;
-                  const badgeLabel = recallStyle ? recallStyle.label : batch.qcStatus;
-                  return (
-                    <button
-                      key={batch.id}
-                      onClick={() => selectBatch(batch.id)}
-                      className={clsx(
-                        "w-full p-3 text-left transition-colors flex items-center justify-between gap-3",
-                        selectedBatchId === batch.id ? "bg-orange-50 dark:bg-orange-500/10" : "hover:bg-gray-50 dark:hover:bg-white/[0.02]"
-                      )}
-                    >
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="text-xs font-mono font-semibold text-gray-800 dark:text-white truncate">{batch.batchCode}</p>
-                        <p className="text-sm font-medium text-gray-700 dark:text-slate-300 truncate">{batch.productName}</p>
-                        <p className="text-xs text-gray-400 dark:text-slate-500">
-                          Approved: {batch.approvedQty} {batch.unit} • {formatDate(batch.productionDate)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className={clsx("px-2 py-0.5 rounded text-[11px] font-semibold border", badge.color, badge.bg, badge.border)}>
-                          {badgeLabel}
-                        </span>
-                        <ChevronRight className="h-3.5 w-3.5 text-gray-300 dark:text-slate-600" />
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Recall Details & Actions */}
-          <div className="xl:col-span-7 space-y-5">
-            {selectedBatch ? (
-              <>
-                {/* Batch Detail Card */}
-                <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-100 dark:border-white/5 pb-3">
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-800 dark:text-white">{selectedBatch.batchCode}</h3>
-                      <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{selectedBatch.productName}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {recall?.status === "COMPLETED" ? (
-                        <span className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold">
-                          <ShieldAlert className="h-3.5 w-3.5" /> Recalled
-                        </span>
-                      ) : isActive ? (
-                        <>
-                          <button
-                            onClick={cancelRecall}
-                            disabled={!!runningAction}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:border-rose-300 dark:hover:border-rose-500/30 hover:text-rose-600 dark:hover:text-rose-400 text-gray-500 dark:text-slate-300 rounded-lg text-xs font-semibold transition-colors disabled:opacity-60"
-                          >
-                            <Undo2 className="h-3.5 w-3.5" /> Cancel
-                          </button>
-                          {canComplete && (
-                            <button
-                              onClick={completeRecall}
-                              disabled={!!runningAction}
-                              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-60"
-                            >
-                              <CheckCircle2 className="h-3.5 w-3.5" /> Complete Recall
-                            </button>
-                          )}
-                          <button
-                            disabled
-                            className="flex items-center gap-1.5 px-4 py-2 bg-[#f58220] text-white rounded-lg text-xs font-semibold shadow-sm opacity-60 cursor-not-allowed"
-                          >
-                            <ShieldAlert className="h-3.5 w-3.5" /> Recall In Progress...
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => setShowReasonForm(true)}
-                          disabled={!eligibility?.eligible || detailLoading}
-                          title={!eligibility?.eligible ? eligibility?.reasons.join(" ") : undefined}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          <ShieldAlert className="h-3.5 w-3.5" />
-                          Initiate Recall
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Ineligibility reasons */}
-                  {!recall && eligibility && !eligibility.eligible && (
-                    <div className="flex items-start gap-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-3">
-                      <Ban className="h-4 w-4 text-rose-500 dark:text-rose-400 shrink-0 mt-0.5" />
-                      <div className="text-xs text-rose-700 dark:text-rose-300 space-y-1">
-                        {eligibility.reasons.map((r, i) => <p key={i}>{r}</p>)}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { label: "Produced Qty", value: `${eligibility?.batch.producedQty ?? selectedBatch.producedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      { label: "Approved Qty", value: `${eligibility?.batch.approvedQty ?? selectedBatch.approvedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      { label: "QC Status", value: selectedBatch.qcStatus },
-                      { label: "Production Date", value: formatDate(selectedBatch.productionDate) },
-                      { label: "Rejected Qty", value: `${eligibility?.batch.rejectedQty ?? selectedBatch.rejectedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      { label: "Packed Qty", value: `${eligibility?.batch.packagedQty ?? selectedBatch.packagedQty} ${eligibility?.batch.unit ?? selectedBatch.unit}` },
-                      { label: "Wasted Qty", value: eligibility ? `${eligibility.batch.wastedQty} ${eligibility.batch.unit}` : "—" },
-                      { label: "Dispatched Qty", value: eligibility ? `${eligibility.batch.distributedQty} ${eligibility.batch.unit}` : "—" },
-                      { label: "Available (Warehouse)", value: eligibility ? `${eligibility.batch.availableQty} ${eligibility.batch.unit}` : "—" },
-                    ].map((item, i) => (
-                      <div key={i} className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
-                        <p className="text-xs text-gray-500 dark:text-slate-400">{item.label}</p>
-                        <p className="text-sm font-semibold text-gray-800 dark:text-white mt-0.5">{item.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Reason form */}
-                  {showReasonForm && !recall && (
-                    <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-lg p-4 space-y-3">
-                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Recall Reason (required)</p>
-                      <select
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white"
-                      >
-                        <option value="" className="dark:bg-card">Select a reason...</option>
-                        {RECALL_REASONS.map((r) => <option key={r} value={r} className="dark:bg-card">{r}</option>)}
-                      </select>
-                      {(reason === "Other" || reason === "") && (
-                        <textarea
-                          value={reasonNotes}
-                          onChange={(e) => setReasonNotes(e.target.value)}
-                          placeholder={reason === "Other" ? "Notes are required for 'Other'..." : "Additional notes (optional)"}
-                          className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white min-h-[70px] placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                        />
-                      )}
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={runInitiate}
-                          disabled={runningAction === "INITIATED"}
-                          className="px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold disabled:opacity-60"
-                        >
-                          {runningAction === "INITIATED" ? "Initiating..." : "Confirm Initiate Recall"}
-                        </button>
-                        <button
-                          onClick={() => setShowReasonForm(false)}
-                          className="px-4 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 rounded-lg text-xs font-semibold"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Real distribution data */}
-                  {recall && (
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Traceability</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
-                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0"><MapPin className="h-3.5 w-3.5" /></div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Affected Locations</p>
-                            {stepIdx < 1 ? (
-                              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">Not yet located</p>
-                            ) : recall.affectedLocations && recall.affectedLocations.length > 0 ? (
-                              <div className="mt-1 space-y-0.5">
-                                {recall.affectedLocations.map((loc, i) => (
-                                  <p key={i} className="text-xs text-gray-600 dark:text-slate-400 truncate">{loc.label} — {loc.qty} {eligibility?.batch.unit}</p>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">No distribution records found for this batch.</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
-                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0"><RefreshCw className="h-3.5 w-3.5" /></div>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Returned Quantity</p>
-                            <p className="text-xs text-gray-600 dark:text-slate-400 mt-0.5">
-                              {recall.returnedQty} / {recall.distributedQty} {eligibility?.batch.unit} returned
-                              {pendingReturnQty > 0 && <span className="text-amber-600 dark:text-amber-400"> ({pendingReturnQty} pending)</span>}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Recall Summary */}
-                  {recall && eligibility && (
-                    <div className="space-y-2">
-                      <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Recall Summary</h4>
-                      <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg divide-y divide-gray-200 dark:divide-white/5">
-                        <div className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-gray-500 dark:text-slate-400">Approved Batch</span>
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.approvedQty} {eligibility.batch.unit}</span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500 dark:text-slate-400">At Warehouse</span>
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.availableQty} {eligibility.batch.unit}</span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500 dark:text-slate-400">Distributed</span>
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white">{eligibility.batch.distributedQty} {eligibility.batch.unit}</span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5 pl-6">
-                          <span className="text-xs text-gray-500 dark:text-slate-400">Returned</span>
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white">
-                            {recall.returnedQty} / {recall.distributedQty} {eligibility.batch.unit}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-gray-500 dark:text-slate-400">Rejected in QC</span>
-                          <span className="text-sm font-semibold text-gray-800 dark:text-white">
-                            {eligibility.batch.rejectedQty} {eligibility.batch.unit}
-                            <span className="ml-2 text-[10px] font-medium text-gray-400 dark:text-slate-500 uppercase">Not part of recall</span>
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[11px] text-gray-400 dark:text-slate-500">
-                        "At Warehouse" and "Distributed" split the Approved Batch quantity — they add up to it, they don't add on top of it.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Collect Returned Stock */}
-                  {isActive && (recall!.step === "REPORT_GENERATED" || recall!.step === "RETURN_COLLECTED") && pendingReturnQty > 0.001 && (
-                    <div className="bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-4 space-y-2">
-                      <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Record Returned Stock (max {pendingReturnQty} {eligibility?.batch.unit})</p>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min={0}
-                          max={pendingReturnQty}
-                          value={returnQtyInput}
-                          onChange={(e) => setReturnQtyInput(e.target.value)}
-                          placeholder="Returned quantity"
-                          className="flex-1 px-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-                        />
-                        <button
-                          onClick={submitReturn}
-                          disabled={runningAction === "RETURN_COLLECTED"}
-                          className="px-4 py-2 bg-[#f58220] hover:bg-[#e8740e] text-white rounded-lg text-xs font-semibold disabled:opacity-60"
-                        >
-                          {runningAction === "RETURN_COLLECTED" ? "Recording..." : "Record Return"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Retry a failed step */}
-                  {failedStep && isActive && (
-                    <div className="flex items-center justify-between bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 rounded-lg p-3">
-                      <p className="text-xs text-rose-600 dark:text-rose-400">Step "{failedStep.replace(/_/g, " ")}" failed. Fix the issue and retry.</p>
-                      <button
-                        onClick={() => {
-                          if (failedStep === "DISTRIBUTION_LOCATED") runStep("DISTRIBUTION_LOCATED", () => recallApi.locateDistribution(selectedBatchId!)).catch(() => {});
-                          else if (failedStep === "SALES_BLOCKED") runStep("SALES_BLOCKED", () => recallApi.blockSales(selectedBatchId!)).catch(() => {});
-                          else if (failedStep === "REPORT_GENERATED") runStep("REPORT_GENERATED", () => recallApi.generateReport(selectedBatchId!)).catch(() => {});
-                        }}
-                        className="px-3 py-1.5 bg-white dark:bg-white/5 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 rounded-lg text-xs font-semibold"
-                      >
-                        Retry
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Tracking Map */}
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">ERP Tracks</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {[
-                        { label: "Batch Movement", desc: "GRN → Production → Warehouse → DC", icon: Truck },
-                        { label: "Outlet Distribution", desc: "Franchise outlets that actually received this batch", icon: Store },
-                        { label: "Sales Linkage", desc: "POS invoices referencing this batch", icon: FileText },
-                        { label: "Return Quantity", desc: "Collected stock from affected outlets", icon: RefreshCw },
-                      ].map((t, i) => (
-                        <div key={i} className="flex items-start gap-3 bg-gray-50 dark:bg-white/[0.02] border border-gray-200 dark:border-white/5 rounded-lg p-3">
-                          <div className="p-1.5 bg-white dark:bg-card rounded-lg text-[#f58220] border border-gray-200 dark:border-white/10 shrink-0">
-                            <t.icon className="h-3.5 w-3.5" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">{t.label}</p>
-                            <p className="text-xs text-gray-400 dark:text-slate-500 mt-0.5">{t.desc}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="bg-white dark:bg-card rounded-lg border border-gray-200 dark:border-white/5 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">
-                <div className="w-16 h-16 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center mb-4">
-                  <ShieldAlert className="h-8 w-8 text-[#f58220]" />
-                </div>
-                <h4 className="text-gray-800 dark:text-white font-semibold text-sm">Select a batch from the registry</h4>
-                <p className="text-gray-500 dark:text-slate-400 text-sm mt-1 max-w-xs">
-                  Select a batch to inspect its traceability chain and initiate a recall workflow if needed.
-                </p>
+                <button onClick={loadBatches} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/5" title="Refresh"><RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} /></button>
               </div>
+              <div className="flex flex-wrap gap-1.5">
+                {FILTERS.map((f) => (
+                  <button key={f.key} onClick={() => setFilter(f.key)}
+                    className={clsx("px-2.5 py-1 rounded-md text-[11px] font-bold border cursor-pointer",
+                      filter === f.key ? "bg-[#f58220] text-white border-[#f58220]" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300 hover:border-[#f58220]")}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {loading && batches.length === 0 ? (
+              <div className="py-16 flex justify-center"><RefreshCw className="h-6 w-6 animate-spin text-orange-400" /></div>
+            ) : filtered.length === 0 ? (
+              <p className="p-8 text-center text-xs text-gray-400">No production batches match.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-white/5 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                {filtered.map((b) => {
+                  const badge = batchRecallBadge(b);
+                  const unit = b.production?.recipe?.yieldUnit || "KG";
+                  return (
+                    <li key={b.id}>
+                      <button onClick={() => select(b.id)}
+                        className={clsx("w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors cursor-pointer border-l-4",
+                          b.id === selectedId ? "bg-orange-50 dark:bg-orange-500/10 border-[#f58220]" : "border-transparent hover:bg-gray-50 dark:hover:bg-white/[0.02]")}>
+                        <span className="min-w-0">
+                          <span className="block text-[11px] font-mono font-bold text-gray-700 dark:text-slate-300">{b.batchCode}</span>
+                          <span className="block text-sm font-semibold text-gray-900 dark:text-white truncate">{b.product?.name || b.production?.recipe?.name}</span>
+                          <span className="block text-[11px] text-gray-400">{fmt(b.quantity)} {unit} · {fmtDate(b.production?.startTime || b.createdAt)}</span>
+                        </span>
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          <span className={clsx("px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap", badge.cls)}>{badge.label}</span>
+                          <ChevronRight className="h-4 w-4 text-gray-300" />
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Batch Details */}
+          <div className="lg:col-span-8 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm p-4 sm:p-5">
+            {!selectedId || !selectedBatch ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <ShieldAlert className="h-10 w-10 text-gray-300 mb-2" />
+                <p className="text-sm font-semibold text-gray-500">Select a batch from the registry</p>
+                <p className="text-xs text-gray-400 mt-1">Its quantities, SKUs, stock locations and recall status appear here.</p>
+              </div>
+            ) : (
+              <BatchDetails batch={selectedBatch} details={details} eligibility={eligibility} loading={detailsLoading} reload={reload} />
             )}
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BatchRecallPage() {
+  return (
+    <Suspense fallback={<div className="py-24 flex justify-center"><RefreshCw className="h-7 w-7 animate-spin text-orange-400" /></div>}>
+      <BatchRecallContent />
+    </Suspense>
   );
 }

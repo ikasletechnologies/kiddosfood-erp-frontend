@@ -93,7 +93,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
   const [errors, setErrors] = useState<string[]>([]);
 
   // Source picker (create only)
-  const [sourceTab, setSourceTab] = useState<string>(editing ? editing.sourceType : "SALE_INVOICE");
+  const [sourceTab, setSourceTab] = useState<string>(editing ? editing.sourceType : "DELIVERY_CHALLAN");
   const [sources, setSources] = useState<any[]>([]);
   const [sourceSearch, setSourceSearch] = useState("");
   const [loadingSources, setLoadingSources] = useState(false);
@@ -268,7 +268,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Create from</span>
                 <div className={S.segWrap}>
-                  {["SALE_INVOICE", "DELIVERY_CHALLAN", "STOCK_TRANSFER", "MANUAL"].map((t) => (
+                  {["DELIVERY_CHALLAN", "MANUAL"].map((t) => (
                     <button
                       key={t}
                       onClick={() => (t === "MANUAL" ? startManual() : (setSourceTab(t), setSourceSearch("")))}

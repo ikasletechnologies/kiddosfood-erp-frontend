@@ -1,18 +1,53 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight, Printer, AlertCircle, AlertTriangle, CheckCircle2,
   RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart,
-  ClipboardList, Package, ExternalLink
+  ClipboardList, ExternalLink, Search, ChevronDown, Check, Info, Zap
 } from "lucide-react";
 import { recipesApi, inventoryApi, franchiseApi, productionApi, franchiseOrdersApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { RECIPE_UNITS } from "@/lib/recipe-units";
-import { convertUnit } from "@/lib/unitConversion";
+import { convertUnit, convertMeasurement } from "@/lib/unitConversion";
 import clsx from "clsx";
+
+const WAREHOUSE_STORAGE_KEY = "kf.productionPlanning.warehouseId";
+const EPSILON = 0.000001;
+
+// Human-friendly quantity: "10" instead of "10.000", "2.5" instead of "2.500".
+function fmtQty(n: number): string {
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+
+// Units that can be meaningfully converted into the recipe's yield unit.
+// convertUnit() silently returns the input for cross-dimension pairs
+// (e.g. BOX -> KG), so offering those units would scale the batch wrongly.
+function isUnitCompatible(unit: string, recipeUnit: string): boolean {
+  if (unit === recipeUnit) return true;
+  try {
+    convertMeasurement(1, unit as any, recipeUnit as any);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cleanInstructionText(text?: string): string {
+  return (text || "")
+    .replace(/\[unitWeight:[\d.]+\]/g, "")
+    .replace(/\[weightUnit:\w+\]/g, "")
+    .trim();
+}
+
+function defaultExpiryDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split("T")[0];
+}
 
 interface RecipeItem {
   id: string;
@@ -149,6 +184,14 @@ function ProductionPlanningContent() {
   const [newWhLocation, setNewWhLocation] = useState("");
   const [savingWh, setSavingWh] = useState(false);
 
+  // Recipe picker + launch confirmation
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [recipeQuery, setRecipeQuery] = useState("");
+  const [highlightIdx, setHighlightIdx] = useState(0);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [expiryDate, setExpiryDate] = useState<string>(defaultExpiryDate());
+
   const recipe = recipes.find((r) => r.id === selectedRecipeId);
 
   // Helper to select a specific franchise order item and match its recipe
@@ -194,7 +237,12 @@ function ProductionPlanningContent() {
         const whList = wRes.data || [];
         setWarehouses(whList);
         if (whList.length > 0) {
-          setSelectedWarehouseId(whList[0].id);
+          let remembered: string | null = null;
+          try {
+            remembered = localStorage.getItem(WAREHOUSE_STORAGE_KEY);
+          } catch {}
+          const rememberedWh = remembered && whList.find((w: any) => w.id === remembered);
+          setSelectedWarehouseId(rememberedWh ? rememberedWh.id : whList[0].id);
         }
 
         const franchiseList = fRes.data || [];
@@ -327,8 +375,20 @@ function ProductionPlanningContent() {
     applyOrderItemSelection(linkedOrder.items[idx], recipes);
   };
 
+  const handleWarehouseChange = (id: string) => {
+    setSelectedWarehouseId(id);
+    try {
+      localStorage.setItem(WAREHOUSE_STORAGE_KEY, id);
+    } catch {}
+  };
+
   const recipeUnit = recipe?.yieldUnit || "KG";
-  const effectiveTargetUnit = targetUnit || recipeUnit;
+  const compatibleUnits = useMemo(() => {
+    const list: string[] = RECIPE_UNITS.filter((u) => isUnitCompatible(u, recipeUnit));
+    if (!list.includes(recipeUnit)) list.unshift(recipeUnit);
+    return list;
+  }, [recipeUnit]);
+  const effectiveTargetUnit = targetUnit && compatibleUnits.includes(targetUnit) ? targetUnit : recipeUnit;
   const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
 
@@ -343,41 +403,126 @@ function ProductionPlanningContent() {
     return convertUnit(found.availableStock ?? 0, found.unit, itemRecipeUnit);
   };
 
-  const EPSILON = 0.000001;
-  const hasShortage = recipe
-    ? recipe.recipeItems.some((item) => {
-        const scaledQty = item.quantityRequired * multiplier;
-        const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
-        return available + EPSILON < scaledQty;
-      })
-    : false;
+  const ingredientRows = (recipe?.recipeItems || []).map((item) => {
+    const scaledQty = item.quantityRequired * multiplier;
+    const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
+    const sufficient = available + EPSILON >= scaledQty;
+    const deficit = Math.max(scaledQty - available, 0);
+    const coverage = scaledQty > 0 ? Math.min(available / scaledQty, 1) : 1;
+    return { item, scaledQty, available, sufficient, deficit, coverage };
+  });
+  const shortRows = ingredientRows.filter((r) => !r.sufficient);
+  const hasShortage = shortRows.length > 0;
+
+  // Largest batch the selected warehouse can support right now, in the target unit.
+  const maxMultiplier = ingredientRows.reduce((min, r) => {
+    if (r.item.quantityRequired <= 0) return min;
+    return Math.min(min, r.available / r.item.quantityRequired);
+  }, Infinity);
+  const maxPossibleYield =
+    recipe && Number.isFinite(maxMultiplier)
+      ? Math.floor(convertUnit(maxMultiplier * recipe.yieldQty, recipeUnit, effectiveTargetUnit) * 1000) / 1000
+      : 0;
+
+  const selectedWarehouse = warehouses.find((w) => w.id === selectedWarehouseId);
+  const yieldInvalid = !!recipe && targetYield <= 0;
+  const canStart = !!recipe && !hasShortage && !yieldInvalid && !!selectedWarehouseId && !stockLoading && ingredientRows.length > 0;
+
+  // Disambiguate recipes that share a name (e.g. two "egg curry" entries).
+  const nameCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    recipes.forEach((r) => {
+      const k = (r.name || "").trim().toLowerCase();
+      counts[k] = (counts[k] || 0) + 1;
+    });
+    return counts;
+  }, [recipes]);
+
+  const recipeSubLabel = (r: Recipe) => {
+    const parts: string[] = [];
+    if (r.product?.name && r.product.name.trim().toLowerCase() !== r.name.trim().toLowerCase()) {
+      parts.push(r.product.name);
+    }
+    parts.push(`Makes ${fmtQty(r.yieldQty)} ${r.yieldUnit}`);
+    parts.push(`${r.recipeItems?.length || 0} ingredient${(r.recipeItems?.length || 0) === 1 ? "" : "s"}`);
+    if (nameCounts[(r.name || "").trim().toLowerCase()] > 1) {
+      parts.push((r as any).recipeCode || `#${r.id.slice(-6).toUpperCase()}`);
+    }
+    return parts.join(" · ");
+  };
+
+  const filteredRecipes = useMemo(() => {
+    const q = recipeQuery.trim().toLowerCase();
+    if (!q) return recipes;
+    return recipes.filter(
+      (r) =>
+        r.name?.toLowerCase().includes(q) ||
+        r.product?.name?.toLowerCase().includes(q) ||
+        ((r as any).recipeCode || "").toLowerCase().includes(q)
+    );
+  }, [recipes, recipeQuery]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [pickerOpen]);
+
+  const pickRecipe = (id: string) => {
+    handleRecipeChange(id);
+    setPickerOpen(false);
+    setRecipeQuery("");
+  };
+
+  const handlePickerKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.min(i + 1, filteredRecipes.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const r = filteredRecipes[highlightIdx];
+      if (r) pickRecipe(r.id);
+    } else if (e.key === "Escape") {
+      setPickerOpen(false);
+    }
+  };
+
+  const setYieldByMultiple = (k: number) => {
+    if (!recipe) return;
+    setTargetUnit(recipeUnit);
+    setTargetYield(Math.round(recipe.yieldQty * k * 1000) / 1000);
+  };
+
+  const handleBuyShortages = () => {
+    if (!recipe) return;
+    const shortageItems = shortRows.map((r) => ({
+      materialId: r.item.inventoryItemId,
+      name: r.item.inventoryItem?.name || "",
+      required: r.scaledQty,
+      stock: r.available,
+      shortage: r.deficit,
+      unit: r.item.unit || "KG",
+    }));
+
+    sessionStorage.setItem("prefilledPoItems", JSON.stringify(shortageItems));
+    // A full navigation, not router.push — the New PO page only reads this
+    // sessionStorage flag in its mount effect, and Next's client-side router
+    // cache can reuse an already-mounted instance of that page from an
+    // earlier visit (well within its default staleTime), silently skipping
+    // that read and leaving the page on whatever stale state it already had.
+    window.location.href = "/purchases/new";
+  };
 
   const handleStartProductionDirect = async () => {
     if (!recipe) return;
     if (hasShortage) {
-      const shortageItems = recipe.recipeItems
-        .map((item) => {
-          const required = item.quantityRequired * multiplier;
-          const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
-          const shortage = required - stock;
-          return {
-            materialId: item.inventoryItemId,
-            name: item.inventoryItem?.name || "",
-            required,
-            stock,
-            shortage,
-            unit: item.unit || "KG",
-          };
-        })
-        .filter((item) => item.shortage > 0);
-
-      sessionStorage.setItem("prefilledPoItems", JSON.stringify(shortageItems));
-      // A full navigation, not router.push — the New PO page only reads this
-      // sessionStorage flag in its mount effect, and Next's client-side router
-      // cache can reuse an already-mounted instance of that page from an
-      // earlier visit (well within its default staleTime), silently skipping
-      // that read and leaving the page on whatever stale state it already had.
-      window.location.href = "/purchases/new";
+      toast.error("Some ingredients are short. Buy raw materials or reduce the batch size first.");
       return;
     }
     if (!selectedWarehouseId) {
@@ -389,17 +534,19 @@ function ProductionPlanningContent() {
       return;
     }
 
+    if (!expiryDate) {
+      toast.error("Choose an expiry date for this batch.");
+      return;
+    }
+
     setLaunching(true);
     try {
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 7);
-
-      await productionApi.startBatch({
+      const startRes = await productionApi.startBatch({
         recipeId: recipe.id,
         franchiseId,
         warehouseId: selectedWarehouseId,
         quantity: multiplier,
-        expiryDate: expiryDate.toISOString().split("T")[0],
+        expiryDate,
         productionType: "FINISHED_GOOD",
       });
 
@@ -412,9 +559,9 @@ function ProductionPlanningContent() {
         } catch (statusErr) {
           console.error("Non-blocking order status update error:", statusErr);
         }
-        toast.success(`Production started for ${recipe.name} (Order: ${linkedOrder.orderNumber})`);
+        toast.success(`Production ${startRes.data?.productionBatchCode || ""} started for ${recipe.name} (Order: ${linkedOrder.orderNumber})`);
       } else {
-        toast.success(`Production started for ${recipe.name}`);
+        toast.success(`Production ${startRes.data?.productionBatchCode || ""} started for ${recipe.name}`);
       }
 
       router.push("/production/batches?tab=ACTIVE_RUNS");
@@ -640,8 +787,22 @@ function ProductionPlanningContent() {
     );
   }
 
+  const instructionsText = cleanInstructionText(recipe?.instructions);
+  const quickMultiples = [0.5, 1, 2, 5];
+
+  const StepBadge = ({ n, done }: { n: number; done: boolean }) => (
+    <span
+      className={clsx(
+        "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0",
+        done ? "bg-emerald-500 text-white" : "bg-orange-100 dark:bg-orange-500/15 text-[#f58220]"
+      )}
+    >
+      {done ? <Check size={11} strokeWidth={3} /> : n}
+    </span>
+  );
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 w-full min-w-0 animate-in fade-in duration-300">
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0 animate-in fade-in duration-300">
 
       {/* ── Franchise Order Context Banner (When opened from FO) ── */}
       {linkedOrder && (
@@ -669,7 +830,6 @@ function ProductionPlanningContent() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Multi-product tabs if order contains >1 item */}
             {linkedOrder.items.length > 1 && (
               <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-slate-900 rounded-xl border border-indigo-200 dark:border-indigo-800 overflow-x-auto max-w-full">
                 {linkedOrder.items.map((it, idx) => (
@@ -700,94 +860,127 @@ function ProductionPlanningContent() {
         </div>
       )}
 
-      {/* ── Top Header Toolbar ── */}
-      <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-2xs w-full min-w-0">
+      {/* ── Header ── */}
+      <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
         <div className="flex items-center gap-3 min-w-0">
           <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
             <ChefHat size={24} />
           </div>
           <div className="min-w-0">
             <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              Production Planning &amp; Scaling
+              Production Planning
             </h1>
-            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate mt-0.5">
-              Scale formulation recipes, verify raw material availability, and launch batch runs
+            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium mt-0.5">
+              Pick what to make, how much, and where to take stock from — we&apos;ll check ingredients for you.
             </p>
           </div>
         </div>
 
-        {/* Header Actions */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between lg:justify-end min-w-0">
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 rounded-xl text-xs font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer"
-            title="Print Formulation Recipe"
-          >
-            <Printer size={15} />
-            <span className="hidden sm:inline">Print Recipe</span>
-          </button>
-
-          <button
-            onClick={handleStartProductionDirect}
-            disabled={launching || multiplier <= 0 || !recipe}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 ${
-              !recipe || multiplier <= 0
-                ? "bg-gray-300 dark:bg-white/10 text-gray-600 dark:text-slate-400"
-                : hasShortage
-                ? "bg-rose-600 hover:bg-rose-700 text-white"
-                : "bg-[#f58220] hover:bg-[#e0751a] text-white"
-            }`}
-          >
-            {launching ? (
-              <>
-                <RefreshCw size={14} className="animate-spin" />
-                <span>Launching...</span>
-              </>
-            ) : !recipe ? (
-              <span>Select Recipe First</span>
-            ) : multiplier <= 0 ? (
-              <span>Enter Batch Yield</span>
-            ) : hasShortage ? (
-              <>
-                <AlertTriangle size={14} />
-                <span>Insufficient Stock — Buy Raw Materials</span>
-                <ShoppingCart size={14} />
-              </>
-            ) : (
-              <>
-                <span>Start Production Run</span>
-                <ArrowRight size={14} />
-              </>
-            )}
-          </button>
-        </div>
+        <button
+          onClick={handlePrint}
+          disabled={!recipe}
+          className="flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 rounded-xl text-xs font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors shadow-2xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          title="Print a work order for the kitchen"
+        >
+          <Printer size={15} />
+          <span>Print Work Order</span>
+        </button>
       </div>
 
-      {/* ── Configuration Parameters Grid ── */}
+      {/* ── Step-by-step setup ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0">
-        {/* 1. Recipe Selector */}
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
-          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-            Formulation Recipe <span className="text-[#f58220]">*</span>
+
+        {/* Step 1 — Recipe picker */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-2 min-w-0">
+          <label className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-slate-300">
+            <StepBadge n={1} done={!!recipe} />
+            What do you want to make?
           </label>
-          <select
-            value={selectedRecipeId}
-            onChange={(e) => handleRecipeChange(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#f58220] outline-none cursor-pointer"
-          >
-            <option value="" disabled className="dark:bg-card">Choose Recipe...</option>
-            {recipes.map((r) => (
-              <option key={r.id} value={r.id} className="dark:bg-card">
-                {r.name} (Yield: {r.yieldQty} {r.yieldUnit})
-              </option>
-            ))}
-          </select>
+
+          <div className="relative" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setPickerOpen((o) => !o);
+                setHighlightIdx(0);
+              }}
+              className={clsx(
+                "w-full flex items-center justify-between gap-2 bg-gray-50 dark:bg-[#13151f] border rounded-xl px-3 py-2 text-left cursor-pointer transition-colors",
+                pickerOpen ? "border-[#f58220]" : "border-gray-200 dark:border-white/10 hover:border-orange-300"
+              )}
+            >
+              {recipe ? (
+                <span className="min-w-0">
+                  <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{recipe.name}</span>
+                  <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{recipeSubLabel(recipe)}</span>
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-gray-400">Search or choose a recipe…</span>
+              )}
+              <ChevronDown size={14} className={clsx("text-gray-400 shrink-0 transition-transform", pickerOpen && "rotate-180")} />
+            </button>
+
+            {pickerOpen && (
+              <div className="absolute z-30 mt-1.5 w-full bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden animate-in fade-in duration-150">
+                <div className="p-2 border-b border-gray-100 dark:border-white/5">
+                  <div className="flex items-center gap-2 bg-gray-50 dark:bg-[#13151f] rounded-lg px-2.5 py-1.5">
+                    <Search size={13} className="text-gray-400 shrink-0" />
+                    <input
+                      autoFocus
+                      value={recipeQuery}
+                      onChange={(e) => {
+                        setRecipeQuery(e.target.value);
+                        setHighlightIdx(0);
+                      }}
+                      onKeyDown={handlePickerKeyDown}
+                      placeholder="Type recipe or product name…"
+                      className="w-full bg-transparent text-xs font-semibold outline-none text-gray-800 dark:text-white placeholder:text-gray-400"
+                    />
+                  </div>
+                </div>
+                <ul className="max-h-64 overflow-y-auto custom-scrollbar py-1">
+                  {filteredRecipes.length === 0 ? (
+                    <li className="px-3 py-4 text-center text-xs text-gray-400 font-semibold">
+                      No recipes match &ldquo;{recipeQuery}&rdquo;
+                    </li>
+                  ) : (
+                    filteredRecipes.map((r, idx) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setHighlightIdx(idx)}
+                          onClick={() => pickRecipe(r.id)}
+                          className={clsx(
+                            "w-full flex items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer",
+                            idx === highlightIdx ? "bg-orange-50 dark:bg-orange-500/10" : ""
+                          )}
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{r.name}</span>
+                            <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{recipeSubLabel(r)}</span>
+                          </span>
+                          {r.id === selectedRecipeId && <Check size={14} className="text-[#f58220] shrink-0" />}
+                        </button>
+                      </li>
+                    ))
+                  )}
+                </ul>
+                <Link
+                  href="/production/recipes"
+                  className="flex items-center gap-1.5 px-3 py-2 border-t border-gray-100 dark:border-white/5 text-[11px] font-bold text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                >
+                  <Plus size={12} /> Create a new recipe
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 2. Target Batch Yield */}
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
-          <label className="block text-xs font-bold text-gray-700 dark:text-slate-300">
-            Target Batch Yield <span className="text-[#f58220]">*</span>
+        {/* Step 2 — Quantity */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-2 min-w-0">
+          <label className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-slate-300">
+            <StepBadge n={2} done={!!recipe && targetYield > 0} />
+            How much to produce?
           </label>
           <div className="flex gap-2">
             <input
@@ -796,50 +989,95 @@ function ProductionPlanningContent() {
               step="any"
               value={targetYield || ""}
               onChange={(e) => setTargetYield(parseFloat(e.target.value) || 0)}
-              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-mono font-bold focus:border-[#f58220] outline-none"
+              disabled={!recipe}
+              className={clsx(
+                "w-full bg-gray-50 dark:bg-[#13151f] border text-gray-800 dark:text-white rounded-xl px-3 py-2 text-sm font-bold focus:border-[#f58220] outline-none disabled:opacity-50",
+                yieldInvalid ? "border-rose-400" : "border-gray-200 dark:border-white/10"
+              )}
               placeholder="e.g. 100"
             />
             <select
-              value={targetUnit}
+              value={effectiveTargetUnit}
               onChange={(e) => setTargetUnit(e.target.value)}
-              className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-2.5 py-2 text-xs font-bold focus:border-[#f58220] outline-none cursor-pointer shrink-0"
+              disabled={!recipe}
+              title="Only units that convert to the recipe's unit are shown"
+              className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-2.5 py-2 text-xs font-bold focus:border-[#f58220] outline-none cursor-pointer shrink-0 disabled:opacity-50"
             >
-              {RECIPE_UNITS.map((u) => (
+              {compatibleUnits.map((u) => (
                 <option key={u} value={u} className="dark:bg-card">{u}</option>
               ))}
             </select>
           </div>
+          {yieldInvalid ? (
+            <p className="text-[11px] font-semibold text-rose-500">Enter a quantity greater than 0.</p>
+          ) : recipe ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mr-0.5">Quick:</span>
+              {quickMultiples.map((k) => {
+                const active = Math.abs(multiplier - k) < 0.0001;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setYieldByMultiple(k)}
+                    title={`${fmtQty(recipe.yieldQty * k)} ${recipeUnit}`}
+                    className={clsx(
+                      "px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors cursor-pointer",
+                      active
+                        ? "bg-[#f58220] text-white border-[#f58220]"
+                        : "bg-white dark:bg-transparent text-gray-600 dark:text-slate-300 border-gray-200 dark:border-white/10 hover:border-[#f58220] hover:text-[#f58220]"
+                    )}
+                  >
+                    {fmtQty(recipe.yieldQty * k)} {recipeUnit}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
-        {/* 3. Warehouse Location */}
-        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-1.5 min-w-0">
+        {/* Step 3 — Warehouse */}
+        <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-2 min-w-0">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Warehouse size={13} className="text-[#f58220]" />
-              Stock Location / Warehouse
+            <label className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-slate-300">
+              <StepBadge n={3} done={!!selectedWarehouseId} />
+              Take ingredients from
             </label>
             <button
               onClick={() => setShowAddWarehouse(true)}
               className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-50 dark:bg-orange-500/10 text-[#f58220] hover:bg-orange-100 transition-colors text-[10px] font-bold uppercase cursor-pointer"
             >
-              <Plus size={10} /> Add
+              <Plus size={10} /> New
             </button>
           </div>
-          <select
-            value={selectedWarehouseId}
-            onChange={(e) => setSelectedWarehouseId(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#f58220] outline-none cursor-pointer"
-          >
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id} className="dark:bg-card">
-                {w.name}{w.location ? ` (${w.location})` : ""}
-              </option>
-            ))}
-          </select>
+          {warehouses.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAddWarehouse(true)}
+              className="w-full border border-dashed border-orange-300 text-[#f58220] rounded-xl px-3 py-2 text-xs font-bold cursor-pointer hover:bg-orange-50"
+            >
+              No warehouse yet — add one
+            </button>
+          ) : (
+            <select
+              value={selectedWarehouseId}
+              onChange={(e) => handleWarehouseChange(e.target.value)}
+              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-xl px-3 py-2 text-xs font-semibold focus:border-[#f58220] outline-none cursor-pointer"
+            >
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id} className="dark:bg-card">
+                  {w.name}{w.location ? ` (${w.location})` : ""}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-[10px] font-semibold text-gray-400 dark:text-slate-500 flex items-center gap-1">
+            <Warehouse size={11} /> Stock is checked against this location
+          </p>
         </div>
       </div>
 
-      {/* ── No Recipe Warning Alert Card (When product has no recipe configured) ── */}
+      {/* ── No Recipe Warning (product has no recipe configured) ── */}
       {missingRecipeForProduct && !recipe && (
         <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center space-y-3 animate-in fade-in duration-300">
           <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
@@ -853,7 +1091,7 @@ function ProductionPlanningContent() {
               {linkedOrder ? (
                 <>The Franchise Order requested <strong>{missingRecipeForProduct.quantity} units</strong> of &ldquo;{missingRecipeForProduct.name}&rdquo;, but no formulation recipe exists for this product in the system yet.</>
               ) : (
-                <>No formulation recipe exists for <strong>{missingRecipeForProduct.name}</strong> in the system yet. Please configure a formulation recipe in Recipe Master or select an existing recipe from the dropdown above.</>
+                <>No formulation recipe exists for <strong>{missingRecipeForProduct.name}</strong> in the system yet. Please configure a formulation recipe in Recipe Master or pick an existing recipe above.</>
               )}
             </p>
           </div>
@@ -868,184 +1106,312 @@ function ProductionPlanningContent() {
         </div>
       )}
 
-      {/* ── Main Formulation & Ingredients Layout ── */}
       {recipe ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 w-full min-w-0">
-
-          {/* Left Column: Yield Scaling Details & Instructions */}
-          <div className="lg:col-span-1 space-y-4 sm:space-y-6 min-w-0">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 min-w-0">
-              <div className="flex items-center gap-2.5">
-                <ChefHat className="text-[#f58220]" size={18} />
-                <h3 className="text-sm font-bold text-gray-800 dark:text-white truncate">{recipe.name}</h3>
-              </div>
-              <div className="space-y-2 text-xs font-semibold text-gray-600 dark:text-slate-300 divide-y divide-gray-100 dark:divide-white/5">
-                <div className="flex justify-between pt-1">
-                  <span className="text-gray-400 dark:text-slate-500">Base Yield:</span>
-                  <span className="text-gray-800 dark:text-white font-mono">{recipe.yieldQty} {recipe.yieldUnit || ""}</span>
-                </div>
-                <div className="flex justify-between pt-2">
-                  <span className="text-gray-400 dark:text-slate-500">Scaled Output:</span>
-                  <span className="text-[#f58220] font-mono font-bold">{targetYield} {targetUnit || recipe.yieldUnit || ""}</span>
-                </div>
-                <div className="flex justify-between pt-2">
-                  <span className="text-gray-400 dark:text-slate-500">Batch Multiplier:</span>
-                  <span className="font-mono font-bold text-gray-900 dark:text-white">{multiplier.toFixed(2)}×</span>
-                </div>
-              </div>
+        <>
+          {/* ── Stock readiness summary ── */}
+          {stockLoading ? (
+            <div className="rounded-2xl border border-gray-200 dark:border-white/5 bg-white dark:bg-card p-4 flex items-center gap-3 text-xs font-bold text-gray-500">
+              <RefreshCw size={16} className="animate-spin text-[#f58220]" />
+              Checking stock at {selectedWarehouse?.name || "warehouse"}…
             </div>
-
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2 min-w-0">
-              <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
-                Production Instructions
-              </h4>
-              <p className="text-xs leading-relaxed text-gray-600 dark:text-slate-300 whitespace-pre-line font-medium">
-                {recipe.instructions || "Standard formulation instructions. Ensure QC parameters are recorded during production stages."}
-              </p>
+          ) : ingredientRows.length === 0 ? (
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                <Info size={18} className="shrink-0" />
+                This recipe has no ingredients yet. Add ingredients in Recipe Master before producing it.
+              </div>
+              <Link href="/production/recipes" className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-bold shrink-0 text-center">
+                Open Recipe Master
+              </Link>
             </div>
-          </div>
-
-          {/* Right Column: Ingredients Needed Table */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6 min-w-0">
-            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl shadow-2xs overflow-hidden min-w-0">
-              
-              {/* Table Header */}
-              <div className="p-4 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50/50 dark:bg-white/[0.01]">
+          ) : hasShortage ? (
+            <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-950/20 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-xl bg-rose-100 dark:bg-rose-500/20 text-rose-600 shrink-0">
+                  <AlertTriangle size={18} />
+                </div>
                 <div>
-                  <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                    <Database size={15} className="text-[#f58220]" />
-                    Raw Material Requirements ({recipe.recipeItems.length})
-                  </h3>
-                  <p className="text-[11px] text-gray-400 dark:text-slate-500 font-semibold mt-0.5">
-                    Quantities needed for {targetYield || 0} {targetUnit || recipe.yieldUnit || ""}
+                  <p className="text-sm font-bold text-rose-800 dark:text-rose-300">
+                    Not enough stock — {shortRows.length} of {ingredientRows.length} ingredient{ingredientRows.length === 1 ? "" : "s"} short
+                  </p>
+                  <p className="text-xs font-medium text-rose-700/80 dark:text-rose-300/70 mt-0.5">
+                    {maxPossibleYield > 0 ? (
+                      <>With current stock at {selectedWarehouse?.name || "this warehouse"} you can make up to <strong>{fmtQty(maxPossibleYield)} {effectiveTargetUnit}</strong>. Buy the missing items, reduce the quantity, or switch warehouse.</>
+                    ) : (
+                      <>{selectedWarehouse?.name || "This warehouse"} has none of at least one ingredient. Buy the missing items or switch to another warehouse.</>
+                    )}
                   </p>
                 </div>
-                {stockLoading && (
-                  <span className="text-[10px] font-bold text-gray-400 dark:text-slate-500 flex items-center gap-1.5 uppercase animate-pulse shrink-0">
-                    <RefreshCw size={12} className="animate-spin text-[#f58220]" /> Checking Stock...
-                  </span>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                {maxPossibleYield > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTargetYield(maxPossibleYield)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-white dark:bg-card text-rose-700 dark:text-rose-300 text-xs font-bold hover:bg-rose-100/60 cursor-pointer"
+                  >
+                    <Zap size={13} /> Make {fmtQty(maxPossibleYield)} {effectiveTargetUnit} instead
+                  </button>
                 )}
+                <button
+                  type="button"
+                  onClick={handleBuyShortages}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer shadow-2xs"
+                >
+                  <ShoppingCart size={13} /> Create Purchase Order
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/20 p-4 flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 shrink-0">
+                <CheckCircle2 size={18} />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Ready to produce</p>
+                <p className="text-xs font-medium text-emerald-700/80 dark:text-emerald-300/70 mt-0.5">
+                  All {ingredientRows.length} ingredient{ingredientRows.length === 1 ? " is" : "s are"} in stock at {selectedWarehouse?.name || "the selected warehouse"}.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Ingredients & instructions ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
+            <div className="lg:col-span-2 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl shadow-2xs overflow-hidden min-w-0">
+              <div className="p-4 border-b border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01]">
+                <h3 className="text-xs font-bold text-gray-800 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Database size={15} className="text-[#f58220]" />
+                  Ingredients needed ({ingredientRows.length})
+                </h3>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 font-semibold mt-0.5">
+                  For {fmtQty(targetYield)} {effectiveTargetUnit} of {recipe.name}
+                  {Math.abs(multiplier - 1) > 0.0001 && <> · {fmtQty(multiplier)}× the base recipe ({fmtQty(recipe.yieldQty)} {recipeUnit})</>}
+                </p>
               </div>
 
-              {/* Desktop Table View */}
-              <div className="hidden sm:block overflow-x-auto custom-scrollbar w-full max-w-full">
-                <table className="w-full text-left border-collapse min-w-[500px]">
-                  <thead>
-                    <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
-                      <th className="py-3 px-5">Ingredient</th>
-                      <th className="py-3 px-4 text-right">Required</th>
-                      <th className="py-3 px-4 text-right">Stock Available</th>
-                      <th className="py-3 px-5 text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-semibold text-gray-700 dark:text-slate-300">
-                    {recipe.recipeItems.map((item) => {
-                      const scaledQty = item.quantityRequired * multiplier;
-                      const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
-                      const sufficient = available + EPSILON >= scaledQty;
-                      const deficit = Math.max(scaledQty - available, 0);
-
-                      return (
-                        <tr key={item.id} className="hover:bg-orange-50/20 dark:hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3.5 px-5 font-bold">
-                            <div className="text-gray-900 dark:text-white">{item.inventoryItem?.name}</div>
-                            <div className="text-[10px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "SKU-N/A"}</div>
-                          </td>
-                          <td className="py-3.5 px-4 text-right font-mono font-bold text-gray-900 dark:text-white">
-                            {scaledQty.toFixed(3)} <span className="text-[10px] uppercase text-[#f58220]">{item.unit}</span>
-                          </td>
-                          <td className="py-3.5 px-4 text-right font-mono text-gray-600 dark:text-slate-400">
-                            {available.toFixed(3)} <span className="text-[10px] uppercase">{item.unit}</span>
-                          </td>
-                          <td className="py-3.5 px-5 text-center">
-                            {sufficient ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20">
-                                <CheckCircle2 size={11} />
-                                Available
-                              </span>
-                            ) : (
-                              <span className="inline-flex flex-col items-center gap-0.5">
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20">
-                                  <AlertCircle size={11} />
-                                  Shortage
-                                </span>
-                                <span className="text-[10px] font-mono text-rose-500 dark:text-rose-400 font-bold">
-                                  {deficit.toFixed(3)} {item.unit} Short
-                                </span>
-                              </span>
-                            )}
-                          </td>
+              {ingredientRows.length === 0 ? (
+                <p className="p-6 text-center text-xs font-semibold text-gray-400">No ingredients listed in this recipe.</p>
+              ) : (
+                <>
+                  {/* Desktop table */}
+                  <div className="hidden sm:block overflow-x-auto custom-scrollbar w-full max-w-full">
+                    <table className="w-full text-left border-collapse min-w-[560px]">
+                      <thead>
+                        <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
+                          <th className="py-3 px-5">Ingredient</th>
+                          <th className="py-3 px-4 text-right">Need</th>
+                          <th className="py-3 px-4 text-right">In stock</th>
+                          <th className="py-3 px-5 w-[180px]">Status</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-semibold text-gray-700 dark:text-slate-300">
+                        {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage }) => (
+                          <tr key={item.id} className={clsx("transition-colors", sufficient ? "hover:bg-orange-50/20 dark:hover:bg-white/[0.02]" : "bg-rose-50/40 dark:bg-rose-500/[0.04]")}>
+                            <td className="py-3.5 px-5">
+                              <div className="font-bold text-gray-900 dark:text-white">{item.inventoryItem?.name}</div>
+                              <div className="text-[10px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "SKU-N/A"}</div>
+                            </td>
+                            <td className="py-3.5 px-4 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
+                              {fmtQty(scaledQty)} <span className="text-[10px] uppercase text-gray-400">{item.unit}</span>
+                            </td>
+                            <td className="py-3.5 px-4 text-right text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                              {fmtQty(available)} <span className="text-[10px] uppercase">{item.unit}</span>
+                            </td>
+                            <td className="py-3.5 px-5">
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                {sufficient ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                    <CheckCircle2 size={12} /> Enough
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
+                                    <AlertCircle size={12} /> Short by {fmtQty(deficit)} {item.unit}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                                <div
+                                  className={clsx("h-full rounded-full", sufficient ? "bg-emerald-500" : "bg-rose-500")}
+                                  style={{ width: `${Math.max(coverage * 100, sufficient ? 100 : 3)}%` }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-              {/* Mobile Cards View (< 640px) */}
-              <div className="sm:hidden divide-y divide-gray-100 dark:divide-white/5">
-                {recipe.recipeItems.map((item) => {
-                  const scaledQty = item.quantityRequired * multiplier;
-                  const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
-                  const sufficient = available + EPSILON >= scaledQty;
-                  const deficit = Math.max(scaledQty - available, 0);
-
-                  return (
-                    <div key={item.id} className="p-3.5 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-bold text-gray-900 dark:text-white text-xs">{item.inventoryItem?.name}</p>
-                          <p className="text-[10px] font-mono text-gray-400">{item.inventoryItem?.sku || "SKU-N/A"}</p>
+                  {/* Mobile cards */}
+                  <div className="sm:hidden divide-y divide-gray-100 dark:divide-white/5">
+                    {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage }) => (
+                      <div key={item.id} className="p-3.5 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-gray-900 dark:text-white text-xs">{item.inventoryItem?.name}</p>
+                            <p className="text-[10px] font-mono text-gray-400">{item.inventoryItem?.sku || "SKU-N/A"}</p>
+                          </div>
+                          {sufficient ? (
+                            <span className="text-[10px] font-bold text-emerald-600">Enough</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-rose-600">Short by {fmtQty(deficit)} {item.unit}</span>
+                          )}
                         </div>
-                        {sufficient ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Available
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200">
-                            Shortage
-                          </span>
-                        )}
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Need <strong className="text-gray-900 dark:text-white">{fmtQty(scaledQty)} {item.unit}</strong></span>
+                          <span className="text-gray-500">In stock <strong className="text-gray-700 dark:text-slate-300">{fmtQty(available)} {item.unit}</strong></span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                          <div
+                            className={clsx("h-full rounded-full", sufficient ? "bg-emerald-500" : "bg-rose-500")}
+                            style={{ width: `${Math.max(coverage * 100, sufficient ? 100 : 3)}%` }}
+                          />
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-xs bg-gray-50 dark:bg-white/[0.02] p-2 rounded-xl">
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400">Required</span>
-                          <p className="font-mono font-bold text-gray-800 dark:text-white mt-0.5">
-                            {scaledQty.toFixed(3)} {item.unit}
-                          </p>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-gray-400">In Stock</span>
-                          <p className="font-mono text-gray-600 dark:text-slate-400 mt-0.5">
-                            {available.toFixed(3)} {item.unit}
-                          </p>
-                        </div>
-                      </div>
-
-                      {!sufficient && (
-                        <p className="text-[10px] font-mono font-bold text-rose-500 text-right">
-                          Deficit: {deficit.toFixed(3)} {item.unit}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
+            <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2 min-w-0 h-fit">
+              <h4 className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">
+                Cooking Instructions
+              </h4>
+              {instructionsText ? (
+                <p className="text-xs leading-relaxed text-gray-600 dark:text-slate-300 whitespace-pre-line font-medium">
+                  {instructionsText}
+                </p>
+              ) : (
+                <p className="text-xs leading-relaxed text-gray-400 dark:text-slate-500 font-medium italic">
+                  No instructions saved for this recipe. Remember to record QC parameters during production.
+                </p>
+              )}
             </div>
           </div>
 
-        </div>
+          {/* ── Sticky action bar ── */}
+          <div className="sticky bottom-0 z-20 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 py-3 bg-white/95 dark:bg-card/95 backdrop-blur border-t border-gray-200 dark:border-white/10 flex items-center justify-end gap-3">
+            <div className="flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setExpiryDate(defaultExpiryDate());
+                  setShowConfirm(true);
+                }}
+                disabled={!canStart || launching}
+                title={
+                  hasShortage
+                    ? "Resolve the ingredient shortage first"
+                    : yieldInvalid
+                    ? "Enter a quantity first"
+                    : !selectedWarehouseId
+                    ? "Choose a warehouse first"
+                    : undefined
+                }
+                className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer bg-[#f58220] hover:bg-[#e0751a] text-white disabled:bg-gray-200 disabled:text-gray-500 dark:disabled:bg-white/10 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
+              >
+                Start Production <ArrowRight size={14} />
+              </button>
+            </div>
+          </div>
+        </>
       ) : !missingRecipeForProduct ? (
-        <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 text-center p-6">
+        <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 text-center p-6">
           <div className="w-14 h-14 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center text-[#f58220] mb-3">
             <ChefHat size={28} />
           </div>
-          <p className="text-sm font-bold text-gray-800 dark:text-white">Select a Formula to Begin Scaling Calculations</p>
-          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Choose a recipe above and enter a target batch yield to calculate ingredient needs.</p>
+          <p className="text-sm font-bold text-gray-800 dark:text-white">
+            {recipes.length === 0 ? "No recipes yet" : "Pick a recipe to get started"}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-sm">
+            {recipes.length === 0
+              ? "Create your first recipe in Recipe Master, then come back here to plan production."
+              : "Choose what you want to make in step 1 — we'll calculate the ingredients and check stock automatically."}
+          </p>
+          {recipes.length === 0 ? (
+            <Link href="/production/recipes" className="mt-4 px-4 py-2 rounded-xl bg-[#f58220] text-white text-xs font-bold flex items-center gap-1.5">
+              <Plus size={14} /> Create Recipe
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="mt-4 px-4 py-2 rounded-xl bg-[#f58220] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            >
+              <Search size={14} /> Choose Recipe
+            </button>
+          )}
         </div>
       ) : null}
+
+      {/* ── Confirm Start Modal ── */}
+      {showConfirm && recipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-md mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <ChefHat size={16} className="text-[#f58220]" />
+                Start this production run?
+              </h3>
+              <button onClick={() => setShowConfirm(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs bg-gray-50 dark:bg-white/[0.03] rounded-xl p-3.5">
+              <dt className="text-gray-400 font-semibold">Recipe</dt>
+              <dd className="font-bold text-gray-900 dark:text-white text-right truncate">{recipe.name}</dd>
+              <dt className="text-gray-400 font-semibold">Quantity</dt>
+              <dd className="font-bold text-[#f58220] text-right">{fmtQty(targetYield)} {effectiveTargetUnit}</dd>
+              <dt className="text-gray-400 font-semibold">Warehouse</dt>
+              <dd className="font-bold text-gray-900 dark:text-white text-right truncate">{selectedWarehouse?.name}</dd>
+              {linkedOrder && (
+                <>
+                  <dt className="text-gray-400 font-semibold">For order</dt>
+                  <dd className="font-bold text-gray-900 dark:text-white text-right">{linkedOrder.orderNumber}</dd>
+                </>
+              )}
+            </dl>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Batch expiry date</label>
+              <input
+                type="date"
+                value={expiryDate}
+                min={new Date().toISOString().split("T")[0]}
+                onChange={(e) => setExpiryDate(e.target.value)}
+                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white bg-gray-50 dark:bg-[#13151f] focus:border-[#f58220] outline-none"
+              />
+            </div>
+
+            <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium flex items-start gap-1.5">
+              <Info size={13} className="shrink-0 mt-0.5" />
+              {ingredientRows.length} ingredient{ingredientRows.length === 1 ? "" : "s"} will be used from {selectedWarehouse?.name || "the warehouse"} and the batch will appear under Production Runs.
+            </p>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleStartProductionDirect}
+                disabled={launching}
+                className="flex-1 py-2.5 rounded-xl bg-[#f58220] text-white text-xs font-bold hover:bg-[#e0751a] transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                {launching ? <RefreshCw size={13} className="animate-spin" /> : <ArrowRight size={13} />}
+                <span>{launching ? "Starting..." : "Yes, Start Production"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Warehouse Modal ── */}
       {showAddWarehouse && (

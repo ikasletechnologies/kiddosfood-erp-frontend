@@ -13,6 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMaterialConsumptionClient";
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
 import { formatDate } from "@/lib/utils";
+import { PRODUCTION_FEATURES, PACKAGEABLE_QC_STATUSES, getBatchStage, packagingBlocker } from "@/config/production-features";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
 
@@ -40,7 +41,17 @@ const STAGE_LABELS: Record<string, string> = {
   MIXING: "Mixing",
   COOKING: "Cooking",
   COOLING: "Cooling",
-  READY_FOR_QC: "QC",
+  READY_FOR_QC: PRODUCTION_FEATURES.qc ? "QC" : "Ready",
+};
+
+// Badge colours for the simplified-workflow business stage (QC switched off).
+const STAGE_BADGE: Record<string, string> = {
+  READY_FOR_PACKAGING: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20",
+  PARTIALLY_PACKED: "text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/20",
+  STOCK_UPDATED: "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20",
+  REJECTED: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20",
+  BLOCKED: "text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10",
+  AWAITING_QC: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20",
 };
 
 function ProductBatchesRegistry() {
@@ -322,8 +333,8 @@ function ProductBatchesRegistry() {
                     <th className="text-left px-4 py-3">Batch ID</th>
                     <th className="text-left px-4 py-3">Product</th>
                     <th className="text-left px-4 py-3">Qty Produced</th>
-                    <th className="text-left px-4 py-3">QC Approved</th>
-                    <th className="text-left px-4 py-3">QC Rejected</th>
+                    <th className="text-left px-4 py-3">{PRODUCTION_FEATURES.qc ? "QC Approved" : "For Packing"}</th>
+                    {PRODUCTION_FEATURES.qc && <th className="text-left px-4 py-3">QC Rejected</th>}
                     <th className="text-left px-4 py-3">Unit Cost</th>
                     <th className="text-left px-4 py-3">Packed</th>
                     <th className="text-left px-4 py-3">Approved Bulk</th>
@@ -359,11 +370,13 @@ function ProductBatchesRegistry() {
                             <>{batch.approvedQty || 0} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
-                          {batch.qcStatus === "PENDING" ? "—" : (
-                            <>{batch.rejectionQty || 0} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
-                          )}
-                        </td>
+                        {PRODUCTION_FEATURES.qc && (
+                          <td className="px-4 py-3 text-sm text-rose-700 dark:text-rose-400">
+                            {batch.qcStatus === "PENDING" ? "—" : (
+                              <>{batch.rejectionQty || 0} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || "KG"}</span></>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-sm font-medium text-gray-800 dark:text-white">
                           {batch.unitCost ? `₹${batch.unitCost.toFixed(2)}` : "—"}
                         </td>
@@ -382,6 +395,11 @@ function ProductBatchesRegistry() {
                           {formatDate(getEffectiveExpiry(batch))}
                         </td>
                         <td className="px-4 py-3 text-center">
+                          {!PRODUCTION_FEATURES.qc ? (
+                            <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", STAGE_BADGE[getBatchStage(batch).key])}>
+                              {getBatchStage(batch).label}
+                            </span>
+                          ) : (
                           <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border",
                             batch.qcStatus === "APPROVED" && batch.packagingStatus === "PACKAGED"
                               ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/10 border-blue-200 dark:border-blue-500/20"
@@ -397,14 +415,22 @@ function ProductBatchesRegistry() {
                               : batch.qcStatus === "PARTIALLY_APPROVED" ? "Partially Approved"
                               : batch.qcStatus === "REJECTED" ? "Rejected" : "Pending"}
                           </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             {[
                               { label: "View", always: true },
-                              { label: "QC", disabled: !!batch.qcStatus && batch.qcStatus !== "PENDING" },
-                              { label: "Pack", disabled: !["APPROVED", "PARTIALLY_APPROVED"].includes(batch.qcStatus) || batch.packagingStatus === "PACKAGED" },
-                            ].map(({ label, disabled }) => {
+                              ...(PRODUCTION_FEATURES.qc ? [{ label: "QC", disabled: !!batch.qcStatus && batch.qcStatus !== "PENDING" }] : []),
+                              {
+                                label: "Pack",
+                                // Same eligibility rule as Packaging & Confirmation (completed,
+                                // not packed, recalled, rejected or expired) — no Release step.
+                                disabled: PRODUCTION_FEATURES.qc
+                                  ? !PACKAGEABLE_QC_STATUSES.includes(batch.qcStatus) || batch.packagingStatus === "PACKAGED"
+                                  : packagingBlocker(batch) !== null,
+                              },
+                            ].map(({ label, disabled }: { label: string; disabled?: boolean }) => {
                               const actionStyles: Record<string, string> = {
                                 View: "border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/10 hover:border-gray-300 hover:text-gray-900 dark:hover:text-white",
                                 QC: "border-blue-200 dark:border-blue-500/20 bg-blue-50/80 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 hover:border-blue-300 hover:text-blue-800 dark:hover:text-blue-300",
@@ -416,7 +442,7 @@ function ProductBatchesRegistry() {
                                   key={label}
                                   disabled={!!disabled}
                                   onClick={() => {
-                                    if (label === "Pack") { router.push("/packaging/queue"); }
+                                    if (label === "Pack") { router.push(PRODUCTION_FEATURES.labels ? "/packaging/queue" : `/packaging?batchId=${batch.id}`); }
                                     else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
                                     else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}&returnTo=/production/batches?tab=REGISTRY`); }
                                   }}
