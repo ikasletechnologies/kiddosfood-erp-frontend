@@ -10,7 +10,7 @@ import { productionApi } from '@/lib/api';
 import { toast } from 'react-hot-toast';
 import { formatDate } from '@/lib/utils';
 
-export default function QCClient() {
+export default function QCClient({ embedded = false }: { embedded?: boolean }) {
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -113,11 +113,6 @@ export default function QCClient() {
         return;
       }
 
-      // Clean up URL searchParams (?batchId=...) while remaining on the QC page
-      if (searchParams.get('batchId')) {
-        router.replace('/purchases/qc');
-      }
-
       // Immediately refresh batch records so updated status is visible
       const freshBatches = await fetchPending();
 
@@ -153,9 +148,9 @@ export default function QCClient() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-foreground -m-4 md:-m-6">
+    <div className={clsx("text-gray-800 dark:text-foreground", !embedded && "min-h-screen bg-gray-50 dark:bg-background -m-4 md:-m-6")}>
       {/* Page Header Toolbar */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end">
+      <div className={clsx("bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex items-center justify-end", embedded && "rounded-xl border")}>
         <button onClick={fetchPending} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors" title="Refresh">
           <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
         </button>

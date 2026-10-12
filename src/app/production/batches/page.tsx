@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMaterialConsumptionClient";
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
+import QCClient from "@/components/modules/purchases/QCClient";
 import { formatDate } from "@/lib/utils";
 import { PRODUCTION_FEATURES, PACKAGEABLE_QC_STATUSES, getBatchStage, packagingBlocker } from "@/config/production-features";
 
@@ -70,9 +71,10 @@ function ProductBatchesRegistry() {
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("");
   const [expiryFilter, setExpiryFilter] = useState<string>("ALL");
-  const [activeTab, setActiveTab] = useState<"REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS">(
-    requestedTab === "ACTIVE_RUNS" || requestedTab === "CONSUMPTION" ? requestedTab : "REGISTRY"
-  );
+  type BatchTab = "REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS" | "QC";
+  const isValidTab = (t: string | null): t is Exclude<BatchTab, "REGISTRY"> =>
+    t === "ACTIVE_RUNS" || t === "CONSUMPTION" || (t === "QC" && PRODUCTION_FEATURES.qc);
+  const [activeTab, setActiveTab] = useState<BatchTab>(isValidTab(requestedTab) ? requestedTab : "REGISTRY");
 
   // Batch Details SlideOver State
   const [showBatchDetails, setShowBatchDetails] = useState(false);
@@ -80,14 +82,10 @@ function ProductBatchesRegistry() {
 
   // Sync activeTab when URL requestedTab changes
   useEffect(() => {
-    if (requestedTab === "ACTIVE_RUNS" || requestedTab === "CONSUMPTION") {
-      setActiveTab(requestedTab);
-    } else {
-      setActiveTab("REGISTRY");
-    }
+    setActiveTab(isValidTab(requestedTab) ? requestedTab : "REGISTRY");
   }, [requestedTab]);
 
-  const handleTabChange = (newTab: "REGISTRY" | "CONSUMPTION" | "ACTIVE_RUNS") => {
+  const handleTabChange = (newTab: BatchTab) => {
     setActiveTab(newTab);
     const params = new URLSearchParams(searchParams.toString());
     if (newTab === "REGISTRY") {
@@ -102,13 +100,14 @@ function ProductBatchesRegistry() {
   // Deep-link support: a batch opened from Expiry Tracking (or elsewhere)
   // via ?batchId= auto-opens straight to that same batch's detail drawer.
   useEffect(() => {
-    if (!requestedBatchId || batches.length === 0) return;
+    // On the QC tab ?batchId= targets the inspection dialog, not this drawer.
+    if (!requestedBatchId || batches.length === 0 || requestedTab === "QC") return;
     const match = batches.find((b: any) => b.id === requestedBatchId);
     if (match) {
       setSelectedBatch(match);
       setShowBatchDetails(true);
     }
-  }, [requestedBatchId, batches]);
+  }, [requestedBatchId, requestedTab, batches]);
 
   // Fetch every branch/outlet for Super Admin — batches can belong to HQ
   // itself (it's a real location batches ship from), so unlike the
@@ -198,6 +197,7 @@ function ProductBatchesRegistry() {
             { key: "REGISTRY", label: "Batch Registry" },
             { key: "ACTIVE_RUNS", label: "Active Runs" },
             { key: "CONSUMPTION", label: "Material Consumption" },
+            ...(PRODUCTION_FEATURES.qc ? [{ key: "QC" as const, label: "Quality Control" }] : []),
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -216,6 +216,8 @@ function ProductBatchesRegistry() {
         <ActiveProductionRunsClient />
       ) : activeTab === "CONSUMPTION" ? (
         <RawMaterialConsumptionClient />
+      ) : activeTab === "QC" ? (
+        <QCClient embedded />
       ) : (
         <div className="space-y-4 sm:space-y-5 w-full min-w-0">
 
@@ -444,7 +446,7 @@ function ProductBatchesRegistry() {
                                   onClick={() => {
                                     if (label === "Pack") { router.push(PRODUCTION_FEATURES.labels ? "/packaging/queue" : `/packaging?batchId=${batch.id}`); }
                                     else if (label === "View") { setSelectedBatch(batch); setShowBatchDetails(true); }
-                                    else if (label === "QC") { router.push(`/purchases/qc?batchId=${batch.id}&returnTo=/production/batches?tab=REGISTRY`); }
+                                    else if (label === "QC") { router.push(`/production/batches?tab=QC&batchId=${batch.id}`); }
                                   }}
                                   className={clsx(
                                     "px-2 py-0.5 text-[11px] font-semibold rounded border shadow-2xs transition-all active:scale-95",

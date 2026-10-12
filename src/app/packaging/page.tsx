@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Box, CheckCircle2, AlertTriangle, RefreshCw, Search, X, PackageCheck,
-  Trash2, ArrowRight, Info, Plus, ChevronDown, Check,
+  Trash2, ArrowRight, Info, Plus, ChevronDown, Check, Clock3, Boxes,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { format } from "date-fns";
@@ -55,6 +55,16 @@ interface ConfirmedLine {
   goodQty: number;
   damagedQty: number;
   totalWeight: number;
+}
+
+interface ConfirmedSummary {
+  batchCode: string;
+  productName: string;
+  batchUnit: string;
+  confirmedAt: Date;
+  usedWeight: number;
+  remainingWeight: number;
+  lines: ConfirmedLine[];
 }
 
 const MAX_ROWS = 20;
@@ -259,7 +269,7 @@ function PackagingContent() {
 
   const [rows, setRows] = useState<PackRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState<{ batchCode: string; lines: ConfirmedLine[] } | null>(null);
+  const [confirmed, setConfirmed] = useState<ConfirmedSummary | null>(null);
   const [wasteTarget, setWasteTarget] = useState<Batch | null>(null);
   const [wasting, setWasting] = useState(false);
 
@@ -469,7 +479,15 @@ function PackagingContent() {
         })),
       });
       const lines: ConfirmedLine[] = res.data?.summary || [];
-      setConfirmed({ batchCode: selected.batchCode, lines });
+      setConfirmed({
+        batchCode: selected.batchCode,
+        productName: selected.product?.name || selected.production?.recipe?.name || 'Product',
+        batchUnit,
+        confirmedAt: new Date(),
+        usedWeight: calc.allocated,
+        remainingWeight: Math.max(0, calc.remaining),
+        lines,
+      });
       const pcs = lines.reduce((s, l) => s + (l.goodQty || 0), 0);
       toast.success(`${pcs} packets added to Stock Hub across ${lines.length} SKU${lines.length === 1 ? "" : "s"}`);
       if (calc.lines.some((l) => l.row.createNew)) await loadProducts();
@@ -541,34 +559,56 @@ function PackagingContent() {
         )}
 
         {confirmed && (
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4" /> Packaging confirmed · {confirmed.batchCode}
-              </p>
-              <button onClick={() => setConfirmed(null)} className="text-emerald-700/60 hover:text-emerald-800" title="Dismiss">
-                <X className="h-4 w-4" />
-              </button>
+          <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-500/20 dark:bg-card">
+            <div className="flex items-start justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-4 py-4 sm:px-5 dark:border-emerald-500/15 dark:bg-emerald-500/10">
+              <div className="flex min-w-0 items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm"><CheckCircle2 className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <p className="text-sm font-extrabold text-emerald-900 dark:text-emerald-200">Packaging successfully confirmed</p>
+                  <p className="mt-0.5 truncate text-xs text-emerald-800/80 dark:text-emerald-300/80">{confirmed.productName} <span className="px-1">·</span> Batch <span className="font-mono font-bold">{confirmed.batchCode}</span></p>
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700/70 dark:text-emerald-300/60"><Clock3 className="h-3 w-3" /> Confirmed on {format(confirmed.confirmedAt, "dd MMM yyyy, hh:mm a")}</p>
+                </div>
+              </div>
+              <button onClick={() => setConfirmed(null)} className="rounded-md p-1.5 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-white/10" title="Dismiss confirmation"><X className="h-4 w-4" /></button>
             </div>
-            <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3 text-xs text-emerald-900 dark:text-emerald-200">
-              {confirmed.lines.map((l, i) => (
-                <li key={i} className="flex items-center justify-between gap-2 bg-white/70 dark:bg-white/5 rounded-lg px-3 py-1.5">
-                  <span className="truncate">
-                    <span className="font-semibold">{l.productName}</span>{" "}
-                    <span className="font-mono text-[10px] text-emerald-700/70">{l.sku}</span>
-                  </span>
-                  <span className="font-bold shrink-0">
-                    +{l.goodQty} pcs{l.damagedQty ? <span className="text-amber-600 font-semibold"> · {l.damagedQty} dmg</span> : null}
-                  </span>
-                </li>
+            <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-4 dark:bg-white/5">
+              {[
+                { label: "Stock added", value: `${confirmed.lines.reduce((s, l) => s + (l.goodQty || 0), 0)} pcs`, tone: "text-emerald-700 dark:text-emerald-300" },
+                { label: "Damaged", value: `${confirmed.lines.reduce((s, l) => s + (l.damagedQty || 0), 0)} pcs`, tone: "text-amber-600 dark:text-amber-400" },
+                { label: "Bulk used", value: `${fmt(confirmed.usedWeight)} ${confirmed.batchUnit}`, tone: "text-gray-900 dark:text-white" },
+                { label: "Bulk remaining", value: `${fmt(confirmed.remainingWeight)} ${confirmed.batchUnit}`, tone: "text-gray-900 dark:text-white" },
+              ].map((item) => (
+                <div key={item.label} className="bg-white px-4 py-3 dark:bg-card"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{item.label}</p><p className={clsx("mt-0.5 text-base font-black", item.tone)}>{item.value}</p></div>
               ))}
-            </ul>
-            <Link href="/inventory/stock" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 hover:underline">
-              View in Stock Hub <ArrowRight className="h-3 w-3" />
-            </Link>
+            </div>
+            <div className="px-4 py-4 sm:px-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-slate-300"><Boxes className="h-4 w-4 text-emerald-600" /> SKU update details</p>
+                <span className="text-[11px] text-gray-400">{confirmed.lines.length} SKU{confirmed.lines.length === 1 ? "" : "s"} updated</span>
+              </div>
+              <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
+                <div className="hidden grid-cols-[minmax(0,1fr)_90px_72px_72px_100px] gap-3 bg-gray-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:grid dark:bg-white/[0.03]">
+                  <span>Product / SKU</span><span>Pack size</span><span className="text-right">Good</span><span className="text-right">Damaged</span><span className="text-right">Weight</span>
+                </div>
+                <ul className="divide-y divide-gray-100 dark:divide-white/5">
+                  {confirmed.lines.map((l, i) => (
+                    <li key={`${l.sku}-${i}`} className="grid gap-2 px-3 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_90px_72px_72px_100px] sm:items-center sm:gap-3">
+                      <span className="min-w-0"><span className="block truncate font-semibold text-gray-800 dark:text-white">{l.productName}</span><span className="block truncate font-mono text-[10px] text-gray-400">{l.sku}</span></span>
+                      <span className="font-semibold text-gray-600 dark:text-slate-300"><span className="text-gray-400 sm:hidden">Pack: </span>{sizeLabel(l.packetSize)}</span>
+                      <span className="font-bold text-emerald-700 sm:text-right dark:text-emerald-300"><span className="font-medium text-gray-400 sm:hidden">Stock added: </span>+{l.goodQty} pcs</span>
+                      <span className={clsx("sm:text-right", l.damagedQty ? "font-bold text-amber-600 dark:text-amber-400" : "text-gray-400")}><span className="text-gray-400 sm:hidden">Damaged: </span>{l.damagedQty || 0} pcs</span>
+                      <span className="font-semibold text-gray-600 sm:text-right dark:text-slate-300"><span className="font-medium text-gray-400 sm:hidden">Total weight: </span>{fmt(l.totalWeight)} {confirmed.batchUnit}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[11px] text-gray-500 dark:text-slate-400">Good packets are now available in Finished Goods stock. Damaged packets were recorded separately.</p>
+                <Link href="/inventory/stock" className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-emerald-700 hover:underline dark:text-emerald-300">View in Stock Hub <ArrowRight className="h-3 w-3" /></Link>
+              </div>
+            </div>
           </div>
         )}
-
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Batch list */}
           <div className="lg:col-span-4 space-y-4">

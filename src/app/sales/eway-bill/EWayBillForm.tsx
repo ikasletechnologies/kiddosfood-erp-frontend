@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Plus, Trash2, Loader2, Search, FileText, Truck, Package, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { Plus, Trash2, Loader2, Search, FileText, Truck, Package, AlertTriangle, CheckCircle2, Info, Home, ChevronRight, Save, FileCheck2, Building2 } from "lucide-react";
 import { clsx } from "clsx";
 import { ewayBillApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
@@ -234,23 +234,39 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
 
   return (
     <div className={S.formPage}>
-      <div className={S.formHeader}>
-        <div className="flex items-center gap-3">
-          <button onClick={onCancel} className={S.btnIcon} aria-label="Back"><ArrowLeft size={18} /></button>
-          <div>
-            <h1 className={S.pageTitle}>{editing ? `Edit ${editing.refNumber}` : "New E-Way Bill"}</h1>
-            <p className={S.pageSubtitle}>Form EWB-01 · Part A (consignment) and Part B (transport)</p>
+      <div className="border-b border-slate-200 bg-white px-4 py-4 dark:border-white/5 dark:bg-card sm:px-6">
+        <div className="mx-auto flex max-w-[1480px] flex-col gap-4">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+            <div>
+              <button onClick={onCancel} className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400">
+                <Home className="h-3.5 w-3.5" /><ChevronRight className="h-3 w-3" /> Logistics <ChevronRight className="h-3 w-3" /> E-Way Bill <ChevronRight className="h-3 w-3" /> <span className="text-slate-700 dark:text-slate-200">Generate New</span>
+              </button>
+              <h1 className="text-2xl font-extrabold tracking-tight text-[#142b4b] dark:text-white sm:text-3xl">{editing ? `Edit ${editing.refNumber}` : "Generate E-Way Bill"}</h1>
+              <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Enter document, party, item and transport details</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button onClick={save} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {editing ? "Save Changes" : "Save Draft"}
+              </button>
+              <button type="button" disabled title="API integration will be enabled after credentials are configured" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
+                <FileCheck2 className="h-4 w-4" /> Generate E-Way Bill
+              </button>
+            </div>
           </div>
+          <div className="grid grid-cols-2 gap-y-3 md:grid-cols-4">
+            {["Document Details", "Parties & Items", "Transportation", "Review"].map((label, index) => (
+              <div key={label} className="flex items-center">
+                <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold", index === 0 ? "bg-[#0787d9] text-white" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300")}>{index + 1}</span>
+                <span className={clsx("ml-3 whitespace-nowrap text-sm font-semibold", index === 0 ? "text-[#075dcc]" : "text-slate-600 dark:text-slate-300")}>{label}</span>
+                {index < 3 && <span className="mx-4 hidden h-px flex-1 bg-slate-300 sm:block dark:bg-white/10" />}
+              </div>
+            ))}
+          </div>
+          {hasSourceLoaded && <span className="w-fit rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">From {SOURCE_LABELS[form.sourceType]} · {form.docNo}</span>}
         </div>
-        {hasSourceLoaded && (
-          <span className="text-xs font-semibold text-[#f58220] bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 rounded-full px-3 py-1">
-            From {SOURCE_LABELS[form.sourceType]} · {form.docNo}
-          </span>
-        )}
       </div>
-
       <div id="ewb-form-body" className={S.formBody}>
-        <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 w-full min-w-0">
+        <div className="mx-auto w-full min-w-0 max-w-[1480px] space-y-3 p-3 sm:p-4 md:p-6">
           {errors.length > 0 && (
             <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl px-4 py-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-400 mb-1">
@@ -343,58 +359,38 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
           )}
 
           {/* ── Transaction details ───────────────────────────────────── */}
-          <Section icon={FileText} title="Transaction Details">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Field label="Supply Type">
-                <select className={S.select} value={form.supplyType} onChange={(e) => changeSupplyType(e.target.value)}>
-                  <option value="O">Outward</option>
-                  <option value="I">Inward</option>
-                </select>
+          <Section icon={FileCheck2} title="Document & Transaction Details">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+              <Field label="Supply Type" required>
+                <select className={S.select} value={form.supplyType} onChange={(e) => changeSupplyType(e.target.value)}><option value="O">Outward</option><option value="I">Inward</option></select>
               </Field>
-              <Field label="Sub Supply Type">
-                <select className={S.select} value={form.subSupplyType} onChange={(e) => changeSubType(e.target.value)}>
-                  {Object.keys(allowedSubTypes).map((k) => <option key={k} value={k}>{masters.subSupplyTypes[k]}</option>)}
-                </select>
+              <Field label="Sub-supply Type" required>
+                <select className={S.select} value={form.subSupplyType} onChange={(e) => changeSubType(e.target.value)}>{Object.keys(allowedSubTypes).map((k) => <option key={k} value={k}>{masters.subSupplyTypes[k]}</option>)}</select>
               </Field>
-              <Field label="Document Type">
-                <select className={S.select} value={form.docType} onChange={(e) => set({ docType: e.target.value })}>
-                  {allowedDocs.map((k) => <option key={k} value={k}>{masters.docTypes[k]}</option>)}
-                </select>
+              <Field label="Document Type" required>
+                <select className={S.select} value={form.docType} onChange={(e) => set({ docType: e.target.value })}>{allowedDocs.map((k) => <option key={k} value={k}>{masters.docTypes[k]}</option>)}</select>
               </Field>
-              <Field label="Transaction Type">
-                <select className={S.select} value={form.transactionType} onChange={(e) => set({ transactionType: e.target.value })}>
-                  {Object.entries(TRANSACTION_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
+              <Field label="Document No." required><input className={S.input} maxLength={16} value={form.docNo} onChange={(e) => set({ docNo: e.target.value })} placeholder="INV-2026-00124" /></Field>
+              <Field label="Document Date" required><input type="date" className={S.input} value={form.docDate} max={dateInput(new Date())} onChange={(e) => set({ docDate: e.target.value })} /></Field>
+              <Field label="Transaction Type" required>
+                <select className={S.select} value={form.transactionType} onChange={(e) => set({ transactionType: e.target.value })}>{Object.entries(TRANSACTION_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
               </Field>
-              <Field label="Document No." required>
-                <input className={S.input} maxLength={16} value={form.docNo} onChange={(e) => set({ docNo: e.target.value })} placeholder="INV-2026-00001" />
+              <Field label="Reason for Movement (if applicable)" className="sm:col-span-2 xl:col-span-6">
+                <input className={S.input} maxLength={20} value={form.subSupplyDesc} onChange={(e) => set({ subSupplyDesc: e.target.value })} placeholder="e.g. Sale, Job Work, Stock Transfer, Exhibition, Others" />
               </Field>
-              <Field label="Document Date" required>
-                <input type="date" className={S.input} value={form.docDate} max={dateInput(new Date())} onChange={(e) => set({ docDate: e.target.value })} />
-              </Field>
-              {form.subSupplyType === "8" && (
-                <Field label="Sub Supply Description" required className="md:col-span-2">
-                  <input className={S.input} maxLength={20} value={form.subSupplyDesc} onChange={(e) => set({ subSupplyDesc: e.target.value })} />
-                </Field>
-              )}
             </div>
           </Section>
-
           {/* ── Parties ───────────────────────────────────────────────── */}
           <div className="grid md:grid-cols-2 gap-4">
-            <PartyCard title="Bill From / Dispatch From" prefix="from" form={form} set={set} changeGstin={changeGstin} />
-            <PartyCard title="Bill To / Ship To" prefix="to" form={form} set={set} changeGstin={changeGstin} />
+            <PartyCard title="Supplier / Dispatch From (Consignor)" prefix="from" form={form} set={set} changeGstin={changeGstin} />
+            <PartyCard title="Recipient / Ship To (Consignee)" prefix="to" form={form} set={set} changeGstin={changeGstin} />
           </div>
 
           {/* ── Items ─────────────────────────────────────────────────── */}
           <Section
             icon={Package}
-            title="Item Details"
-            right={
-              <span className={clsx("text-[11px] font-medium px-2 py-0.5 rounded-full border", interState ? "bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/20" : "bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/20")}>
-                {actFrom && actTo ? (interState ? "Inter-state · IGST" : "Intra-state · CGST + SGST") : "Select states to determine tax"}
-              </span>
-            }
+            title="Goods / Item Details"
+            right={<button onClick={() => setItems((l) => [...l, blankItem()])} className="inline-flex items-center gap-1.5 rounded-md border border-blue-500 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10"><Plus className="h-3.5 w-3.5" /> Add Item</button>}
             flush
           >
             <div className="overflow-x-auto">
@@ -464,10 +460,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
                 </tbody>
               </table>
             </div>
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 p-4 border-t border-gray-100 dark:border-white/5">
-              <button onClick={() => setItems((l) => [...l, blankItem()])} className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-[#f58220] hover:text-[#e8740e] px-3 py-2 rounded-xl border border-dashed border-orange-300 dark:border-orange-500/30 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors w-fit">
-                <Plus className="h-4 w-4" /> Add Item
-              </button>
+            <div className="flex justify-end gap-4 p-4 border-t border-gray-100 dark:border-white/5">
               <div className="w-full lg:w-80 space-y-2.5 p-4 bg-gray-50/50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5 text-xs sm:text-sm">
                 <TotalRow label="Taxable Value" value={totals.taxable} />
                 {interState ? (
@@ -503,7 +496,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
           {/* ── Part B ────────────────────────────────────────────────── */}
           <Section icon={Truck} title="Transportation Details (Part B)">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Field label="Mode">
+              <Field label="Mode of Transport">
                 <select className={S.select} value={form.transMode} onChange={(e) => set({ transMode: e.target.value })}>
                   <option value="">Not yet known (Part A only)</option>
                   {Object.entries(masters.transModes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -556,12 +549,15 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
         </div>
       </div>
 
-      <div className={S.formActionBar}>
-        <button onClick={onCancel} className={S.btnSecondary}>Cancel</button>
-        <button onClick={save} disabled={saving} className={S.btnPrimary}>
-          {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-          {editing ? "Save Changes" : "Save Draft"}
-        </button>
+      <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/5 dark:bg-card/95 sm:px-6">
+        <div className="mx-auto flex max-w-[1480px] flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <p className="flex flex-1 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"><Info className="h-4 w-4 shrink-0" /> E-Way Bill number is issued only after successful validation on the authorised GST E-Way Bill system.</p>
+          <div className="flex items-center justify-end gap-3">
+            <button onClick={onCancel} className="h-10 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 dark:border-white/10 dark:bg-card dark:text-white">Cancel</button>
+            <button onClick={save} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {editing ? "Save Changes" : "Save Draft"}</button>
+            <button type="button" disabled title="API integration will be enabled after credentials are configured" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"><FileCheck2 className="h-4 w-4" /> Validate & Generate</button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -569,11 +565,13 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
 
 // ── Small building blocks ─────────────────────────────────────────────────
 function Section({ icon: Icon, title, right, children, flush }: { icon?: any; title: string; right?: React.ReactNode; children: React.ReactNode; flush?: boolean }) {
+  const recipient = title.startsWith("Recipient");
+  const supplier = title.startsWith("Supplier");
   return (
     <div className={clsx(S.card, "overflow-hidden")}>
-      <div className={S.cardHead}>
-        <span className={S.cardHeadTitle}>
-          {Icon && <Icon className="h-3.5 w-3.5 text-[#f58220]" />} {title}
+      <div className={clsx(S.cardHead, supplier && "bg-blue-50/80 dark:bg-blue-500/10", recipient && "bg-emerald-50/80 dark:bg-emerald-500/10")}>
+        <span className={clsx(S.cardHeadTitle, supplier && "text-blue-700 dark:text-blue-300", recipient && "text-emerald-700 dark:text-emerald-300")}>
+          {Icon && <Icon className={clsx("h-3.5 w-3.5", recipient ? "text-emerald-600" : "text-blue-600")} />} {title}
         </span>
         {right}
       </div>
@@ -609,7 +607,7 @@ function PartyCard({ title, prefix, form, set, changeGstin }: {
   const registered = gstin && gstin !== "URP";
   const gstinBad = registered && !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstin);
   return (
-    <Section title={title}>
+    <Section icon={Building2} title={title}>
       <div className="grid grid-cols-2 gap-3">
         <Field label="GSTIN (URP if unregistered)" required>
           <input className={clsx(S.input, gstinBad && "!border-red-400")} maxLength={15} value={gstin} onChange={(e) => changeGstin(prefix, e.target.value)} />

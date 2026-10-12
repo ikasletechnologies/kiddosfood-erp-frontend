@@ -13,7 +13,6 @@ import {
   Factory,
   ChefHat,
   Store,
-  UserCheck,
   Layers,
   Landmark,
   Truck,
@@ -29,7 +28,6 @@ import {
   FilePlus2,
   Barcode,
   MapPin,
-  ShieldAlert,
   FileCheck2,
   BarChart3,
 } from "lucide-react";
@@ -275,20 +273,12 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Factory,
-        label: "Production Runs",
+        label: "Batch Manufacturing",
         href: "/production/batches",
         roles: SUPER_ONLY,
       },
-      // Hidden modules stay in the codebase and come back here when their
-      // flag is switched on — see src/config/production-features.ts.
-      ...(PRODUCTION_FEATURES.qc
-        ? [{
-            icon: UserCheck,
-            label: "QC",
-            href: "/purchases/qc",
-            roles: SUPER_ONLY,
-          }]
-        : []),
+      // QC lives inside Batch Manufacturing (Quality Control tab) and Batch
+      // Recall has no sidebar entry; their pages/APIs are untouched.
       // With Labels & Barcodes on, packaging is the original two-step flow
       // (Queue -> Labels -> Confirm). Off, it is one merged screen.
       ...(PRODUCTION_FEATURES.labels
@@ -322,18 +312,10 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
           ]),
       {
         icon: Undo2,
-        label: "Wastage Records",
+        label: "Wastage",
         href: "/production/wastage",
         roles: SUPER_ONLY,
       },
-      ...(PRODUCTION_FEATURES.recall
-        ? [{
-            icon: ShieldAlert,
-            label: "Batch Recall",
-            href: "/production/batch-recall",
-            roles: SUPER_ONLY,
-          }]
-        : []),
     ],
   },
 

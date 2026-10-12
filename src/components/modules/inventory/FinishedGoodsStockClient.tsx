@@ -825,9 +825,6 @@ export default function FinishedGoodsStockClient() {
               { id: "IN_STOCK", label: "In Stock" },
               { id: "OUT_OF_STOCK", label: "Out of Stock" },
               { id: "LOW_STOCK", label: "Low Stock" },
-              { id: "RESERVED", label: "Reserved" },
-              { id: "IN_TRANSIT", label: "In Transit" },
-              { id: "PENDING_DEMAND", label: "Pending Demand" },
             ].map((f) => (
               <button
                 key={f.id}
