@@ -6,18 +6,22 @@ import { productionApi, inventoryApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
+import { useRouter } from "next/navigation";
 import { convertUnit } from "@/lib/unitConversion";
+import { PRODUCTION_FEATURES, QC_NOT_REQUIRED } from "@/config/production-features";
 
 const STAGE_LABELS: Record<string, string> = {
   QUEUED: "Queued",
   MIXING: "Mixing",
   COOKING: "Cooking",
   COOLING: "Cooling",
-  READY_FOR_QC: "QC Inspection",
+  READY_FOR_QC: PRODUCTION_FEATURES.qc ? "QC Inspection" : "Ready to Complete",
 };
 
 export default function ActiveProductionRunsClient() {
+  const router = useRouter();
   const [history, setHistory] = useState<any[]>([]);
+  const [wastageQty, setWastageQty] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [batchToApprove, setBatchToApprove] = useState<any | null>(null);
@@ -136,24 +140,44 @@ export default function ActiveProductionRunsClient() {
     setBatchToApprove(production);
     const expected = (production.quantity || 0) * (production.recipe?.yieldQty || 1);
     setActualYield(expected);
+    setWastageQty(0);
     setRemarks(production.remarks || "");
     setExpiryDate(production.expiryDate ? new Date(production.expiryDate).toISOString().split("T")[0] : "");
     setShowApprovalModal(true);
   };
 
   const handleFinalApprove = async () => {
-    if (!batchToApprove) return;
+    if (!batchToApprove || submitting) return;
+    if (!(Number(actualYield) > 0)) {
+      toast.error("Enter the actual produced quantity");
+      return;
+    }
+    if (Number(wastageQty) < 0) {
+      toast.error("Wastage cannot be negative");
+      return;
+    }
     setSubmitting(true);
     try {
-      await productionApi.approveBatch(batchToApprove.id, {
+      const res = await productionApi.approveBatch(batchToApprove.id, {
         actualYield: Number(actualYield),
         remarks: remarks.trim() || undefined,
-        expiryDate: expiryDate || undefined
+        expiryDate: expiryDate || undefined,
+        wastageQty: Number(wastageQty) > 0 ? Number(wastageQty) : undefined,
       });
-      toast.success("Production completed & added to Batch Registry");
+      const batch = res.data?.batch;
+      const otherActiveRuns = history.filter(
+        (h) => h.id !== batchToApprove.id && (h.status === "IN_PROGRESS" || h.status === "STOPPED")
+      ).length;
       setShowApprovalModal(false);
       setBatchToApprove(null);
       fetchHistory();
+      if (batch?.qcStatus === QC_NOT_REQUIRED) {
+        toast.success(`${batch.batchCode} completed — ready for packaging`);
+        // Last open run: take the operator straight to the next step.
+        if (otherActiveRuns === 0) router.push(`/packaging?batchId=${batch.id}`);
+      } else {
+        toast.success("Production completed & added to Batch Registry");
+      }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || "Failed to complete production");
     } finally {
@@ -274,7 +298,7 @@ export default function ActiveProductionRunsClient() {
                       : "bg-emerald-600 hover:bg-emerald-700 text-white"
                   )}
                 >
-                  <CheckCircle2 size={15} /> Complete &amp; Yield Production
+                  <CheckCircle2 size={15} /> Complete Production
                 </button>
 
                 <button
@@ -431,6 +455,26 @@ export default function ActiveProductionRunsClient() {
           </div>
 
           <div className="space-y-1">
+            <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300">
+              Production Wastage ({yieldUnit}) <span className="font-medium text-gray-400">— optional</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={wastageQty === 0 ? "" : wastageQty}
+              onChange={(e) => setWastageQty(Math.max(0, Number(e.target.value) || 0))}
+              placeholder={
+                expectedYieldVal - (Number(actualYield) || 0) > 0
+                  ? `Yield loss vs expected: ${(expectedYieldVal - (Number(actualYield) || 0)).toFixed(2)}`
+                  : "0"
+              }
+              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-mono font-bold text-gray-900 dark:text-white outline-none focus:border-amber-500"
+            />
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">Recorded in Wastage Records as yield loss. Does not change stock.</p>
+          </div>
+
+          <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
               <CalendarClock size={13} /> Batch Expiry Date <span className="text-rose-500">*</span>
             </label>
@@ -444,13 +488,13 @@ export default function ActiveProductionRunsClient() {
 
           <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-              <FileText size={13} /> Remarks &amp; QC Notes
+              <FileText size={13} /> {PRODUCTION_FEATURES.qc ? <>Remarks &amp; QC Notes</> : "Remarks"}
             </label>
             <textarea
               rows={2}
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Enter production remarks or QA observations..."
+              placeholder="Enter production remarks or observations..."
               className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl p-3 text-xs text-gray-800 dark:text-white outline-none resize-none focus:border-emerald-500"
             />
           </div>
@@ -476,7 +520,7 @@ export default function ActiveProductionRunsClient() {
               ) : (
                 <>
                   <CheckCircle2 size={14} />
-                  <span>Confirm Completion</span>
+                  <span>{PRODUCTION_FEATURES.qc ? "Confirm Completion" : "Complete & Send to Packaging"}</span>
                 </>
               )}
             </button>

@@ -60,6 +60,27 @@ export default function Sidebar() {
   const isFranchiseUser = userRole === "FRANCHISE_ADMIN";
   const sections = isFranchiseUser ? franchiseMenuSections : SUPER_ADMIN_SIDEBAR;
 
+  // Third-level menus (Reports > category > report): accordion — only one
+  // category open at a time. Opening a report directly (deep link, refresh,
+  // back/forward) opens its category automatically.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const isLinkActive = useCallback(
+    (href: string) => pathname === href || fullPath === href,
+    [pathname, fullPath]
+  );
+  useEffect(() => {
+    for (const section of sections) {
+      for (const item of section.items) {
+        const active = item.groups?.find((g) => g.children.some((c) => isLinkActive(c.href)));
+        if (active) {
+          setOpenGroup(active.label);
+          return;
+        }
+      }
+    }
+  }, [sections, isLinkActive]);
+  const toggleGroup = (label: string) => setOpenGroup((prev) => (prev === label ? null : label));
+
   if (pathname === "/login") return null;
 
   return (
@@ -161,6 +182,8 @@ export default function Sidebar() {
               if (section.title.toLowerCase().includes(term)) return true;
               if (item.label.toLowerCase().includes(term)) return true;
               if (item.children?.some((c) => c.label.toLowerCase().includes(term)))
+                return true;
+              if (item.groups?.some((g) => g.label.toLowerCase().includes(term)))
                 return true;
               return false;
             });
@@ -342,8 +365,77 @@ export default function Sidebar() {
                           </div>
                         )}
 
+                        {/* Grouped submenu (Reports > category > report) */}
+                        {!isCollapsed && item.groups && isExpanded && (
+                          <div className="pl-5 mt-1 space-y-0.5 relative">
+                            <div className="absolute left-4 top-0 bottom-2 w-px bg-slate-200/80 dark:bg-white/5" />
+                            {item.groups.map((group) => {
+                              const term = searchTerm.toLowerCase();
+                              const groupMatches = !term || group.label.toLowerCase().includes(term);
+                              const visibleChildren = groupMatches
+                                ? group.children
+                                : group.children.filter((c) => c.label.toLowerCase().includes(term));
+                              if (visibleChildren.length === 0) return null;
+
+                              const groupHasActive = group.children.some((c) => isLinkActive(c.href));
+                              const groupOpen = openGroup === group.label || !!searchTerm;
+                              const GroupIcon = group.icon;
+
+                              return (
+                                <div key={group.label}>
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroup(group.label)}
+                                    className={clsx(
+                                      "w-full flex items-center gap-2 pl-3 pr-2 py-1.5 rounded-xl text-xs text-left transition-all",
+                                      groupHasActive
+                                        ? "text-slate-900 dark:text-white font-bold"
+                                        : "text-slate-600 dark:text-slate-400 font-semibold hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.03]"
+                                    )}
+                                  >
+                                    {GroupIcon && (
+                                      <GroupIcon size={13} className={clsx("shrink-0", groupHasActive ? "text-[#F58220]" : "text-slate-400")} />
+                                    )}
+                                    <span className="flex-1 truncate">{group.label}</span>
+                                    <ChevronRight
+                                      size={12}
+                                      className={clsx(
+                                        "text-slate-400 transition-transform duration-200 shrink-0",
+                                        groupOpen && "rotate-90 text-[#F58220]"
+                                      )}
+                                    />
+                                  </button>
+
+                                  {groupOpen && (
+                                    <div className="ml-[18px] pl-3 border-l border-slate-200/80 dark:border-white/5 mt-0.5 mb-1 space-y-0.5">
+                                      {visibleChildren.map((child) => {
+                                        const isChildActive = isLinkActive(child.href);
+                                        return (
+                                          <Link
+                                            key={child.href}
+                                            href={child.href}
+                                            onClick={closeMobile}
+                                            className={clsx(
+                                              "block px-2.5 py-1.5 rounded-lg text-xs font-medium truncate transition-all",
+                                              isChildActive
+                                                ? "text-[#F58220] bg-orange-50/80 dark:bg-orange-950/20 font-bold"
+                                                : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-white/[0.02]"
+                                            )}
+                                          >
+                                            {child.label}
+                                          </Link>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
                         {/* Submenu Children */}
-                        {!isCollapsed && hasChildren && isExpanded && (
+                        {!isCollapsed && hasChildren && !item.groups && isExpanded && (
                           <div className="pl-7 mt-1 space-y-0.5 relative">
                             <div className="absolute left-4 top-0 bottom-2 w-px bg-slate-200/80 dark:bg-white/5" />
                             {item.children?.map((child) => {

@@ -14,7 +14,7 @@ import {
 import { clsx } from "clsx";
 import api, {
   productsFullApi, franchiseProductRequestsApi,
-  franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem
+  franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem, recallApi
 } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import InventoryMetricCard from "./InventoryMetricCard";
@@ -221,6 +221,23 @@ export default function FinishedGoodsStockClient() {
   };
 
   const [demandItems, setDemandItems] = useState<InventoryDemandItem[]>([]);
+  // Recall-quarantined HQ stock per SKU. HQ Available is physical stock, so
+  // it still includes these units — they're shown separately as not saleable.
+  // Loaded independently so a failure never affects the stock figures above.
+  const [quarantineBySku, setQuarantineBySku] = useState<Record<string, number>>({});
+  useEffect(() => {
+    recallApi.quarantineSummary()
+      .then((res) => {
+        const map: Record<string, number> = {};
+        for (const q of res.data || []) {
+          if (q.franchiseId || !q.sku) continue;
+          map[String(q.sku).toUpperCase()] = (map[String(q.sku).toUpperCase()] || 0) + Number(q.quarantinedQty || 0);
+        }
+        setQuarantineBySku(map);
+      })
+      .catch(() => {});
+  }, []);
+  const quarantinedOf = (sku?: string) => (sku ? quarantineBySku[sku.toUpperCase()] || 0 : 0);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [demandFilter, setDemandFilter] = useState<
@@ -940,6 +957,9 @@ export default function FinishedGoodsStockClient() {
                               <p className="text-sm font-bold text-slate-800 dark:text-white mt-0.5">
                                 {item.hqAvailableStock}
                               </p>
+                              {quarantinedOf(item.sku) > 0 && (
+                                <p className="text-[9px] font-bold text-rose-600 dark:text-rose-400">incl. {quarantinedOf(item.sku)} quarantined</p>
+                              )}
                             </div>
                             <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-lg border border-purple-100 dark:border-purple-900/30">
                               <p className="text-[9px] font-semibold text-purple-600 dark:text-purple-400 uppercase">Reserved</p>
@@ -1089,6 +1109,11 @@ export default function FinishedGoodsStockClient() {
 
                       <td className="px-6 py-4 text-center font-bold text-slate-800 dark:text-white">
                         {item.hqAvailableStock} <span className="text-[10px] text-slate-450 font-normal">{item.unit}</span>
+                        {quarantinedOf(item.sku) > 0 && (
+                          <span className="block text-[10px] font-bold text-rose-600 dark:text-rose-400" title="Blocked by a batch recall — not saleable">
+                            incl. {quarantinedOf(item.sku)} quarantined
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-6 py-4 text-center font-bold text-purple-650 dark:text-purple-400">

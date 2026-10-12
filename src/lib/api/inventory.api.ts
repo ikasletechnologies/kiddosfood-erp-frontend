@@ -92,7 +92,7 @@ export const productionApi = {
   },
   startBatch: (data: any) => api.post('/api/production/batch', data),
   stopBatch: (id: string) => api.post(`/api/production/${id}/stop`),
-  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string }) => api.post(`/api/production/${id}/approve`, data),
+  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string; wastageQty?: number; wastageNote?: string }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (params?: any) => {
     const p = typeof params === 'string' ? { franchiseId: params } : params;
@@ -103,6 +103,24 @@ export const productionApi = {
   // only — bulk stock and Finished Goods are untouched until confirmPackaging.
   packageBatch: (id: string, data: any) => api.post(`/api/production/batches/${id}/package`, data),
   wasteBalance: (id: string, note?: string) => api.post(`/api/production/batches/${id}/waste-balance`, { note }),
+  // Simplified workflow: reserve bulk, credit Finished Goods (per SKU) and
+  // record damaged packets as wastage in ONE server transaction — for one or
+  // several pack sizes of the batch (Packaging & Confirmation).
+  // expectedPackagedQty is the batch's packagedQty as last seen on screen — a
+  // repeated/stale submission is rejected instead of packing twice.
+  packageAndConfirm: (id: string, data: {
+    expectedPackagedQty: number;
+    rows: Array<{
+      packetSize: string;
+      packedQty: number;
+      damagedQty: number;
+      productId?: string;
+      newProduct?: { name: string; sku?: string; basePrice: number };
+    }>;
+  }) => api.post(`/api/production/batches/${id}/package-confirm`, data),
+  // Releases a batch completed while production QC was still required (still
+  // PENDING, never inspected) to packaging now that QC is switched off.
+  releaseToPackaging: (id: string) => api.post(`/api/production/batches/${id}/release-to-packaging`),
   // Phase 2: reports the good/damaged/spoiled split for the completed
   // physical packaging run. Only now is bulk deducted and Finished Goods created.
   verifyPackaging: (packagingId: string, data: { stickersPrinted: number; physicalChecked: boolean; goodQty: number; damagedQty: number; spoiledQty: number }) =>
@@ -142,14 +160,25 @@ export const productBatchesApi = {
 export const recallApi = {
   getEligibility: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall/eligibility`),
   getState: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall`),
-  initiate: (batchId: string, data: { reason: string; reasonNotes?: string }) =>
+  initiate: (batchId: string, data: { reason: string; reasonNotes?: string; severity?: string; description?: string }) =>
     api.post(`/api/production/batches/${batchId}/recall/initiate`, data),
+  // Recall Details: batch, per-SKU quantities, locations, activity, audit trail
+  // (also previews affected stock for a batch with no recall yet).
+  getDetails: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall/details`),
+  list: () => api.get('/api/production/recalls'),
+  quarantineSummary: () => api.get('/api/production/recalls/quarantine-summary'),
+  recover: (batchId: string, data: { inventoryBatchId: string; returnedQty: number; note?: string }) =>
+    api.post(`/api/production/batches/${batchId}/recall/collect-return`, data),
+  dispose: (batchId: string, data: { inventoryBatchId: string; quantity: number; note: string }) =>
+    api.post(`/api/production/batches/${batchId}/recall/dispose`, data),
+  reconcile: (batchId: string, data: { lines: Array<{ inventoryItemId: string; unavailableQty: number }>; notes: string }) =>
+    api.post(`/api/production/batches/${batchId}/recall/reconcile`, data),
   locateDistribution: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/locate-distribution`),
   blockSales: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/block-sales`),
   generateReport: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/generate-report`),
   collectReturn: (batchId: string, returnedQty: number) =>
     api.post(`/api/production/batches/${batchId}/recall/collect-return`, { returnedQty }),
-  complete: (batchId: string) => api.post(`/api/production/batches/${batchId}/recall/complete`),
+  complete: (batchId: string, note?: string) => api.post(`/api/production/batches/${batchId}/recall/complete`, { note }),
   cancel: (batchId: string, note?: string) => api.post(`/api/production/batches/${batchId}/recall/cancel`, { note }),
 };
 

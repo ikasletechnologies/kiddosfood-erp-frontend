@@ -201,10 +201,11 @@ function computeRow(item: LineItem, withTax: boolean) {
   return { gross, discAmt, taxable, taxAmt, amount: lineTotal };
 }
 
-// A batch is dispatchable when it has passed QC, isn't under an active recall,
-// hasn't expired, and still has packaged stock on hand.
+// A batch is dispatchable when it has passed QC (or was released without QC
+// because production QC is switched off — QC_NOT_REQUIRED), isn't under an
+// active recall, hasn't expired, and still has packaged stock on hand.
 function batchIsUsable(b: any) {
-  const qcOk = b.qcStatus === "APPROVED" || b.qcStatus === "PARTIALLY_APPROVED";
+  const qcOk = b.qcStatus === "APPROVED" || b.qcStatus === "PARTIALLY_APPROVED" || b.qcStatus === "QC_NOT_REQUIRED";
   const notRecalled = !(b.recall && (b.recall.status === "IN_PROGRESS" || b.recall.status === "COMPLETED"));
   const notExpired = b.expiryStatus !== "EXPIRED";
   const hasStock = (b.availableQuantity || 0) > 0;

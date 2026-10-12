@@ -31,7 +31,9 @@ import {
   MapPin,
   ShieldAlert,
   FileCheck2,
+  BarChart3,
 } from "lucide-react";
+import { PRODUCTION_FEATURES } from "./production-features";
 
 export interface MenuItem {
   icon: any;
@@ -45,6 +47,15 @@ export interface MenuItem {
     label: string;
     href: string;
     isNew?: boolean;
+  }[];
+  // Optional third level (used by Reports): Reports > category > report.
+  // When present the sidebar renders these groups; `children` still holds
+  // the same links flattened, so title lookup and other consumers that read
+  // `children` keep working unchanged.
+  groups?: {
+    icon: any;
+    label: string;
+    children: { label: string; href: string; isNew?: boolean }[];
   }[];
 }
 
@@ -182,6 +193,18 @@ const FRANCHISE_REPORT_GROUPS = REPORT_GROUPS.filter(
   (g) => g.label !== "Franchise Reports" && g.label !== "Loan Account Reports"
 );
 
+// One collapsible "Reports" entry holding every report category (level 2)
+// and its existing report pages (level 3). Routes are unchanged — only how
+// they're grouped in the sidebar.
+const reportsMenu = (groups: typeof REPORT_GROUPS, roles: string[]): MenuItem => ({
+  icon: BarChart3,
+  label: "Reports",
+  href: "/reports",
+  roles,
+  children: groups.flatMap((g) => g.items),
+  groups: groups.map((g) => ({ icon: g.icon, label: g.label, children: g.items })),
+});
+
 // ─── SUPER_ADMIN (HQ CONTROL CENTER) ──────────────────────────────────────────
 export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
   {
@@ -252,46 +275,65 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Factory,
-        label: "Batch Manufacturing",
+        label: "Production Runs",
         href: "/production/batches",
         roles: SUPER_ONLY,
       },
-      {
-        icon: UserCheck,
-        label: "QC",
-        href: "/purchases/qc",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: ClipboardList,
-        label: "Packaging Queue",
-        href: "/packaging/queue",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: Barcode,
-        label: "Labels & Barcodes",
-        href: "/packaging/labels",
-        roles: SUPER_ONLY,
-      },
-      {
-        icon: PackageCheck,
-        label: "Confirm Packaging",
-        href: "/packaging/confirm",
-        roles: SUPER_ONLY,
-      },
+      // Hidden modules stay in the codebase and come back here when their
+      // flag is switched on — see src/config/production-features.ts.
+      ...(PRODUCTION_FEATURES.qc
+        ? [{
+            icon: UserCheck,
+            label: "QC",
+            href: "/purchases/qc",
+            roles: SUPER_ONLY,
+          }]
+        : []),
+      // With Labels & Barcodes on, packaging is the original two-step flow
+      // (Queue -> Labels -> Confirm). Off, it is one merged screen.
+      ...(PRODUCTION_FEATURES.labels
+        ? [
+            {
+              icon: ClipboardList,
+              label: "Packaging Queue",
+              href: "/packaging/queue",
+              roles: SUPER_ONLY,
+            },
+            {
+              icon: Barcode,
+              label: "Labels & Barcodes",
+              href: "/packaging/labels",
+              roles: SUPER_ONLY,
+            },
+            {
+              icon: PackageCheck,
+              label: "Confirm Packaging",
+              href: "/packaging/confirm",
+              roles: SUPER_ONLY,
+            },
+          ]
+        : [
+            {
+              icon: PackageCheck,
+              label: "Packaging & Confirmation",
+              href: "/packaging",
+              roles: SUPER_ONLY,
+            },
+          ]),
       {
         icon: Undo2,
-        label: "Wastage",
+        label: "Wastage Records",
         href: "/production/wastage",
         roles: SUPER_ONLY,
       },
-      {
-        icon: ShieldAlert,
-        label: "Batch Recall",
-        href: "/production/batch-recall",
-        roles: SUPER_ONLY,
-      },
+      ...(PRODUCTION_FEATURES.recall
+        ? [{
+            icon: ShieldAlert,
+            label: "Batch Recall",
+            href: "/production/batch-recall",
+            roles: SUPER_ONLY,
+          }]
+        : []),
     ],
   },
 
@@ -513,13 +555,7 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
   },
   {
     title: "REPORTS",
-    items: REPORT_GROUPS.map((g) => ({
-      icon: g.icon,
-      label: g.label,
-      href: g.items[0].href,
-      roles: SUPER_ONLY,
-      children: g.items,
-    })),
+    items: [reportsMenu(REPORT_GROUPS, SUPER_ONLY)],
   },
   {
     title: "SYSTEM",
@@ -721,13 +757,7 @@ export const franchiseMenuSections: MenuSection[] = [
   },
   {
     title: "REPORTS",
-    items: FRANCHISE_REPORT_GROUPS.map((g) => ({
-      icon: g.icon,
-      label: g.label,
-      href: g.items[0].href,
-      roles: FRANCHISE_ONLY,
-      children: g.items,
-    })),
+    items: [reportsMenu(FRANCHISE_REPORT_GROUPS, FRANCHISE_ONLY)],
   },
   {
     title: "SETTINGS",
