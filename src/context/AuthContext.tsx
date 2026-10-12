@@ -49,6 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
+    Object.keys(sessionStorage)
+      .filter((key) => key.startsWith('erp-assistant:'))
+      .forEach((key) => sessionStorage.removeItem(key));
     setUser(null);
     setSetupStatus(null);
     router.push('/login');

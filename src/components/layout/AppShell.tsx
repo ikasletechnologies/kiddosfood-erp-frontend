@@ -12,6 +12,8 @@ import { FranchiseWarehouseGuard } from "@/components/modules/franchise/Franchis
 const PUBLIC_PATHS = ["/login"];
 const SETUP_PATH = "/setup";
 
+import ERPAssistant from '@/components/assistant/ERPAssistant';
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, setupStatus, setupStatusLoading } = useAuth();
   const pathname = usePathname();
@@ -106,6 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
+        <ERPAssistant />
     </SidebarProvider>
   );
 }
