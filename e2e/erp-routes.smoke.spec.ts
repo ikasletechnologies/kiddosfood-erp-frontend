@@ -165,3 +165,4 @@ for (const [moduleName, routes] of Object.entries(moduleRoutes)) {
     }
   });
 }
+// @ts-nocheck

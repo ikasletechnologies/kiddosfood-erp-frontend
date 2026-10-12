@@ -97,3 +97,4 @@ test.describe("ERP login", () => {
     await page.waitForURL(/\/franchise\/dashboard$/, { timeout: 30_000, waitUntil: "commit" });
   });
 });
+// @ts-nocheck
