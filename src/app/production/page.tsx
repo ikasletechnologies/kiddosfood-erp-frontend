@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense, Fragment } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowRight, Printer, AlertCircle, AlertTriangle, CheckCircle2,
   RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart,
-  ClipboardList, ExternalLink, Search, ChevronDown, Check, Info, Zap
+  ClipboardList, ExternalLink, Search, ChevronDown, Check, Info, Zap, Layers
 } from "lucide-react";
 import { recipesApi, inventoryApi, franchiseApi, productionApi, franchiseOrdersApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { RECIPE_UNITS } from "@/lib/recipe-units";
 import { convertUnit, convertMeasurement } from "@/lib/unitConversion";
 import clsx from "clsx";
+import ReferenceFormulationPanel, { Formulation, isUsableFormulation } from "@/components/modules/production/ReferenceFormulationPanel";
+import IngredientLotPanel from "@/components/modules/production/IngredientLotPanel";
+import { AllocationDraft, MaterialLots, allocationCost, allocationError, fifoDraft, toPayload } from "@/lib/lot-allocation";
 
 const WAREHOUSE_STORAGE_KEY = "kf.productionPlanning.warehouseId";
 const EPSILON = 0.000001;
@@ -73,6 +76,16 @@ interface Recipe {
     name: string;
   };
   recipeItems: RecipeItem[];
+  ingredients?: Array<{ inventoryItemId: string; inventoryItem: any }>;
+  activeFormulation?: Formulation | null;
+  productionCount?: number;
+}
+
+// The saved formulation must cover exactly the recipe's current ingredients.
+function sameIngredientSet(recipe: Recipe, f: Formulation): boolean {
+  const ing = new Set((recipe.ingredients ?? []).map((i) => i.inventoryItemId));
+  const form = new Set((f.items ?? []).map((i) => i.inventoryItemId));
+  return ing.size === form.size && Array.from(ing).every((id) => form.has(id));
 }
 
 interface LinkedFranchiseOrderItem {
@@ -189,10 +202,45 @@ function ProductionPlanningContent() {
   const [recipeQuery, setRecipeQuery] = useState("");
   const [highlightIdx, setHighlightIdx] = useState(0);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [expiryDate, setExpiryDate] = useState<string>(defaultExpiryDate());
+  // Unsaved formulation being edited in the Reference Formulation panel,
+  // tagged with the recipe it belongs to.
+  const [formulationDraft, setFormulationDraft] = useState<{ recipeId: string; formulation: Formulation | null } | null>(null);
+  // Purchase lots per material in the selected warehouse, and the operator's
+  // allocation per material (absent = the oldest-first suggestion).
+  const [lotOptions, setLotOptions] = useState<Record<string, MaterialLots> | null>(null);
+  const [lotsError, setLotsError] = useState(false);
+  const [lotsReload, setLotsReload] = useState(0);
+  const [lotDrafts, setLotDrafts] = useState<Record<string, AllocationDraft>>({});
+  const [openLots, setOpenLots] = useState<Record<string, boolean>>({});
 
-  const recipe = recipes.find((r) => r.id === selectedRecipeId);
+  // Recipe Master only lists ingredients; quantities and the reference yield
+  // come from the saved formulation (or the draft while it's being edited).
+  // Everything below scales from `recipe.yieldQty` / `recipe.recipeItems`,
+  // so the effective recipe presents the formulation in that shape.
+  const baseRecipe = recipes.find((r) => r.id === selectedRecipeId);
+  const activeFormulation = isUsableFormulation(baseRecipe?.activeFormulation) ? baseRecipe!.activeFormulation! : null;
+  const formulationOutdated = !!baseRecipe && !!activeFormulation && !sameIngredientSet(baseRecipe, activeFormulation);
+  const draftForRecipe = formulationDraft?.recipeId === selectedRecipeId ? formulationDraft.formulation : null;
+  const editingFormulation = !!draftForRecipe;
+  // Requirements are only calculated from a formulation with a valid
+  // reference yield; an incomplete draft shows no numbers rather than ×1.
+  const candidateFormulation = draftForRecipe ?? (formulationOutdated ? null : activeFormulation);
+  const shownFormulation = candidateFormulation && Number.isFinite(candidateFormulation.yieldQty) && candidateFormulation.yieldQty > 0
+    ? candidateFormulation
+    : null;
+  const recipe: Recipe | undefined = baseRecipe && {
+    ...baseRecipe,
+    yieldQty: shownFormulation && shownFormulation.yieldQty > 0 ? shownFormulation.yieldQty : 0,
+    yieldUnit: shownFormulation?.yieldUnit || baseRecipe.yieldUnit || "KG",
+    recipeItems: (shownFormulation?.items ?? []).map((i) => ({
+      id: i.inventoryItemId,
+      inventoryItemId: i.inventoryItemId,
+      quantityRequired: i.quantity,
+      unit: i.unit,
+      inventoryItem: { name: i.inventoryItem?.name, sku: i.inventoryItem?.sku, currentStock: i.inventoryItem?.currentStock ?? 0 },
+    })),
+  };
+  const formulationReady = !!activeFormulation && !formulationOutdated && !editingFormulation;
 
   // Helper to select a specific franchise order item and match its recipe
   const applyOrderItemSelection = useCallback(
@@ -383,12 +431,19 @@ function ProductionPlanningContent() {
   };
 
   const recipeUnit = recipe?.yieldUnit || "KG";
+  // Target units must be convertible to the saved formulation's yield unit.
+  // With nothing saved yet, the target sets that unit, so any unit the
+  // formulation layer supports is offered.
+  const unitAnchor = activeFormulation?.yieldUnit || null;
   const compatibleUnits = useMemo(() => {
-    const list: string[] = RECIPE_UNITS.filter((u) => isUnitCompatible(u, recipeUnit));
-    if (!list.includes(recipeUnit)) list.unshift(recipeUnit);
+    if (!unitAnchor) return ["KG", "G", "L", "ML", "PCS", "BOX"];
+    const list: string[] = RECIPE_UNITS.filter((u) => isUnitCompatible(u, unitAnchor));
+    if (!list.includes(unitAnchor)) list.unshift(unitAnchor);
     return list;
-  }, [recipeUnit]);
-  const effectiveTargetUnit = targetUnit && compatibleUnits.includes(targetUnit) ? targetUnit : recipeUnit;
+  }, [unitAnchor]);
+  const effectiveTargetUnit = targetUnit && compatibleUnits.includes(targetUnit)
+    ? targetUnit
+    : (compatibleUnits.includes(recipeUnit) ? recipeUnit : compatibleUnits[0]);
   const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
   const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
 
@@ -409,10 +464,40 @@ function ProductionPlanningContent() {
     const sufficient = available + EPSILON >= scaledQty;
     const deficit = Math.max(scaledQty - available, 0);
     const coverage = scaledQty > 0 ? Math.min(available / scaledQty, 1) : 1;
-    return { item, scaledQty, available, sufficient, deficit, coverage };
+    // Lot allocation is in the material's stock unit.
+    const material = lotOptions?.[item.inventoryItemId];
+    const requiredStock = material ? convertUnit(scaledQty, item.unit, material.unit) : 0;
+    const lotDraft: AllocationDraft = material ? (lotDrafts[item.inventoryItemId] ?? fifoDraft(material, requiredStock)) : {};
+    const lotError = material ? allocationError(material, lotDraft, requiredStock) : null;
+    const lotCost = material ? allocationCost(material, lotDraft) : null;
+    return { item, scaledQty, available, sufficient, deficit, coverage, material, requiredStock, lotDraft, lotError, lotCost };
   });
   const shortRows = ingredientRows.filter((r) => !r.sufficient);
   const hasShortage = shortRows.length > 0;
+
+  const ingredientIdsKey = (recipe?.recipeItems || []).map((i) => i.inventoryItemId).sort().join(",");
+  useEffect(() => {
+    setLotDrafts({});
+    setOpenLots({});
+    setLotOptions(null);
+    setLotsError(false);
+    if (!selectedWarehouseId || !ingredientIdsKey) return;
+    let cancelled = false;
+    productionApi.getLotOptions(selectedWarehouseId, ingredientIdsKey.split(","))
+      .then((res) => {
+        if (cancelled) return;
+        const map: Record<string, MaterialLots> = {};
+        (Array.isArray(res.data) ? res.data : []).forEach((m: MaterialLots) => { map[m.inventoryItemId] = m; });
+        setLotOptions(map);
+      })
+      .catch(() => { if (!cancelled) setLotsError(true); });
+    return () => { cancelled = true; };
+  }, [selectedWarehouseId, ingredientIdsKey, lotsReload]);
+
+  const lotsReady = !!lotOptions && ingredientRows.every((r) => !!r.material);
+  const lotProblemRows = ingredientRows.filter((r) => r.lotError);
+  const materialCostTotal = ingredientRows.reduce((s, r) => s + (r.lotCost ?? 0), 0);
+  const fmtInr = (n: number) => `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
   // Largest batch the selected warehouse can support right now, in the target unit.
   const maxMultiplier = ingredientRows.reduce((min, r) => {
@@ -426,7 +511,13 @@ function ProductionPlanningContent() {
 
   const selectedWarehouse = warehouses.find((w) => w.id === selectedWarehouseId);
   const yieldInvalid = !!recipe && targetYield <= 0;
-  const canStart = !!recipe && !hasShortage && !yieldInvalid && !!selectedWarehouseId && !stockLoading && ingredientRows.length > 0;
+  const canStart = !!recipe && formulationReady && !hasShortage && !yieldInvalid && !!selectedWarehouseId && !stockLoading && ingredientRows.length > 0
+    && lotsReady && lotProblemRows.length === 0;
+
+  const handleFormulationSaved = (f: Formulation) => {
+    setRecipes((prev) => prev.map((r) => (r.id === selectedRecipeId ? { ...r, activeFormulation: f, yieldQty: f.yieldQty, yieldUnit: f.yieldUnit } : r)));
+    setFormulationDraft(null);
+  };
 
   // Disambiguate recipes that share a name (e.g. two "egg curry" entries).
   const nameCounts = useMemo(() => {
@@ -443,8 +534,9 @@ function ProductionPlanningContent() {
     if (r.product?.name && r.product.name.trim().toLowerCase() !== r.name.trim().toLowerCase()) {
       parts.push(r.product.name);
     }
-    parts.push(`Makes ${fmtQty(r.yieldQty)} ${r.yieldUnit}`);
-    parts.push(`${r.recipeItems?.length || 0} ingredient${(r.recipeItems?.length || 0) === 1 ? "" : "s"}`);
+    parts.push(isUsableFormulation(r.activeFormulation) ? `Ref. ${fmtQty(r.activeFormulation.yieldQty)} ${r.activeFormulation.yieldUnit}` : "Formulation needed");
+    const ingCount = r.ingredients?.length ?? r.recipeItems?.length ?? 0;
+    parts.push(`${ingCount} ingredient${ingCount === 1 ? "" : "s"}`);
     if (nameCounts[(r.name || "").trim().toLowerCase()] > 1) {
       parts.push((r as any).recipeCode || `#${r.id.slice(-6).toUpperCase()}`);
     }
@@ -521,6 +613,10 @@ function ProductionPlanningContent() {
 
   const handleStartProductionDirect = async () => {
     if (!recipe) return;
+    if (!formulationReady || !activeFormulation?.id) {
+      toast.error("Save the reference formulation before starting production.");
+      return;
+    }
     if (hasShortage) {
       toast.error("Some ingredients are short. Buy raw materials or reduce the batch size first.");
       return;
@@ -533,21 +629,31 @@ function ProductionPlanningContent() {
       toast.error("Target batch yield must be greater than 0.");
       return;
     }
-
-    if (!expiryDate) {
-      toast.error("Choose an expiry date for this batch.");
+    if (!lotsReady || lotProblemRows.length > 0) {
+      toast.error(lotProblemRows.length
+        ? `Check the purchase lots for ${lotProblemRows[0].item.inventoryItem?.name}: ${lotProblemRows[0].lotError}`
+        : "Purchase lots are still loading.");
       return;
     }
 
+    // Same default the old confirmation dialog pre-filled (today + 7 days).
+    const expiryDate = defaultExpiryDate();
+
     setLaunching(true);
     try {
-      const startRes = await productionApi.startBatch({
+      // The backend resolves the saved formulation, rescales, re-checks
+      // warehouse stock and freezes a snapshot before deducting anything.
+      const startRes = await productionApi.startPlanned({
         recipeId: recipe.id,
+        formulationId: activeFormulation.id,
+        targetQty: targetYield,
+        targetUnit: effectiveTargetUnit,
         franchiseId,
         warehouseId: selectedWarehouseId,
-        quantity: multiplier,
         expiryDate,
         productionType: "FINISHED_GOOD",
+        // Exactly the lots chosen above; the server re-checks each one.
+        lotAllocations: Object.fromEntries(ingredientRows.map((r) => [r.item.inventoryItemId, toPayload(r.lotDraft)])),
       });
 
       // If originated from a Franchise Order in APPROVED state, update order status to IN_PRODUCTION
@@ -1010,7 +1116,7 @@ function ProductionPlanningContent() {
           </div>
           {yieldInvalid ? (
             <p className="text-[11px] font-semibold text-rose-500">Enter a quantity greater than 0.</p>
-          ) : recipe ? (
+          ) : recipe && recipe.yieldQty > 0 ? (
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mr-0.5">Quick:</span>
               {quickMultiples.map((k) => {
@@ -1114,7 +1220,7 @@ function ProductionPlanningContent() {
               <RefreshCw size={16} className="animate-spin text-[#f58220]" />
               Checking stock at {selectedWarehouse?.name || "warehouse"}…
             </div>
-          ) : ingredientRows.length === 0 ? (
+          ) : (baseRecipe?.ingredients?.length ?? 0) === 0 && ingredientRows.length === 0 ? (
             <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3 text-xs font-semibold text-amber-800 dark:text-amber-300">
                 <Info size={18} className="shrink-0" />
@@ -1123,6 +1229,11 @@ function ProductionPlanningContent() {
               <Link href="/production/recipes" className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-bold shrink-0 text-center">
                 Open Recipe Master
               </Link>
+            </div>
+          ) : ingredientRows.length === 0 ? (
+            <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 p-4 flex items-center gap-3 text-xs font-semibold text-amber-800 dark:text-amber-300">
+              <Info size={18} className="shrink-0" />
+              Enter the reference formulation below to calculate ingredient requirements.
             </div>
           ) : hasShortage ? (
             <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-950/20 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -1176,6 +1287,17 @@ function ProductionPlanningContent() {
             </div>
           )}
 
+          {/* ── Reference formulation (saved per recipe, versioned) ── */}
+          <ReferenceFormulationPanel
+            key={`${baseRecipe!.id}:${activeFormulation?.id ?? "none"}`}
+            recipe={baseRecipe}
+            outdated={formulationOutdated}
+            targetQty={targetYield}
+            targetUnit={effectiveTargetUnit}
+            onDraftChange={(f) => setFormulationDraft(f ? { recipeId: baseRecipe!.id, formulation: f } : null)}
+            onSaved={handleFormulationSaved}
+          />
+
           {/* ── Ingredients & instructions ── */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 w-full min-w-0">
             <div className="lg:col-span-2 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl shadow-2xs overflow-hidden min-w-0">
@@ -1196,18 +1318,21 @@ function ProductionPlanningContent() {
                 <>
                   {/* Desktop table */}
                   <div className="hidden sm:block overflow-x-auto custom-scrollbar w-full max-w-full">
-                    <table className="w-full text-left border-collapse min-w-[560px]">
+                    <table className="w-full text-left border-collapse min-w-[780px]">
                       <thead>
                         <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500 border-b border-gray-200 dark:border-white/5">
                           <th className="py-3 px-5">Ingredient</th>
                           <th className="py-3 px-4 text-right">Need</th>
                           <th className="py-3 px-4 text-right">In stock</th>
                           <th className="py-3 px-5 w-[180px]">Status</th>
+                          <th className="py-3 px-4">Purchase lots</th>
+                          <th className="py-3 px-5 text-right">Material cost</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-xs font-semibold text-gray-700 dark:text-slate-300">
-                        {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage }) => (
-                          <tr key={item.id} className={clsx("transition-colors", sufficient ? "hover:bg-orange-50/20 dark:hover:bg-white/[0.02]" : "bg-rose-50/40 dark:bg-rose-500/[0.04]")}>
+                        {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage, material, requiredStock, lotDraft, lotError, lotCost }) => (
+                          <Fragment key={item.id}>
+                          <tr className={clsx("transition-colors", sufficient ? "hover:bg-orange-50/20 dark:hover:bg-white/[0.02]" : "bg-rose-50/40 dark:bg-rose-500/[0.04]")}>
                             <td className="py-3.5 px-5">
                               <div className="font-bold text-gray-900 dark:text-white">{item.inventoryItem?.name}</div>
                               <div className="text-[10px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "SKU-N/A"}</div>
@@ -1237,7 +1362,49 @@ function ProductionPlanningContent() {
                                 />
                               </div>
                             </td>
+                            <td className="py-3.5 px-4">
+                              {material ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenLots((o) => ({ ...o, [item.inventoryItemId]: !o[item.inventoryItemId] }))}
+                                  aria-expanded={!!openLots[item.inventoryItemId]}
+                                  className={clsx(
+                                    "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold cursor-pointer whitespace-nowrap",
+                                    lotError ? "border-rose-300 text-rose-600 bg-rose-50 dark:bg-rose-500/10" : "border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-300 hover:border-[#f58220]"
+                                  )}
+                                >
+                                  <Layers size={12} />
+                                  {lotError ? "Check lots" : `${Object.values(lotDraft).filter((v) => Number(v) > 0).length} lot${Object.values(lotDraft).filter((v) => Number(v) > 0).length === 1 ? "" : "s"}`}
+                                  <ChevronDown size={12} className={clsx("transition-transform", openLots[item.inventoryItemId] && "rotate-180")} />
+                                </button>
+                              ) : (
+                                <span className="text-[11px] text-gray-400">{lotsError ? "—" : "Loading…"}</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-5 text-right whitespace-nowrap">
+                              {lotCost != null ? (
+                                <>
+                                  <div className="font-bold text-gray-900 dark:text-white">{fmtInr(lotCost)}</div>
+                                  {requiredStock > 0 && <div className="text-[10px] text-gray-400">{fmtInr(lotCost / requiredStock)}/{material?.unit}</div>}
+                                </>
+                              ) : "—"}
+                            </td>
                           </tr>
+                          {material && openLots[item.inventoryItemId] && (
+                            <tr>
+                              <td colSpan={6} className="p-0">
+                                <IngredientLotPanel
+                                  material={material}
+                                  required={requiredStock}
+                                  draft={lotDraft}
+                                  edited={!!lotDrafts[item.inventoryItemId]}
+                                  onChange={(d) => setLotDrafts((prev) => ({ ...prev, [item.inventoryItemId]: d }))}
+                                  onReset={() => setLotDrafts((prev) => { const next = { ...prev }; delete next[item.inventoryItemId]; return next; })}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         ))}
                       </tbody>
                     </table>
@@ -1245,7 +1412,7 @@ function ProductionPlanningContent() {
 
                   {/* Mobile cards */}
                   <div className="sm:hidden divide-y divide-gray-100 dark:divide-white/5">
-                    {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage }) => (
+                    {ingredientRows.map(({ item, scaledQty, available, sufficient, deficit, coverage, material, requiredStock, lotDraft, lotError, lotCost }) => (
                       <div key={item.id} className="p-3.5 space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div>
@@ -1268,8 +1435,56 @@ function ProductionPlanningContent() {
                             style={{ width: `${Math.max(coverage * 100, sufficient ? 100 : 3)}%` }}
                           />
                         </div>
+                        {material && (
+                          <div className="flex items-center justify-between text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setOpenLots((o) => ({ ...o, [item.inventoryItemId]: !o[item.inventoryItemId] }))}
+                              className={clsx("inline-flex items-center gap-1 font-bold cursor-pointer", lotError ? "text-rose-600" : "text-[#f58220]")}
+                            >
+                              <Layers size={12} /> {lotError ? "Check lots" : "Purchase lots"}
+                              <ChevronDown size={12} className={clsx("transition-transform", openLots[item.inventoryItemId] && "rotate-180")} />
+                            </button>
+                            <span className="text-gray-500">Cost <strong className="text-gray-900 dark:text-white">{fmtInr(lotCost ?? 0)}</strong></span>
+                          </div>
+                        )}
+                        {material && openLots[item.inventoryItemId] && (
+                          <div className="-mx-3.5">
+                            <IngredientLotPanel
+                              material={material}
+                              required={requiredStock}
+                              draft={lotDraft}
+                              edited={!!lotDrafts[item.inventoryItemId]}
+                              onChange={(d) => setLotDrafts((prev) => ({ ...prev, [item.inventoryItemId]: d }))}
+                              onReset={() => setLotDrafts((prev) => { const next = { ...prev }; delete next[item.inventoryItemId]; return next; })}
+                            />
+                          </div>
+                        )}
                       </div>
                     ))}
+                  </div>
+
+                  {/* Production material cost summary */}
+                  <div className="border-t border-gray-100 dark:border-white/5 bg-gray-50/50 dark:bg-white/[0.01] px-4 sm:px-5 py-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Production material cost</p>
+                    {lotsError ? (
+                      <span className="text-[11px] font-bold text-rose-600 flex items-center gap-2">
+                        Couldn&apos;t load purchase lots.
+                        <button type="button" onClick={() => setLotsReload((n) => n + 1)} className="underline cursor-pointer">Retry</button>
+                      </span>
+                    ) : !lotsReady ? (
+                      <span className="text-[11px] font-semibold text-gray-400">{selectedWarehouseId ? "Loading purchase lots…" : "Choose a warehouse"}</span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs font-semibold text-gray-600 dark:text-slate-300">
+                        <span>Total <strong className="text-gray-900 dark:text-white text-sm">{fmtInr(materialCostTotal)}</strong></span>
+                        {targetYield > 0 && (
+                          <span>Planned cost <strong className="text-gray-900 dark:text-white">{fmtInr(materialCostTotal / targetYield)}/{effectiveTargetUnit}</strong></span>
+                        )}
+                        {lotProblemRows.length > 0 && (
+                          <span className="text-rose-600 font-bold">{lotProblemRows.length} ingredient{lotProblemRows.length === 1 ? "" : "s"} need lot allocation</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -1296,23 +1511,28 @@ function ProductionPlanningContent() {
             <div className="flex gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  setExpiryDate(defaultExpiryDate());
-                  setShowConfirm(true);
-                }}
+                onClick={handleStartProductionDirect}
                 disabled={!canStart || launching}
                 title={
-                  hasShortage
+                  !formulationReady
+                    ? "Save the reference formulation first"
+                    : hasShortage
                     ? "Resolve the ingredient shortage first"
                     : yieldInvalid
                     ? "Enter a quantity first"
                     : !selectedWarehouseId
                     ? "Choose a warehouse first"
+                    : lotProblemRows.length > 0
+                    ? "Allocate purchase lots for every ingredient first"
+                    : !lotsReady
+                    ? "Loading purchase lots"
                     : undefined
                 }
                 className="flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer bg-[#f58220] hover:bg-[#e0751a] text-white disabled:bg-gray-200 disabled:text-gray-500 dark:disabled:bg-white/10 dark:disabled:text-slate-500 disabled:cursor-not-allowed"
               >
-                Start Production <ArrowRight size={14} />
+                {launching ? <RefreshCw size={14} className="animate-spin" /> : null}
+                {launching ? "Starting..." : "Start Production"}
+                {!launching && <ArrowRight size={14} />}
               </button>
             </div>
           </div>
@@ -1345,73 +1565,6 @@ function ProductionPlanningContent() {
           )}
         </div>
       ) : null}
-
-      {/* ── Confirm Start Modal ── */}
-      {showConfirm && recipe && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl p-5 sm:p-6 w-full max-w-md mx-auto space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <ChefHat size={16} className="text-[#f58220]" />
-                Start this production run?
-              </h3>
-              <button onClick={() => setShowConfirm(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 cursor-pointer">
-                <X size={16} />
-              </button>
-            </div>
-
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs bg-gray-50 dark:bg-white/[0.03] rounded-xl p-3.5">
-              <dt className="text-gray-400 font-semibold">Recipe</dt>
-              <dd className="font-bold text-gray-900 dark:text-white text-right truncate">{recipe.name}</dd>
-              <dt className="text-gray-400 font-semibold">Quantity</dt>
-              <dd className="font-bold text-[#f58220] text-right">{fmtQty(targetYield)} {effectiveTargetUnit}</dd>
-              <dt className="text-gray-400 font-semibold">Warehouse</dt>
-              <dd className="font-bold text-gray-900 dark:text-white text-right truncate">{selectedWarehouse?.name}</dd>
-              {linkedOrder && (
-                <>
-                  <dt className="text-gray-400 font-semibold">For order</dt>
-                  <dd className="font-bold text-gray-900 dark:text-white text-right">{linkedOrder.orderNumber}</dd>
-                </>
-              )}
-            </dl>
-
-            <div>
-              <label className="block text-xs font-bold text-gray-700 dark:text-slate-300 mb-1">Batch expiry date</label>
-              <input
-                type="date"
-                value={expiryDate}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => setExpiryDate(e.target.value)}
-                className="w-full border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-gray-800 dark:text-white bg-gray-50 dark:bg-[#13151f] focus:border-[#f58220] outline-none"
-              />
-            </div>
-
-            <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium flex items-start gap-1.5">
-              <Info size={13} className="shrink-0 mt-0.5" />
-              {ingredientRows.length} ingredient{ingredientRows.length === 1 ? "" : "s"} will be used from {selectedWarehouse?.name || "the warehouse"} and the batch will appear under Production Runs.
-            </p>
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-white/10 text-xs font-semibold text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleStartProductionDirect}
-                disabled={launching}
-                className="flex-1 py-2.5 rounded-xl bg-[#f58220] text-white text-xs font-bold hover:bg-[#e0751a] transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-              >
-                {launching ? <RefreshCw size={13} className="animate-spin" /> : <ArrowRight size={13} />}
-                <span>{launching ? "Starting..." : "Yes, Start Production"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Add Warehouse Modal ── */}
       {showAddWarehouse && (

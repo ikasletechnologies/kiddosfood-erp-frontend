@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Box, CheckCircle2, AlertTriangle, RefreshCw, Search, X, PackageCheck,
-  Trash2, ArrowRight, Info, Plus, ChevronDown, Check, Clock3, Boxes,
+  Trash2, Info, Plus, ChevronDown, Check,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { format } from "date-fns";
@@ -15,6 +15,9 @@ import { productionApi, franchiseApi, productsApi } from "@/lib/api";
 import { convertUnit } from "@/lib/unitConversion";
 import { generateSKU } from "@/lib/utils/erp";
 import { packagingBlocker, packableQty } from "@/config/production-features";
+import { plannedYieldOf } from "@/lib/production-yield";
+import ProductionCostPanel, { ExpenseDraft, RowCost, expensesPayload } from "@/components/modules/production/ProductionCostPanel";
+import { profitOf } from "@/lib/packaging-profit";
 
 interface Batch {
   id: string;
@@ -30,7 +33,13 @@ interface Batch {
   recall?: { status: string } | null;
   packagings?: Array<{ id: string; status: string; totalWeight: number }>;
   product?: { id?: string | null; name: string; sku?: string | null } | null;
-  production?: { status?: string | null; recipe?: { name?: string; yieldUnit?: string | null } | null } | null;
+  production?: {
+    status?: string | null;
+    quantity?: number | null;
+    plannedYieldQty?: number | null;
+    plannedYieldUnit?: string | null;
+    recipe?: { name?: string; yieldQty?: number | null; yieldUnit?: string | null } | null;
+  } | null;
 }
 
 interface PackRow {
@@ -49,22 +58,7 @@ interface PackRow {
 }
 
 interface ConfirmedLine {
-  packetSize: string;
-  sku: string;
-  productName: string;
   goodQty: number;
-  damagedQty: number;
-  totalWeight: number;
-}
-
-interface ConfirmedSummary {
-  batchCode: string;
-  productName: string;
-  batchUnit: string;
-  confirmedAt: Date;
-  usedWeight: number;
-  remainingWeight: number;
-  lines: ConfirmedLine[];
 }
 
 const MAX_ROWS = 20;
@@ -269,9 +263,17 @@ function PackagingContent() {
 
   const [rows, setRows] = useState<PackRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [confirmed, setConfirmed] = useState<ConfirmedSummary | null>(null);
   const [wasteTarget, setWasteTarget] = useState<Batch | null>(null);
   const [wasting, setWasting] = useState(false);
+  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]);
+  const [costRefresh, setCostRefresh] = useState(0);
+  // Server-calculated production cost per row (keyed by row key).
+  const [rowCosts, setRowCosts] = useState<Record<string, RowCost>>({});
+  const [costsLoading, setCostsLoading] = useState(false);
+  const handleCostsChange = useCallback((byKey: Record<string, RowCost>, loading: boolean) => {
+    setRowCosts(byKey);
+    setCostsLoading(loading);
+  }, []);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -383,7 +385,7 @@ function PackagingContent() {
   const selectBatch = useCallback(
     (b: Batch) => {
       setSelectedId(b.id);
-      setConfirmed(null);
+      setExpenses([]);
       startRows(b);
     },
     [startRows]
@@ -456,13 +458,34 @@ function PackagingContent() {
     return { lines, good, damaged, allocated: good + damaged, remaining, over: remaining < -0.000001 };
   }, [rows, batchUnit, available, products, baseName]);
 
-  const hasErrors = calc.lines.some((l) => l.error) || calc.over;
+  const priceOf = (row: PackRow): number | null => {
+    if (row.createNew) return row.newPrice > 0 ? row.newPrice : null;
+    const p = row.productId ? products.find((x: any) => x.id === row.productId) : null;
+    const price = Number(p?.basePrice);
+    return Number.isFinite(price) && price > 0 ? price : null;
+  };
+
+  // Rows as the cost preview / confirmation see them (same order and indexes).
+  const costRows = calc.lines.map(({ row, size }) => ({
+    key: row.key,
+    packetSize: size,
+    packedQty: row.good,
+    damagedQty: row.damaged,
+    productId: row.createNew ? undefined : row.productId || undefined,
+    sellingPrice: row.createNew ? row.newPrice || undefined : undefined,
+    // Price shown for this row: the new variant's entered price, or the
+    // existing product's current Product Master price (never changed here).
+    price: priceOf(row),
+  }));
+  const expenseCheck = expensesPayload(expenses, costRows);
+  const hasErrors = calc.lines.some((l) => l.error) || calc.over || !!expenseCheck.error;
 
   const handleConfirm = async () => {
     if (!selected || submitting) return;
     const firstError = calc.lines.findIndex((l) => l.error);
     if (firstError >= 0) return toast.error(`Row ${firstError + 1}: ${calc.lines[firstError].error}`);
     if (calc.over) return toast.error(`Rows need ${fmt(calc.allocated)} ${batchUnit}, only ${fmt(available)} ${batchUnit} is left`);
+    if (expenseCheck.error) return toast.error(expenseCheck.error);
 
     setSubmitting(true);
     try {
@@ -477,17 +500,10 @@ function PackagingContent() {
             ? { name: row.newName.trim(), sku: row.newSku.trim().toUpperCase(), basePrice: Number(row.newPrice) }
             : undefined,
         })),
+        expenses: expenseCheck.lines,
       });
       const lines: ConfirmedLine[] = res.data?.summary || [];
-      setConfirmed({
-        batchCode: selected.batchCode,
-        productName: selected.product?.name || selected.production?.recipe?.name || 'Product',
-        batchUnit,
-        confirmedAt: new Date(),
-        usedWeight: calc.allocated,
-        remainingWeight: Math.max(0, calc.remaining),
-        lines,
-      });
+      setCostRefresh((k) => k + 1);
       const pcs = lines.reduce((s, l) => s + (l.goodQty || 0), 0);
       toast.success(`${pcs} packets added to Stock Hub across ${lines.length} SKU${lines.length === 1 ? "" : "s"}`);
       if (calc.lines.some((l) => l.row.createNew)) await loadProducts();
@@ -558,57 +574,6 @@ function PackagingContent() {
           </div>
         )}
 
-        {confirmed && (
-          <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm dark:border-emerald-500/20 dark:bg-card">
-            <div className="flex items-start justify-between gap-4 border-b border-emerald-100 bg-emerald-50 px-4 py-4 sm:px-5 dark:border-emerald-500/15 dark:bg-emerald-500/10">
-              <div className="flex min-w-0 items-start gap-3">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm"><CheckCircle2 className="h-5 w-5" /></span>
-                <div className="min-w-0">
-                  <p className="text-sm font-extrabold text-emerald-900 dark:text-emerald-200">Packaging successfully confirmed</p>
-                  <p className="mt-0.5 truncate text-xs text-emerald-800/80 dark:text-emerald-300/80">{confirmed.productName} <span className="px-1">·</span> Batch <span className="font-mono font-bold">{confirmed.batchCode}</span></p>
-                  <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700/70 dark:text-emerald-300/60"><Clock3 className="h-3 w-3" /> Confirmed on {format(confirmed.confirmedAt, "dd MMM yyyy, hh:mm a")}</p>
-                </div>
-              </div>
-              <button onClick={() => setConfirmed(null)} className="rounded-md p-1.5 text-emerald-700/60 hover:bg-emerald-100 hover:text-emerald-900 dark:hover:bg-white/10" title="Dismiss confirmation"><X className="h-4 w-4" /></button>
-            </div>
-            <div className="grid grid-cols-2 gap-px bg-gray-100 sm:grid-cols-4 dark:bg-white/5">
-              {[
-                { label: "Stock added", value: `${confirmed.lines.reduce((s, l) => s + (l.goodQty || 0), 0)} pcs`, tone: "text-emerald-700 dark:text-emerald-300" },
-                { label: "Damaged", value: `${confirmed.lines.reduce((s, l) => s + (l.damagedQty || 0), 0)} pcs`, tone: "text-amber-600 dark:text-amber-400" },
-                { label: "Bulk used", value: `${fmt(confirmed.usedWeight)} ${confirmed.batchUnit}`, tone: "text-gray-900 dark:text-white" },
-                { label: "Bulk remaining", value: `${fmt(confirmed.remainingWeight)} ${confirmed.batchUnit}`, tone: "text-gray-900 dark:text-white" },
-              ].map((item) => (
-                <div key={item.label} className="bg-white px-4 py-3 dark:bg-card"><p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{item.label}</p><p className={clsx("mt-0.5 text-base font-black", item.tone)}>{item.value}</p></div>
-              ))}
-            </div>
-            <div className="px-4 py-4 sm:px-5">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-gray-600 dark:text-slate-300"><Boxes className="h-4 w-4 text-emerald-600" /> SKU update details</p>
-                <span className="text-[11px] text-gray-400">{confirmed.lines.length} SKU{confirmed.lines.length === 1 ? "" : "s"} updated</span>
-              </div>
-              <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-white/10">
-                <div className="hidden grid-cols-[minmax(0,1fr)_90px_72px_72px_100px] gap-3 bg-gray-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-400 sm:grid dark:bg-white/[0.03]">
-                  <span>Product / SKU</span><span>Pack size</span><span className="text-right">Good</span><span className="text-right">Damaged</span><span className="text-right">Weight</span>
-                </div>
-                <ul className="divide-y divide-gray-100 dark:divide-white/5">
-                  {confirmed.lines.map((l, i) => (
-                    <li key={`${l.sku}-${i}`} className="grid gap-2 px-3 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_90px_72px_72px_100px] sm:items-center sm:gap-3">
-                      <span className="min-w-0"><span className="block truncate font-semibold text-gray-800 dark:text-white">{l.productName}</span><span className="block truncate font-mono text-[10px] text-gray-400">{l.sku}</span></span>
-                      <span className="font-semibold text-gray-600 dark:text-slate-300"><span className="text-gray-400 sm:hidden">Pack: </span>{sizeLabel(l.packetSize)}</span>
-                      <span className="font-bold text-emerald-700 sm:text-right dark:text-emerald-300"><span className="font-medium text-gray-400 sm:hidden">Stock added: </span>+{l.goodQty} pcs</span>
-                      <span className={clsx("sm:text-right", l.damagedQty ? "font-bold text-amber-600 dark:text-amber-400" : "text-gray-400")}><span className="text-gray-400 sm:hidden">Damaged: </span>{l.damagedQty || 0} pcs</span>
-                      <span className="font-semibold text-gray-600 sm:text-right dark:text-slate-300"><span className="font-medium text-gray-400 sm:hidden">Total weight: </span>{fmt(l.totalWeight)} {confirmed.batchUnit}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-[11px] text-gray-500 dark:text-slate-400">Good packets are now available in Finished Goods stock. Damaged packets were recorded separately.</p>
-                <Link href="/inventory/stock" className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-emerald-700 hover:underline dark:text-emerald-300">View in Stock Hub <ArrowRight className="h-3 w-3" /></Link>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Batch list */}
           <div className="lg:col-span-4 space-y-4">
@@ -704,9 +669,11 @@ function PackagingContent() {
                 </div>
 
                 {/* Quantity strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-gray-100 dark:divide-white/5 border-b border-gray-100 dark:border-white/5 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-gray-100 dark:divide-white/5 border-b border-gray-100 dark:border-white/5 text-center">
                   {[
-                    { label: "Produced", value: selected.approvedQty || selected.quantity || 0, cls: "text-gray-800 dark:text-white" },
+                    { label: "Planned Yield", value: plannedYieldOf(selected.production).qty, cls: "text-gray-500 dark:text-slate-400" },
+                    // Packaging always works from what was actually produced.
+                    { label: "Actual Yield", value: selected.approvedQty || selected.quantity || 0, cls: "text-gray-800 dark:text-white" },
                     { label: "Already Packed", value: alreadyPacked, cls: "text-gray-800 dark:text-white" },
                     { label: "Currently Allocated", value: calc.allocated, cls: "text-blue-600 dark:text-blue-400" },
                     { label: "Remaining Bulk", value: calc.remaining, cls: calc.over ? "text-rose-600" : "text-[#f58220]" },
@@ -714,7 +681,7 @@ function PackagingContent() {
                     <div key={s.label} className="py-2.5 px-2">
                       <p className="text-[10px] font-bold uppercase text-gray-400">{s.label}</p>
                       <p className={clsx("text-sm font-bold mt-0.5 tabular-nums", s.cls)}>
-                        {fmt(s.value)} <span className="text-[10px] text-gray-400">{batchUnit}</span>
+                        {s.value == null ? "—" : fmt(s.value)} <span className="text-[10px] text-gray-400">{batchUnit}</span>
                       </p>
                     </div>
                   ))}
@@ -840,26 +807,79 @@ function PackagingContent() {
                               )
                             ) : (
                               <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                <div className="sm:col-span-5">
+                                <div className="sm:col-span-7">
                                   <label className={labelCls}>Product Name</label>
                                   <input value={row.newName} onChange={(e) => updateRow(row.key, { newName: e.target.value })} placeholder={`${baseName} ${sizeLabel(size)}`} className={inputCls} />
                                 </div>
-                                <div className="sm:col-span-4">
+                                <div className="sm:col-span-5">
                                   <label className={labelCls}>SKU</label>
                                   <input value={row.newSku} onChange={(e) => updateRow(row.key, { newSku: e.target.value.toUpperCase().replace(/\s+/g, "") })} placeholder="FG-XXXX-500G" className={clsx(inputCls, "font-mono")} />
                                 </div>
-                                <div className="sm:col-span-3">
-                                  <label className={labelCls}>Selling Price (₹)</label>
-                                  <input
-                                    type="number" min="0" step="0.01" inputMode="decimal"
-                                    value={row.newPrice || ""}
-                                    onChange={(e) => updateRow(row.key, { newPrice: Math.max(0, Number(e.target.value) || 0) })}
-                                    placeholder="Required"
-                                    className={clsx(inputCls, "tabular-nums")}
-                                  />
-                                </div>
                               </div>
                             )}
+
+                            {/* Production cost beside selling price, with live profit/loss */}
+                            {(() => {
+                              const rc = rowCosts[row.key];
+                              const cost = rc && rc.good > 0 ? rc.costPerGoodPacket : null;
+                              const price = priceOf(row);
+                              const p = profitOf(cost, price, row.good);
+                              const tone = !p ? "text-gray-400" : p.status === "LOSS" ? "text-rose-600 dark:text-rose-400" : p.status === "PROFIT" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-700 dark:text-slate-300";
+                              const money = (n: number) => `₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+                              const signed = (n: number) => (n === 0 ? "₹0" : `${n < 0 ? "−" : "+"}${money(n)}`);
+                              return (
+                                <>
+                                  <div className={clsx("grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-lg border p-2", p?.status === "LOSS" ? "border-rose-200 bg-rose-50/50 dark:border-rose-500/30 dark:bg-rose-500/5" : "border-gray-100 bg-gray-50/60 dark:border-white/5 dark:bg-white/[0.02]")}>
+                                    <div>
+                                      <label className={labelCls}>Production Cost / pkt</label>
+                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5 text-gray-900 dark:text-white", costsLoading && "opacity-50")} title="Calculated automatically — raw material plus selected expenses">
+                                        {cost != null ? money(cost) : row.good > 0 ? (costsLoading ? "…" : "—") : "—"}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Selling Price / pkt</label>
+                                      {row.createNew ? (
+                                        <input
+                                          type="number" min="0" step="0.01" inputMode="decimal"
+                                          value={row.newPrice || ""}
+                                          onChange={(e) => updateRow(row.key, { newPrice: Math.max(0, Number(e.target.value) || 0) })}
+                                          placeholder="Required"
+                                          aria-label="Selling price per packet"
+                                          className={clsx(inputCls, "tabular-nums font-bold")}
+                                        />
+                                      ) : (
+                                        <p className="text-sm font-bold tabular-nums py-1.5 text-gray-900 dark:text-white" title="Current Product Master price — change it in Product Master">
+                                          {price != null ? money(price) : "—"}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Profit / Loss per pkt</label>
+                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5", tone)}>{!p ? "—" : p.status === "BREAK_EVEN" ? "Break-even" : signed(p.perPacket)}</p>
+                                    </div>
+                                    <div>
+                                      <label className={labelCls}>Total Profit / Loss</label>
+                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5", tone)}>{!p ? "—" : signed(p.total)}</p>
+                                    </div>
+                                  </div>
+                                  {p && (
+                                    <p className={clsx("text-[11px] font-semibold flex items-start gap-1.5", tone)} role={p.status === "LOSS" ? "alert" : undefined}>
+                                      {p.status === "LOSS" && <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />}
+                                      <span>
+                                        {p.message}
+                                        {p.status === "LOSS" && <> (Cost {money(cost!)} · Selling price {money(price!)})</>}
+                                      </span>
+                                    </p>
+                                  )}
+                                  {rc && rc.damaged > 0 && rc.good > 0 && (
+                                    <p className="text-[10px] text-amber-600">Includes the cost of {rc.damaged} damaged packet{rc.damaged === 1 ? "" : "s"} ({money(rc.damageAbsorbed)}).</p>
+                                  )}
+                                  {!row.createNew && row.productId && price == null && (
+                                    <p className="text-[10px] text-amber-600">This product has no selling price in Product Master.</p>
+                                  )}
+                                </>
+                              );
+                            })()}
                           </div>
                         )}
                         {error && (row.good > 0 || row.damaged > 0 || row.size === "custom") && (
@@ -878,30 +898,17 @@ function PackagingContent() {
                   </button>
 
                   {/* Totals */}
-                  <div className={clsx(
-                    "rounded-xl p-3 text-xs grid grid-cols-3 gap-2 border",
-                    calc.over
-                      ? "bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/20"
-                      : "bg-gray-50 dark:bg-white/[0.02] border-gray-200 dark:border-white/5"
-                  )}>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-gray-400">Good weight</p>
-                      <p className="font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{fmt(calc.good)} {batchUnit}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-gray-400">Damaged weight</p>
-                      <p className="font-bold text-amber-700 dark:text-amber-400 tabular-nums">{fmt(calc.damaged)} {batchUnit}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase text-gray-400">Remaining bulk</p>
-                      <p className={clsx("font-bold tabular-nums", calc.over ? "text-rose-600" : "text-gray-900 dark:text-white")}>{fmt(calc.remaining)} {batchUnit}</p>
-                    </div>
-                    {calc.over && (
-                      <p className="col-span-3 text-rose-700 dark:text-rose-300 font-semibold flex items-center gap-1.5">
-                        <AlertTriangle className="h-3.5 w-3.5" /> These rows need {fmt(calc.allocated)} {batchUnit}, but only {fmt(available)} {batchUnit} is left in this batch.
-                      </p>
-                    )}
-                  </div>
+
+
+                  <ProductionCostPanel
+                    batchId={selected.id}
+                    unit={batchUnit}
+                    rows={costRows}
+                    expenses={expenses}
+                    onExpensesChange={setExpenses}
+                    refreshKey={costRefresh}
+                    onCostsChange={handleCostsChange}
+                  />
 
                   <button
                     onClick={handleConfirm}

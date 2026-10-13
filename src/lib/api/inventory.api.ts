@@ -29,6 +29,10 @@ export const recipesApi = {
   delete: (id: string) => api.delete(`/api/recipes/${id}`),
   getCategories: () => api.get('/api/recipe-categories'),
   createCategory: (name: string) => api.post('/api/recipe-categories', { name }),
+  // Versioned reference formulations (reference yield + ingredient quantities)
+  getFormulations: (id: string) => api.get(`/api/recipes/${id}/formulations`),
+  saveFormulation: (id: string, data: { yieldQty: number; yieldUnit: string; notes?: string; items: { inventoryItemId: string; quantity: number; unit: string }[] }) =>
+    api.post(`/api/recipes/${id}/formulations`, data),
 };
 
 // --- Raw Materials ---
@@ -36,6 +40,7 @@ export const rawMaterialsApi = {
   getAll: (includeInactive = false, franchiseId?: string, excludeCategory?: string) =>
     api.get('/api/raw-materials', { params: { includeInactive, franchiseId, excludeCategory } }),
   getById: (id: string) => api.get(`/api/raw-materials/${id}`),
+  getLots: (id: string) => api.get(`/api/raw-materials/${id}/lots`),
   create: (data: any) => api.post('/api/raw-materials', data),
   update: (id: string, data: any) => api.patch(`/api/raw-materials/${id}`, data),
   deactivate: (id: string) => api.patch(`/api/raw-materials/${id}/deactivate`),
@@ -85,14 +90,34 @@ export const inventoryApi = {
 };
 
 // --- Production Workflow ---
+// Operator-chosen purchase lot (batchId null = stock with no lot on record), qty in stock unit.
+export type LotAllocation = { batchId: string | null; qty: number };
+// Additional production expense; row limits a per-kg / per-packet line to one pack-size row.
+export type ExpenseLine = { category: string; basis: 'PER_BATCH' | 'PER_KG' | 'PER_PACKET'; rate: number; row?: number | null };
+
 export const productionApi = {
   getHistory: (params?: any) => {
     const p = typeof params === 'string' ? { franchiseId: params } : params;
     return api.get('/api/production/history', { params: p });
   },
   startBatch: (data: any) => api.post('/api/production/batch', data),
+  // Start from the recipe's saved formulation scaled to a target yield;
+  // the backend re-validates stock and freezes a formulation snapshot.
+  startPlanned: (data: { recipeId: string; formulationId: string; targetQty: number; targetUnit: string; warehouseId: string; franchiseId?: string; expiryDate?: string; productionType?: string; lotAllocations?: Record<string, LotAllocation[]> }) =>
+    api.post('/api/production/plan/start', data),
   stopBatch: (id: string) => api.post(`/api/production/${id}/stop`),
-  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string; wastageQty?: number; wastageNote?: string }) => api.post(`/api/production/${id}/approve`, data),
+  // { varianceRemarksThresholdPct } — remarks required above this yield variance.
+  getCompletionSettings: () => api.get('/api/production/completion-settings'),
+  // Production-eligible lots per material in a warehouse (oldest first) + untracked stock.
+  getLotOptions: (warehouseId: string, itemIds: string[]) =>
+    api.get('/api/production/lot-options', { params: { warehouseId, itemIds: itemIds.join(',') } }),
+  // { categories: [{code,label}], bases: ['PER_BATCH','PER_KG','PER_PACKET'] }
+  getCostingSettings: () => api.get('/api/production/costing-settings'),
+  getBatchCostSummary: (id: string) => api.get(`/api/production/batches/${id}/cost-summary`),
+  // Same calculation Confirm Packaging posts; writes nothing.
+  previewPackagingCost: (id: string, data: { rows: Array<{ packetSize: string; packedQty: number; damagedQty: number; productId?: string; sellingPrice?: number }>; expenses: ExpenseLine[] }) =>
+    api.post(`/api/production/batches/${id}/packaging-cost-preview`, data),
+  approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string; wastageQty?: number; wastageNote?: string; additionalMaterials?: Array<{ inventoryItemId: string; quantity: number; lots?: LotAllocation[]; note?: string }> }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (params?: any) => {
     const p = typeof params === 'string' ? { franchiseId: params } : params;
@@ -117,6 +142,7 @@ export const productionApi = {
       productId?: string;
       newProduct?: { name: string; sku?: string; basePrice: number };
     }>;
+    expenses?: ExpenseLine[];
   }) => api.post(`/api/production/batches/${id}/package-confirm`, data),
   // Releases a batch completed while production QC was still required (still
   // PENDING, never inspected) to packaging now that QC is switched off.

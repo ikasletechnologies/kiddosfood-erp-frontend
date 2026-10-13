@@ -24,13 +24,13 @@ import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
-import { RECIPE_UNITS as UNITS } from "@/lib/recipe-units";
 import { exportRecipeToPdf } from "@/lib/recipe-export";
 
+// Recipe Master only records WHICH raw materials a recipe uses. How much of
+// each (and the yield it makes) is the reference formulation, maintained in
+// Production Planning.
 interface RecipeItem {
   inventoryItemId: string;
-  quantityRequired: number | string;
-  unit: string;
 }
 
 const emptyForm = {
@@ -39,11 +39,23 @@ const emptyForm = {
   name: "",
   productId: "",
   shelfLifeDays: null as number | null,
-  yieldQty: 1,
-  yieldUnit: "",
   instructions: "",
   estimatedDurationMinutes: null as number | null,
   items: [] as RecipeItem[],
+};
+
+// Ingredient ids for an existing recipe: its saved selection, or — for any
+// recipe the API returns without one — the distinct materials of its BOM.
+const ingredientIdsOf = (recipe: any): string[] => {
+  const fromSelection = (recipe?.ingredients ?? []).map((i: any) => i.inventoryItemId);
+  if (fromSelection.length > 0) return fromSelection;
+  return Array.from(new Set<string>((recipe?.recipeItems ?? []).map((i: any) => i.inventoryItemId)));
+};
+
+const ingredientNamesOf = (recipe: any): string[] => {
+  if (recipe?.ingredients?.length) return recipe.ingredients.map((i: any) => i.inventoryItem?.name || "Ingredient");
+  const seen = new Set<string>();
+  return (recipe?.recipeItems ?? []).filter((i: any) => !seen.has(i.inventoryItemId) && seen.add(i.inventoryItemId)).map((i: any) => i.inventoryItem?.name || "Ingredient");
 };
 
 export default function RecipeMasterTab() {
@@ -190,15 +202,9 @@ export default function RecipeMasterTab() {
       name: recipe.name ?? "",
       productId: recipe.productId ?? "",
       shelfLifeDays: products.find((p: any) => p.id === recipe.productId)?.shelfLifeDays ?? null,
-      yieldQty: recipe.yieldQty ?? 1,
-      yieldUnit: recipe.yieldUnit ?? "",
       instructions: recipe.instructions ?? "",
       estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
-      items: (recipe.recipeItems ?? []).map((i: any) => ({
-        inventoryItemId: i.inventoryItemId,
-        quantityRequired: i.quantityRequired,
-        unit: i.unit,
-      })),
+      items: ingredientIdsOf(recipe).map((inventoryItemId) => ({ inventoryItemId })),
     });
     setEditingId(recipe.id);
     setError("");
@@ -207,14 +213,15 @@ export default function RecipeMasterTab() {
 
   const handleSave = async () => {
     if (!form.name.trim()) { setError("Recipe name is required."); return; }
-    if (!form.yieldUnit) { setError("Select the recipe's yield unit (e.g. KG, L, PCS)."); return; }
+    if (!form.category) { setError("Select a category."); return; }
     if (form.items.length === 0) { setError("Add at least one ingredient."); return; }
     if (form.items.some(item => !item.inventoryItemId)) {
       setError("Please select a material for all ingredients.");
       return;
     }
-    if (form.items.some(item => !item.quantityRequired || Number(item.quantityRequired) <= 0)) {
-      setError("Please specify a valid quantity greater than 0 for all ingredients.");
+    const ids = form.items.map(item => item.inventoryItemId);
+    if (new Set(ids).size !== ids.length) {
+      setError("Each ingredient can only be added once.");
       return;
     }
     setSaving(true);
@@ -223,14 +230,12 @@ export default function RecipeMasterTab() {
       await recipesApi.upsert({
         ...(editingId ? { id: editingId } : {}),
         recipeCode: form.recipeCode || undefined,
-        category: form.category || undefined,
-        name: form.name,
+        category: form.category,
+        name: form.name.trim(),
         productId: form.productId || undefined,
-        yieldQty: form.yieldQty,
-        yieldUnit: form.yieldUnit,
         instructions: form.instructions || undefined,
         estimatedDurationMinutes: form.estimatedDurationMinutes,
-        items: form.items,
+        ingredientIds: ids,
       });
       // Shelf life lives on the linked Product master (batch expiry is
       // computed from it there), not on the recipe row itself.
@@ -353,7 +358,7 @@ export default function RecipeMasterTab() {
   const addItem = () => {
     setForm(f => ({
       ...f,
-      items: [...f.items, { inventoryItemId: "", quantityRequired: "", unit: "KG" }],
+      items: [...f.items, { inventoryItemId: "" }],
     }));
     setTimeout(() => {
       const el = document.getElementById('ingredients-container');
@@ -491,12 +496,23 @@ export default function RecipeMasterTab() {
                             <span className="truncate max-w-[140px] sm:max-w-[200px]">{recipe.product.name}</span>
                           </span>
                         )}
-                        <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded border border-green-200 dark:border-green-500/20 shrink-0">
-                          Yield: {recipe.yieldQty} {recipe.yieldUnit || "units"}
-                        </span>
+                        {recipe.category && (
+                          <span className="text-xs font-medium text-gray-600 dark:text-slate-300 bg-gray-100/70 dark:bg-white/5 px-2 py-0.5 rounded shrink-0">
+                            {recipe.category}
+                          </span>
+                        )}
                         <span className="text-xs text-gray-500 dark:text-slate-400 shrink-0">
-                          {recipe.recipeItems?.length ?? 0} ingredients
+                          {ingredientNamesOf(recipe).length} ingredients
                         </span>
+                        {recipe.activeFormulation ? (
+                          <span className="text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded border border-green-200 dark:border-green-500/20 shrink-0">
+                            Formulation v{recipe.activeFormulation.version}
+                          </span>
+                        ) : (
+                          <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-500/20 shrink-0" title="Set ingredient quantities in Production Planning before producing">
+                            Formulation needed
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -541,14 +557,13 @@ export default function RecipeMasterTab() {
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-white/5">
                     <div className="pt-3 grid md:grid-cols-2 gap-4">
-                      {/* Bill of Materials */}
+                      {/* Ingredients (names only; quantities live in the formulation) */}
                       <div>
-                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Bill of Materials</p>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Ingredients</p>
                         <div className="space-y-1.5">
-                          {recipe.recipeItems?.length > 0 ? recipe.recipeItems.map((item: any, i: number) => (
-                            <div key={i} className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
-                              <span className="text-xs font-medium text-gray-700 dark:text-slate-300">{item.inventoryItem?.name || "Ingredient"}</span>
-                              <span className="text-xs font-bold text-gray-800 dark:text-white">{item.quantityRequired} {item.unit}</span>
+                          {ingredientNamesOf(recipe).length > 0 ? ingredientNamesOf(recipe).map((name: string, i: number) => (
+                            <div key={i} className="flex items-center px-3 py-2 bg-gray-50 dark:bg-white/[0.02] rounded-lg border border-gray-200 dark:border-white/5">
+                              <span className="text-xs font-medium text-gray-700 dark:text-slate-300">{name}</span>
                             </div>
                           )) : (
                             <p className="text-xs text-gray-400 dark:text-slate-500 italic">No ingredients defined.</p>
@@ -595,7 +610,7 @@ export default function RecipeMasterTab() {
           </div>
 
           <div className="space-y-1.5 relative category-selector-container">
-            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Category</label>
+            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Category *</label>
             <div
               onClick={(e) => {
                 if (isCategoryDropdownOpen) {
@@ -694,27 +709,6 @@ export default function RecipeMasterTab() {
           )}
 
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Yield *</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={1}
-                value={form.yieldQty}
-                onChange={e => setForm(f => ({ ...f, yieldQty: e.target.value === '' ? ('' as any) : (parseInt(e.target.value) || 0) }))}
-                className="flex-1 h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all"
-              />
-              <select
-                value={form.yieldUnit}
-                onChange={e => setForm(f => ({ ...f, yieldUnit: e.target.value }))}
-                className="w-24 h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded-lg font-medium text-xs text-gray-800 dark:text-white outline-none focus:border-[#f58220] transition-all cursor-pointer"
-              >
-                <option value="" disabled className="dark:bg-card">Select...</option>
-                {UNITS.map(u => <option key={u} value={u} className="dark:bg-card">{u}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
             <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">Instructions</label>
             <textarea
               ref={(el) => {
@@ -734,7 +728,8 @@ export default function RecipeMasterTab() {
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">
-                Ingredients / Bill of Materials *
+                Ingredients *
+                <span className="block text-[10px] font-normal text-gray-400 dark:text-slate-500">Select materials only — quantities are set as the reference formulation in Production Planning.</span>
               </label>
               <button
                 onClick={addItem}
@@ -801,11 +796,15 @@ export default function RecipeMasterTab() {
             )}
                         </div>
                         <div className="max-h-48 overflow-y-auto">
-                          {materials.filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase())).length === 0 ? (
+                          {(() => {
+                            // Materials already chosen on another row aren't offered again.
+                            const takenElsewhere = new Set(form.items.filter((_, i) => i !== idx).map(it => it.inventoryItemId));
+                            const options = materials.filter((m: any) =>
+                              !takenElsewhere.has(m.id) && m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase()));
+                            return options.length === 0 ? (
                             <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No materials found</div>
                           ) : (
-                            materials
-                              .filter((m: any) => m.name.toLowerCase().includes(materialSearchQuery.trim().toLowerCase()))
+                            options
                               .map((m: any) => (
                                 <div
                                   key={m.id}
@@ -822,7 +821,8 @@ export default function RecipeMasterTab() {
                                   {m.name}
                                 </div>
                               ))
-                          )}
+                          );
+                          })()}
                         </div>
                         <div
                           onClick={e => {
@@ -837,29 +837,6 @@ export default function RecipeMasterTab() {
                       </div>,
                       document.body
                     )}
-                  </div>
-
-                  <div className="flex-1 sm:w-20 sm:flex-initial space-y-1 min-w-[70px]">
-                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Qty</label>
-                    <input
-                      type="number"
-                      min={0.001}
-                      step={0.001}
-                      value={item.quantityRequired}
-                      onChange={e => updateItem(idx, { quantityRequired: e.target.value === '' ? '' : (parseFloat(e.target.value) || 0) })}
-                      className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs font-semibold text-gray-800 dark:text-white outline-none focus:border-[#f58220] text-center"
-                    />
-                  </div>
-
-                  <div className="flex-1 sm:w-20 sm:flex-initial space-y-1 min-w-[70px]">
-                    <label className="text-xs font-medium text-gray-500 dark:text-slate-400">Unit</label>
-                    <select
-                      value={item.unit}
-                      onChange={e => updateItem(idx, { unit: e.target.value })}
-                      className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs font-medium text-gray-800 dark:text-white uppercase outline-none focus:border-[#f58220] cursor-pointer"
-                    >
-                      {UNITS.map(u => <option key={u} value={u} className="dark:bg-card">{u}</option>)}
-                    </select>
                   </div>
 
                   <button

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { Bot, ExternalLink, Loader2, MessageCircle, Plus, Send, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -55,6 +55,17 @@ const validLinkPrefixes = [
   '/sales', '/reports',
 ];
 
+const BUTTON_SIZE = 48;
+const EDGE_GAP = 12;
+const POSITION_KEY = 'erp-assistant:button-position';
+
+type Position = { x: number; y: number };
+
+const clampPosition = ({ x, y }: Position): Position => ({
+  x: Math.min(Math.max(EDGE_GAP, x), window.innerWidth - BUTTON_SIZE - EDGE_GAP),
+  y: Math.min(Math.max(EDGE_GAP, y), window.innerHeight - BUTTON_SIZE - EDGE_GAP),
+});
+
 const safeLinks = (links: unknown) =>
   Array.isArray(links)
     ? links.filter((link): link is string => typeof link === 'string' && validLinkPrefixes.some((prefix) => link === prefix || link.startsWith(prefix + '/') || link.startsWith(prefix + '?'))).slice(0, 8)
@@ -72,6 +83,8 @@ export default function ERPAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [position, setPosition] = useState<Position | null>(null);
+  const drag = useRef<{ offsetX: number; offsetY: number; startX: number; startY: number; moved: boolean } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const prompts = useMemo(() => suggestions(pathname), [pathname]);
 
@@ -94,7 +107,54 @@ export default function ERPAssistant() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversationId, messages, storageKey]);
 
+  useEffect(() => {
+    let initial: Position = {
+      x: window.innerWidth - BUTTON_SIZE - 20,
+      y: window.innerHeight - BUTTON_SIZE - 20,
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem(POSITION_KEY) || 'null');
+      if (typeof saved?.x === 'number' && typeof saved?.y === 'number') initial = saved;
+    } catch { /* ignore */ }
+    setPosition(clampPosition(initial));
+    const onResize = () => setPosition((old) => old && clampPosition(old));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   if (!allowed) return null;
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!position) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = {
+      offsetX: event.clientX - position.x,
+      offsetY: event.clientY - position.y,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const state = drag.current;
+    if (!state) return;
+    if (!state.moved && Math.hypot(event.clientX - state.startX, event.clientY - state.startY) < 5) return;
+    state.moved = true;
+    setPosition(clampPosition({ x: event.clientX - state.offsetX, y: event.clientY - state.offsetY }));
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const state = drag.current;
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (!state) return;
+    if (state.moved) {
+      try { localStorage.setItem(POSITION_KEY, JSON.stringify(position)); } catch { /* ignore */ }
+    } else {
+      setOpen(true);
+    }
+  };
 
   const reset = async () => {
     await assistantApi.clear(conversationId).catch(() => undefined);
@@ -143,13 +203,19 @@ export default function ERPAssistant() {
   };
 
   return <>
-    <button
-      onClick={() => setOpen(true)}
+    {position && <button
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { drag.current = null; }}
+      onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOpen(true); } }}
       aria-label='Open ERP Assistant'
-      className='fixed bottom-5 right-5 z-40 flex h-14 items-center gap-2 rounded-full bg-orange-500 px-4 text-sm font-semibold text-white shadow-xl transition hover:bg-orange-600'
+      title='ERP Assistant (drag to move)'
+      style={{ left: position.x, top: position.y, width: BUTTON_SIZE, height: BUTTON_SIZE }}
+      className='fixed z-40 flex cursor-grab touch-none select-none items-center justify-center rounded-full bg-orange-500 text-white shadow-xl transition-colors hover:bg-orange-600 active:cursor-grabbing'
     >
-      <MessageCircle size={22} /> <span className='hidden sm:inline'>ERP Assistant</span>
-    </button>
+      <MessageCircle size={22} />
+    </button>}
 
     {open && <div className='pointer-events-none fixed inset-0 z-50 flex items-end justify-end bg-transparent sm:p-5'>
       <section className='pointer-events-auto flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl border bg-background shadow-2xl sm:h-[min(760px,90vh)] sm:max-w-md sm:rounded-2xl'>

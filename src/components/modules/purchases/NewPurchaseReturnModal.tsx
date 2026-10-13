@@ -4,6 +4,17 @@ import api from "@/lib/api/base";
 import { vendorsApi } from "@/lib/api/procurement.api";
 import { useToast } from "@/context/ToastContext";
 
+interface ReturnableLot {
+  batchId: string;
+  lotNumber: string;
+  poNumber: string | null;
+  receivedAt: string;
+  expDate: string | null;
+  unitCost: number;
+  availableQty: number;
+  warehouse: string | null;
+}
+
 interface ReturnableMaterial {
   materialId: string;
   name: string;
@@ -11,17 +22,19 @@ interface ReturnableMaterial {
   unit: string;
   rate: number;
   availableQty: number;
+  lots?: ReturnableLot[];
 }
 
 interface ReturnRow {
   materialId: string;
+  inventoryBatchId: string;
   itemName: string;
   quantity: string;
   unit: string;
   rate: number;
 }
 
-const emptyRow = (): ReturnRow => ({ materialId: "", itemName: "", quantity: "1", unit: "", rate: 0 });
+const emptyRow = (): ReturnRow => ({ materialId: "", inventoryBatchId: "", itemName: "", quantity: "1", unit: "", rate: 0 });
 
 export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: { vendors: any[], onClose: () => void, onSuccess: () => void }) {
   const [vendorId, setVendorId] = useState("");
@@ -68,6 +81,27 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
     return Math.max(0, material.availableQty - claimedElsewhere);
   }
 
+  // Same idea per received lot: what that lot still holds minus what other
+  // rows in this form already claim on it.
+  function lotRemainingFor(materialId: string, batchId: string, excludeIndex: number): number {
+    const lot = lotsFor(materialId).find(l => l.batchId === batchId);
+    if (!lot) return 0;
+    const claimedElsewhere = rows.reduce((sum, r, idx) => {
+      if (idx === excludeIndex || r.inventoryBatchId !== batchId) return sum;
+      return sum + (Number(r.quantity) || 0);
+    }, 0);
+    return Math.max(0, lot.availableQty - claimedElsewhere);
+  }
+
+  function maxFor(row: ReturnRow, i: number): number {
+    const materialMax = remainingFor(row.materialId, i);
+    return row.inventoryBatchId ? Math.min(materialMax, lotRemainingFor(row.materialId, row.inventoryBatchId, i)) : materialMax;
+  }
+
+  function lotsFor(materialId: string): ReturnableLot[] {
+    return materials.find(m => m.materialId === materialId)?.lots ?? [];
+  }
+
   function addRow() {
     setRows([...rows, emptyRow()]);
   }
@@ -78,8 +112,18 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
     const material = materials.find(m => m.materialId === materialId);
     const next = [...rows];
     next[i] = material
-      ? { materialId, itemName: material.name, unit: material.unit, rate: material.rate, quantity: "1" }
+      ? { materialId, inventoryBatchId: "", itemName: material.name, unit: material.unit, rate: material.rate, quantity: "1" }
       : emptyRow();
+    setRows(next);
+  }
+  // Returning a specific lot: it comes out of that lot's stock and is
+  // valued at that lot's own purchase cost.
+  function selectLot(i: number, batchId: string) {
+    const row = rows[i];
+    const lot = lotsFor(row.materialId).find(l => l.batchId === batchId);
+    const material = materials.find(m => m.materialId === row.materialId);
+    const next = [...rows];
+    next[i] = { ...row, inventoryBatchId: batchId, rate: lot ? lot.unitCost : (material?.rate ?? 0) };
     setRows(next);
   }
   function updateQuantity(i: number, value: string) {
@@ -93,9 +137,10 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
   const rowErrors = rows.map((r, i) => {
     if (!r.materialId) return null;
     const qty = Number(r.quantity);
+    if (lotsFor(r.materialId).length > 0 && !r.inventoryBatchId) return "Select the lot being returned";
     if (!r.quantity || isNaN(qty) || qty <= 0) return "Enter a valid quantity";
-    const max = remainingFor(r.materialId, i);
-    if (qty > max + 0.0001) return `Only ${max} ${r.unit} available`;
+    const max = maxFor(r, i);
+    if (qty > max + 0.0001) return `Only ${Number(max.toFixed(4))} ${r.unit} available${r.inventoryBatchId ? " in this lot" : ""}`;
     return null;
   });
   const hasErrors = rowErrors.some(e => e !== null) || rows.every(r => !r.materialId);
@@ -113,7 +158,8 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
           itemName: r.itemName,
           quantity: Number(r.quantity),
           unit: r.unit,
-          rate: r.rate
+          rate: r.rate,
+          ...(r.inventoryBatchId ? { inventoryBatchId: r.inventoryBatchId } : {})
         }))
       });
       showToast("Purchase Return created successfully!", "success");
@@ -207,7 +253,8 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                       {rows.map((row, i) => {
-                        const max = row.materialId ? remainingFor(row.materialId, i) : 0;
+                        const max = row.materialId ? maxFor(row, i) : 0;
+                        const rowLots = row.materialId ? lotsFor(row.materialId) : [];
                         const error = rowErrors[i];
                         const amount = (Number(row.quantity) || 0) * row.rate;
                         return (
@@ -227,6 +274,21 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
                                   </option>
                                 ))}
                               </select>
+                              {rowLots.length > 0 && (
+                                <select
+                                  required
+                                  value={row.inventoryBatchId}
+                                  onChange={(e) => selectLot(i, e.target.value)}
+                                  className="mt-1.5 w-full text-xs text-gray-600 dark:text-slate-300 outline-none bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-md px-2 py-1"
+                                >
+                                  <option value="" className="dark:bg-[#13151f]">Select lot being returned...</option>
+                                  {rowLots.map(l => (
+                                    <option key={l.batchId} value={l.batchId} className="dark:bg-[#13151f]">
+                                      {l.lotNumber} · rcvd {new Date(l.receivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · ₹{l.unitCost.toFixed(2)}/{row.unit} · {l.availableQty} {row.unit} left{l.poNumber ? ` · ${l.poNumber}` : ""}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
                               {error && <p className="text-[11px] font-medium text-rose-500 mt-0.5">{error}</p>}
                             </td>
                             <td className="px-2 py-2.5">

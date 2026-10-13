@@ -14,6 +14,7 @@ import RawMaterialConsumptionClient from "@/components/modules/inventory/RawMate
 import ActiveProductionRunsClient from "@/components/modules/production/ActiveProductionRunsClient";
 import QCClient from "@/components/modules/purchases/QCClient";
 import { formatDate } from "@/lib/utils";
+import { plannedYieldOf, yieldVariance, fmtYield, fmtSigned, varianceTone } from "@/lib/production-yield";
 import { PRODUCTION_FEATURES, PACKAGEABLE_QC_STATUSES, getBatchStage, packagingBlocker } from "@/config/production-features";
 
 type ExpiryStatus = "EXPIRED" | "EXPIRING_SOON" | "VALID";
@@ -334,7 +335,7 @@ function ProductBatchesRegistry() {
                   <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
                     <th className="text-left px-4 py-3">Batch ID</th>
                     <th className="text-left px-4 py-3">Product</th>
-                    <th className="text-left px-4 py-3">Qty Produced</th>
+                    <th className="text-left px-4 py-3">Planned / Actual</th>
                     <th className="text-left px-4 py-3">{PRODUCTION_FEATURES.qc ? "QC Approved" : "For Packing"}</th>
                     {PRODUCTION_FEATURES.qc && <th className="text-left px-4 py-3">QC Rejected</th>}
                     <th className="text-left px-4 py-3">Unit Cost</th>
@@ -365,7 +366,22 @@ function ProductBatchesRegistry() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-700 dark:text-slate-300">
-                          {batch.quantity} <span className="text-xs text-gray-400 dark:text-slate-500">{batch.production?.recipe?.yieldUnit || "KG"}</span>
+                          {(() => {
+                            const plan = plannedYieldOf(batch.production);
+                            const v = yieldVariance(plan.qty, batch.quantity ?? null);
+                            return (
+                              <>
+                                <span className="font-semibold text-gray-800 dark:text-white">{fmtYield(batch.quantity)}</span>{" "}
+                                <span className="text-xs text-gray-400 dark:text-slate-500">{plan.unit}</span>
+                                {plan.qty != null && (
+                                  <span className="block text-[11px] text-gray-400 dark:text-slate-500">
+                                    Plan {fmtYield(plan.qty)}
+                                    {v.pct != null && <span className={clsx("ml-1 font-semibold", varianceTone(v.difference))}>{fmtSigned(v.pct, "%")}</span>}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
                           {batch.qcStatus === "PENDING" ? "—" : (
@@ -560,8 +576,24 @@ function ProductBatchesRegistry() {
                 <h3 className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase mb-3">Production Yield &amp; Cost</h3>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <div className="p-4 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm text-center">
-                    <p className="text-xs text-gray-500 dark:text-slate-400">Produced</p>
-                    <p className="text-base font-bold text-gray-800 dark:text-white mt-1 tabular-nums">{selectedBatch.quantity ?? 0} <span className="text-xs text-gray-400 dark:text-slate-500">{selectedBatch.production?.recipe?.yieldUnit || "KG"}</span></p>
+                    {(() => {
+                      const plan = plannedYieldOf(selectedBatch.production);
+                      const v = yieldVariance(plan.qty, selectedBatch.quantity ?? null);
+                      return (
+                        <>
+                          <p className="text-xs text-gray-500 dark:text-slate-400">Actual Yield</p>
+                          <p className="text-base font-bold text-gray-800 dark:text-white mt-1 tabular-nums">{fmtYield(selectedBatch.quantity ?? 0)} <span className="text-xs text-gray-400 dark:text-slate-500">{plan.unit}</span></p>
+                          <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5">
+                            Planned {fmtYield(plan.qty)} {plan.unit}
+                            {v.difference != null && (
+                              <span className={clsx("block font-semibold", varianceTone(v.difference))}>
+                                {fmtSigned(v.difference)} {plan.unit} ({fmtSigned(v.pct, "%")})
+                              </span>
+                            )}
+                          </p>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="p-4 bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-lg shadow-sm text-center">
                     <p className="text-xs text-gray-500 dark:text-slate-400">Approved / Rejected</p>
