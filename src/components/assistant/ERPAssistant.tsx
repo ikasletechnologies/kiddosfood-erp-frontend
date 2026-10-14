@@ -146,12 +146,12 @@ export default function ERPAssistant() {
     <button
       onClick={() => setOpen(true)}
       aria-label='Open ERP Assistant'
-      className='fixed bottom-5 right-5 z-40 flex h-14 items-center gap-2 rounded-full bg-orange-500 px-4 text-sm font-semibold text-white shadow-xl transition hover:bg-orange-600'
+      className='fixed bottom-5 right-24 z-40 flex h-14 items-center gap-2 rounded-full bg-orange-500 px-4 text-sm font-semibold text-white shadow-xl transition hover:bg-orange-600 sm:right-5'
     >
       <MessageCircle size={22} /> <span className='hidden sm:inline'>ERP Assistant</span>
     </button>
 
-    {open && <div className='pointer-events-none fixed inset-0 z-50 flex items-end justify-end bg-transparent sm:p-5'>
+    {open && <div className='pointer-events-none fixed inset-0 z-50 flex items-end justify-start bg-transparent sm:p-5'>
       <section className='pointer-events-auto flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl border bg-background shadow-2xl sm:h-[min(760px,90vh)] sm:max-w-md sm:rounded-2xl'>
         <header className='flex items-center justify-between border-b bg-orange-500 px-4 py-3 text-white'>
           <div className='flex items-center gap-2'>
