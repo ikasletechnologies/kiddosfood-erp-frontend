@@ -9,6 +9,14 @@ import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { convertUnit } from "@/lib/unitConversion";
 import { PRODUCTION_FEATURES, QC_NOT_REQUIRED } from "@/config/production-features";
+import { plannedYieldOf, yieldVariance, fmtYield, fmtSigned, varianceTone } from "@/lib/production-yield";
+import { MaterialLots, UNTRACKED, allocatedTotal, allocationCost, fifoDraft, toPayload } from "@/lib/lot-allocation";
+
+// A material actually used beyond the plan, reported at completion.
+type ExtraMaterial = { key: number; itemId: string; qty: string; lotId: string; note: string };
+const AUTO_LOTS = "";
+const inr = (n: number | null | undefined) =>
+  n == null || !Number.isFinite(n) ? "—" : `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 const STAGE_LABELS: Record<string, string> = {
   QUEUED: "Queued",
@@ -25,7 +33,9 @@ export default function ActiveProductionRunsClient() {
   const [loading, setLoading] = useState(true);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [batchToApprove, setBatchToApprove] = useState<any | null>(null);
-  const [actualYield, setActualYield] = useState<number>(0);
+  // Typed text, so an empty / invalid entry is distinguishable from 0.
+  const [actualYield, setActualYield] = useState<string>("");
+  const [varianceThresholdPct, setVarianceThresholdPct] = useState<number>(20);
   const [remarks, setRemarks] = useState<string>("");
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
@@ -35,6 +45,8 @@ export default function ActiveProductionRunsClient() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [runToCancel, setRunToCancel] = useState<any | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [extras, setExtras] = useState<ExtraMaterial[]>([]);
+  const [extraLots, setExtraLots] = useState<Record<string, MaterialLots>>({});
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -71,6 +83,15 @@ export default function ActiveProductionRunsClient() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  useEffect(() => {
+    productionApi.getCompletionSettings()
+      .then((res) => {
+        const n = Number(res.data?.varianceRemarksThresholdPct);
+        if (Number.isFinite(n) && n >= 0) setVarianceThresholdPct(n);
+      })
+      .catch(() => { /* keep default; the server enforces the real value */ });
+  }, []);
 
   const getAvailableFor = (run: any, item: any): number => {
     const stockList = run.warehouseId ? warehouseStockByWarehouse[run.warehouseId] : undefined;
@@ -138,9 +159,11 @@ export default function ActiveProductionRunsClient() {
 
   const handleApproveClick = (production: any) => {
     setBatchToApprove(production);
-    const expected = (production.quantity || 0) * (production.recipe?.yieldQty || 1);
-    setActualYield(expected);
+    // Left empty on purpose: the operator must enter what was really made.
+    setActualYield("");
     setWastageQty(0);
+    setExtras([]);
+    setExtraLots({});
     setRemarks(production.remarks || "");
     setExpiryDate(production.expiryDate ? new Date(production.expiryDate).toISOString().split("T")[0] : "");
     setShowApprovalModal(true);
@@ -148,12 +171,20 @@ export default function ActiveProductionRunsClient() {
 
   const handleFinalApprove = async () => {
     if (!batchToApprove || submitting) return;
-    if (!(Number(actualYield) > 0)) {
-      toast.error("Enter the actual produced quantity");
+    if (actualError) {
+      toast.error(actualError);
+      return;
+    }
+    if (remarksRequired && !remarks.trim()) {
+      toast.error(`Add remarks — actual yield is more than ${varianceThresholdPct}% away from plan.`);
       return;
     }
     if (Number(wastageQty) < 0) {
       toast.error("Wastage cannot be negative");
+      return;
+    }
+    if (extraError) {
+      toast.error(extraError);
       return;
     }
     setSubmitting(true);
@@ -163,6 +194,9 @@ export default function ActiveProductionRunsClient() {
         remarks: remarks.trim() || undefined,
         expiryDate: expiryDate || undefined,
         wastageQty: Number(wastageQty) > 0 ? Number(wastageQty) : undefined,
+        additionalMaterials: extraRows.length
+          ? extraRows.map((r) => ({ inventoryItemId: r.itemId, quantity: r.qtyNum, lots: r.lots, note: r.note.trim() || undefined }))
+          : undefined,
       });
       const batch = res.data?.batch;
       const otherActiveRuns = history.filter(
@@ -195,8 +229,58 @@ export default function ActiveProductionRunsClient() {
   }
 
   const activeRuns = history.filter(h => h.status === 'IN_PROGRESS' || h.status === 'STOPPED');
-  const expectedYieldVal = (batchToApprove?.quantity || 0) * (batchToApprove?.recipe?.yieldQty || 1);
-  const yieldUnit = batchToApprove?.recipe?.yieldUnit || "KG";
+  const planned = plannedYieldOf(batchToApprove);
+  const yieldUnit = planned.unit;
+  const actualNum = actualYield.trim() === "" ? NaN : Number(actualYield);
+  const actualError = actualYield.trim() === ""
+    ? "Enter the actual produced quantity."
+    : !Number.isFinite(actualNum) || actualNum <= 0
+    ? "Actual produced quantity must be a number greater than 0."
+    : !/^\d+(\.\d{1,3})?$/.test(actualYield.trim())
+    ? "Use up to 3 decimal places."
+    : null;
+  const variance = yieldVariance(planned.qty, actualError ? null : actualNum);
+  const remarksRequired = variance.pct !== null && Math.abs(variance.pct) > varianceThresholdPct;
+
+  // Additional materials: lots are the chosen one, or oldest first — the exact
+  // allocation is sent, so what's costed here is what gets deducted.
+  const materialOptions: any[] = (batchToApprove?.warehouseId && warehouseStockByWarehouse[batchToApprove.warehouseId]) || [];
+  const extraRows = extras.filter((e) => e.itemId || e.qty.trim()).map((e) => {
+    const lotsFor = extraLots[e.itemId];
+    const qtyNum = Number(e.qty);
+    const validQty = e.qty.trim() !== "" && Number.isFinite(qtyNum) && qtyNum > 0;
+    let draft: Record<string, string> = {};
+    if (lotsFor && validQty) {
+      draft = e.lotId === AUTO_LOTS ? fifoDraft(lotsFor, qtyNum) : { [e.lotId]: String(qtyNum) };
+    }
+    const cap = !lotsFor ? 0 : e.lotId === AUTO_LOTS
+      ? lotsFor.lots.reduce((s, l) => s + l.availableQty, 0) + lotsFor.untrackedQty
+      : e.lotId === UNTRACKED ? lotsFor.untrackedQty : (lotsFor.lots.find((l) => l.id === e.lotId)?.availableQty ?? 0);
+    const error = !e.itemId ? "Choose the material."
+      : !validQty ? "Enter a quantity greater than 0."
+      : !lotsFor ? "Loading lots…"
+      : qtyNum > cap + 0.0005 ? `Only ${fmtYield(cap)} ${lotsFor.unit} available${e.lotId === AUTO_LOTS ? "" : " in that lot"}.`
+      : Math.abs(allocatedTotal(draft) - qtyNum) > 0.0005 ? "Not enough stock." : null;
+    return { ...e, qtyNum, unit: lotsFor?.unit || "", cost: lotsFor && !error ? allocationCost(lotsFor, draft) : 0, lots: toPayload(draft), error };
+  });
+  const extraError = extraRows.find((r) => r.error)?.error ?? null;
+  const plannedMaterialCost = Number(batchToApprove?.materialCost) || 0;
+  const additionalCost = extraRows.reduce((s, r) => s + r.cost, 0);
+  const totalMaterialCost = plannedMaterialCost + additionalCost;
+
+  const loadExtraLots = (itemId: string) => {
+    if (!itemId || extraLots[itemId] || !batchToApprove?.warehouseId) return;
+    productionApi.getLotOptions(batchToApprove.warehouseId, [itemId])
+      .then((res) => {
+        const m = Array.isArray(res.data) ? res.data[0] : null;
+        if (m) setExtraLots((prev) => ({ ...prev, [itemId]: m }));
+      })
+      .catch(() => toast.error("Couldn't load lots for that material"));
+  };
+  const updateExtra = (key: number, patch: Partial<ExtraMaterial>) => {
+    setExtras((list) => list.map((e) => (e.key === key ? { ...e, ...patch } : e)));
+    if (patch.itemId) loadExtraLots(patch.itemId);
+  };
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300 w-full min-w-0">
@@ -251,9 +335,9 @@ export default function ActiveProductionRunsClient() {
               {/* Operational Metrics Strip */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-4 bg-gray-50 dark:bg-white/[0.02] p-3 sm:p-4 rounded-xl text-xs">
                 <div>
-                  <span className="text-[10px] font-bold uppercase text-gray-400">Target Output</span>
+                  <span className="text-[10px] font-bold uppercase text-gray-400">Planned Output</span>
                   <p className="font-mono font-bold text-gray-900 dark:text-white mt-0.5">
-                    {((run.quantity || 0) * (run.recipe?.yieldQty || 1)).toFixed(2)} {run.recipe?.yieldUnit || "KG"}
+                    {fmtYield(plannedYieldOf(run).qty)} {plannedYieldOf(run).unit}
                   </p>
                 </div>
                 <div>
@@ -403,7 +487,7 @@ export default function ActiveProductionRunsClient() {
       {/* Production Summary — Complete Production Modal */}
       <Modal
         isOpen={showApprovalModal}
-        onClose={() => setShowApprovalModal(false)}
+        onClose={() => { if (!submitting) setShowApprovalModal(false); }}
         title="Complete Production Batch"
       >
         <div className="space-y-4 text-xs">
@@ -416,7 +500,7 @@ export default function ActiveProductionRunsClient() {
                 </p>
               </div>
               <div className="text-right">
-                <span className="text-[10px] font-bold uppercase text-gray-400">Batch Code</span>
+                <span className="text-[10px] font-bold uppercase text-gray-400">Production Batch ID</span>
                 <p className="text-xs font-bold text-[#f58220] font-mono mt-0.5">
                   {batchToApprove.productionBatchCode || "Pending"}
                 </p>
@@ -425,33 +509,160 @@ export default function ActiveProductionRunsClient() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-gray-50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5 text-center">
-              <span className="text-[10px] font-bold uppercase text-gray-400">Expected</span>
-              <p className="text-sm font-bold font-mono text-gray-900 dark:text-white mt-0.5">
-                {expectedYieldVal.toFixed(2)} {yieldUnit}
-              </p>
+            <div className="p-3 bg-gray-50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5">
+              <span className="text-[10px] font-bold uppercase text-gray-400">Planned Quantity</span>
+              <p className="text-sm font-bold font-mono text-gray-900 dark:text-white mt-0.5">{fmtYield(planned.qty)}</p>
             </div>
-
-            <div className="p-3 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 text-center">
-              <span className="text-[10px] font-bold uppercase text-indigo-700 dark:text-indigo-300">Actual</span>
-              <p className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">
-                {(Number(actualYield) || 0).toFixed(2)} {yieldUnit}
-              </p>
+            <div className="p-3 bg-gray-50 dark:bg-white/[0.02] rounded-xl border border-gray-100 dark:border-white/5">
+              <span className="text-[10px] font-bold uppercase text-gray-400">Planned Unit</span>
+              <p className="text-sm font-bold font-mono text-gray-900 dark:text-white mt-0.5">{yieldUnit}</p>
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300">
-              Actual Finished Yield ({yieldUnit}) <span className="text-rose-500">*</span>
+            <label htmlFor="actual-yield" className="text-[11px] font-bold text-gray-700 dark:text-slate-300">
+              Actual Produced Quantity ({yieldUnit}) <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="number"
-              step="0.01"
-              value={actualYield === 0 ? "" : actualYield}
-              onChange={(e) => setActualYield(Number(e.target.value))}
-              placeholder={`Enter yield in ${yieldUnit}`}
-              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-mono font-bold text-gray-900 dark:text-white outline-none focus:border-emerald-500"
-            />
+            <div className="relative">
+              <input
+                id="actual-yield"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.001"
+                autoFocus
+                value={actualYield}
+                onChange={(e) => setActualYield(e.target.value)}
+                placeholder={`What was actually produced, in ${yieldUnit}`}
+                className={clsx(
+                  "w-full bg-gray-50 dark:bg-[#13151f] border rounded-xl px-3 py-2 pr-12 text-sm font-mono font-bold text-gray-900 dark:text-white outline-none",
+                  actualYield.trim() !== "" && actualError ? "border-rose-300 focus:border-rose-500" : "border-gray-200 dark:border-white/10 focus:border-emerald-500"
+                )}
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-gray-400">{yieldUnit}</span>
+            </div>
+            {actualYield.trim() !== "" && actualError && <p className="text-[11px] font-semibold text-rose-500">{actualError}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl border border-gray-100 dark:border-white/5 bg-white dark:bg-white/[0.01]">
+              <span className="text-[10px] font-bold uppercase text-gray-400">Yield Difference</span>
+              <p className={clsx("text-sm font-bold font-mono mt-0.5", varianceTone(variance.difference))}>
+                {variance.difference == null ? "—" : `${fmtSigned(variance.difference)} ${yieldUnit}`}
+              </p>
+            </div>
+            <div className="p-3 rounded-xl border border-gray-100 dark:border-white/5 bg-white dark:bg-white/[0.01]">
+              <span className="text-[10px] font-bold uppercase text-gray-400">Yield Variance</span>
+              <p className={clsx("text-sm font-bold font-mono mt-0.5", varianceTone(variance.difference))}>
+                {fmtSigned(variance.pct, "%")}
+              </p>
+            </div>
+          </div>
+
+          {/* Additional materials actually used beyond the plan */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-gray-700 dark:text-slate-300">
+                Additional Materials Used <span className="font-medium text-gray-400">— only if extra material was really added</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setExtras((l) => [...l, { key: Date.now(), itemId: "", qty: "", lotId: AUTO_LOTS, note: "" }])}
+                disabled={!batchToApprove?.warehouseId || extras.length >= 30}
+                className="text-[11px] font-bold text-[#f58220] hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline"
+              >
+                + Add material
+              </button>
+            </div>
+            {extras.map((e) => {
+              const row = extraRows.find((r) => r.key === e.key);
+              const lotsFor = extraLots[e.itemId];
+              return (
+                <div key={e.key} className="rounded-xl border border-gray-100 dark:border-white/5 p-2.5 space-y-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_1fr_auto] gap-2 items-center">
+                    <select
+                      value={e.itemId}
+                      aria-label="Material"
+                      onChange={(ev) => updateExtra(e.key, { itemId: ev.target.value, lotId: AUTO_LOTS })}
+                      className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs font-semibold dark:text-white"
+                    >
+                      <option value="">Material…</option>
+                      {materialOptions.map((m: any) => (
+                        <option key={m.id} value={m.id}>{m.name} ({fmtYield(m.availableStock)} {m.unit})</option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="any"
+                        value={e.qty}
+                        aria-label="Quantity used"
+                        onChange={(ev) => updateExtra(e.key, { qty: ev.target.value })}
+                        placeholder="Qty"
+                        className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 pr-9 text-xs font-mono font-bold dark:text-white"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{row?.unit}</span>
+                    </div>
+                    <select
+                      value={e.lotId}
+                      aria-label="Purchase lot"
+                      disabled={!lotsFor}
+                      onChange={(ev) => updateExtra(e.key, { lotId: ev.target.value })}
+                      className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs font-semibold dark:text-white disabled:opacity-50"
+                    >
+                      <option value={AUTO_LOTS}>Oldest lot first</option>
+                      {lotsFor?.lots.map((l) => (
+                        <option key={l.id} value={l.id}>{l.lotNumber} · {fmtYield(l.availableQty)} {lotsFor.unit} @ {inr(l.unitCost)}</option>
+                      ))}
+                      {lotsFor && lotsFor.untrackedQty > 0 && (
+                        <option value={UNTRACKED}>Stock without lot · {fmtYield(lotsFor.untrackedQty)} {lotsFor.unit} @ {inr(lotsFor.averageCost)}</option>
+                      )}
+                    </select>
+                    <button
+                      type="button"
+                      aria-label="Remove material"
+                      onClick={() => setExtras((l) => l.filter((x) => x.key !== e.key))}
+                      className="text-gray-400 hover:text-rose-500 cursor-pointer justify-self-end"
+                    >
+                      <XCircle size={16} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <input
+                      value={e.note}
+                      onChange={(ev) => updateExtra(e.key, { note: ev.target.value })}
+                      placeholder="Why was it added? (optional)"
+                      maxLength={500}
+                      className="flex-1 min-w-[160px] bg-transparent border-b border-gray-200 dark:border-white/10 px-1 py-1 text-[11px] dark:text-white outline-none"
+                    />
+                    <span className={clsx("text-[11px] font-bold", row?.error ? "text-rose-500" : "text-gray-700 dark:text-slate-300")}>
+                      {row?.error || inr(row?.cost)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Actual material cost */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="p-2.5 rounded-xl border border-gray-100 dark:border-white/5">
+              <span className="text-[9px] font-bold uppercase text-gray-400">Material Cost</span>
+              <p className="text-xs font-bold font-mono text-gray-900 dark:text-white mt-0.5">{inr(totalMaterialCost)}</p>
+              {additionalCost > 0 && <p className="text-[10px] text-gray-400">incl. {inr(additionalCost)} extra</p>}
+            </div>
+            <div className="p-2.5 rounded-xl border border-gray-100 dark:border-white/5">
+              <span className="text-[9px] font-bold uppercase text-gray-400">Planned Cost/{yieldUnit}</span>
+              <p className="text-xs font-bold font-mono text-gray-900 dark:text-white mt-0.5">{planned.qty ? inr(plannedMaterialCost / planned.qty) : "—"}</p>
+            </div>
+            <div className="p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-500/5 col-span-2">
+              <span className="text-[9px] font-bold uppercase text-emerald-700 dark:text-emerald-400">Actual Material Cost/{yieldUnit}</span>
+              <p className="text-sm font-bold font-mono text-emerald-700 dark:text-emerald-300 mt-0.5">
+                {actualError ? "—" : inr(totalMaterialCost / actualNum)}
+              </p>
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -465,8 +676,8 @@ export default function ActiveProductionRunsClient() {
               value={wastageQty === 0 ? "" : wastageQty}
               onChange={(e) => setWastageQty(Math.max(0, Number(e.target.value) || 0))}
               placeholder={
-                expectedYieldVal - (Number(actualYield) || 0) > 0
-                  ? `Yield loss vs expected: ${(expectedYieldVal - (Number(actualYield) || 0)).toFixed(2)}`
+                variance.difference != null && variance.difference < 0
+                  ? `Yield loss vs plan: ${fmtYield(-variance.difference)}`
                   : "0"
               }
               className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-sm font-mono font-bold text-gray-900 dark:text-white outline-none focus:border-amber-500"
@@ -488,7 +699,10 @@ export default function ActiveProductionRunsClient() {
 
           <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-              <FileText size={13} /> {PRODUCTION_FEATURES.qc ? <>Remarks &amp; QC Notes</> : "Remarks"}
+              <FileText size={13} /> {PRODUCTION_FEATURES.qc ? <>Remarks &amp; QC Notes</> : "Production Remarks"}
+              {remarksRequired
+                ? <span className="text-rose-500">* required — variance is over {varianceThresholdPct}%</span>
+                : <span className="font-medium text-gray-400">— optional</span>}
             </label>
             <textarea
               rows={2}
@@ -509,7 +723,7 @@ export default function ActiveProductionRunsClient() {
             </button>
             <button
               onClick={handleFinalApprove}
-              disabled={submitting}
+              disabled={submitting || !!actualError || (remarksRequired && !remarks.trim()) || !!extraError}
               className="flex-[2] py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {submitting ? (
@@ -520,7 +734,7 @@ export default function ActiveProductionRunsClient() {
               ) : (
                 <>
                   <CheckCircle2 size={14} />
-                  <span>{PRODUCTION_FEATURES.qc ? "Confirm Completion" : "Complete & Send to Packaging"}</span>
+                  <span>Confirm Completion</span>
                 </>
               )}
             </button>

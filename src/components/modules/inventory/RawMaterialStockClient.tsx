@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -9,13 +9,14 @@ import {
   RefreshCw, Trash2, X,
   Edit2, Lock,
   Calculator, Package, BarChart3, Database,
-  Download, Flame, Wrench, Recycle, Upload, Loader2, UploadCloud, Maximize2
+  Download, Flame, Wrench, Recycle, Upload, Loader2, UploadCloud, Maximize2, ChevronRight
 } from "lucide-react";
 import { clsx } from "clsx";
 import { rawMaterialsApi } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Modal } from "@/components/ui/Modal";
 import MinimizedImportWidget from "./MinimizedImportWidget";
+import MaterialLotsPanel, { formatINR } from "./MaterialLotsPanel";
 import { toast } from "react-hot-toast";
 
 const WEIGHT_VOLUME_UNITS = new Set(['KG', 'G', 'GM', 'KGS', 'L', 'LTR', 'LITER', 'LITRE', 'ML']);
@@ -113,6 +114,7 @@ export default function RawMaterialStockClient() {
   // Edit / Action states
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const openEditPage = (item: any) => {
     router.push(`/inventory/stock/edit?id=${item.id}`);
@@ -251,7 +253,11 @@ export default function RawMaterialStockClient() {
     if (s < t) return { label: "LOW STOCK", color: "text-orange-600 bg-orange-50 dark:bg-orange-500/10" };
     if (s === t) return { label: "REORDER", color: "text-amber-600 bg-amber-50 dark:bg-amber-500/10" };
     return { label: "SAFE", color: "text-emerald-600 bg-emerald-50 dark:bg-emerald-500/10" };
-  };  const totalValue = items.reduce((acc, i) => acc + ((i.currentStock || 0) * (i.costPrice || 0)), 0);
+  };
+  // Lot-based value (each purchase batch at its own cost) when the API
+  // provides it; falls back to stock × average cost otherwise.
+  const itemValue = (i: any) => i.lotSummary?.totalValue ?? ((i.currentStock || 0) * (i.costPrice || 0));
+  const totalValue = items.reduce((acc, i) => acc + itemValue(i), 0);
   const rawMaterialsCount = items.filter(i => {
     const cat = (i.category || "").toUpperCase();
     return cat.includes("RAW") || (!cat.includes("PACKAG") && !cat.includes("SEMI") && !cat.includes("ASSET"));
@@ -394,12 +400,14 @@ export default function RawMaterialStockClient() {
         </div>
 
         <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-          <table className="w-full text-left min-w-[650px]">
+          <table className="w-full text-left min-w-[860px]">
             <thead className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 text-slate-500 text-[11px] sm:text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
               <tr>
                 <th className="px-4 sm:px-6 py-3.5">Item</th>
                 <th className="px-4 sm:px-6 py-3.5">Category</th>
                 <th className="px-4 sm:px-6 py-3.5 text-center">Stock</th>
+                <th className="px-4 sm:px-6 py-3.5 text-right">Inventory Value</th>
+                <th className="px-4 sm:px-6 py-3.5 text-center">Active Lots</th>
                 <th className="px-4 sm:px-6 py-3.5 text-center">Min Stock</th>
                 <th className="px-4 sm:px-6 py-3.5 text-center">Status</th>
                 <th className="px-4 sm:px-6 py-3.5 text-right">Actions</th>
@@ -407,21 +415,43 @@ export default function RawMaterialStockClient() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               {loading ? (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 font-semibold">Loading raw materials…</td></tr>
+                <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-400 font-semibold">Loading raw materials…</td></tr>
               ) : filteredItems.length === 0 ? (
-                <tr><td colSpan={6} className="px-6 py-10 text-center text-slate-400 font-semibold">No raw materials found.</td></tr>
+                <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-400 font-semibold">No raw materials found.</td></tr>
               ) : (
                 filteredItems.map(item => {
                   const status = getStockStatus(item.currentStock || 0, item.minimumStock);
+                  const expanded = expandedId === item.id;
+                  const lots = item.lotSummary;
                   return (
-                    <tr key={item.id} className={clsx("hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all", item.isActive === false && "opacity-50")}>
+                    <Fragment key={item.id}>
+                    <tr
+                      onClick={() => setExpandedId(expanded ? null : item.id)}
+                      className={clsx("cursor-pointer hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all", item.isActive === false && "opacity-50", expanded && "bg-orange-50/40 dark:bg-orange-500/5")}
+                    >
                       <td className="px-6 py-3">
-                        <p className="font-semibold text-slate-800 dark:text-white">{item.name}</p>
-                        <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">SKU: {item.sku || "N/A"}</p>
+                        <div className="flex items-center gap-2">
+                          <ChevronRight size={14} className={clsx("text-slate-400 shrink-0 transition-transform", expanded && "rotate-90 text-orange-500")} />
+                          <div>
+                            <p className="font-semibold text-slate-800 dark:text-white">{item.name}</p>
+                            <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">SKU: {item.sku || "N/A"}</p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-3 text-slate-500">{(item.category || "").replace(/_/g, " ")}</td>
                       <td className="px-6 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">
                         {(item.currentStock || 0).toFixed(2)} {item.unit}
+                      </td>
+                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                        <p className="font-semibold text-slate-800 dark:text-white">{formatINR(itemValue(item))}</p>
+                        {lots && (item.currentStock || 0) > 0 && (
+                          <p className="text-[10px] text-slate-400">Avg {formatINR(lots.weightedAvgCost)}/{item.unit}</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        <span className={clsx("text-[10px] font-bold px-2 py-0.5 rounded-full", (lots?.activeLots || 0) > 0 ? "text-blue-600 bg-blue-50 dark:bg-blue-500/10" : "text-slate-400 bg-slate-100 dark:bg-white/5")}>
+                          {lots?.activeLots || 0}
+                        </span>
                       </td>
                       <td className="px-6 py-3 text-center text-slate-500">{item.minimumStock} {item.unit}</td>
                       <td className="px-6 py-3 text-center">
@@ -431,13 +461,21 @@ export default function RawMaterialStockClient() {
                       </td>
                       <td className="px-6 py-3 text-right">
                         <button
-                          onClick={() => openEditPage(item)}
+                          onClick={(e) => { e.stopPropagation(); openEditPage(item); }}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 rounded-lg text-slate-600 dark:text-slate-300 font-semibold transition-colors"
                         >
                           <Edit2 size={12} /> Edit
                         </button>
                       </td>
                     </tr>
+                    {expanded && (
+                      <tr>
+                        <td colSpan={8} className="p-0">
+                          <MaterialLotsPanel itemId={item.id} unit={item.unit} summary={lots} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               )}
