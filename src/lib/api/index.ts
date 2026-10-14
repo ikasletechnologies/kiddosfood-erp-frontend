@@ -14,3 +14,4 @@ export * from './alerts.api';
 export * from './ewaybill.api';
 export * from './attachments.api';
 export * from './assistant.api';
+export * from './chat.api';

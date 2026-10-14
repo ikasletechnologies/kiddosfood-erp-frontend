@@ -26,6 +26,7 @@ import { clsx } from "clsx";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { useSidebar } from "@/context/SidebarContext";
+import { useChat } from "@/context/ChatContext";
 import { SUPER_ADMIN_SIDEBAR, franchiseMenuSections } from "@/config/navigation";
 
 export default function Sidebar() {
@@ -36,6 +37,7 @@ export default function Sidebar() {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const { isCollapsed, toggleCollapsed, isMobileOpen, closeMobile } = useSidebar();
+  const { totalUnread: chatUnread } = useChat();
 
   const [expandedMenus, setExpandedMenus] = useState<string[]>(["Sales CRM", "PROCUREMENT", "PRODUCTION"]);
   const [collapsedSections, setCollapsedSections] = useState<string[]>([]);
@@ -263,6 +265,7 @@ export default function Sidebar() {
                     const isHovered = hoveredItem === item.label;
                     const isComingSoon = item.isComingSoon;
                     const IconComponent = itemIcon;
+                    const badgeCount = item.badge === "chat" ? chatUnread : 0;
 
                     return (
                       <div
@@ -310,6 +313,9 @@ export default function Sidebar() {
                                 size={19}
                                 strokeWidth={isActive ? 2.4 : 1.9}
                               />
+                              {badgeCount > 0 && (
+                                <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-[#F58220] ring-2 ring-white dark:ring-[#0b0c10]" />
+                              )}
                             </div>
                           )}
 
@@ -335,6 +341,12 @@ export default function Sidebar() {
                                 >
                                   {item.label}
                                 </Link>
+                              )}
+
+                              {badgeCount > 0 && (
+                                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#F58220] text-white text-[10px] font-bold flex items-center justify-center">
+                                  {badgeCount > 99 ? "99+" : badgeCount}
+                                </span>
                               )}
 
                               {item.isComingSoon && (

@@ -33,6 +33,13 @@ import { clsx } from "clsx";
 import { franchiseApi, userGovernanceApi, default as api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-hot-toast";
+import {
+  validateAadhaar,
+  validateEmail,
+  validatePan,
+  validatePassword,
+  type FranchiseFieldErrors,
+} from "@/lib/franchise-validation";
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string; dot: string }> = {
   ACTIVE: {
@@ -63,6 +70,8 @@ const EMPTY_FORM = {
   location: "",
   ownerName: "",
   contactNum: "",
+  aadhaarNumber: "",
+  panNumber: "",
   status: "ACTIVE",
   dashboardPassword: "",
   adminUser: {
@@ -83,6 +92,11 @@ export default function FranchisePage() {
   const [editing, setEditing] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  // Field errors returned by the API (e.g. duplicate email); cleared per field on edit.
+  const [serverErrors, setServerErrors] = useState<FranchiseFieldErrors>({});
+  // Edit mode: Aadhaar is never sent back in full, so the input starts empty
+  // (= keep the saved value) and this flag requests its removal.
+  const [clearAadhaar, setClearAadhaar] = useState(false);
 
   useEffect(() => {
     if (!loading && currentUser && currentUser.role === "FRANCHISE_ADMIN") {
@@ -169,6 +183,8 @@ export default function FranchisePage() {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setServerErrors({});
+    setClearAadhaar(false);
     setActiveTab("info");
     setShowForm(true);
   };
@@ -199,10 +215,14 @@ export default function FranchisePage() {
       location: f.location,
       ownerName: f.ownerName,
       contactNum: f.contactNum,
+      aadhaarNumber: "",
+      panNumber: f.panNumber ?? "",
       status: f.status ?? "ACTIVE",
       dashboardPassword: f.dashboardPassword || "",
       adminUser: { email: "", password: "", fullName: "" },
     });
+    setServerErrors({});
+    setClearAadhaar(false);
     setActiveTab("info");
     setShowForm(true);
     setShowAddUser(false);
@@ -220,6 +240,25 @@ export default function FranchisePage() {
 
   const isValidContactNum = (v: string) => /^\d{10}$/.test(v);
 
+  // Inline errors: optional Aadhaar/PAN only error once something is typed;
+  // Email ID / Password (create only) only once the user starts typing.
+  const fieldErrors: FranchiseFieldErrors = {
+    aadhaarNumber: validateAadhaar(form.aadhaarNumber) || serverErrors.aadhaarNumber,
+    panNumber: validatePan(form.panNumber) || serverErrors.panNumber,
+    email: (form.adminUser.email && validateEmail(form.adminUser.email)) || serverErrors.email,
+    password: (form.adminUser.password && validatePassword(form.adminUser.password)) || serverErrors.password,
+    contactNum: serverErrors.contactNum,
+  };
+  const isFranchiseFormValid =
+    !!form.name &&
+    !!form.location &&
+    isValidContactNum(form.contactNum) &&
+    !validateAadhaar(form.aadhaarNumber) &&
+    !validatePan(form.panNumber) &&
+    (!!editing || (!validateEmail(form.adminUser.email) && !validatePassword(form.adminUser.password)));
+  const clearServerError = (key: keyof FranchiseFieldErrors) =>
+    setServerErrors((e) => ({ ...e, [key]: undefined }));
+
   const handleSave = async () => {
     if (!form.name || !form.location) return;
     if (!isValidContactNum(form.contactNum)) {
@@ -230,20 +269,29 @@ export default function FranchisePage() {
       });
       return;
     }
+    if (!isFranchiseFormValid) return;
     setSaving(true);
+    setServerErrors({});
+    const panNumber = form.panNumber.trim().toUpperCase();
+    const aadhaarNumber = form.aadhaarNumber.replace(/\s/g, "");
     try {
       if (editing) {
-        const { adminUser, ...updateData } = form;
-        await franchiseApi.update(editing.id, updateData);
+        const { adminUser, aadhaarNumber: _a, ...updateData } = form;
+        await franchiseApi.update(editing.id, {
+          ...updateData,
+          panNumber,
+          // Empty = keep the saved Aadhaar; null = remove it.
+          aadhaarNumber: clearAadhaar ? null : aadhaarNumber || undefined,
+        });
       } else {
-        const payload = { ...form };
-        if (payload.adminUser.email) {
-          const email = payload.adminUser.email;
-          payload.adminUser.email = email.includes("@") ? email : `${email}@gmail.com`;
-        } else {
-          payload.adminUser.email = "";
-        }
-        await franchiseApi.create(payload);
+        // Email ID is sent exactly as entered (trimmed) — never auto-completed
+        // into an address; the backend re-validates it and checks duplicates.
+        await franchiseApi.create({
+          ...form,
+          panNumber,
+          aadhaarNumber,
+          adminUser: { ...form.adminUser, email: form.adminUser.email.trim() },
+        });
       }
       setShowForm(false);
       fetchFranchises();
@@ -253,6 +301,7 @@ export default function FranchisePage() {
         message: `${form.name} has been ${editing ? "updated" : "registered"} successfully.`,
       });
     } catch (e: any) {
+      if (e.response?.data?.fieldErrors) setServerErrors(e.response.data.fieldErrors);
       setNotification({
         type: "error",
         title: "Save Failed",
@@ -707,18 +756,96 @@ export default function FranchisePage() {
                       </label>
                       <input
                         value={form.contactNum}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           setForm((f) => ({
                             ...f,
                             contactNum: e.target.value.replace(/\D/g, "").slice(0, 10),
-                          }))
-                        }
+                          }));
+                          clearServerError("contactNum");
+                        }}
                         type="tel"
                         inputMode="numeric"
                         maxLength={10}
-                        className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"
+                        className={clsx(
+                          "w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all",
+                          fieldErrors.contactNum && "!border-red-400"
+                        )}
                         placeholder="10-digit mobile number"
                       />
+                      {fieldErrors.contactNum && (
+                        <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors.contactNum}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
+                        Aadhaar Number
+                      </label>
+                      <input
+                        value={form.aadhaarNumber}
+                        onChange={(e) => {
+                          setForm((f) => ({
+                            ...f,
+                            aadhaarNumber: e.target.value.replace(/\D/g, "").slice(0, 12),
+                          }));
+                          clearServerError("aadhaarNumber");
+                        }}
+                        inputMode="numeric"
+                        maxLength={12}
+                        autoComplete="off"
+                        disabled={clearAadhaar}
+                        className={clsx(
+                          "w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all disabled:opacity-50",
+                          fieldErrors.aadhaarNumber && "!border-red-400"
+                        )}
+                        placeholder={
+                          editing?.hasAadhaar && !clearAadhaar
+                            ? `${editing.aadhaarMasked ?? "Saved"} (blank = keep)`
+                            : "12-digit Aadhaar (optional)"
+                        }
+                      />
+                      {fieldErrors.aadhaarNumber && (
+                        <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors.aadhaarNumber}</p>
+                      )}
+                      {editing?.hasAadhaar && (
+                        <label className="mt-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clearAadhaar}
+                            onChange={(e) => {
+                              setClearAadhaar(e.target.checked);
+                              if (e.target.checked) setForm((f) => ({ ...f, aadhaarNumber: "" }));
+                            }}
+                          />
+                          Remove saved Aadhaar
+                        </label>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
+                        PAN Number
+                      </label>
+                      <input
+                        value={form.panNumber}
+                        onChange={(e) => {
+                          setForm((f) => ({
+                            ...f,
+                            panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10),
+                          }));
+                          clearServerError("panNumber");
+                        }}
+                        maxLength={10}
+                        autoComplete="off"
+                        className={clsx(
+                          "w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all",
+                          fieldErrors.panNumber && "!border-red-400"
+                        )}
+                        placeholder="AAAAA9999A (optional)"
+                      />
+                      {fieldErrors.panNumber && (
+                        <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors.panNumber}</p>
+                      )}
                     </div>
                   </div>
 
@@ -747,23 +874,32 @@ export default function FranchisePage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
-                              Login ID / Email
+                              Email ID <span className="text-red-500">*</span>
                             </label>
                             <input
+                              type="email"
+                              autoComplete="off"
                               value={form.adminUser.email}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setForm((f) => ({
                                   ...f,
                                   adminUser: { ...f.adminUser, email: e.target.value },
-                                }))
-                              }
-                              className="w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all"
-                              placeholder="Email or Username"
+                                }));
+                                clearServerError("email");
+                              }}
+                              className={clsx(
+                                "w-full px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all",
+                                fieldErrors.email && "!border-red-400"
+                              )}
+                              placeholder="admin@example.com"
                             />
+                            {fieldErrors.email && (
+                              <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors.email}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
-                              Password
+                              Password <span className="text-red-500">*</span>
                             </label>
                             <div className="relative">
                               <input
@@ -776,19 +912,28 @@ export default function FranchisePage() {
                                     dashboardPassword: pass,
                                     adminUser: { ...prev.adminUser, password: pass },
                                   }));
+                                  clearServerError("password");
                                 }}
-                                className="w-full px-4 py-2 pr-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all"
-                                placeholder="Password"
+                                autoComplete="new-password"
+                                className={clsx(
+                                  "w-full px-4 py-2 pr-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-orange-500 transition-all",
+                                  fieldErrors.password && "!border-red-400"
+                                )}
+                                placeholder="Min. 8 characters"
                               />
                               <button
                                 type="button"
                                 onClick={() => setShowAdminPassword((v) => !v)}
                                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-orange-500 transition-colors"
                                 tabIndex={-1}
+                                aria-label={showAdminPassword ? "Hide password" : "Show password"}
                               >
                                 {showAdminPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                               </button>
                             </div>
+                            {fieldErrors.password && (
+                              <p className="mt-1 text-[11px] font-semibold text-red-500">{fieldErrors.password}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1001,7 +1146,7 @@ export default function FranchisePage() {
                   saving ||
                   (showAddUser
                     ? !userForm.fullName || !userForm.email || (!editingUser && !userForm.password)
-                    : !form.name || !form.location || !isValidContactNum(form.contactNum))
+                    : !isFranchiseFormValid)
                 }
                 className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 text-white rounded-lg font-bold text-sm transition-all shadow-sm"
               >
