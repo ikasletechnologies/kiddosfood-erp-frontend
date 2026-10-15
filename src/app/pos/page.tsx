@@ -16,6 +16,9 @@ import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
+import { useAuth } from "@/context/AuthContext";
+import { canViewCost, signedMoney, toneOf, useProfitEstimate } from "@/lib/profit-estimate";
+import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -556,6 +559,23 @@ export default function POSPage() {
   const roundOff   = parseFloat((total - rawTotal).toFixed(2));
   const changeDue  = paidAmount ? parseFloat(paidAmount) - total : 0;
 
+  // Estimated cost & profit for the bill — priced and costed on the server
+  // exactly as checkout would (excl. GST, after line and bill discounts).
+  // Only for roles allowed to see cost; never changes the price or the bill.
+  // Franchise-party bills go through Franchise Orders, not POS checkout.
+  const { user: authUser } = useAuth();
+  const showProfit = canViewCost(authUser) && partyType !== "FRANCHISE";
+  const [profitOpen, setProfitOpen] = useState(false);
+  const profitPayload = {
+    franchiseId: (authUser as any)?.franchiseId || null,
+    partyType,
+    manualDiscount: manualDisc,
+    items: cart.map(i => ({ productId: i.id, quantity: i.quantity, ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}) })),
+  };
+  const profitKey = cart.length ? JSON.stringify(profitPayload) : "";
+  const profit = useProfitEstimate(() => posApi.estimateProfit(profitPayload), profitKey, showProfit);
+  const lineEstimate = (idx: number) => profit.estimate?.lines[idx] ?? null;
+
   // ── Checkout ───────────────────────────────────────────────────────────────
 
   // `credit` = "Other/Credit Payments": bill a real Customer/Dealer and
@@ -1034,7 +1054,11 @@ export default function POSPage() {
                     <tr key={item.id} onClick={() => setSelectedRowIndex(idx)} className={clsx("border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/50 dark:hover:bg-white/5 transition-colors cursor-pointer group", selectedRowIndex === idx && "bg-orange-100/60 dark:bg-orange-500/20")}>
                       <td className="px-3 py-2.5 font-medium text-gray-500">{idx + 1}</td>
                       <td className="px-3 py-2.5 font-mono text-gray-600 dark:text-slate-300">{item.id.substring(0,6).toUpperCase()}</td>
-                      <td className="px-3 py-2.5 font-bold text-gray-800 dark:text-white truncate max-w-[200px]">{item.name}</td>
+                      <td className="px-3 py-2.5 font-bold text-gray-800 dark:text-white max-w-[220px]">
+                        <span className="block truncate">{item.name}</span>
+                        {showProfit && <LineProfit line={lineEstimate(idx)} loading={profit.loading} className="block truncate font-normal" />}
+                        {showProfit && <LossWarning line={lineEstimate(idx)} />}
+                      </td>
                       <td className="px-3 py-2.5">
                         <div className="flex items-center justify-center gap-2">
                           <button onClick={(e) => { e.stopPropagation(); updateQty(item.id, -1); }} className="w-5 h-5 flex items-center justify-center rounded border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/10">-</button>
@@ -1258,6 +1282,29 @@ export default function POSPage() {
               <span className="text-xs font-medium text-gray-500 dark:text-slate-400">PAYABLE TOTAL</span>
               <span className="text-xl font-black text-gray-900 dark:text-white">{fmt(total)}</span>
             </div>
+            {showProfit && cart.length > 0 && (
+              <div className="pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setProfitOpen(o => !o)}
+                  className="w-full flex justify-between items-center text-[11px] font-semibold text-gray-500 dark:text-slate-400 cursor-pointer"
+                  aria-expanded={profitOpen}
+                >
+                  <span>Est. profit (excl. GST) {profitOpen ? "▴" : "▾"}</span>
+                  {profit.estimate ? (
+                    <span className={toneOf(profit.estimate.summary.status)}>
+                      {profit.estimate.summary.profit == null ? "Cost unavailable"
+                        : `${signedMoney(profit.estimate.summary.profit)}${profit.estimate.summary.marginPct != null ? ` (${profit.estimate.summary.marginPct}%)` : ""}`}
+                    </span>
+                  ) : <span className="text-gray-400">{profit.loading ? "…" : "—"}</span>}
+                </button>
+                {profitOpen && (
+                  <div className="mt-1.5">
+                    <ProfitSummaryPanel summary={profit.estimate?.summary} loading={profit.loading} error={profit.error} title="Estimated Bill Profit / Loss" compact />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Account */}

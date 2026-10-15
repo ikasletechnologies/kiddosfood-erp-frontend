@@ -8,6 +8,9 @@ export const posApi = {
   getInvoice: (orderId: string) => api.get(`/api/invoices/${orderId}`),
   updateStatus: (id: string, status: string) => api.patch(`/api/orders/${id}/status`, { status }),
   addPayment: (id: string, data: any) => api.post(`/api/orders/${id}/payment`, data),
+  // Estimated bill profit/loss — server re-prices exactly as checkout; read-only.
+  estimateProfit: (data: { franchiseId?: string | null; partyType?: string; items: Array<{ productId: string; quantity: number; unit?: string; discountPerUnit?: number }>; manualDiscount?: number }) =>
+    api.post('/api/pos/profitability', data),
 };
 
 // --- POS Day Closing / Settlement ---
@@ -22,6 +25,8 @@ export const posSettlementApi = {
 
 // --- Sales Module (Quotations, Orders, Returns) ---
 export const salesApi = {
+  // Estimated Sales Order profit/loss — server re-prices exactly as saving; read-only.
+  estimateOrderProfit: (data: { items: any[]; discountAmount?: number }) => api.post("/api/sales/orders/profitability", data),
   getQuotations: (params?: any) => api.get('/api/sales/quotations', { params }),
   createQuotation: (data: any) => api.post('/api/sales/quotations', data),
   getQuotationById: (id: string) => api.get(`/api/sales/quotations/${id}`),

@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   Box, CheckCircle2, AlertTriangle, RefreshCw, Search, X, PackageCheck,
-  Trash2, Info, Plus, ChevronDown, Check,
+  Trash2, Info, Plus,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { format } from "date-fns";
@@ -16,8 +16,8 @@ import { convertUnit } from "@/lib/unitConversion";
 import { generateSKU } from "@/lib/utils/erp";
 import { packagingBlocker, packableQty } from "@/config/production-features";
 import { plannedYieldOf } from "@/lib/production-yield";
-import ProductionCostPanel, { ExpenseDraft, RowCost, expensesPayload } from "@/components/modules/production/ProductionCostPanel";
-import { profitOf } from "@/lib/packaging-profit";
+import { SKU_RE, newVariantProblem, parseSizeText, variantChoices } from "@/lib/packaging-variants";
+import ProductionCostPanel, { ExpenseSource, RowCost } from "@/components/modules/production/ProductionCostPanel";
 
 interface Batch {
   id: string;
@@ -38,7 +38,8 @@ interface Batch {
     quantity?: number | null;
     plannedYieldQty?: number | null;
     plannedYieldUnit?: string | null;
-    recipe?: { name?: string; yieldQty?: number | null; yieldUnit?: string | null } | null;
+    // productLinks: finished-goods variants linked to the recipe (Recipe import / Recipe Master).
+    recipe?: { name?: string; yieldQty?: number | null; yieldUnit?: string | null; productLinks?: Array<{ productId: string }> } | null;
   } | null;
 }
 
@@ -49,12 +50,14 @@ interface PackRow {
   customUnit: string;
   good: number;
   damaged: number;
-  productId: string;
-  createNew: boolean;
+  productId: string; // existing finished-goods variant this row is packed into
+  createNew: boolean; // create a new variant on confirm instead
   newName: string;
   newSku: string;
-  newPrice: number;
-  matchedFor: string; // pack size the auto-filled product/variant fields belong to
+  // A same-size product with this product's name but not linked to its
+  // recipe: "" = not decided yet, "use" = pack into it, "new" = create anyway.
+  nameMatchChoice: "" | "use" | "new";
+  matchedFor: string; // pack size the product fields were filled for
 }
 
 interface ConfirmedLine {
@@ -88,73 +91,6 @@ function uniqueSku(base: string, taken: Set<string>): string {
   return sku;
 }
 
-const SKU_RE = /^[A-Z0-9][A-Z0-9-]{1,63}$/;
-
-// Searchable finished-product picker (name, SKU, current selling price).
-function ProductPicker({ options, value, onChange, inputCls }: {
-  options: any[];
-  value: string;
-  onChange: (id: string) => void;
-  inputCls: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
-  const sel = options.find((o) => o.id === value);
-  const list = options.filter((o) => !q || norm(o.name).includes(norm(q)) || (o.sku || "").toLowerCase().includes(q.toLowerCase()));
-  return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} className={clsx(inputCls, "flex items-center justify-between gap-2 text-left cursor-pointer")}>
-        {sel ? (
-          <span className="min-w-0 flex items-center gap-2">
-            <span className="font-semibold truncate">{sel.name}</span>
-            <span className="font-mono text-[11px] text-gray-400 shrink-0">{sel.sku}</span>
-            <span className="text-[11px] font-bold text-emerald-600 shrink-0">₹{Number(sel.basePrice || 0).toLocaleString("en-IN")}</span>
-          </span>
-        ) : (
-          <span className="text-gray-400">Select product…</span>
-        )}
-        <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
-      </button>
-      {open && (
-        <div className="absolute z-30 mt-1 w-full bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden">
-          <div className="p-1.5 border-b border-gray-100 dark:border-white/5">
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or SKU…" className={inputCls} />
-          </div>
-          <ul className="max-h-56 overflow-y-auto custom-scrollbar py-1">
-            {list.length === 0 ? (
-              <li className="px-3 py-3 text-xs text-gray-400 text-center">No matching products</li>
-            ) : list.map((o) => (
-              <li key={o.id}>
-                <button
-                  type="button"
-                  onClick={() => { onChange(o.id); setOpen(false); setQ(""); }}
-                  className="w-full px-3 py-2 text-left text-xs flex items-center justify-between gap-2 hover:bg-orange-50 dark:hover:bg-orange-500/10 cursor-pointer"
-                >
-                  <span className="min-w-0">
-                    <span className="block font-semibold text-gray-800 dark:text-white truncate">{o.name}</span>
-                    <span className="block font-mono text-[10px] text-gray-400">{o.sku}</span>
-                  </span>
-                  <span className="flex items-center gap-2 shrink-0">
-                    <span className="font-bold text-emerald-600">₹{Number(o.basePrice || 0).toLocaleString("en-IN")}</span>
-                    {o.id === value && <Check className="h-3.5 w-3.5 text-[#f58220]" />}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
 const sizeLabel = (s: string) => s.replace(/l$/, "L");
 
 function fmt(n: number) {
@@ -175,60 +111,21 @@ function packetWeight(size: string, batchUnit: string): number {
   return val > 0 ? convertUnit(val, m[3], batchUnit) : 0;
 }
 
-// Pack size as a comparable amount in a base unit (g / ml / pcs).
-function canonicalSize(qty: number, unit: string): { amount: number; dim: string } | null {
-  const u = unit.toUpperCase();
-  if (u === "G" || u === "KG") return { amount: convertUnit(qty, u, "G"), dim: "W" };
-  if (u === "ML" || u === "L") return { amount: convertUnit(qty, u, "ML"), dim: "V" };
-  if (u === "PCS" || u === "PC" || u === "UNIT") return { amount: qty, dim: "C" };
-  return null;
-}
-
-function parseSizeText(text: string): { amount: number; dim: string } | null {
-  const m = text.trim().match(/^(\d+(?:\.\d+)?)\s*(kg|g|ml|l|pcs|pc|unit)$/i);
-  return m ? canonicalSize(Number(m[1]), m[2]) : null;
-}
-
-// Pack size a product represents: the SKU's size segment (the ERP SKU format
-// always ends in one, e.g. FG-VEGD-500G), else a size at the end of its name.
-function productSize(p: any): { amount: number; dim: string } | null {
-  const fromSku = (p.sku || "").match(/-(\d+(?:\.\d+)?)(KG|G|ML|L|PCS|PC)$/i);
-  if (fromSku) return canonicalSize(Number(fromSku[1]), fromSku[2]);
-  const fromName = (p.name || "").match(/(\d+(?:\.\d+)?)\s*(kg|g|ml|l|pcs)\.?\s*\)?\s*$/i);
-  return fromName ? canonicalSize(Number(fromName[1]), fromName[2]) : null;
-}
-
-const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const sameSize = (a: { amount: number; dim: string } | null, b: { amount: number; dim: string } | null) =>
-  !!a && !!b && a.dim === b.dim && Math.abs(a.amount - b.amount) < 0.000001;
-
 // Base product name without any master pack size it may already carry.
 function baseNameOf(batch: Batch): string {
   const raw = batch.product?.name || batch.production?.recipe?.name || "Product";
   return raw.replace(/\s*\(?\s*\d+(\.\d+)?\s*(kg|g|l|ml|pcs)\.?\s*\)?\s*$/i, "").trim() || raw;
 }
 
-const isSameBase = (p: any, base: string) => norm(p.name).includes(norm(base));
-
-/**
- * Active, SKU'd products of this pack size for the batch's base product. Only
- * when none exist are other products of the same size offered (never
- * auto-selected), for catalogues whose naming differs from the recipe.
- */
-function variantsFor(products: any[], base: string, packetSize: string): any[] {
-  const want = parseSizeText(packetSize);
-  if (!want) return [];
-  const sameSizeList = products.filter((p) => p.isActive !== false && p.sku && sameSize(productSize(p), want));
-  const sameBase = sameSizeList.filter((p) => isSameBase(p, base));
-  return sameBase.length ? sameBase : sameSizeList;
-}
+const linkedIdsOf = (batch: Batch | null | undefined) =>
+  new Set((batch?.production?.recipe?.productLinks || []).map((l) => l.productId));
 
 function newRow(size: string, customUnit: string): PackRow {
   return {
     key: Math.random().toString(36).slice(2),
     size, customValue: "", customUnit,
     good: 0, damaged: 0,
-    productId: "", createNew: false, newName: "", newSku: "", newPrice: 0, matchedFor: "",
+    productId: "", createNew: false, newName: "", newSku: "", nameMatchChoice: "", matchedFor: "",
   };
 }
 
@@ -265,14 +162,16 @@ function PackagingContent() {
   const [submitting, setSubmitting] = useState(false);
   const [wasteTarget, setWasteTarget] = useState<Batch | null>(null);
   const [wasting, setWasting] = useState(false);
-  const [expenses, setExpenses] = useState<ExpenseDraft[]>([]);
   const [costRefresh, setCostRefresh] = useState(0);
-  // Server-calculated production cost per row (keyed by row key).
+  // Server-calculated production cost per row (keyed by row key), from the
+  // batch's saved expenses — Packaging never takes expense input.
   const [rowCosts, setRowCosts] = useState<Record<string, RowCost>>({});
   const [costsLoading, setCostsLoading] = useState(false);
-  const handleCostsChange = useCallback((byKey: Record<string, RowCost>, loading: boolean) => {
+  const [expenseSource, setExpenseSource] = useState<ExpenseSource>(null);
+  const handleCostsChange = useCallback((byKey: Record<string, RowCost>, loading: boolean, source: ExpenseSource) => {
     setRowCosts(byKey);
     setCostsLoading(loading);
+    setExpenseSource(source);
   }, []);
 
   const loadProducts = useCallback(async () => {
@@ -344,33 +243,59 @@ function PackagingContent() {
   const available = selected ? availableBulk(selected) : 0;
   const alreadyPacked = selected ? (selected.packagedQty ?? 0) + pendingWeight(selected) : 0;
 
-  // Auto-match the finished product for a row's pack size. When the size is
-  // unchanged it only fills a still-empty choice, so a product picked or a
-  // variant name typed by the operator is never overwritten.
+  // Finished product for a row's pack size. Only a variant linked to this
+  // batch's recipe (a verified relationship) is reused automatically, and
+  // only when it is the single one; otherwise the row starts on Create New
+  // Variant with a suggested name and SKU. A same-name product that isn't
+  // linked is never used without the operator confirming it. Operator
+  // choices for the same size are kept.
   const withMatchedProduct = useCallback(
     (r: PackRow): PackRow => {
       const size = rowPacketSize(r);
       if (!size || !selected) return { ...r, productId: "", createNew: false, matchedFor: "" };
-      const options = variantsFor(products, baseName, size);
+      const { linked, nameMatches } = variantChoices(products, baseName, size, linkedIdsOf(selected));
       if (r.matchedFor === size) {
-        const valid = r.productId && options.some((p) => p.id === r.productId);
-        if (valid || r.createNew) return r;
-        return { ...r, productId: options[0] && isSameBase(options[0], baseName) ? options[0].id : "" };
+        const allowed = [...linked, ...(r.nameMatchChoice === "use" ? nameMatches : [])];
+        if (!r.createNew && r.productId && !allowed.some((x) => x.id === r.productId)) return { ...r, productId: "", createNew: linked.length === 0 };
+        return r;
       }
-      const taken = new Set(products.map((p: any) => (p.sku || "").toUpperCase()).filter(Boolean));
+      // Suggestions only — uniqueness is checked against the server before confirming.
+      const taken = new Set(products.map((x: any) => (x.sku || "").toUpperCase()).filter(Boolean));
       return {
         ...r,
         matchedFor: size,
-        productId: options[0] && isSameBase(options[0], baseName) ? options[0].id : "",
-        // No existing variant of this base product + size: start on Create New Variant.
-        createNew: !(options[0] && isSameBase(options[0], baseName)),
+        productId: linked.length === 1 ? linked[0].id : "",
+        createNew: linked.length === 0,
+        nameMatchChoice: "",
         newName: `${baseName} ${sizeLabel(size)}`,
         newSku: uniqueSku(generateSKU("FINISHED_GOOD", baseName, size.toUpperCase()), taken),
-        newPrice: 0,
       };
     },
     [products, baseName, selected]
   );
+
+  // Server-side SKU uniqueness for Create New Variant rows (debounced; the
+  // confirm transaction re-checks). Keyed by SKU.
+  const [skuChecks, setSkuChecks] = useState<Record<string, { available: boolean; owner?: string } | "checking" | "failed">>({});
+  const newSkus = rows.filter((r) => r.createNew).map((r) => r.newSku.trim().toUpperCase()).filter((x) => SKU_RE.test(x));
+  const newSkusKey = Array.from(new Set(newSkus)).sort().join("|");
+  useEffect(() => {
+    const pending = newSkusKey ? newSkusKey.split("|").filter((x) => !(x in skuChecks) || skuChecks[x] === "failed") : [];
+    if (!pending.length) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      setSkuChecks((prev) => ({ ...prev, ...Object.fromEntries(pending.map((x) => [x, "checking" as const])) }));
+      pending.forEach((sku) => {
+        productionApi.checkPackagingSku(sku)
+          .then((res) => { if (!cancelled) setSkuChecks((prev) => ({ ...prev, [sku]: { available: !!res.data?.available, owner: res.data?.product?.name } })); })
+          .catch(() => { if (!cancelled) setSkuChecks((prev) => ({ ...prev, [sku]: "failed" })); });
+      });
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newSkusKey]);
+  // A product created by a confirmation takes its SKU: check again next time.
+  useEffect(() => { setSkuChecks({}); }, [products]);
 
   const startRows = useCallback(
     (b: Batch) => {
@@ -385,7 +310,6 @@ function PackagingContent() {
   const selectBatch = useCallback(
     (b: Batch) => {
       setSelectedId(b.id);
-      setExpenses([]);
       startRows(b);
     },
     [startRows]
@@ -427,43 +351,31 @@ function PackagingContent() {
       const sig = canon ? `${canon.dim}${canon.amount}` : "";
       const dupOf = sig && seen.has(sig) ? seen.get(sig)! : -1;
       if (sig && dupOf < 0) seen.set(sig, i);
-      const options = size ? variantsFor(products, baseName, size) : [];
+      const choices = size ? variantChoices(products, baseName, size, linkedIdsOf(selected)) : { linked: [], nameMatches: [] };
       const newSku = r.newSku.trim().toUpperCase();
-      const newName = r.newName.trim();
-      const productKey = r.createNew ? `new:${newSku || norm(newName)}` : r.productId ? `id:${r.productId}` : "";
+      const productKey = r.createNew ? `new:${newSku}` : r.productId ? `id:${r.productId}` : "";
       const dupProduct = productKey && seenProduct.has(productKey) ? seenProduct.get(productKey)! : -1;
       if (productKey && dupProduct < 0) seenProduct.set(productKey, i);
-      const skuOwner = newSku ? products.find((p: any) => (p.sku || "").toUpperCase() === newSku) : null;
-      const nameOwner = newName ? products.find((p: any) => norm(p.name) === norm(newName)) : null;
-      const skuSize = newSku.match(/-(\d+(?:\.\d+)?)(KG|G|ML|L|PCS|PC)$/i);
 
       let error = "";
       if (r.size === "custom" && unitDim(r.customUnit) !== batchDim) error = `${sizeLabel(r.customUnit)} can't be packed from a ${batchUnit} batch`;
       else if (!size || per <= 0) error = r.size === "custom" ? "Enter a custom size greater than 0" : "Choose a pack size";
       else if (dupOf >= 0) error = `Same size as row ${dupOf + 1} — use one row per size`;
       else if (r.good + r.damaged <= 0) error = "Enter good or damaged packets";
-      else if (!r.createNew && !options.some((p) => p.id === r.productId)) error = `Select a ${sizeLabel(size)} product, or create a new variant`;
-      else if (r.createNew && newName.length < 2) error = "Enter the product name";
-      else if (r.createNew && nameOwner) error = `"${nameOwner.name}" already exists — select it under Use Existing Product`;
-      else if (r.createNew && !SKU_RE.test(newSku)) error = "Enter a SKU (letters, numbers and hyphens)";
-      else if (r.createNew && skuOwner) error = `SKU ${newSku} already belongs to "${skuOwner.name}"`;
-      else if (r.createNew && skuSize && !sameSize(canonicalSize(Number(skuSize[1]), skuSize[2]), parseSizeText(size))) error = `SKU ends in ${skuSize[1]}${skuSize[2]} but the pack size is ${sizeLabel(size)}`;
-      else if (r.createNew && !(r.newPrice > 0)) error = "Enter the selling price";
+      else if (!r.createNew && !r.productId) error = `Choose which ${sizeLabel(size)} variant to pack into, or create a new variant`;
+      else if (r.createNew && choices.nameMatches.length > 0 && r.nameMatchChoice !== "new") error = `"${choices.nameMatches[0].name}" already exists for ${sizeLabel(size)} — use it, or confirm creating a new variant`;
+      else if (r.createNew && newVariantProblem({ name: r.newName, sku: r.newSku, packetSize: sizeLabel(size) }, products)) error = newVariantProblem({ name: r.newName, sku: r.newSku, packetSize: sizeLabel(size) }, products)!;
+      else if (r.createNew && (skuChecks[newSku] === undefined || skuChecks[newSku] === "checking")) error = `Checking SKU ${newSku}…`;
+      else if (r.createNew && skuChecks[newSku] === "failed") error = `Couldn't verify SKU ${newSku} is unique — check your connection and try again`;
+      else if (r.createNew && typeof skuChecks[newSku] === "object" && !(skuChecks[newSku] as any).available) error = `SKU ${newSku} already belongs to "${(skuChecks[newSku] as any).owner || "another product"}"`;
       else if (dupProduct >= 0) error = `Same product as row ${dupProduct + 1} — combine them into one row`;
-      return { row: r, size, per, options, goodWeight: r.good * per, damagedWeight: r.damaged * per, error };
+      return { row: r, size, per, choices, goodWeight: r.good * per, damagedWeight: r.damaged * per, error };
     });
     const good = lines.reduce((s, l) => s + l.goodWeight, 0);
     const damaged = lines.reduce((s, l) => s + l.damagedWeight, 0);
     const remaining = available - good - damaged;
     return { lines, good, damaged, allocated: good + damaged, remaining, over: remaining < -0.000001 };
-  }, [rows, batchUnit, available, products, baseName]);
-
-  const priceOf = (row: PackRow): number | null => {
-    if (row.createNew) return row.newPrice > 0 ? row.newPrice : null;
-    const p = row.productId ? products.find((x: any) => x.id === row.productId) : null;
-    const price = Number(p?.basePrice);
-    return Number.isFinite(price) && price > 0 ? price : null;
-  };
+  }, [rows, batchUnit, available, products, baseName, skuChecks, selected]);
 
   // Rows as the cost preview / confirmation see them (same order and indexes).
   const costRows = calc.lines.map(({ row, size }) => ({
@@ -472,20 +384,14 @@ function PackagingContent() {
     packedQty: row.good,
     damagedQty: row.damaged,
     productId: row.createNew ? undefined : row.productId || undefined,
-    sellingPrice: row.createNew ? row.newPrice || undefined : undefined,
-    // Price shown for this row: the new variant's entered price, or the
-    // existing product's current Product Master price (never changed here).
-    price: priceOf(row),
   }));
-  const expenseCheck = expensesPayload(expenses, costRows);
-  const hasErrors = calc.lines.some((l) => l.error) || calc.over || !!expenseCheck.error;
+  const hasErrors = calc.lines.some((l) => l.error) || calc.over;
 
   const handleConfirm = async () => {
     if (!selected || submitting) return;
     const firstError = calc.lines.findIndex((l) => l.error);
     if (firstError >= 0) return toast.error(`Row ${firstError + 1}: ${calc.lines[firstError].error}`);
     if (calc.over) return toast.error(`Rows need ${fmt(calc.allocated)} ${batchUnit}, only ${fmt(available)} ${batchUnit} is left`);
-    if (expenseCheck.error) return toast.error(expenseCheck.error);
 
     setSubmitting(true);
     try {
@@ -495,12 +401,14 @@ function PackagingContent() {
           packetSize: size,
           packedQty: row.good,
           damagedQty: row.damaged,
+          // An existing variant (price untouched), or a new one created and
+          // linked to this recipe in the same transaction as the stock posting.
           productId: row.createNew ? undefined : row.productId,
           newProduct: row.createNew
-            ? { name: row.newName.trim(), sku: row.newSku.trim().toUpperCase(), basePrice: Number(row.newPrice) }
+            ? { name: row.newName.trim(), sku: row.newSku.trim().toUpperCase() } // created Pricing Pending; price is set in Product Master
             : undefined,
         })),
-        expenses: expenseCheck.lines,
+        // No expense lines: the server applies the batch's saved expenses.
       });
       const lines: ConfirmedLine[] = res.data?.summary || [];
       setCostRefresh((k) => k + 1);
@@ -689,7 +597,7 @@ function PackagingContent() {
 
                 {/* Packaging rows */}
                 <div className="p-4 sm:p-5 space-y-3">
-                  {calc.lines.map(({ row, size, options, goodWeight, damagedWeight, error }, i) => {
+                  {calc.lines.map(({ row, size, choices, goodWeight, damagedWeight, error }, i) => {
                     return (
                       <div key={row.key} className={clsx("rounded-xl border p-3", error && (row.good || row.damaged) ? "border-rose-200 dark:border-rose-500/30" : "border-gray-200 dark:border-white/10")}>
                         <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 items-end">
@@ -768,120 +676,104 @@ function PackagingContent() {
                           </div>
                         </div>
 
-                        {/* Product for this pack size — chosen independently per row */}
-                        {size && (
-                          <div className="mt-2.5 pt-2.5 border-t border-dashed border-gray-100 dark:border-white/5 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <label className={clsx(labelCls, "!mb-0")}>Product</label>
-                              <div className="inline-flex rounded-lg border border-gray-200 dark:border-white/10 p-0.5 text-[11px] font-bold">
-                                <button
-                                  type="button"
-                                  onClick={() => updateRow(row.key, { createNew: false })}
-                                  className={clsx("px-2.5 py-1 rounded-md transition-colors cursor-pointer", !row.createNew ? "bg-[#f58220] text-white" : "text-gray-500 hover:text-gray-800 dark:hover:text-white")}
-                                >
-                                  Use Existing Product
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => updateRow(row.key, { createNew: true })}
-                                  className={clsx("px-2.5 py-1 rounded-md transition-colors cursor-pointer", row.createNew ? "bg-[#f58220] text-white" : "text-gray-500 hover:text-gray-800 dark:hover:text-white")}
-                                >
-                                  Create New Variant
-                                </button>
+                        {/* Finished product for this pack size: a verified existing variant, or Create New Variant */}
+                        {size && (() => {
+                          const { linked, nameMatches } = choices;
+                          const confirmedMatch = row.nameMatchChoice === "use" ? nameMatches.find((p: any) => p.id === row.productId) : null;
+                          const existing = !row.createNew ? [...linked, ...(confirmedMatch ? [confirmedMatch] : [])].find((p: any) => p.id === row.productId) : null;
+                          const rc = rowCosts[row.key];
+                          const cost = rc && rc.good > 0 ? rc.costPerGoodPacket : null;
+                          const money = (n: number) => `₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+                          const sku = row.newSku.trim().toUpperCase();
+                          const skuState = skuChecks[sku];
+                          const toNew = () => updateRow(row.key, { createNew: true, productId: "" });
+                          return (
+                            <div className="mt-2.5 pt-2.5 border-t border-dashed border-gray-100 dark:border-white/5 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <label className={clsx(labelCls, "!mb-0")}>{row.createNew ? "Create New Variant" : "Finished Product"}</label>
+                                {row.createNew && linked.length > 0 && (
+                                  <button type="button" onClick={() => updateRow(row.key, { createNew: false, productId: linked.length === 1 ? linked[0].id : "" })} className="text-[11px] font-bold text-[#f58220] hover:underline cursor-pointer">
+                                    Use existing {sizeLabel(size)} variant instead
+                                  </button>
+                                )}
+                                {!row.createNew && (
+                                  <button type="button" onClick={toNew} className="text-[11px] font-bold text-[#f58220] hover:underline cursor-pointer">
+                                    Create New Variant instead
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Same-name product not linked to this recipe: confirm before using or duplicating it. */}
+                              {row.createNew && nameMatches.length > 0 && row.nameMatchChoice === "" && (
+                                <div className="rounded-lg border border-amber-200 dark:border-amber-500/20 bg-amber-50/60 dark:bg-amber-500/5 px-2.5 py-2 space-y-1.5">
+                                  <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                                    <span>&quot;{nameMatches[0].name}&quot; ({nameMatches[0].sku}) already exists for {sizeLabel(size)} but isn&apos;t linked to this recipe. Is it this product?</span>
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {nameMatches.map((m: any) => (
+                                      <button key={m.id} type="button" onClick={() => updateRow(row.key, { createNew: false, productId: m.id, nameMatchChoice: "use" })} className="px-2.5 py-1 rounded-md border border-amber-300 dark:border-amber-500/30 bg-white dark:bg-card text-[11px] font-bold text-amber-800 dark:text-amber-300 cursor-pointer hover:bg-amber-100/60">
+                                        Yes, use {m.sku}
+                                      </button>
+                                    ))}
+                                    <button type="button" onClick={() => updateRow(row.key, { nameMatchChoice: "new" })} className="px-2.5 py-1 rounded-md bg-[#f58220] hover:bg-[#e8740e] text-[11px] font-bold text-white cursor-pointer">
+                                      No, create a new variant
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {row.createNew ? (
+                                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                  <div className="sm:col-span-7">
+                                    <label className={labelCls}>Product Name</label>
+                                    <input value={row.newName} onChange={(e) => updateRow(row.key, { newName: e.target.value })} placeholder={`${baseName} ${sizeLabel(size)}`} aria-label="New variant product name" className={inputCls} />
+                                  </div>
+                                  <div className="sm:col-span-5">
+                                    <label className={labelCls}>SKU</label>
+                                    <input value={row.newSku} onChange={(e) => updateRow(row.key, { newSku: e.target.value.toUpperCase().replace(/\s+/g, "") })} placeholder={`FG-XXXX-${size.toUpperCase()}`} aria-label="New variant SKU" className={clsx(inputCls, "font-mono")} />
+                                    {SKU_RE.test(sku) && (
+                                      <p className={clsx("text-[10px] font-semibold mt-0.5", skuState && typeof skuState === "object" ? (skuState.available ? "text-emerald-600" : "text-rose-600") : "text-gray-400")}>
+                                        {skuState === "checking" || skuState === undefined ? "Checking SKU…" : skuState === "failed" ? "Couldn't check SKU" : skuState.available ? "SKU available" : `Taken by "${skuState.owner || "another product"}"`}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <p className="sm:col-span-12 text-[10px] text-gray-400">Created as <span className="font-semibold text-amber-600">Pricing Pending</span> — set its selling price later in Product Master.</p>
+                                </div>
+                              ) : linked.length > 1 && !confirmedMatch ? (
+                                <div>
+                                  <label className={labelCls}>{linked.length} {sizeLabel(size)} variants of this recipe — choose one</label>
+                                  <select value={row.productId} onChange={(e) => updateRow(row.key, { productId: e.target.value })} aria-label={`${sizeLabel(size)} variant`} className={clsx(inputCls, "cursor-pointer")}>
+                                    <option value="" className="dark:bg-card">Choose the {sizeLabel(size)} variant…</option>
+                                    {linked.map((o: any) => <option key={o.id} value={o.id} className="dark:bg-card">{o.name} · {o.sku}</option>)}
+                                  </select>
+                                </div>
+                              ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-12 gap-2">
+                                  <div className="col-span-2 sm:col-span-7 min-w-0">
+                                    <label className={labelCls}>Product Name</label>
+                                    <p className="text-sm font-semibold py-1.5 truncate text-gray-900 dark:text-white" title={existing?.name}>{existing?.name || "—"}</p>
+                                  </div>
+                                  <div className="col-span-2 sm:col-span-5 min-w-0">
+                                    <label className={labelCls}>SKU</label>
+                                    <p className="text-sm font-mono py-1.5 truncate text-gray-700 dark:text-slate-300">{existing?.sku || "—"}</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div>
+                                <label className={labelCls}>Production Cost / pkt</label>
+                                <p className={clsx("text-sm font-bold tabular-nums py-1 text-gray-900 dark:text-white", costsLoading && "opacity-50")} title={expenseSource === "LEGACY" ? "Calculated automatically — this batch has no saved expense data, so only raw materials and expenses already recorded on it are included" : "Calculated automatically — manufacturing cost plus the recipe's packaging expenses"}>
+                                  {cost != null ? money(cost) : row.good > 0 ? (costsLoading ? "…" : "—") : "—"}
+                                  {expenseSource === "LEGACY" && cost != null && <span className="ml-2 text-[10px] font-semibold text-amber-600">Expense data unavailable</span>}
+                                </p>
+                                {rc && rc.damaged > 0 && rc.good > 0 && (
+                                  <p className="text-[10px] text-amber-600">Includes the cost of {rc.damaged} damaged packet{rc.damaged === 1 ? "" : "s"} ({money(rc.damageAbsorbed)}).</p>
+                                )}
                               </div>
                             </div>
-
-                            {!row.createNew ? (
-                              options.length > 0 ? (
-                                <ProductPicker
-                                  options={options}
-                                  value={row.productId}
-                                  onChange={(id) => updateRow(row.key, { productId: id })}
-                                  inputCls={inputCls}
-                                />
-                              ) : (
-                                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1.5">
-                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                                  No existing {sizeLabel(size)} product found for {baseName}. Use Create New Variant.
-                                </p>
-                              )
-                            ) : (
-                              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                                <div className="sm:col-span-7">
-                                  <label className={labelCls}>Product Name</label>
-                                  <input value={row.newName} onChange={(e) => updateRow(row.key, { newName: e.target.value })} placeholder={`${baseName} ${sizeLabel(size)}`} className={inputCls} />
-                                </div>
-                                <div className="sm:col-span-5">
-                                  <label className={labelCls}>SKU</label>
-                                  <input value={row.newSku} onChange={(e) => updateRow(row.key, { newSku: e.target.value.toUpperCase().replace(/\s+/g, "") })} placeholder="FG-XXXX-500G" className={clsx(inputCls, "font-mono")} />
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Production cost beside selling price, with live profit/loss */}
-                            {(() => {
-                              const rc = rowCosts[row.key];
-                              const cost = rc && rc.good > 0 ? rc.costPerGoodPacket : null;
-                              const price = priceOf(row);
-                              const p = profitOf(cost, price, row.good);
-                              const tone = !p ? "text-gray-400" : p.status === "LOSS" ? "text-rose-600 dark:text-rose-400" : p.status === "PROFIT" ? "text-emerald-600 dark:text-emerald-400" : "text-gray-700 dark:text-slate-300";
-                              const money = (n: number) => `₹${Math.abs(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-                              const signed = (n: number) => (n === 0 ? "₹0" : `${n < 0 ? "−" : "+"}${money(n)}`);
-                              return (
-                                <>
-                                  <div className={clsx("grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-lg border p-2", p?.status === "LOSS" ? "border-rose-200 bg-rose-50/50 dark:border-rose-500/30 dark:bg-rose-500/5" : "border-gray-100 bg-gray-50/60 dark:border-white/5 dark:bg-white/[0.02]")}>
-                                    <div>
-                                      <label className={labelCls}>Production Cost / pkt</label>
-                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5 text-gray-900 dark:text-white", costsLoading && "opacity-50")} title="Calculated automatically — raw material plus selected expenses">
-                                        {cost != null ? money(cost) : row.good > 0 ? (costsLoading ? "…" : "—") : "—"}
-                                      </p>
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Selling Price / pkt</label>
-                                      {row.createNew ? (
-                                        <input
-                                          type="number" min="0" step="0.01" inputMode="decimal"
-                                          value={row.newPrice || ""}
-                                          onChange={(e) => updateRow(row.key, { newPrice: Math.max(0, Number(e.target.value) || 0) })}
-                                          placeholder="Required"
-                                          aria-label="Selling price per packet"
-                                          className={clsx(inputCls, "tabular-nums font-bold")}
-                                        />
-                                      ) : (
-                                        <p className="text-sm font-bold tabular-nums py-1.5 text-gray-900 dark:text-white" title="Current Product Master price — change it in Product Master">
-                                          {price != null ? money(price) : "—"}
-                                        </p>
-                                      )}
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Profit / Loss per pkt</label>
-                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5", tone)}>{!p ? "—" : p.status === "BREAK_EVEN" ? "Break-even" : signed(p.perPacket)}</p>
-                                    </div>
-                                    <div>
-                                      <label className={labelCls}>Total Profit / Loss</label>
-                                      <p className={clsx("text-sm font-bold tabular-nums py-1.5", tone)}>{!p ? "—" : signed(p.total)}</p>
-                                    </div>
-                                  </div>
-                                  {p && (
-                                    <p className={clsx("text-[11px] font-semibold flex items-start gap-1.5", tone)} role={p.status === "LOSS" ? "alert" : undefined}>
-                                      {p.status === "LOSS" && <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />}
-                                      <span>
-                                        {p.message}
-                                        {p.status === "LOSS" && <> (Cost {money(cost!)} · Selling price {money(price!)})</>}
-                                      </span>
-                                    </p>
-                                  )}
-                                  {rc && rc.damaged > 0 && rc.good > 0 && (
-                                    <p className="text-[10px] text-amber-600">Includes the cost of {rc.damaged} damaged packet{rc.damaged === 1 ? "" : "s"} ({money(rc.damageAbsorbed)}).</p>
-                                  )}
-                                  {!row.createNew && row.productId && price == null && (
-                                    <p className="text-[10px] text-amber-600">This product has no selling price in Product Master.</p>
-                                  )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        )}
+                          );
+                        })()}
                         {error && (row.good > 0 || row.damaged > 0 || row.size === "custom") && (
                           <p className="mt-2 text-[11px] font-semibold text-rose-600 dark:text-rose-400">{error}</p>
                         )}
@@ -904,8 +796,6 @@ function PackagingContent() {
                     batchId={selected.id}
                     unit={batchUnit}
                     rows={costRows}
-                    expenses={expenses}
-                    onExpensesChange={setExpenses}
                     refreshKey={costRefresh}
                     onCostsChange={handleCostsChange}
                   />

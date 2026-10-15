@@ -156,10 +156,17 @@ export default function ProductsPage() {
               {/* Bottom Info */}
               <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
                 <div>
-                  <div className="flex items-baseline gap-0.5 text-slate-900">
-                    <span className="text-[9px] font-bold tracking-tight">₹</span>
-                    <span className="text-lg font-black tabular-nums">{product.basePrice || 0}</span>
-                  </div>
+                  {product.pricingStatus === "PENDING" ? (
+                    // Created in Packaging without a selling price — set it via Edit.
+                    <span className="inline-block text-[10px] font-black uppercase tracking-wide text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5" title="Created in Packaging without a selling price. Edit the product to set its price before it can be billed.">
+                      Pricing Pending
+                    </span>
+                  ) : (
+                    <div className="flex items-baseline gap-0.5 text-slate-900">
+                      <span className="text-[9px] font-bold tracking-tight">₹</span>
+                      <span className="text-lg font-black tabular-nums">{product.basePrice || 0}</span>
+                    </div>
+                  )}
                   <div className="flex gap-1.5 mt-1">
                     {product.isVeg && (
                       <span className="text-[7px] font-black text-emerald-500 uppercase tracking-widest px-1 py-0.5 bg-emerald-50 rounded">Veg</span>
