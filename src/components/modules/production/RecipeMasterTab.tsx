@@ -16,21 +16,19 @@ import {
   Play,
   Download,
   ChevronDown,
-  Upload,
   Eye,
-  History,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { clsx } from "clsx";
-import { recipesApi, rawMaterialsApi, productsApi, productsFullApi, productionApi } from "@/lib/api";
+import { recipesApi, rawMaterialsApi, productsApi, productsFullApi, productionApi, recipeImportsApi } from "@/lib/api";
 import RecipeExpensesEditor from "./RecipeExpensesEditor";
 import RecipeFormulationView from "./RecipeFormulationView";
 import { RECIPE_FILTERS, RecipeFilter, matchesRecipeFilter, matchesRecipeSearch } from "@/lib/recipe-master-filter";
 import { DEFAULT_CATEGORIES, ExpenseCategory, RecipeExpenseDraft, draftsFrom, expenseSummary, expensesPayloadFrom } from "@/lib/recipe-expenses";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { exportRecipeToPdf } from "@/lib/recipe-export";
 
 // Recipe Master only records WHICH raw materials a recipe uses. How much of
@@ -39,6 +37,36 @@ import { exportRecipeToPdf } from "@/lib/recipe-export";
 interface RecipeItem {
   inventoryItemId: string;
 }
+
+type RecipeImportLink = {
+  key: string;
+  recipeId: string;
+  title: string | null;
+  state: "IMPORTED" | "UNCHANGED" | "PENDING" | "SKIPPED";
+  importedAt: string;
+  version: number | null;
+};
+
+type RecipeImportSession = {
+  id: string;
+  fileName: string;
+  createdAt: string;
+  updatedAt: string;
+  total: number;
+  imported: number;
+  pending: number;
+  skipped: number;
+  recipes?: RecipeImportLink[];
+};
+
+type RecipeImportRecord = RecipeImportLink & {
+  sessionId: string;
+  fileName: string;
+  total: number;
+  imported: number;
+  pending: number;
+  skipped: number;
+};
 
 const emptyForm = {
   recipeCode: "",
@@ -88,6 +116,10 @@ export default function RecipeMasterTab() {
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
+  const [importSessions, setImportSessions] = useState<RecipeImportSession[]>([]);
+  const [importsLoading, setImportsLoading] = useState(true);
+  const [importsError, setImportsError] = useState(false);
+  const [importHistoryRecipe, setImportHistoryRecipe] = useState<any | null>(null);
 
   const [isAddingMaterial, setIsAddingMaterial] = useState(false);
   const [materialRowIdx, setMaterialRowIdx] = useState<number | null>(null);
@@ -159,6 +191,15 @@ export default function RecipeMasterTab() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setImportsLoading(true);
+    setImportsError(false);
+    const importsRequest = recipeImportsApi.list()
+      .then((res) => setImportSessions(Array.isArray(res.data) ? res.data : []))
+      .catch(() => {
+        setImportSessions([]);
+        setImportsError(true);
+      })
+      .finally(() => setImportsLoading(false));
     try {
       const [rRes, mRes, pRes, cRes] = await Promise.all([
         recipesApi.getAll(),
@@ -192,6 +233,7 @@ export default function RecipeMasterTab() {
     } finally {
       setLoading(false);
     }
+    await importsRequest;
     // Expense categories are configurable; the defaults cover a failed load.
     productionApi.getCostingSettings()
       .then((res) => { if (res.data?.categories?.length) setExpenseCategories(res.data.categories); })
@@ -403,6 +445,25 @@ export default function RecipeMasterTab() {
   };
 
   const filtered = recipes.filter(r => matchesRecipeFilter(r, listFilter) && matchesRecipeSearch(r, search));
+  const importsByRecipe = new Map<string, RecipeImportRecord[]>();
+  for (const session of importSessions) {
+    for (const linked of session.recipes || []) {
+      const records = importsByRecipe.get(linked.recipeId) || [];
+      records.push({
+        ...linked,
+        sessionId: session.id,
+        fileName: session.fileName,
+        total: session.total,
+        imported: session.imported,
+        pending: session.pending,
+        skipped: session.skipped,
+      });
+      importsByRecipe.set(linked.recipeId, records);
+    }
+  }
+  importsByRecipe.forEach((records: RecipeImportRecord[]) => {
+    records.sort((a: RecipeImportRecord, b: RecipeImportRecord) => new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime());
+  });
 
   return (
     <div className="space-y-4 sm:space-y-6 text-gray-800 dark:text-slate-100 w-full min-w-0">
@@ -460,22 +521,6 @@ export default function RecipeMasterTab() {
               <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
             </button>
             <button
-              onClick={() => router.push("/production/recipes/import?view=history")}
-              className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-slate-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap"
-              title="View previously uploaded Word documents and their import review"
-            >
-              <History size={14} className="text-[#f58220]" />
-              <span>Recent Imports</span>
-            </button>
-            <button
-              onClick={() => router.push("/production/recipes/import")}
-              className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-slate-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap"
-              title="Import recipes, ingredient quantities and yields from a Word document"
-            >
-              <Upload size={14} />
-              <span>Import from Word</span>
-            </button>
-            <button
               onClick={openCreate}
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors shadow-sm whitespace-nowrap"
             >
@@ -510,6 +555,8 @@ export default function RecipeMasterTab() {
         <div className="grid gap-3 w-full min-w-0">
           {filtered.map(recipe => {
             const isExpanded = expandedId === recipe.id;
+            const recipeImports = importsByRecipe.get(recipe.id) || [];
+            const latestImport = recipeImports[0];
             return (
               <div
                 key={recipe.id}
@@ -554,6 +601,50 @@ export default function RecipeMasterTab() {
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Recent Imports column */}
+                  <div className="w-full md:w-[245px] md:shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-white/5 pt-2.5 md:pt-0 md:pl-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Recent Imports</p>
+                    {importsLoading ? (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400"><RefreshCw size={11} className="animate-spin" /> Loading...</span>
+                    ) : importsError ? (
+                      <span className="text-[11px] font-medium text-rose-500">Import history unavailable</span>
+                    ) : !latestImport ? (
+                      <span className="text-[11px] text-gray-400 dark:text-slate-500">No imports</span>
+                    ) : (
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300 shrink-0">Word</span>
+                          <span className={clsx(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0",
+                            latestImport.pending > 0
+                              ? "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300"
+                              : "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          )}>{latestImport.pending > 0 ? "Processing" : "Success"}</span>
+                          <span className="truncate text-[11px] font-semibold text-gray-700 dark:text-slate-300" title={latestImport.fileName}>{latestImport.fileName}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 truncate" title={formatDateTime(latestImport.importedAt)}>
+                          {formatDateTime(latestImport.importedAt)} · {latestImport.imported}/{latestImport.total} imported
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(event) => { event.stopPropagation(); router.push(`/production/recipes/import?importId=${encodeURIComponent(latestImport.sessionId)}`); }}
+                            className="text-[10px] font-bold text-[#f58220] hover:underline"
+                          >
+                            View Details
+                          </button>
+                          {recipeImports.length > 1 && (
+                            <button
+                              onClick={(event) => { event.stopPropagation(); setImportHistoryRecipe(recipe); }}
+                              className="text-[10px] font-semibold text-gray-500 hover:text-gray-800 dark:hover:text-slate-200"
+                            >
+                              +{recipeImports.length - 1} more
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Right Side: Actions (Stacked on mobile, inline on desktop) */}
@@ -673,6 +764,36 @@ export default function RecipeMasterTab() {
           })}
         </div>
       )}
+
+      <Modal
+        isOpen={!!importHistoryRecipe}
+        onClose={() => setImportHistoryRecipe(null)}
+        title={`Import History${importHistoryRecipe?.name ? ` — ${importHistoryRecipe.name}` : ""}`}
+        size="lg"
+      >
+        <div className="space-y-2">
+          {(importHistoryRecipe ? importsByRecipe.get(importHistoryRecipe.id) || [] : []).map((record) => (
+            <div key={`${record.sessionId}-${record.key}`} className="rounded-lg border border-gray-200 dark:border-white/10 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300">Word</span>
+                  <span className="text-xs font-bold truncate" title={record.fileName}>{record.fileName}</span>
+                </div>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-slate-400">
+                  {formatDateTime(record.importedAt)} · {record.imported}/{record.total} recipes imported
+                  {record.version ? ` · Formulation v${record.version}` : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/production/recipes/import?importId=${encodeURIComponent(record.sessionId)}`)}
+                className="shrink-0 text-[11px] font-bold text-[#f58220] hover:underline text-left"
+              >
+                View Details
+              </button>
+            </div>
+          ))}
+        </div>
+      </Modal>
 
       {/* Create / Edit Modal */}
       <Modal

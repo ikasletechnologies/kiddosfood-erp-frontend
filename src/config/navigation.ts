@@ -504,8 +504,8 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
       },
       {
         icon: Building2,
-        label: "Warehouse",
-        href: "/warehouse",
+        label: "Franchise Warehouses",
+        href: "/franchise/warehouses",
         roles: SUPER_ONLY,
       },
     ],
