@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Search, RefreshCw, Calendar, 
   ChevronRight, ArrowUpRight, Filter, ShoppingBag,
@@ -15,6 +15,9 @@ import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
 import { formatDate, calculateSalesDocumentTotals, roundMoney } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { useAuth } from "@/context/AuthContext";
+import { canViewCost, useProfitEstimate } from "@/lib/profit-estimate";
+import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
 
 // No hardcoded state here — the seller's GST registration state must come
 // from the real HQ franchise (see SettingsService.getCompanyProfile),
@@ -506,6 +509,28 @@ export default function SalesOrdersPage() {
   const totalBeforeRound = calcResult.totalBeforeRound;
   const roundOff = calcResult.roundOff;
   const finalTotal = calcResult.finalTotal;
+
+  // Estimated production cost and profit/loss per line and for the order —
+  // priced and costed on the server exactly as saving would (excl. GST),
+  // shown only to roles allowed to see cost. Never changes the price.
+  const { user: authUser } = useAuth();
+  const showProfit = canViewCost(authUser);
+  const profitRows = items.map((it, idx) => ({ it, idx })).filter(({ it }) => it.itemSearch.trim() !== "" && it.qty > 0);
+  const profitPayload = {
+    items: profitRows.map(({ it }) => {
+      const gross = (it.qty || 0) * (it.rate || 0);
+      const discAmt = it.discountAmount !== undefined && it.discountAmount > 0
+        ? it.discountAmount
+        : parseFloat((gross * (it.discountPct || 0) / 100).toFixed(2));
+      return { productId: it.productId || undefined, productName: it.itemSearch, quantity: it.qty, unit: it.unit, rate: it.rate, discountPercent: it.discountPct || 0, discountAmount: discAmt };
+    }),
+  };
+  const profitKey = profitRows.length ? JSON.stringify(profitPayload) : "";
+  const profit = useProfitEstimate(() => salesApi.estimateOrderProfit(profitPayload), profitKey, showProfit && view !== "list");
+  const lineEstimate = (idx: number) => {
+    const k = profitRows.findIndex((x) => x.idx === idx);
+    return k >= 0 ? profit.estimate?.lines[k] ?? null : null;
+  };
 
   // Auto-increment Order ID
   useEffect(() => {
@@ -1193,7 +1218,8 @@ export default function SalesOrdersPage() {
                   const comp = computeRow(it, withTax);
                   const isItemDropOpen = openItemDrop === it.id;
                   return (
-                    <tr key={it.id} className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
+                    <Fragment key={it.id}>
+                    <tr className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                       <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                       <td className="px-4 py-2.5" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                         <input
@@ -1346,6 +1372,16 @@ export default function SalesOrdersPage() {
                         </button>
                       </td>
                     </tr>
+                    {showProfit && it.itemSearch.trim() !== "" && it.qty > 0 && (lineEstimate(idx) || profit.loading) && (
+                      <tr className="!border-t-0">
+                        <td></td>
+                        <td colSpan={8} className="px-4 pb-2 pt-0">
+                          <LineProfit line={lineEstimate(idx)} loading={profit.loading} />
+                          <LossWarning line={lineEstimate(idx)} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -1494,6 +1530,12 @@ export default function SalesOrdersPage() {
                         </div>
                       </div>
                     </div>
+                    {showProfit && it.itemSearch.trim() !== "" && it.qty > 0 && (
+                      <div className="pt-1">
+                        <LineProfit line={lineEstimate(idx)} loading={profit.loading} />
+                        <LossWarning line={lineEstimate(idx)} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1644,6 +1686,11 @@ export default function SalesOrdersPage() {
                 <span className="font-bold text-gray-800 dark:text-white">Total</span>
                 <span className="text-xl font-bold font-mono text-[#f58220]">₹{finalTotal.toFixed(2)}</span>
               </div>
+              {showProfit && profitRows.length > 0 && (
+                <div className="pt-2">
+                  <ProfitSummaryPanel summary={profit.estimate?.summary} loading={profit.loading} error={profit.error} title="Estimated Order Profit / Loss" compact />
+                </div>
+              )}
             </div>
           </div>
         </div>

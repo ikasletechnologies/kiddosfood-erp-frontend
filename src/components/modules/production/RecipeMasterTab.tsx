@@ -16,11 +16,18 @@ import {
   Play,
   Download,
   ChevronDown,
+  Upload,
+  Eye,
+  History,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { SlideOver } from "@/components/ui/SlideOver";
 import { clsx } from "clsx";
-import { recipesApi, rawMaterialsApi, productsApi, productsFullApi } from "@/lib/api";
+import { recipesApi, rawMaterialsApi, productsApi, productsFullApi, productionApi } from "@/lib/api";
+import RecipeExpensesEditor from "./RecipeExpensesEditor";
+import RecipeFormulationView from "./RecipeFormulationView";
+import { RECIPE_FILTERS, RecipeFilter, matchesRecipeFilter, matchesRecipeSearch } from "@/lib/recipe-master-filter";
+import { DEFAULT_CATEGORIES, ExpenseCategory, RecipeExpenseDraft, draftsFrom, expenseSummary, expensesPayloadFrom } from "@/lib/recipe-expenses";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
@@ -66,6 +73,7 @@ export default function RecipeMasterTab() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [listFilter, setListFilter] = useState<RecipeFilter>("ALL");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -74,6 +82,8 @@ export default function RecipeMasterTab() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ ...emptyForm });
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_CATEGORIES);
+  const [expenseDrafts, setExpenseDrafts] = useState<RecipeExpenseDraft[]>(() => draftsFrom(null, DEFAULT_CATEGORIES));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -182,6 +192,10 @@ export default function RecipeMasterTab() {
     } finally {
       setLoading(false);
     }
+    // Expense categories are configurable; the defaults cover a failed load.
+    productionApi.getCostingSettings()
+      .then((res) => { if (res.data?.categories?.length) setExpenseCategories(res.data.categories); })
+      .catch(() => {});
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -189,6 +203,7 @@ export default function RecipeMasterTab() {
   const openCreate = () => {
     setIsAddingCategory(false);
     setForm({ ...emptyForm });
+    setExpenseDrafts(draftsFrom(null, expenseCategories));
     setEditingId(null);
     setError("");
     setShowForm(true);
@@ -206,6 +221,7 @@ export default function RecipeMasterTab() {
       estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
       items: ingredientIdsOf(recipe).map((inventoryItemId) => ({ inventoryItemId })),
     });
+    setExpenseDrafts(draftsFrom(recipe.additionalExpenses, expenseCategories));
     setEditingId(recipe.id);
     setError("");
     setShowForm(true);
@@ -224,6 +240,8 @@ export default function RecipeMasterTab() {
       setError("Each ingredient can only be added once.");
       return;
     }
+    const expenseCheck = expensesPayloadFrom(expenseDrafts);
+    if (expenseCheck.error) { setError(expenseCheck.error); return; }
     setSaving(true);
     setError("");
     try {
@@ -236,6 +254,7 @@ export default function RecipeMasterTab() {
         instructions: form.instructions || undefined,
         estimatedDurationMinutes: form.estimatedDurationMinutes,
         ingredientIds: ids,
+        additionalExpenses: expenseCheck.payload,
       });
       // Shelf life lives on the linked Product master (batch expiry is
       // computed from it there), not on the recipe row itself.
@@ -383,11 +402,7 @@ export default function RecipeMasterTab() {
     }));
   };
 
-  const filtered = recipes.filter(r =>
-    !search ||
-    r.name?.toLowerCase().includes(search.toLowerCase()) ||
-    r.product?.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = recipes.filter(r => matchesRecipeFilter(r, listFilter) && matchesRecipeSearch(r, search));
 
   return (
     <div className="space-y-4 sm:space-y-6 text-gray-800 dark:text-slate-100 w-full min-w-0">
@@ -417,7 +432,7 @@ export default function RecipeMasterTab() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search recipes..."
+              placeholder="Search name, category, ingredient..."
               className="w-full pl-9 pr-8 py-2 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-white rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (
@@ -428,6 +443,14 @@ export default function RecipeMasterTab() {
               />
             )}
           </div>
+          <select
+            value={listFilter}
+            onChange={e => setListFilter(e.target.value as RecipeFilter)}
+            aria-label="Filter recipes"
+            className="h-[34px] px-2.5 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-700 dark:text-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#f58220] transition-colors"
+          >
+            {RECIPE_FILTERS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={fetchAll}
@@ -435,6 +458,22 @@ export default function RecipeMasterTab() {
               title="Refresh"
             >
               <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
+            </button>
+            <button
+              onClick={() => router.push("/production/recipes/import?view=history")}
+              className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-slate-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap"
+              title="View previously uploaded Word documents and their import review"
+            >
+              <History size={14} className="text-[#f58220]" />
+              <span>Recent Imports</span>
+            </button>
+            <button
+              onClick={() => router.push("/production/recipes/import")}
+              className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-700 dark:text-slate-200 px-3.5 py-2 rounded-lg font-semibold text-xs transition-colors whitespace-nowrap"
+              title="Import recipes, ingredient quantities and yields from a Word document"
+            >
+              <Upload size={14} />
+              <span>Import from Word</span>
             </button>
             <button
               onClick={openCreate}
@@ -519,6 +558,16 @@ export default function RecipeMasterTab() {
 
                   {/* Right Side: Actions (Stacked on mobile, inline on desktop) */}
                   <div className="flex items-center justify-between md:justify-end gap-2 pt-2.5 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-white/5 shrink-0">
+                    {recipe.activeFormulation && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setExpandedId(isExpanded ? null : recipe.id); }}
+                        aria-expanded={isExpanded}
+                        className="flex-1 md:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-white/5 text-gray-700 dark:text-slate-200 border border-gray-200 dark:border-white/10 hover:bg-gray-50 dark:hover:bg-white/10 transition-colors flex items-center justify-center gap-1.5"
+                        title="View the saved reference formulation (read-only)"
+                      >
+                        <Eye size={12} /> {isExpanded ? "Hide Formulation" : "View Formulation"}
+                      </button>
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); router.push(`/production?recipeId=${recipe.id}`); }}
                       className="flex-1 md:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-50 dark:bg-orange-500/10 text-[#f58220] border border-orange-200 dark:border-orange-500/20 hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors flex items-center justify-center gap-1.5"
@@ -556,6 +605,16 @@ export default function RecipeMasterTab() {
 
                 {isExpanded && (
                   <div className="px-4 pb-4 pt-0 border-t border-gray-100 dark:border-white/5">
+                    {recipe.activeFormulation && (
+                      <div className="pt-3">
+                        <RecipeFormulationView
+                          recipeId={recipe.id}
+                          recipeName={recipe.name}
+                          active={recipe.activeFormulation}
+                          onEdit={() => router.push(`/production?recipeId=${recipe.id}`)}
+                        />
+                      </div>
+                    )}
                     <div className="pt-3 grid md:grid-cols-2 gap-4">
                       {/* Ingredients (names only; quantities live in the formulation) */}
                       <div>
@@ -582,6 +641,30 @@ export default function RecipeMasterTab() {
                           <p className="text-xs text-gray-400 dark:text-slate-500 italic">No instructions provided.</p>
                         )}
                       </div>
+                    </div>
+                    {recipe.productLinks?.length > 0 && (
+                      <div className="pt-3">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Finished Goods</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {recipe.productLinks.map((l: any) => (
+                            <span key={l.product.id} className="text-xs font-medium text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-white/[0.02] px-2 py-1 rounded border border-gray-200 dark:border-white/5">
+                              {l.product.name} <span className="text-gray-400">{l.product.sku}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="pt-3">
+                      <p className="text-xs font-semibold text-gray-500 dark:text-slate-400 mb-2">Additional Expenses</p>
+                      {expenseSummary(recipe.additionalExpenses).length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {expenseSummary(recipe.additionalExpenses).map((text) => (
+                            <span key={text} className="text-xs font-medium text-gray-700 dark:text-slate-300 bg-gray-50 dark:bg-white/[0.02] px-2 py-1 rounded border border-gray-200 dark:border-white/5">{text}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-400 dark:text-slate-500 italic">None.</p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -848,6 +931,10 @@ export default function RecipeMasterTab() {
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="pt-2">
+            <RecipeExpensesEditor value={expenseDrafts} onChange={setExpenseDrafts} />
           </div>
 
           {error && (

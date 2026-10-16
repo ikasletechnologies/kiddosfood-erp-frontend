@@ -35,6 +35,18 @@ export const recipesApi = {
     api.post(`/api/recipes/${id}/formulations`, data),
 };
 
+// --- Word recipe import (review, then confirm one recipe at a time) ---
+export const recipeImportsApi = {
+  list: () => api.get('/api/recipe-imports'),
+  // Parses the .docx and opens (or resumes) its review session; saves no recipe.
+  upload: (fileName: string, contentBase64: string) => api.post('/api/recipe-imports', { fileName, contentBase64 }),
+  review: (sessionId: string) => api.get(`/api/recipe-imports/${sessionId}`),
+  confirm: (sessionId: string, key: string, decision: any) =>
+    api.post(`/api/recipe-imports/${sessionId}/recipes/${encodeURIComponent(key)}/confirm`, decision),
+  skip: (sessionId: string, key: string, skip: boolean) =>
+    api.post(`/api/recipe-imports/${sessionId}/recipes/${encodeURIComponent(key)}/skip`, { skip }),
+};
+
 // --- Raw Materials ---
 export const rawMaterialsApi = {
   getAll: (includeInactive = false, franchiseId?: string, excludeCategory?: string) =>
@@ -114,9 +126,12 @@ export const productionApi = {
   // { categories: [{code,label}], bases: ['PER_BATCH','PER_KG','PER_PACKET'] }
   getCostingSettings: () => api.get('/api/production/costing-settings'),
   getBatchCostSummary: (id: string) => api.get(`/api/production/batches/${id}/cost-summary`),
-  // Same calculation Confirm Packaging posts; writes nothing.
-  previewPackagingCost: (id: string, data: { rows: Array<{ packetSize: string; packedQty: number; damagedQty: number; productId?: string; sellingPrice?: number }>; expenses: ExpenseLine[] }) =>
+  // Same calculation Confirm Packaging posts; writes nothing. Expenses come
+  // from the batch (recipe snapshot / already recorded) — never sent from here.
+  previewPackagingCost: (id: string, data: { rows: Array<{ packetSize: string; packedQty: number; damagedQty: number; productId?: string; sellingPrice?: number }> }) =>
     api.post(`/api/production/batches/${id}/packaging-cost-preview`, data),
+  // Create New Variant: is this SKU free? { sku, available, product: { id, name, sku } | null }
+  checkPackagingSku: (sku: string) => api.get('/api/production/packaging/sku-check', { params: { sku } }),
   approveBatch: (id: string, data?: { actualYield?: number; remarks?: string; expiryDate?: string; wastageQty?: number; wastageNote?: string; additionalMaterials?: Array<{ inventoryItemId: string; quantity: number; lots?: LotAllocation[]; note?: string }> }) => api.post(`/api/production/${id}/approve`, data),
   updateStatus: (id: string, status: string) => api.patch(`/api/production/${id}/status`, { status }),
   getPendingQC: (params?: any) => {
@@ -140,9 +155,9 @@ export const productionApi = {
       packedQty: number;
       damagedQty: number;
       productId?: string;
-      newProduct?: { name: string; sku?: string; basePrice: number };
+      // No selling price: a new variant is created Pricing Pending (priced in Product Master).
+      newProduct?: { name: string; sku?: string };
     }>;
-    expenses?: ExpenseLine[];
   }) => api.post(`/api/production/batches/${id}/package-confirm`, data),
   // Releases a batch completed while production QC was still required (still
   // PENDING, never inspected) to packaging now that QC is switched off.

@@ -15,6 +15,8 @@ import { convertUnit, convertMeasurement } from "@/lib/unitConversion";
 import clsx from "clsx";
 import ReferenceFormulationPanel, { Formulation, isUsableFormulation } from "@/components/modules/production/ReferenceFormulationPanel";
 import IngredientLotPanel from "@/components/modules/production/IngredientLotPanel";
+import { estimateManufacturing, isPackaging } from "@/lib/recipe-expenses";
+import { Rounding, autoQty, formatQty, maxMultiplierFor, roundRequirement } from "@/lib/qty-display";
 import { AllocationDraft, MaterialLots, allocationCost, allocationError, fifoDraft, toPayload } from "@/lib/lot-allocation";
 
 const WAREHOUSE_STORAGE_KEY = "kf.productionPlanning.warehouseId";
@@ -24,6 +26,12 @@ const EPSILON = 0.000001;
 function fmtQty(n: number): string {
   if (!Number.isFinite(n)) return "0";
   return n.toLocaleString("en-IN", { maximumFractionDigits: 3 });
+}
+
+/** Ingredient quantity in whole g below 1 KG and KG from 1 KG (ml/L likewise); see qty-display. */
+function QtyText({ qty, unit, unitClass, rounding }: { qty: number; unit: string; unitClass?: string; rounding?: Rounding }) {
+  const d = autoQty(qty, unit, rounding);
+  return <>{d.shown.toLocaleString("en-IN", { maximumFractionDigits: 6 })} <span className={unitClass}>{d.unit}</span></>;
 }
 
 // Units that can be meaningfully converted into the recipe's yield unit.
@@ -77,6 +85,8 @@ interface Recipe {
   };
   recipeItems: RecipeItem[];
   ingredients?: Array<{ inventoryItemId: string; inventoryItem: any }>;
+  // Recipe Master Additional Expenses (see src/lib/recipe-expenses.ts).
+  additionalExpenses?: any[];
   activeFormulation?: Formulation | null;
   productionCount?: number;
 }
@@ -174,7 +184,17 @@ function ProductionPlanningContent() {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
-  const [targetYield, setTargetYield] = useState<number>(0);
+  // The production target as typed. Empty by default: the operator enters it
+  // explicitly (never pre-filled from the reference yield). Only a positive
+  // number is a target; until then nothing is scaled, checked or startable.
+  const [targetText, setTargetText] = useState<string>("");
+  const setTargetYield = useCallback((n: number | null | undefined) => {
+    setTargetText(n != null && Number.isFinite(n) && n > 0 ? String(n) : "");
+  }, []);
+  const targetEntered = targetText.trim() !== "";
+  const targetParsed = targetEntered ? Number(targetText) : NaN;
+  const targetValid = Number.isFinite(targetParsed) && targetParsed > 0;
+  const targetYield = targetValid ? targetParsed : 0;
   const [targetUnit, setTargetUnit] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [stockLoading, setStockLoading] = useState(false);
@@ -252,7 +272,7 @@ function ProductionPlanningContent() {
 
       if (matched) {
         setSelectedRecipeId(matched.id);
-        setTargetYield(orderItem.quantity || matched.yieldQty || 100);
+        setTargetYield(orderItem.quantity);
         setTargetUnit(orderItem.unit || matched.yieldUnit || "KG");
         setMissingRecipeForProduct(null);
       } else {
@@ -352,7 +372,7 @@ function ProductionPlanningContent() {
 
           if (matched) {
             setSelectedRecipeId(matched.id);
-            setTargetYield(targetYieldParam ? Number(targetYieldParam) : (matched.yieldQty || 100));
+            setTargetYield(targetYieldParam ? Number(targetYieldParam) : null);
             setTargetUnit(targetUnitParam || matched.yieldUnit || "KG");
             setMissingRecipeForProduct(null);
           } else {
@@ -372,7 +392,7 @@ function ProductionPlanningContent() {
         else {
           if (recipeList.length > 0) {
             setSelectedRecipeId(recipeList[0].id);
-            setTargetYield(recipeList[0].yieldQty || 100);
+            setTargetYield(null);
             setTargetUnit(recipeList[0].yieldUnit || "KG");
             setMissingRecipeForProduct(null);
           } else {
@@ -388,7 +408,7 @@ function ProductionPlanningContent() {
       }
     }
     initData();
-  }, [franchiseOrderIdParam, targetProductIdParam, recipeIdParam, recipeCodeParam, productNameParam, targetYieldParam, targetUnitParam, applyOrderItemSelection]);
+  }, [franchiseOrderIdParam, targetProductIdParam, recipeIdParam, recipeCodeParam, productNameParam, targetYieldParam, targetUnitParam, applyOrderItemSelection, setTargetYield]);
 
   useEffect(() => {
     if (!selectedWarehouseId) return;
@@ -411,7 +431,7 @@ function ProductionPlanningContent() {
     setSelectedRecipeId(id);
     const found = recipes.find((r) => r.id === id);
     if (found) {
-      setTargetYield(found.yieldQty || 100);
+      setTargetYield(null);
       setTargetUnit(found.yieldUnit || "KG");
       setMissingRecipeForProduct(null);
     }
@@ -445,7 +465,9 @@ function ProductionPlanningContent() {
     ? targetUnit
     : (compatibleUnits.includes(recipeUnit) ? recipeUnit : compatibleUnits[0]);
   const targetYieldInRecipeUnit = convertUnit(targetYield, effectiveTargetUnit, recipeUnit);
-  const multiplier = recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
+  const multiplier = !targetValid ? 0 : recipe && recipe.yieldQty > 0 ? targetYieldInRecipeUnit / recipe.yieldQty : 1;
+  // Requirements, stock and lot checks only mean something once a target is entered.
+  const targetReady = !!recipe && targetValid;
 
   const getAvailableStock = (itemId: string, itemSku: string, itemRecipeUnit: string) => {
     if (!Array.isArray(warehouseStock)) return 0;
@@ -459,7 +481,9 @@ function ProductionPlanningContent() {
   };
 
   const ingredientRows = (recipe?.recipeItems || []).map((item) => {
-    const scaledQty = item.quantityRequired * multiplier;
+    // The requirement as the run will consume it (weights below 1 KG up to
+    // the next whole gram) — shown, checked, allocated and costed as is.
+    const scaledQty = roundRequirement(item.quantityRequired * multiplier, item.unit);
     const available = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
     const sufficient = available + EPSILON >= scaledQty;
     const deficit = Math.max(scaledQty - available, 0);
@@ -497,12 +521,16 @@ function ProductionPlanningContent() {
   const lotsReady = !!lotOptions && ingredientRows.every((r) => !!r.material);
   const lotProblemRows = ingredientRows.filter((r) => r.lotError);
   const materialCostTotal = ingredientRows.reduce((s, r) => s + (r.lotCost ?? 0), 0);
+  // The recipe's saved expenses, applied automatically (nothing to enter here).
+  const expenseEstimate = estimateManufacturing(recipe?.additionalExpenses, targetYield, effectiveTargetUnit);
+  const packagingExpense = (recipe?.additionalExpenses || []).find((e: any) => e?.enabled && isPackaging(e.category));
+  const estimatedProductionCost = materialCostTotal + expenseEstimate.total;
   const fmtInr = (n: number) => `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
   // Largest batch the selected warehouse can support right now, in the target unit.
   const maxMultiplier = ingredientRows.reduce((min, r) => {
     if (r.item.quantityRequired <= 0) return min;
-    return Math.min(min, r.available / r.item.quantityRequired);
+    return Math.min(min, maxMultiplierFor(r.item.quantityRequired, r.available, r.item.unit));
   }, Infinity);
   const maxPossibleYield =
     recipe && Number.isFinite(maxMultiplier)
@@ -510,8 +538,9 @@ function ProductionPlanningContent() {
       : 0;
 
   const selectedWarehouse = warehouses.find((w) => w.id === selectedWarehouseId);
-  const yieldInvalid = !!recipe && targetYield <= 0;
-  const canStart = !!recipe && formulationReady && !hasShortage && !yieldInvalid && !!selectedWarehouseId && !stockLoading && ingredientRows.length > 0
+  // Typed but not a positive number (an empty field is simply "not entered yet").
+  const yieldInvalid = !!recipe && targetEntered && !targetValid;
+  const canStart = targetReady && formulationReady && !hasShortage && !!selectedWarehouseId && !stockLoading && ingredientRows.length > 0
     && lotsReady && lotProblemRows.length === 0;
 
   const handleFormulationSaved = (f: Formulation) => {
@@ -731,7 +760,7 @@ function ProductionPlanningContent() {
     };
 
     const tableRows = recipe.recipeItems.map((item, idx) => {
-      const scaledQty = item.quantityRequired * multiplier;
+      const scaledQty = roundRequirement(item.quantityRequired * multiplier, item.unit);
       const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
       const isShort = stock + 0.000001 < scaledQty;
       const shortageQty = scaledQty - stock;
@@ -744,12 +773,12 @@ function ProductionPlanningContent() {
             ${item.inventoryItem?.sku ? `<div style="font-size: 10px; color: #64748b; font-weight: 500; font-family: monospace;">SKU: ${item.inventoryItem.sku}</div>` : ""}
           </td>
           <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #64748b; font-family: monospace;">${formatNum(item.quantityRequired)}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #ea580c; font-size: 12px; font-family: monospace;">${formatNum(scaledQty)}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 800; color: #ea580c; font-size: 12px; font-family: monospace;">${formatQty(scaledQty, item.unit)}</td>
           <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center; color: #475569; font-weight: 600;">${item.unit || "KG"}</td>
-          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 600; color: #334155;">${formatNum(stock)} ${item.unit || "KG"}</td>
+          <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; font-weight: 600; color: #334155;">${formatQty(stock, item.unit, "down")}</td>
           <td style="padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">
             ${isShort 
-              ? `<span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca;">Short: -${formatNum(shortageQty)}</span>` 
+              ? `<span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background-color: #fee2e2; color: #dc2626; border: 1px solid #fecaca;">Short: -${formatQty(shortageQty, item.unit)}</span>` 
               : `<span style="display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">✓ In Stock</span>`
             }
           </td>
@@ -851,7 +880,7 @@ function ProductionPlanningContent() {
                 <th style="text-align: left;">Raw Material / Ingredient</th>
                 <th style="text-align: right; width: 90px;">Base Formula</th>
                 <th style="text-align: right; width: 110px;">Required Qty</th>
-                <th style="text-align: center; width: 60px;">Unit</th>
+                <th style="text-align: center; width: 60px;">Formula Unit</th>
                 <th style="text-align: right; width: 100px;">Available Stock</th>
                 <th style="text-align: center; width: 110px;">Status</th>
               </tr>
@@ -1085,7 +1114,7 @@ function ProductionPlanningContent() {
         {/* Step 2 — Quantity */}
         <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl p-4 shadow-2xs space-y-2 min-w-0">
           <label className="flex items-center gap-2 text-xs font-bold text-gray-700 dark:text-slate-300">
-            <StepBadge n={2} done={!!recipe && targetYield > 0} />
+            <StepBadge n={2} done={targetReady} />
             How much to produce?
           </label>
           <div className="flex gap-2">
@@ -1093,14 +1122,15 @@ function ProductionPlanningContent() {
               type="number"
               min="0"
               step="any"
-              value={targetYield || ""}
-              onChange={(e) => setTargetYield(parseFloat(e.target.value) || 0)}
+              value={targetText}
+              onChange={(e) => setTargetText(e.target.value)}
+              aria-label="Production quantity"
               disabled={!recipe}
               className={clsx(
                 "w-full bg-gray-50 dark:bg-[#13151f] border text-gray-800 dark:text-white rounded-xl px-3 py-2 text-sm font-bold focus:border-[#f58220] outline-none disabled:opacity-50",
                 yieldInvalid ? "border-rose-400" : "border-gray-200 dark:border-white/10"
               )}
-              placeholder="e.g. 100"
+              placeholder="Enter production quantity"
             />
             <select
               value={effectiveTargetUnit}
@@ -1235,6 +1265,11 @@ function ProductionPlanningContent() {
               <Info size={18} className="shrink-0" />
               Enter the reference formulation below to calculate ingredient requirements.
             </div>
+          ) : !targetReady ? (
+            <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/[0.02] p-4 flex items-center gap-3 text-xs font-semibold text-gray-600 dark:text-slate-300">
+              <Info size={18} className="shrink-0 text-gray-400" />
+              Enter production quantity to calculate ingredient requirements.
+            </div>
           ) : hasShortage ? (
             <div className="rounded-2xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-950/20 p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
               <div className="flex items-start gap-3">
@@ -1306,14 +1341,16 @@ function ProductionPlanningContent() {
                   <Database size={15} className="text-[#f58220]" />
                   Ingredients needed ({ingredientRows.length})
                 </h3>
-                <p className="text-[11px] text-gray-400 dark:text-slate-500 font-semibold mt-0.5">
+                {targetReady && <p className="text-[11px] text-gray-400 dark:text-slate-500 font-semibold mt-0.5">
                   For {fmtQty(targetYield)} {effectiveTargetUnit} of {recipe.name}
                   {Math.abs(multiplier - 1) > 0.0001 && <> · {fmtQty(multiplier)}× the base recipe ({fmtQty(recipe.yieldQty)} {recipeUnit})</>}
-                </p>
+                </p>}
               </div>
 
               {ingredientRows.length === 0 ? (
                 <p className="p-6 text-center text-xs font-semibold text-gray-400">No ingredients listed in this recipe.</p>
+              ) : !targetReady ? (
+                <p className="p-6 text-center text-xs font-semibold text-gray-400">Enter production quantity to calculate ingredient requirements.</p>
               ) : (
                 <>
                   {/* Desktop table */}
@@ -1338,10 +1375,10 @@ function ProductionPlanningContent() {
                               <div className="text-[10px] font-mono text-gray-400 dark:text-slate-500 mt-0.5">{item.inventoryItem?.sku || "SKU-N/A"}</div>
                             </td>
                             <td className="py-3.5 px-4 text-right font-bold text-gray-900 dark:text-white whitespace-nowrap">
-                              {fmtQty(scaledQty)} <span className="text-[10px] uppercase text-gray-400">{item.unit}</span>
+                              <QtyText qty={scaledQty} unit={item.unit} unitClass="text-[10px] text-gray-400" />
                             </td>
                             <td className="py-3.5 px-4 text-right text-gray-600 dark:text-slate-400 whitespace-nowrap">
-                              {fmtQty(available)} <span className="text-[10px] uppercase">{item.unit}</span>
+                              <QtyText qty={available} unit={item.unit} unitClass="text-[10px]" rounding="down" />
                             </td>
                             <td className="py-3.5 px-5">
                               <div className="flex items-center justify-between gap-2 mb-1">
@@ -1351,7 +1388,7 @@ function ProductionPlanningContent() {
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap">
-                                    <AlertCircle size={12} /> Short by {fmtQty(deficit)} {item.unit}
+                                    <AlertCircle size={12} /> Short by {formatQty(deficit, item.unit)}
                                   </span>
                                 )}
                               </div>
@@ -1422,12 +1459,12 @@ function ProductionPlanningContent() {
                           {sufficient ? (
                             <span className="text-[10px] font-bold text-emerald-600">Enough</span>
                           ) : (
-                            <span className="text-[10px] font-bold text-rose-600">Short by {fmtQty(deficit)} {item.unit}</span>
+                            <span className="text-[10px] font-bold text-rose-600">Short by {formatQty(deficit, item.unit)}</span>
                           )}
                         </div>
                         <div className="flex justify-between text-xs">
-                          <span className="text-gray-500">Need <strong className="text-gray-900 dark:text-white">{fmtQty(scaledQty)} {item.unit}</strong></span>
-                          <span className="text-gray-500">In stock <strong className="text-gray-700 dark:text-slate-300">{fmtQty(available)} {item.unit}</strong></span>
+                          <span className="text-gray-500">Need <strong className="text-gray-900 dark:text-white">{formatQty(scaledQty, item.unit)}</strong></span>
+                          <span className="text-gray-500">In stock <strong className="text-gray-700 dark:text-slate-300">{formatQty(available, item.unit, "down")}</strong></span>
                         </div>
                         <div className="h-1.5 w-full rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
                           <div
@@ -1486,6 +1523,34 @@ function ProductionPlanningContent() {
                       </div>
                     )}
                   </div>
+
+                  {/* Estimated production cost: materials + the recipe's manufacturing expenses */}
+                  {lotsReady && !lotsError && (
+                    <div className="border-t border-gray-100 dark:border-white/5 px-4 sm:px-5 py-3 space-y-1.5">
+                      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">Estimated production cost</p>
+                        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs font-semibold text-gray-600 dark:text-slate-300">
+                          {expenseEstimate.lines.map((l) => (
+                            <span key={l.category} title={l.basis === "PER_KG" ? `${fmtInr(l.rate)} per KG × planned output` : "Per batch"}>
+                              {l.label} <strong className="text-gray-900 dark:text-white">{fmtInr(l.amount)}</strong>
+                            </span>
+                          ))}
+                          <span>Total <strong className="text-gray-900 dark:text-white text-sm">{fmtInr(estimatedProductionCost)}</strong></span>
+                          {targetYield > 0 && (
+                            <span>Per {effectiveTargetUnit} <strong className="text-emerald-700 dark:text-emerald-400">{fmtInr(estimatedProductionCost / targetYield)}</strong></span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                        {expenseEstimate.lines.length || expenseEstimate.deferred.length || packagingExpense
+                          ? "Additional expenses come from Recipe Master and are applied automatically. Final cost uses the actual yield at Complete Production."
+                          : "No additional expenses set for this recipe in Recipe Master."}
+                        {expenseEstimate.deferred.length > 0 && ` ${expenseEstimate.deferred.map((d) => `${d.label} ${fmtInr(d.rate)}/pkt`).join(", ")} charged at packaging.`}
+                        {packagingExpense && " Packaging materials are charged at packaging."}
+                      </p>
+                      {expenseEstimate.error && <p className="text-[11px] font-bold text-rose-600">{expenseEstimate.error} Change its basis in Recipe Master.</p>}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -1514,12 +1579,12 @@ function ProductionPlanningContent() {
                 onClick={handleStartProductionDirect}
                 disabled={!canStart || launching}
                 title={
-                  !formulationReady
+                  !targetValid
+                    ? "Enter production quantity first"
+                    : !formulationReady
                     ? "Save the reference formulation first"
                     : hasShortage
                     ? "Resolve the ingredient shortage first"
-                    : yieldInvalid
-                    ? "Enter a quantity first"
                     : !selectedWarehouseId
                     ? "Choose a warehouse first"
                     : lotProblemRows.length > 0

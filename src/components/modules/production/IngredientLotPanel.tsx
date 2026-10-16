@@ -4,11 +4,11 @@ import clsx from "clsx";
 import { RotateCcw } from "lucide-react";
 import {
   AllocationDraft, MaterialLots, UNTRACKED,
-  allocatedTotal, allocationCost, allocationError, round3,
+  allocatedTotal, allocationCost, allocationError,
 } from "@/lib/lot-allocation";
+import { autoQty, formatQty } from "@/lib/qty-display";
 
 const inr = (n: number) => `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-const fmt = (n: number) => (Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 
 interface Props {
@@ -78,7 +78,7 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
                     <td className="py-1.5 px-2">{r.supplier || "—"}</td>
                     <td className="py-1.5 px-2 whitespace-nowrap">{day(r.receivedAt)}</td>
                     <td className="py-1.5 px-2 whitespace-nowrap">{day(r.expDate)}</td>
-                    <td className="py-1.5 px-2 text-right whitespace-nowrap">{fmt(r.availableQty)} {unit}</td>
+                    <td className="py-1.5 px-2 text-right whitespace-nowrap">{formatQty(r.availableQty, unit, "down")}</td>
                     <td className="py-1.5 px-2 text-right whitespace-nowrap">{inr(r.unitCost)}/{unit}</td>
                     <td className="py-1.5 px-2 text-right">
                       <input
@@ -94,6 +94,10 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
                           over ? "border-rose-400" : "border-gray-200 dark:border-white/10"
                         )}
                       />
+                      {/* Entered in the stock unit (exact); shown in g/ml when that reads better. */}
+                      {q > 0 && autoQty(q, unit).unit.toUpperCase() !== unit.toUpperCase() && (
+                        <span className="block text-[10px] font-semibold text-gray-400 mt-0.5">= {formatQty(q, unit)}</span>
+                      )}
                     </td>
                     <td className="py-1.5 pl-2 text-right whitespace-nowrap text-gray-900 dark:text-white">{q > 0 ? inr(q * r.unitCost) : "—"}</td>
                   </tr>
@@ -106,7 +110,7 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold">
         <span className={clsx(error ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")}>
-          {error || `Allocated ${fmt(total)} of ${fmt(round3(required))} ${unit}`}
+          {error || `Allocated ${formatQty(total, unit)} of ${formatQty(required, unit)}`}
         </span>
         <span className="text-gray-700 dark:text-slate-300">
           Ingredient cost <span className="text-gray-900 dark:text-white">{inr(cost)}</span>

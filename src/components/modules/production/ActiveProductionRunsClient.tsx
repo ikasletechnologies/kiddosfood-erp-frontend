@@ -11,6 +11,7 @@ import { convertUnit } from "@/lib/unitConversion";
 import { PRODUCTION_FEATURES, QC_NOT_REQUIRED } from "@/config/production-features";
 import { plannedYieldOf, yieldVariance, fmtYield, fmtSigned, varianceTone } from "@/lib/production-yield";
 import { MaterialLots, UNTRACKED, allocatedTotal, allocationCost, fifoDraft, toPayload } from "@/lib/lot-allocation";
+import { estimateManufacturing } from "@/lib/recipe-expenses";
 
 // A material actually used beyond the plan, reported at completion.
 type ExtraMaterial = { key: number; itemId: string; qty: string; lotId: string; note: string };
@@ -664,6 +665,29 @@ export default function ActiveProductionRunsClient() {
               </p>
             </div>
           </div>
+
+          {/* Manufacturing expenses from the recipe, frozen when this run started */}
+          {batchToApprove?.expenseSnapshot && (() => {
+            const est = estimateManufacturing(batchToApprove.expenseSnapshot.expenses, actualError ? 0 : actualNum, yieldUnit);
+            const total = totalMaterialCost + est.total;
+            return (
+              <div className="rounded-xl border border-gray-100 dark:border-white/5 p-2.5 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-gray-600 dark:text-slate-300">
+                  <span className="text-[9px] font-bold uppercase text-gray-400">Expenses from recipe</span>
+                  {est.lines.length === 0 && est.deferred.length === 0 && <span className="text-gray-400">None</span>}
+                  {est.lines.map((l) => (
+                    <span key={l.category}>{l.label} <strong className="font-mono text-gray-900 dark:text-white">{actualError && l.basis === "PER_KG" ? "—" : inr(l.amount)}</strong></span>
+                  ))}
+                  {est.deferred.map((d) => <span key={d.category} className="text-gray-400">{d.label} {inr(d.rate)}/pkt at packaging</span>)}
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] font-semibold text-gray-600 dark:text-slate-300 border-t border-gray-100 dark:border-white/5 pt-1.5">
+                  <span>Total Manufacturing Cost <strong className="font-mono text-gray-900 dark:text-white">{actualError ? "—" : inr(total)}</strong></span>
+                  <span className="text-emerald-700 dark:text-emerald-400">Manufacturing Cost/{yieldUnit} <strong className="font-mono">{actualError ? "—" : inr(total / actualNum)}</strong></span>
+                </div>
+                {est.error && <p className="text-[10px] font-bold text-rose-600">{est.error}</p>}
+              </div>
+            );
+          })()}
 
           <div className="space-y-1">
             <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300">

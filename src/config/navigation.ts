@@ -30,6 +30,7 @@ import {
   MapPin,
   FileCheck2,
   BarChart3,
+  MessagesSquare,
 } from "lucide-react";
 import { PRODUCTION_FEATURES } from "./production-features";
 
@@ -41,6 +42,8 @@ export interface MenuItem {
   isNew?: boolean;
   isHot?: boolean;
   isComingSoon?: boolean;
+  // Live count shown next to the label (rendered by Sidebar).
+  badge?: "chat";
   children?: {
     label: string;
     href: string;
@@ -451,6 +454,13 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
         href: "/franchise",
         roles: SUPER_ONLY,
       },
+      {
+        icon: MessagesSquare,
+        label: "Franchise Chat",
+        href: "/chat",
+        roles: SUPER_ONLY,
+        badge: "chat",
+      },
       // {
       //   icon: Package,
       //   label: "Outlet Inventory",
@@ -583,6 +593,13 @@ export const franchiseMenuSections: MenuSection[] = [
         label: "Branch Dashboard",
         href: "/franchise/dashboard",
         roles: FRANCHISE_ONLY,
+      },
+      {
+        icon: MessagesSquare,
+        label: "Chat with Super Admin",
+        href: "/chat",
+        roles: FRANCHISE_ONLY,
+        badge: "chat",
       },
     ],
   },
