@@ -19,6 +19,9 @@ import AddInventoryProductForm from "@/components/modules/inventory/AddInventory
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { formatDate, roundMoney, calculateSalesDocumentTotals, formatERPNumber } from "@/lib/utils";
 import { loadUnicodeFont } from "@/lib/pdfFonts";
+import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
+import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
+import { canViewCost } from "@/lib/profit-estimate";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -226,6 +229,9 @@ interface LineItem {
   taxLabel?: string;
   baseUnit?: any;
   conversions?: any[];
+  // Finished-goods lot this line sells from (Set Price); null = standard line.
+  lotId?: string | null;
+  lotNumber?: string | null;
 }
 
 // InventoryItem.unit is free-text from Item Master (e.g. "kg", "Ltr") and
@@ -788,6 +794,8 @@ export default function EstimationsPageClient({
             discountAmount: calculatedDiscAmt,
             taxPct: Number(i.taxPercent ?? i.taxPct ?? 0),
             taxLabel: TAX_OPTIONS.find(o => o.value === Number(i.taxPercent ?? i.taxPct ?? 0))?.label || "NONE",
+            lotId: i.inventoryBatchId || null,
+            lotNumber: i.lotNumber || null,
           };
         })
         : [makeItem(), makeItem()];
@@ -870,7 +878,9 @@ export default function EstimationsPageClient({
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
     const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
-    const rate = getChannelPrice(p, partyType);
+    // Priced Set Price lots: show their price (not ₹0) and open the lot picker.
+    const shown = catalogPrice(getChannelPrice(p, partyType), p.lotPricing);
+    const rate = shown.price ?? getChannelPrice(p, partyType);
     const { discountPct, discountAmount } = getAutoDiscount(p, rate, partyType);
     const packSize = getProductPackSize(p);
     const displayName = packSize && !p.name.includes(packSize)
@@ -890,9 +900,36 @@ export default function EstimationsPageClient({
         taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
         baseUnit: p.baseUnit || p.unit,
         conversions: p.unitConversions || p.conversions || [],
+        lotId: null,
+        lotNumber: null,
       } : it
     ));
     setOpenItemDrop(null);
+    if (shown.source === "LOT") setLotPickerIdx(idx);
+  };
+
+  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
+  // Optional: split a product line into one line per finished-goods lot, each
+  // at the lot's own price. Estimates/Proformas reserve and deduct nothing;
+  // the lot is re-checked when the document is converted.
+  const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
+  const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
+  const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
+  const applyLots = (allocations: LotAllocation[]) => {
+    if (lotPickerIdx == null) return;
+    setItems(prev => applyLotSelection(prev, lotPickerIdx, allocations, lotKey, (base, a, i) => {
+      const gross = a.quantity * a.price;
+      return {
+        ...base,
+        id: i === 0 ? base.id : Math.random().toString(36).slice(2),
+        lotId: a.lotId,
+        lotNumber: a.lotNumber,
+        qty: a.quantity,
+        rate: a.price,
+        discountAmount: base.discountPct > 0 ? roundMoney(gross * base.discountPct / 100) : 0,
+      };
+    }));
+    setLotPickerIdx(null);
   };
 
   // Line items are priced at selection-time; if the party channel changes
@@ -902,7 +939,8 @@ export default function EstimationsPageClient({
   useEffect(() => {
     if (!products.length) return;
     setItems(prev => prev.map(it => {
-      if (!it.productId) return it;
+      // A lot line is priced by its lot (Set Price), not the channel price.
+      if (!it.productId || it.lotId) return it;
       const p = products.find((pr: any) => pr.id === it.productId);
       if (!p) return it;
       const rate = getChannelPrice(p, partyType);
@@ -1023,6 +1061,8 @@ export default function EstimationsPageClient({
             discountAmount: discAmt,
             discount: discAmt,
             taxPercent: i.taxPct,
+            // The server prices this line from the lot's Set Price and keeps the lot.
+            inventoryBatchId: i.lotId || undefined,
           };
         }),
         discountAmount: totalDisc,
@@ -1936,7 +1976,8 @@ export default function EstimationsPageClient({
                                         </div>
                                         <div className="text-right shrink-0">
                                           <div className="text-sm font-bold text-gray-900 dark:text-white">
-                                            ₹{Number(price || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            {/* Set Price lot price when the product has priced lots; never ₹0. */}
+                                            {catalogPrice(price, p.lotPricing).label}
                                           </div>
                                           <div className="text-[10px] text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                                             per {unitText}
@@ -1949,6 +1990,12 @@ export default function EstimationsPageClient({
                               </div>
                             </div>
                           )}
+                          <LotLineControl
+                            productId={item.productId}
+                            lotNumber={item.lotId ? item.lotNumber : null}
+                            readOnly={loadedStatus !== null && loadedStatus !== "DRAFT"}
+                            onOpen={() => setLotPickerIdx(idx)}
+                          />
                         </td>
                         <td className="px-4 py-2.5 align-top">
                           <input
@@ -2246,6 +2293,21 @@ export default function EstimationsPageClient({
           </div>
         )}
 
+        {lotPickerRow && (
+          <LotSelector
+            open
+            onClose={() => setLotPickerIdx(null)}
+            productId={lotPickerRow.productId}
+            productName={lotPickerRow.itemSearch}
+            scope="HQ"
+            quantity={lotPickerRow.lotId
+              ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)
+              : lotPickerRow.qty}
+            initial={currentLotQuantities(items, lotPickerRow.productId, lotKey)}
+            showCost={canViewCost(user)}
+            onApply={applyLots}
+          />
+        )}
       </div>
     );
   }

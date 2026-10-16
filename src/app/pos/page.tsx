@@ -10,7 +10,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Loader2, ArrowUpRight
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi, dealersApi } from "@/lib/api";
+import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi, dealersApi, lotPricingApi } from "@/lib/api";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
@@ -19,6 +19,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/context/AuthContext";
 import { canViewCost, signedMoney, toneOf, useProfitEstimate } from "@/lib/profit-estimate";
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
+import LotSelector, { LotChip } from "@/components/sales/LotSelector";
+import { catalogPrice, LotAllocation, LotPriceSummary, SaleLot } from "@/lib/lot-pricing";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -46,7 +48,16 @@ interface CartItem {
   // and the value is sent to checkout as a per-line override.
   itemDiscount: number;
   discountEdited?: boolean;
+  // Lot lines (Set Price): `id` is "<productId>::<lotId>" so one product can
+  // sit on several lines; productId is the real product, and the line is
+  // charged the lot's price and deducted from that lot. Absent = standard line.
+  productId?: string;
+  lotId?: string | null;
+  lotNumber?: string | null;
 }
+
+// The product a cart line sells (lot lines carry it separately from their id).
+const productIdOf = (i: CartItem) => i.productId || i.id;
 
 // ── Receipt data ───────────────────────────────────────────────────────────────
 
@@ -355,6 +366,8 @@ export default function POSPage() {
           packSize: p.packSize as { qty: number; unit: string } | null | undefined,
           discountType: p.discountType || "PERCENT",
           discountValue: p.discountValue || 0,
+          // Set Price lots: what a lot sale charges (shown when the master price is empty).
+          lotPricing: (p.lotPricing || null) as LotPriceSummary | null,
         }));
         setProducts(mapped);
         const cats = Array.from(new Set(mapped.map(p => p.category).filter(Boolean))) as string[];
@@ -372,6 +385,12 @@ export default function POSPage() {
   }, []);
 
   useEffect(() => { fetchProducts(); fetchAccounts(); }, [fetchProducts, fetchAccounts]);
+  // Prices changed in Set Price (another tab) show up when the cashier comes back.
+  useEffect(() => {
+    const onFocus = () => fetchProducts();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchProducts]);
 
   // Auto-select matching account for payment mode
   useEffect(() => {
@@ -478,6 +497,12 @@ export default function POSPage() {
   // configured, otherwise fall back to the generic base price.
   // Search display, add-to-cart and the channel re-price below all read the
   // same backend-resolved price, so a displayed price is always billable.
+  // Price shown in search / scan: Set Price lot price when the product has
+  // priced lots (what a lot sale charges), else the channel price, else
+  // "Awaiting Price" / "No price". Franchise bills don't use lots.
+  const posPriceLabel = (p: any) =>
+    catalogPrice(getPrice(p, partyType), partyType === "FRANCHISE" ? null : p?.lotPricing);
+
   const getPrice = (p: any, type: string): number => {
     const v = Number(p.sellingPrices?.[type]);
     return Number.isFinite(v) && v > 0 ? v : 0;
@@ -492,7 +517,8 @@ export default function POSPage() {
     return p.discountType === "PERCENT" ? price * (p.discountValue / 100) : p.discountValue;
   };
 
-  const addToCart = (p: any) => {
+  // Standard line (master price, FIFO stock) — the original add-to-cart.
+  const addStandardToCart = (p: any) => {
     if (!(getPrice(p, partyType) > 0)) { toast.error(`"${p.name}" has no selling price`); return; }
     const ex = cart.find(i => i.id === p.id);
     const cur = ex?.quantity || 0;
@@ -505,6 +531,70 @@ export default function POSPage() {
     );
   };
 
+  // ── Lot selection (Set Price lots) ─────────────────────────────────────────
+  // Fast billing stays as it was: a product with no priced lot gets the
+  // standard line; with exactly one priced lot, that lot is chosen
+  // automatically; only when several priced lots exist does the compact lot
+  // selector open. Re-scanning a product already on a lot line adds one to
+  // that lot while it has stock.
+  const [lotPicker, setLotPicker] = useState<{ product: any } | null>(null);
+  const lotOptionsRef = useRef<Record<string, SaleLot[]>>({});
+  const lotLine = (p: any, lot: SaleLot, quantity: number): CartItem => {
+    const price = lot.sellingPriceExclTax ?? 0;
+    return {
+      id: `${p.id}::${lot.id}`, productId: p.id, lotId: lot.id, lotNumber: lot.lotNumber,
+      name: p.name, sku: p.sku, price, quantity, taxPercent: lot.taxPercent, stock: lot.availableQty,
+      itemDiscount: getItemDiscount(p, partyType, price),
+    };
+  };
+
+  const addToCart = async (p: any) => {
+    if (partyType === "FRANCHISE" || cart.some(i => i.id === p.id)) { addStandardToCart(p); return; }
+    const lotLines = cart.filter(i => productIdOf(i) === p.id && i.lotId);
+    if (lotLines.length) {
+      const room = [...lotLines].reverse().find(i => i.stock == null || i.quantity < i.stock);
+      if (room) setCart(prev => prev.map(i => i.id === room.id ? { ...i, quantity: i.quantity + 1 } : i));
+      else setLotPicker({ product: p });
+      return;
+    }
+    let lots: SaleLot[] = [];
+    try {
+      const res = await lotPricingApi.saleLotOptions({ productId: p.id, franchiseId: (authUser as any)?.franchiseId || undefined });
+      lots = res.data?.lots ?? [];
+    } catch {
+      // Lot lookup failed — fall back to the standard line (server prices it).
+    }
+    lotOptionsRef.current[p.id] = lots;
+    const eligible = lots.filter(l => l.selectable && l.availableQty >= 1);
+    if (eligible.length === 0) { addStandardToCart(p); return; }
+    if (eligible.length === 1) {
+      const line = lotLine(p, eligible[0], 1);
+      setCart(prev => prev.some(i => i.id === line.id)
+        ? prev.map(i => i.id === line.id ? { ...i, quantity: i.quantity + 1 } : i)
+        : [...prev, line]);
+      return;
+    }
+    setLotPicker({ product: p });
+  };
+
+  // Replaces every line of the product (standard or lot) with the chosen lots.
+  const applyPosLots = (allocations: LotAllocation[]) => {
+    const p = lotPicker?.product;
+    if (!p) return;
+    const lots = lotOptionsRef.current[p.id] || [];
+    setCart(prev => {
+      const first = prev.findIndex(i => productIdOf(i) === p.id);
+      const kept = prev.filter(i => productIdOf(i) !== p.id);
+      const at = first < 0 ? kept.length : prev.slice(0, first).filter(i => productIdOf(i) !== p.id).length;
+      const lines = allocations.map(a => {
+        const lot = lots.find(l => l.id === a.lotId);
+        return lot ? lotLine(p, lot, a.quantity) : null;
+      }).filter(Boolean) as CartItem[];
+      return [...kept.slice(0, at), ...lines, ...kept.slice(at)];
+    });
+    setLotPicker(null);
+  };
+
   // Cart lines are priced at add-time; if the party channel changes after
   // items are already in the cart, re-derive each line's price/discount
   // against the newly selected channel so the cart never shows a Customer
@@ -512,9 +602,10 @@ export default function POSPage() {
   useEffect(() => {
     if (!products.length) return;
     setCart(prev => prev.map(item => {
-      const p = products.find(pr => pr.id === item.id);
+      const p = products.find(pr => pr.id === productIdOf(item));
       if (!p) return item;
-      const price = getPrice(p, partyType);
+      // A lot line keeps its lot's Set Price; only its discount follows the channel.
+      const price = item.lotId ? item.price : getPrice(p, partyType);
       // Keep a cashier-edited discount (bounded to the new price).
       const itemDiscount = item.discountEdited ? Math.min(item.itemDiscount, price) : getItemDiscount(p, partyType, price);
       return price === item.price && itemDiscount === item.itemDiscount ? item : { ...item, price, itemDiscount };
@@ -523,11 +614,12 @@ export default function POSPage() {
   }, [partyType, products]);
 
   const updateQty = (id: string, delta: number) => {
-    const p = products.find(x => x.id === id);
     setCart(prev => prev.map(i => {
       if (i.id !== id) return i;
+      // A lot line is limited by its lot's stock; a standard line by the product's.
+      const limit = i.lotId ? i.stock : products.find(x => x.id === id)?.stock;
       const q = i.quantity + delta;
-      if (delta > 0 && p?.stock !== null && q > p.stock) { toast.error(`Only ${p.stock} available`); return i; }
+      if (delta > 0 && limit != null && q > limit) { toast.error(`Only ${limit} available${i.lotNumber ? ` in lot ${i.lotNumber}` : ""}`); return i; }
       return q <= 0 ? null as any : { ...i, quantity: q };
     }).filter(Boolean));
   };
@@ -570,7 +662,7 @@ export default function POSPage() {
     franchiseId: (authUser as any)?.franchiseId || null,
     partyType,
     manualDiscount: manualDisc,
-    items: cart.map(i => ({ productId: i.id, quantity: i.quantity, ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}) })),
+    items: cart.map(i => ({ productId: productIdOf(i), quantity: i.quantity, ...(i.lotId ? { inventoryBatchId: i.lotId } : {}), ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}) })),
   };
   const profitKey = cart.length ? JSON.stringify(profitPayload) : "";
   const profit = useProfitEstimate(() => posApi.estimateProfit(profitPayload), profitKey, showProfit);
@@ -612,7 +704,7 @@ export default function POSPage() {
         // warns the cashier separately when a discount is present.
         const res = await api.post("/api/franchise-orders", {
           franchiseId: selectedParty.id,
-          items: cart.map(i => ({ productId: i.id, productName: i.name, quantity: i.quantity, unitPrice: i.price, totalPrice: i.price * i.quantity })),
+          items: cart.map(i => ({ productId: productIdOf(i), productName: i.name, quantity: i.quantity, unitPrice: i.price, totalPrice: i.price * i.quantity })),
           notes: `POS Sale - Franchise Credit`,
         });
         orderId = res.data?.id || res.data?.orderId || "";
@@ -652,11 +744,13 @@ export default function POSPage() {
           manualDiscount: manualDisc,
           totalAmount: total,
           items: cart.map(i => ({
-            productId: i.id,
+            productId: productIdOf(i),
             quantity: i.quantity,
             unitPrice: i.price,
             totalPrice: i.price * i.quantity,
             taxPercent: i.taxPercent,
+            // Lot line: charged the lot's price and deducted from that lot.
+            ...(i.lotId ? { inventoryBatchId: i.lotId } : {}),
             ...(i.discountEdited ? { discountPerUnit: i.itemDiscount } : {}),
           })),
           // A normal sale must carry the amount actually collected — the
@@ -990,8 +1084,13 @@ export default function POSPage() {
                           )}
                         </div>
                       </div>
-                      <div className="text-sm font-black" style={{ color: BRAND_ORANGE }}>
-                        {getPrice(p, partyType) > 0 ? `₹${getPrice(p, partyType).toLocaleString()}` : "No price"}
+                      <div className="text-sm font-black text-right" style={{ color: BRAND_ORANGE }}>
+                        {posPriceLabel(p).label}
+                        {posPriceLabel(p).source === "LOT" && (
+                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                            {posPriceLabel(p).lotCount > 1 ? `${posPriceLabel(p).lotCount} lots` : "Lot price"}
+                          </span>
+                        )}
                       </div>
                     </button>
                   ))}
@@ -1056,6 +1155,14 @@ export default function POSPage() {
                       <td className="px-3 py-2.5 font-mono text-gray-600 dark:text-slate-300">{item.id.substring(0,6).toUpperCase()}</td>
                       <td className="px-3 py-2.5 font-bold text-gray-800 dark:text-white max-w-[220px]">
                         <span className="block truncate">{item.name}</span>
+                        {item.lotId && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <LotChip
+                              lotNumber={item.lotNumber}
+                              onClick={() => { const p = products.find(x => x.id === productIdOf(item)); if (p) setLotPicker({ product: p }); }}
+                            />
+                          </span>
+                        )}
                         {showProfit && <LineProfit line={lineEstimate(idx)} loading={profit.loading} className="block truncate font-normal" />}
                         {showProfit && <LossWarning line={lineEstimate(idx)} />}
                       </td>
@@ -1540,7 +1647,7 @@ export default function POSPage() {
                 <div>
                   <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Product Decoded</p>
                   <h4 className="text-lg font-black text-white uppercase">{scannedProduct.name}</h4>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Price: {getPrice(scannedProduct, partyType) > 0 ? `₹${getPrice(scannedProduct, partyType)}` : "No price"} · Stock: {scannedProduct.stock ?? "N/A"}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Price: {posPriceLabel(scannedProduct).label} · Stock: {scannedProduct.stock ?? "N/A"}</p>
                 </div>
               </div>
             )}
@@ -1882,6 +1989,26 @@ export default function POSPage() {
           </div>
         </div>,
         document.body
+      )}
+
+      {lotPicker && (
+        <LotSelector
+          open
+          onClose={() => setLotPicker(null)}
+          productId={lotPicker.product.id}
+          productName={lotPicker.product.name}
+          franchiseId={(authUser as any)?.franchiseId || undefined}
+          quantity={Math.max(1, cart.filter(i => productIdOf(i) === lotPicker.product.id).reduce((s, i) => s + i.quantity, 0))}
+          initial={Object.fromEntries(cart.filter(i => productIdOf(i) === lotPicker.product.id && i.lotId).map(i => [i.lotId as string, i.quantity]))}
+          showCost={showProfit}
+          onLoaded={(lots) => { lotOptionsRef.current[lotPicker.product.id] = lots; }}
+          onApply={applyPosLots}
+          onUseStandard={() => {
+            const p = lotPicker.product;
+            setLotPicker(null);
+            if (!cart.some(i => productIdOf(i) === p.id && i.lotId)) addStandardToCart(p);
+          }}
+        />
       )}
     </div>
   );

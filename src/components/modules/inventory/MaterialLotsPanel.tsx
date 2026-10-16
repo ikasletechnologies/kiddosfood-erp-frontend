@@ -26,6 +26,11 @@ type Lot = {
   expDate: string | null;
   status: string;
   warehouse: { id: string; name: string } | null;
+  // Same eligibility Production Planning uses; reason when not usable.
+  productionUsable?: boolean;
+  productionIssue?: string | null;
+  /** Expiry date reached (expired ON the expiry date). */
+  expired?: boolean;
 };
 
 export type LotSummary = {
@@ -36,6 +41,12 @@ export type LotSummary = {
   untrackedValue: number;
   totalValue: number;
   weightedAvgCost: number;
+  /** Lot stock production can use now (approved, not expired). */
+  usableLotQty?: number;
+  /** Approved lot stock past its expiry date — not available. */
+  expiredQty?: number;
+  /** Ledger stock minus expired / held lot stock: what is actually available. */
+  usableStock?: number;
 };
 
 export const formatINR = (n: number) =>
@@ -59,6 +70,7 @@ export default function MaterialLotsPanel({ itemId, unit, summary }: { itemId: s
   const [lots, setLots] = useState<Lot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showConsumed, setShowConsumed] = useState(false);
+  const [showExpired, setShowExpired] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,10 +89,15 @@ export default function MaterialLotsPanel({ itemId, unit, summary }: { itemId: s
     );
   }
 
-  const active = lots.filter((l) => l.availableQty > 0.0001);
-  const consumed = lots.length - active.length;
-  const visible = showConsumed ? lots : active;
-  const today = new Date();
+  // Expired lots (expiry date reached — server rule) still hold stock on
+  // record, but aren't shown as available; they're listed only on request.
+  const withStock = lots.filter((l) => l.availableQty > 0.0001);
+  const active = withStock.filter((l) => !l.expired);
+  const expiredLots = withStock.filter((l) => l.expired);
+  const consumed = lots.length - withStock.length;
+  const visible = lots.filter((l) => l.availableQty > 0.0001
+    ? (!l.expired || showExpired)
+    : showConsumed);
 
   return (
     <div className="px-4 sm:px-6 py-4 bg-slate-50/60 dark:bg-white/[0.02] border-t border-slate-100 dark:border-white/5">
@@ -88,12 +105,20 @@ export default function MaterialLotsPanel({ itemId, unit, summary }: { itemId: s
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
           Purchase Batches · {active.length} active
         </p>
-        {consumed > 0 && (
-          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer">
-            <input type="checkbox" checked={showConsumed} onChange={(e) => setShowConsumed(e.target.checked)} className="rounded" />
-            Show {consumed} fully consumed
-          </label>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {expiredLots.length > 0 && (
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-rose-600 cursor-pointer">
+              <input type="checkbox" checked={showExpired} onChange={(e) => setShowExpired(e.target.checked)} className="rounded" />
+              Show {expiredLots.length} expired ({formatQty(expiredLots.reduce((s, l) => s + l.availableQty, 0))} {unit}, not available)
+            </label>
+          )}
+          {consumed > 0 && (
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 cursor-pointer">
+              <input type="checkbox" checked={showConsumed} onChange={(e) => setShowConsumed(e.target.checked)} className="rounded" />
+              Show {consumed} fully consumed
+            </label>
+          )}
+        </div>
       </div>
 
       {visible.length === 0 && !(summary && summary.untrackedQty > 0) ? (
@@ -119,7 +144,7 @@ export default function MaterialLotsPanel({ itemId, unit, summary }: { itemId: s
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {visible.map((lot) => {
-                const expired = lot.expDate && new Date(lot.expDate) < today;
+                const expired = !!lot.expired;
                 const boughtInOtherUnit = lot.purchaseUnit && lot.purchaseQty != null && lot.purchaseUnit.toUpperCase() !== unit.toUpperCase();
                 return (
                   <tr key={lot.id} className={clsx(lot.availableQty <= 0.0001 && "opacity-50")}>
@@ -159,6 +184,11 @@ export default function MaterialLotsPanel({ itemId, unit, summary }: { itemId: s
                       <span className={clsx("text-[9px] font-bold px-2 py-0.5 rounded-full", STATUS_STYLES[lot.status] || STATUS_STYLES.RETURNED)}>
                         {lot.status.replace(/_/g, " ")}
                       </span>
+                      {lot.availableQty > 0.0001 && lot.productionUsable === false && (
+                        <p className="mt-1 text-[9px] font-bold text-rose-600 whitespace-nowrap" title={lot.productionIssue || undefined}>
+                          Not usable for production
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );

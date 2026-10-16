@@ -18,6 +18,8 @@ import GSTInvoice from "@/components/documents/GSTInvoice";
 import { useAuth } from "@/context/AuthContext";
 import { canViewCost, useProfitEstimate } from "@/lib/profit-estimate";
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
+import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
+import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
 
 // No hardcoded state here — the seller's GST registration state must come
 // from the real HQ franchise (see SettingsService.getCompanyProfile),
@@ -124,6 +126,9 @@ interface LineItem {
   remarks: string;
   baseUnit?: any;
   conversions?: any[];
+  // Finished-goods lot this line sells from (Set Price); null = standard line.
+  lotId?: string | null;
+  lotNumber?: string | null;
 }
 
 function makeItem(): LineItem {
@@ -466,6 +471,8 @@ export default function SalesOrdersPage() {
               discountAmount: it.discountAmount || 0,
               taxPct: it.taxPercent || 0,
               taxLabel: it.taxPercent ? `GST@${it.taxPercent}%` : "NONE",
+              lotId: it.inventoryBatchId || null,
+              lotNumber: it.lotNumber || null,
             })));
           }
 
@@ -522,7 +529,7 @@ export default function SalesOrdersPage() {
       const discAmt = it.discountAmount !== undefined && it.discountAmount > 0
         ? it.discountAmount
         : parseFloat((gross * (it.discountPct || 0) / 100).toFixed(2));
-      return { productId: it.productId || undefined, productName: it.itemSearch, quantity: it.qty, unit: it.unit, rate: it.rate, discountPercent: it.discountPct || 0, discountAmount: discAmt };
+      return { productId: it.productId || undefined, productName: it.itemSearch, quantity: it.qty, unit: it.unit, rate: it.rate, discountPercent: it.discountPct || 0, discountAmount: discAmt, inventoryBatchId: it.lotId || undefined };
     }),
   };
   const profitKey = profitRows.length ? JSON.stringify(profitPayload) : "";
@@ -584,7 +591,10 @@ export default function SalesOrdersPage() {
     const conversions = p.conversions || [];
     const unitOptions = getUnitOptions({ baseUnit, conversions } as LineItem);
     const defaultUnit = unitOptions === UNITS ? (p.unit || "NONE") : unitOptions[0].code;
-    const rate = p.customerPrice || p.basePrice || p.price || 0;
+    // A product priced through Set Price lots shows its lot price (never ₹0);
+    // the lot picker then sets each line's exact lot and price.
+    const shown = catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing);
+    const rate = shown.price ?? (p.customerPrice || p.basePrice || p.price || 0);
     const { discountPct, discountAmount } = getAutoDiscount(p, rate);
 
     setItems(prev => prev.map((it, i) =>
@@ -601,9 +611,13 @@ export default function SalesOrdersPage() {
         taxLabel,
         baseUnit,
         conversions,
+        lotId: null,
+        lotNumber: null,
       } : it
     ));
     setOpenItemDrop(null);
+    // Priced lots exist: show them right away to pick one or more lots.
+    if (shown.source === "LOT") setLotPickerIdx(idx);
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
@@ -722,6 +736,8 @@ export default function SalesOrdersPage() {
           discountAmount: discAmt,
           discount: discAmt,
           taxPercent: it.taxPct,
+          // The server prices this line from the lot's Set Price and keeps the lot.
+          inventoryBatchId: it.lotId || undefined,
         };
       })
     };
@@ -833,6 +849,8 @@ export default function SalesOrdersPage() {
           taxPct: Number(it.taxPercent ?? it.taxPct ?? 0),
           taxLabel: TAX_OPTIONS.find(o => o.value === Number(it.taxPercent ?? it.taxPct ?? 0))?.label || "NONE",
           remarks: it.remarks || "",
+          lotId: it.inventoryBatchId || null,
+          lotNumber: it.lotNumber || null,
         };
       }));
     } else {
@@ -840,6 +858,30 @@ export default function SalesOrdersPage() {
     }
 
     setView("edit");
+  };
+
+  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
+  // Optional: a product line can be split into one line per finished-goods
+  // lot, each at the lot's own price. Everything else on the line (discount,
+  // unit, GST) works exactly as before; the server re-prices lot lines.
+  const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
+  const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
+  const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
+  const applyLots = (allocations: LotAllocation[]) => {
+    if (lotPickerIdx == null) return;
+    setItems(prev => applyLotSelection(prev, lotPickerIdx, allocations, lotKey, (base, a, i) => {
+      const gross = a.quantity * a.price;
+      return {
+        ...base,
+        id: i === 0 ? base.id : Math.random().toString(36).slice(2),
+        lotId: a.lotId,
+        lotNumber: a.lotNumber,
+        qty: a.quantity,
+        rate: a.price,
+        discountAmount: base.discountPct > 0 ? parseFloat((gross * base.discountPct / 100).toFixed(2)) : 0,
+      };
+    }));
+    setLotPickerIdx(null);
   };
 
   // Read-only view for a specific Sales Order (deep-linked via ?id=, e.g.
@@ -1281,7 +1323,7 @@ export default function SalesOrdersPage() {
                                     <strong className="text-gray-800 dark:text-white">{p.name}</strong>
                                     <div className="text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
                                   </div>
-                                  <span className="text-[#f58220] font-mono font-bold">₹{p.customerPrice || p.basePrice || p.price || 0}</span>
+                                  <span className="text-[#f58220] font-mono font-bold">{catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing).label}</span>
                                 </button>
                               ))
                             )}
@@ -1293,6 +1335,7 @@ export default function SalesOrdersPage() {
                           placeholder="Remarks / delivery details"
                           className="w-full px-3 py-1 text-xs text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
                         />
+                        <div className="px-3"><LotLineControl productId={it.productId} lotNumber={it.lotNumber} readOnly={readOnly} onOpen={() => setLotPickerIdx(idx)} /></div>
                       </td>
                       <td className="px-4 py-2.5">
                         <input
@@ -1447,7 +1490,7 @@ export default function SalesOrdersPage() {
                                   <strong className="text-gray-800 dark:text-white truncate block">{p.name}</strong>
                                   <div className="text-gray-400 dark:text-slate-500 text-[10px]">SKU: {p.sku || "—"}</div>
                                 </div>
-                                <span className="text-[#f58220] font-mono font-bold shrink-0">₹{p.customerPrice || p.basePrice || p.price || 0}</span>
+                                <span className="text-[#f58220] font-mono font-bold shrink-0">{catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing).label}</span>
                               </button>
                             ))
                           )}
@@ -1459,6 +1502,7 @@ export default function SalesOrdersPage() {
                         placeholder="Remarks / delivery instructions"
                         className="w-full px-3 py-1.5 text-xs text-gray-500 dark:text-slate-400 outline-none bg-white dark:bg-[#13151f] border border-gray-100 dark:border-white/5 rounded-lg mt-1"
                       />
+                      <LotLineControl productId={it.productId} lotNumber={it.lotNumber} readOnly={readOnly} onOpen={() => setLotPickerIdx(idx)} />
                     </div>
 
                     {/* Quantity & Unit Row */}
@@ -1753,6 +1797,21 @@ export default function SalesOrdersPage() {
             </>
           )}
         </div>
+        {lotPickerRow && (
+          <LotSelector
+            open
+            onClose={() => setLotPickerIdx(null)}
+            productId={lotPickerRow.productId}
+            productName={lotPickerRow.itemSearch}
+            scope="HQ"
+            quantity={lotPickerRow.lotId
+              ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)
+              : lotPickerRow.qty}
+            initial={currentLotQuantities(items, lotPickerRow.productId, lotKey)}
+            showCost={showProfit}
+            onApply={applyLots}
+          />
+        )}
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoQty, convertQty, defaultDisplayUnit, formatQty, maxMultiplierFor, roundForDisplay, roundRequirement } from "../qty-display";
+import { autoQty, convertQty, defaultDisplayUnit, formatQty, maxMultiplierFor, procurementQty, roundForDisplay, roundRequirement } from "../qty-display";
 
 describe("ingredient quantity display", () => {
   it.each([
@@ -100,5 +100,25 @@ describe("planning requirement rounding policy", () => {
     expect(m).toBeCloseTo(24 / 24.27, 9);
     // Above 1 KG nothing is rounded.
     expect(maxMultiplierFor(1.2, 2.4, "KG")).toBe(2);
+  });
+});
+
+describe("procurement quantity (Production → Purchase Order)", () => {
+  it("keeps Production Planning's units and never understates", () => {
+    // Kambu Dosa 10 KG: requirements as stored in grams.
+    expect(procurementQty(1375.404, "G")).toEqual({ quantity: 1.376, unit: "KG" });
+    expect(procurementQty(486, "G")).toEqual({ quantity: 486, unit: "G" });
+    expect(procurementQty(161.2, "G")).toEqual({ quantity: 162, unit: "G" });
+    expect(procurementQty(25, "g")).toEqual({ quantity: 25, unit: "G" });
+    // Stored in KG.
+    expect(procurementQty(1.375404, "kg")).toEqual({ quantity: 1.376, unit: "KG" });
+    expect(procurementQty(0.0485, "KG")).toEqual({ quantity: 49, unit: "G" });
+    expect(procurementQty(2, "KG")).toEqual({ quantity: 2, unit: "KG" });
+    // Float noise doesn't bump an exact amount.
+    expect(procurementQty(0.025, "KG")).toEqual({ quantity: 25, unit: "G" });
+    // Volume and count units.
+    expect(procurementQty(1500.2, "ML")).toEqual({ quantity: 1.501, unit: "L" });
+    expect(procurementQty(250, "ml")).toEqual({ quantity: 250, unit: "ML" });
+    expect(procurementQty(12, "PCS")).toEqual({ quantity: 12, unit: "PCS" });
   });
 });

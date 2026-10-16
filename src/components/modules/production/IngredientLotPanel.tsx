@@ -51,7 +51,9 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-xs font-semibold text-rose-600">No usable lots in this warehouse (expired, blocked and rejected stock is excluded).</p>
+        <p className="text-xs font-semibold text-rose-600">
+          No usable lots in this warehouse{material.unavailableLots?.length ? " — see the lots below for the reason." : " (expired, blocked and rejected stock is excluded)."}
+        </p>
       ) : (
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full min-w-[640px] text-left text-[11px] font-semibold text-gray-700 dark:text-slate-300">
@@ -105,6 +107,22 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Lots with stock that can't be used here — shown with the reason, never allocatable. */}
+      {!!material.unavailableLots?.length && (
+        <div className="rounded-lg border border-rose-100 dark:border-rose-500/20 bg-rose-50/40 dark:bg-rose-500/5 px-2.5 py-2 space-y-1">
+          <p className="text-[9px] font-bold uppercase tracking-wider text-rose-500">Not available for this production</p>
+          {material.unavailableLots.map((l) => (
+            <div key={l.id} className="flex flex-wrap items-baseline justify-between gap-x-3 text-[11px]">
+              <span className="font-mono font-bold text-gray-700 dark:text-slate-200">
+                {l.lotNumber}
+                <span className="font-sans font-semibold text-gray-400"> · {formatQty(l.availableQty, unit, "down")} · exp {day(l.expDate)}{l.warehouse ? ` · ${l.warehouse}` : ""}</span>
+              </span>
+              <span className="font-semibold text-rose-600 dark:text-rose-400">{l.reason}</span>
+            </div>
+          ))}
         </div>
       )}
 

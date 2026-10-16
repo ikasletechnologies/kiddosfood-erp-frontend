@@ -119,6 +119,24 @@ export function autoQty(qty: number, unit: string, rounding: Rounding = "up"): D
   return { value, shown, unit: LARGE[d.kind], dp: DP.large };
 }
 
+/**
+ * Procurement policy for a shortage sent to a Purchase Order: never
+ * understated, in the unit Production Planning shows it in.
+ *  • Weight → rounded UP to the next whole gram; from 1 KG expressed in KG
+ *    (whole grams, so 3 decimals are exact: 1375.404 g → 1.376 KG), below
+ *    that in G (485.2 g → 486 G).
+ *  • Volume → rounded UP to the next whole ml; from 1 L in L, else ML.
+ *  • Count / other units → unchanged (no conversion is guessed).
+ * Units are returned in the Purchase Order's codes (KG, G, L, ML).
+ */
+export function procurementQty(qty: number, unit: string): { quantity: number; unit: string } {
+  const d = dimOf(unit);
+  if (!d || !Number.isFinite(qty) || qty <= 0) return { quantity: qty, unit: String(unit || "").toUpperCase() };
+  const base = Math.ceil(settle(qty * d.toBase)); // whole grams / millilitres
+  if (base >= BASE_PER_LARGE) return { quantity: clean(base / BASE_PER_LARGE), unit: d.kind === "weight" ? "KG" : "L" };
+  return { quantity: base, unit: d.kind === "weight" ? "G" : "ML" };
+}
+
 /** "486 g", "1.375 KG", "12 PCS". */
 export function formatQty(qty: number, unit: string, rounding: Rounding = "up"): string {
   const d = autoQty(qty, unit, rounding);

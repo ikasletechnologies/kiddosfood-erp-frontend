@@ -9,6 +9,7 @@ import {
 import { recipesApi, inventoryApi, franchiseApi, productionApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { convertUnit } from "@/lib/unitConversion";
+import { procurementQty } from "@/lib/qty-display";
 
 interface RecipeItem {
   id: string;
@@ -170,16 +171,22 @@ export default function FormulaScalingTab() {
           const required = item.quantityRequired * multiplier;
           const stock = getAvailableStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit);
           const shortage = required - stock;
+          // Same procurement rule as Production Planning: KG from 1 KG, else
+          // whole grams, never understated (not the recipe's raw stored unit).
+          const order = procurementQty(shortage, item.unit || "KG");
           return {
             materialId: item.inventoryItemId,
             name: item.inventoryItem?.name || "",
             required,
             stock,
-            shortage,
-            unit: item.unit || "KG",
+            shortage: order.quantity,
+            unit: order.unit,
+            canonicalShortage: shortage,
+            canonicalUnit: item.unit || "KG",
+            warehouseId: selectedWarehouseId || undefined,
           };
         })
-        .filter((item) => item.shortage > 0);
+        .filter((item) => item.canonicalShortage > 0);
 
       sessionStorage.setItem('prefilledPoItems', JSON.stringify(shortageItems));
       // Full navigation, not router.push — see production/page.tsx's identical

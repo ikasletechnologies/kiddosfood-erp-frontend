@@ -176,10 +176,6 @@ export default function ActiveProductionRunsClient() {
       toast.error(actualError);
       return;
     }
-    if (remarksRequired && !remarks.trim()) {
-      toast.error(`Add remarks — actual yield is more than ${varianceThresholdPct}% away from plan.`);
-      return;
-    }
     if (Number(wastageQty) < 0) {
       toast.error("Wastage cannot be negative");
       return;
@@ -241,7 +237,6 @@ export default function ActiveProductionRunsClient() {
     ? "Use up to 3 decimal places."
     : null;
   const variance = yieldVariance(planned.qty, actualError ? null : actualNum);
-  const remarksRequired = variance.pct !== null && Math.abs(variance.pct) > varianceThresholdPct;
 
   // Additional materials: lots are the chosen one, or oldest first — the exact
   // allocation is sent, so what's costed here is what gets deducted.
@@ -560,93 +555,6 @@ export default function ActiveProductionRunsClient() {
             </div>
           </div>
 
-          {/* Additional materials actually used beyond the plan */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-gray-700 dark:text-slate-300">
-                Additional Materials Used <span className="font-medium text-gray-400">— only if extra material was really added</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setExtras((l) => [...l, { key: Date.now(), itemId: "", qty: "", lotId: AUTO_LOTS, note: "" }])}
-                disabled={!batchToApprove?.warehouseId || extras.length >= 30}
-                className="text-[11px] font-bold text-[#f58220] hover:underline cursor-pointer disabled:opacity-40 disabled:no-underline"
-              >
-                + Add material
-              </button>
-            </div>
-            {extras.map((e) => {
-              const row = extraRows.find((r) => r.key === e.key);
-              const lotsFor = extraLots[e.itemId];
-              return (
-                <div key={e.key} className="rounded-xl border border-gray-100 dark:border-white/5 p-2.5 space-y-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_110px_1fr_auto] gap-2 items-center">
-                    <select
-                      value={e.itemId}
-                      aria-label="Material"
-                      onChange={(ev) => updateExtra(e.key, { itemId: ev.target.value, lotId: AUTO_LOTS })}
-                      className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs font-semibold dark:text-white"
-                    >
-                      <option value="">Material…</option>
-                      {materialOptions.map((m: any) => (
-                        <option key={m.id} value={m.id}>{m.name} ({fmtYield(m.availableStock)} {m.unit})</option>
-                      ))}
-                    </select>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="any"
-                        value={e.qty}
-                        aria-label="Quantity used"
-                        onChange={(ev) => updateExtra(e.key, { qty: ev.target.value })}
-                        placeholder="Qty"
-                        className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 pr-9 text-xs font-mono font-bold dark:text-white"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400">{row?.unit}</span>
-                    </div>
-                    <select
-                      value={e.lotId}
-                      aria-label="Purchase lot"
-                      disabled={!lotsFor}
-                      onChange={(ev) => updateExtra(e.key, { lotId: ev.target.value })}
-                      className="bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg px-2 py-1.5 text-xs font-semibold dark:text-white disabled:opacity-50"
-                    >
-                      <option value={AUTO_LOTS}>Oldest lot first</option>
-                      {lotsFor?.lots.map((l) => (
-                        <option key={l.id} value={l.id}>{l.lotNumber} · {fmtYield(l.availableQty)} {lotsFor.unit} @ {inr(l.unitCost)}</option>
-                      ))}
-                      {lotsFor && lotsFor.untrackedQty > 0 && (
-                        <option value={UNTRACKED}>Stock without lot · {fmtYield(lotsFor.untrackedQty)} {lotsFor.unit} @ {inr(lotsFor.averageCost)}</option>
-                      )}
-                    </select>
-                    <button
-                      type="button"
-                      aria-label="Remove material"
-                      onClick={() => setExtras((l) => l.filter((x) => x.key !== e.key))}
-                      className="text-gray-400 hover:text-rose-500 cursor-pointer justify-self-end"
-                    >
-                      <XCircle size={16} />
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <input
-                      value={e.note}
-                      onChange={(ev) => updateExtra(e.key, { note: ev.target.value })}
-                      placeholder="Why was it added? (optional)"
-                      maxLength={500}
-                      className="flex-1 min-w-[160px] bg-transparent border-b border-gray-200 dark:border-white/10 px-1 py-1 text-[11px] dark:text-white outline-none"
-                    />
-                    <span className={clsx("text-[11px] font-bold", row?.error ? "text-rose-500" : "text-gray-700 dark:text-slate-300")}>
-                      {row?.error || inr(row?.cost)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
           {/* Actual material cost */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <div className="p-2.5 rounded-xl border border-gray-100 dark:border-white/5">
@@ -721,22 +629,6 @@ export default function ActiveProductionRunsClient() {
             />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-gray-700 dark:text-slate-300 flex items-center gap-1.5">
-              <FileText size={13} /> {PRODUCTION_FEATURES.qc ? <>Remarks &amp; QC Notes</> : "Production Remarks"}
-              {remarksRequired
-                ? <span className="text-rose-500">* required — variance is over {varianceThresholdPct}%</span>
-                : <span className="font-medium text-gray-400">— optional</span>}
-            </label>
-            <textarea
-              rows={2}
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Enter production remarks or observations..."
-              className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl p-3 text-xs text-gray-800 dark:text-white outline-none resize-none focus:border-emerald-500"
-            />
-          </div>
-
           <div className="flex gap-2 pt-3 border-t border-gray-100 dark:border-white/5">
             <button
               onClick={() => setShowApprovalModal(false)}
@@ -747,7 +639,7 @@ export default function ActiveProductionRunsClient() {
             </button>
             <button
               onClick={handleFinalApprove}
-              disabled={submitting || !!actualError || (remarksRequired && !remarks.trim()) || !!extraError}
+              disabled={submitting || !!actualError || !!extraError}
               className="flex-[2] py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-2xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {submitting ? (

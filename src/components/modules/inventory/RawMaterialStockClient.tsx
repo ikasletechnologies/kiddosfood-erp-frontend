@@ -256,6 +256,9 @@ export default function RawMaterialStockClient() {
   };
   // Lot-based value (each purchase batch at its own cost) when the API
   // provides it; falls back to stock × average cost otherwise.
+  // Available = usable stock: expired (expiry date reached) and held lot
+  // stock is not counted (it stays in the ledger for wastage / return).
+  const usableOf = (i: any): number => i.lotSummary?.usableStock ?? (i.currentStock || 0);
   const itemValue = (i: any) => i.lotSummary?.totalValue ?? ((i.currentStock || 0) * (i.costPrice || 0));
   const totalValue = items.reduce((acc, i) => acc + itemValue(i), 0);
   const rawMaterialsCount = items.filter(i => {
@@ -263,7 +266,7 @@ export default function RawMaterialStockClient() {
     return cat.includes("RAW") || (!cat.includes("PACKAG") && !cat.includes("SEMI") && !cat.includes("ASSET"));
   }).length;
   const packagingAssetsCount = items.length - rawMaterialsCount;
-  const lowStockCount = items.filter(i => (i.currentStock || 0) <= (i.minimumStock || 0)).length;
+  const lowStockCount = items.filter(i => usableOf(i) <= (i.minimumStock || 0)).length;
 
   const filteredItems = items.filter(i => {
     if (categoryFilter !== "ALL") {
@@ -328,15 +331,15 @@ export default function RawMaterialStockClient() {
           <AlertTriangle className="text-red-500" size={18} />
           Critical & Low Stock Alerts
         </h3>
-        {items.filter(i => (i.currentStock || 0) <= (i.minimumStock || 0)).length === 0 ? (
+        {items.filter(i => usableOf(i) <= (i.minimumStock || 0)).length === 0 ? (
           <p className="text-xs sm:text-sm text-slate-500">All raw materials are currently adequately stocked.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
             {items
-              .filter(i => (i.currentStock || 0) <= (i.minimumStock || 0))
+              .filter(i => usableOf(i) <= (i.minimumStock || 0))
               .slice(0, 12)
               .map(item => {
-                const status = getStockStatus(item.currentStock || 0, item.minimumStock);
+                const status = getStockStatus(usableOf(item), item.minimumStock);
                 return (
                   <div key={item.id} className="p-3.5 sm:p-4 rounded-xl border border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/5 flex flex-col gap-2 min-w-0">
                     <div className="flex justify-between items-start gap-2">
@@ -346,7 +349,7 @@ export default function RawMaterialStockClient() {
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs text-slate-500">
-                      <span>Available: <strong className="text-slate-700 dark:text-slate-300">{(item.currentStock || 0).toFixed(2)} {item.unit}</strong></span>
+                      <span>Available: <strong className="text-slate-700 dark:text-slate-300">{usableOf(item).toFixed(2)} {item.unit}</strong></span>
                       <span>Min: {item.minimumStock} {item.unit}</span>
                     </div>
                   </div>
@@ -420,7 +423,7 @@ export default function RawMaterialStockClient() {
                 <tr><td colSpan={8} className="px-6 py-10 text-center text-slate-400 font-semibold">No raw materials found.</td></tr>
               ) : (
                 filteredItems.map(item => {
-                  const status = getStockStatus(item.currentStock || 0, item.minimumStock);
+                  const status = getStockStatus(usableOf(item), item.minimumStock);
                   const expanded = expandedId === item.id;
                   const lots = item.lotSummary;
                   return (
@@ -440,7 +443,18 @@ export default function RawMaterialStockClient() {
                       </td>
                       <td className="px-6 py-3 text-slate-500">{(item.category || "").replace(/_/g, " ")}</td>
                       <td className="px-6 py-3 text-center font-semibold text-slate-700 dark:text-slate-300">
-                        {(item.currentStock || 0).toFixed(2)} {item.unit}
+                        {usableOf(item).toFixed(2)} {item.unit}
+                        {/* Not counted above — same rule as Production Planning. */}
+                        {lots && (lots.expiredQty || 0) > 0.0005 && (
+                          <p className="text-[10px] font-bold text-rose-600" title="Expired stock is not available for production or sale">
+                            {lots.expiredQty.toFixed(3)} {item.unit} expired
+                          </p>
+                        )}
+                        {lots && lots.usableLotQty != null && lots.lotQty - lots.usableLotQty - (lots.expiredQty || 0) > 0.0005 && (
+                          <p className="text-[10px] font-bold text-amber-600" title="QC hold / blocked / returned lots are not available">
+                            {(lots.lotQty - lots.usableLotQty - (lots.expiredQty || 0)).toFixed(3)} {item.unit} on hold
+                          </p>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-right whitespace-nowrap">
                         <p className="font-semibold text-slate-800 dark:text-white">{formatINR(itemValue(item))}</p>

@@ -16,7 +16,7 @@ import clsx from "clsx";
 import ReferenceFormulationPanel, { Formulation, isUsableFormulation } from "@/components/modules/production/ReferenceFormulationPanel";
 import IngredientLotPanel from "@/components/modules/production/IngredientLotPanel";
 import { estimateManufacturing, isPackaging } from "@/lib/recipe-expenses";
-import { Rounding, autoQty, formatQty, maxMultiplierFor, roundRequirement } from "@/lib/qty-display";
+import { Rounding, autoQty, formatQty, maxMultiplierFor, procurementQty, roundRequirement } from "@/lib/qty-display";
 import { AllocationDraft, MaterialLots, allocationCost, allocationError, fifoDraft, toPayload } from "@/lib/lot-allocation";
 
 const WAREHOUSE_STORAGE_KEY = "kf.productionPlanning.warehouseId";
@@ -469,15 +469,24 @@ function ProductionPlanningContent() {
   // Requirements, stock and lot checks only mean something once a target is entered.
   const targetReady = !!recipe && targetValid;
 
-  const getAvailableStock = (itemId: string, itemSku: string, itemRecipeUnit: string) => {
-    if (!Array.isArray(warehouseStock)) return 0;
-    const found = warehouseStock.find((fi: any) => {
+  const findStock = (itemId: string, itemSku: string) => {
+    if (!Array.isArray(warehouseStock)) return null;
+    return warehouseStock.find((fi: any) => {
       const matchSku = fi.sku && itemSku && fi.sku.trim().toLowerCase() === itemSku.trim().toLowerCase();
       const matchId = fi.inventoryItemId === itemId || fi.id === itemId;
       return matchSku || matchId;
-    });
+    }) || null;
+  };
+  // Usable stock only: expired (expiry date reached) and held lot stock is
+  // never counted, so a shortage shows and can be purchased.
+  const getAvailableStock = (itemId: string, itemSku: string, itemRecipeUnit: string) => {
+    const found = findStock(itemId, itemSku);
     if (!found) return 0;
-    return convertUnit(found.availableStock ?? 0, found.unit, itemRecipeUnit);
+    return convertUnit(found.usableStock ?? found.availableStock ?? 0, found.unit, itemRecipeUnit);
+  };
+  const getExpiredStock = (itemId: string, itemSku: string, itemRecipeUnit: string) => {
+    const found = findStock(itemId, itemSku);
+    return found?.expiredStock > 0 ? convertUnit(found.expiredStock, found.unit, itemRecipeUnit) : 0;
   };
 
   const ingredientRows = (recipe?.recipeItems || []).map((item) => {
@@ -622,14 +631,25 @@ function ProductionPlanningContent() {
 
   const handleBuyShortages = () => {
     if (!recipe) return;
-    const shortageItems = shortRows.map((r) => ({
-      materialId: r.item.inventoryItemId,
-      name: r.item.inventoryItem?.name || "",
-      required: r.scaledQty,
-      stock: r.available,
-      shortage: r.deficit,
-      unit: r.item.unit || "KG",
-    }));
+    const shortageItems = shortRows.map((r) => {
+      // Same units the screen shows (1.375 KG, 486 g), never understated:
+      // weights up to the next whole gram (see procurementQty). The raw
+      // recipe unit used to be sent as-is, so a recipe kept in grams opened
+      // the PO as "1375.404 G".
+      const order = procurementQty(r.deficit, r.item.unit || "KG");
+      return {
+        materialId: r.item.inventoryItemId,
+        name: r.item.inventoryItem?.name || "",
+        required: r.scaledQty,
+        stock: r.available,
+        shortage: order.quantity,
+        unit: order.unit,
+        // Exact shortfall in the recipe unit, for reference.
+        canonicalShortage: r.deficit,
+        canonicalUnit: r.item.unit || "KG",
+        warehouseId: selectedWarehouseId || undefined,
+      };
+    });
 
     sessionStorage.setItem("prefilledPoItems", JSON.stringify(shortageItems));
     // A full navigation, not router.push — the New PO page only reads this
@@ -1379,6 +1399,11 @@ function ProductionPlanningContent() {
                             </td>
                             <td className="py-3.5 px-4 text-right text-gray-600 dark:text-slate-400 whitespace-nowrap">
                               <QtyText qty={available} unit={item.unit} unitClass="text-[10px]" rounding="down" />
+                              {getExpiredStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit) > 0 && (
+                                <div className="text-[10px] font-bold text-rose-600" title="Expired stock is not counted — purchase fresh material">
+                                  {formatQty(getExpiredStock(item.inventoryItemId, item.inventoryItem?.sku, item.unit), item.unit)} expired
+                                </div>
+                              )}
                             </td>
                             <td className="py-3.5 px-5">
                               <div className="flex items-center justify-between gap-2 mb-1">

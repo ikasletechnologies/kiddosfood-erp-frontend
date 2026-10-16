@@ -29,6 +29,7 @@ import {
   Barcode,
   MapPin,
   FileCheck2,
+  Tags,
   BarChart3,
   MessagesSquare,
 } from "lucide-react";
@@ -313,6 +314,13 @@ export const SUPER_ADMIN_SIDEBAR: MenuSection[] = [
               roles: SUPER_ONLY,
             },
           ]),
+      // Selling price per packaged lot — priced right after packaging.
+      {
+        icon: Tags,
+        label: "Set Price",
+        href: "/sales/set-price",
+        roles: SUPER_ONLY,
+      },
       {
         icon: Undo2,
         label: "Wastage",

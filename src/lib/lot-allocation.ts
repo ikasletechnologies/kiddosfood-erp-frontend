@@ -20,6 +20,9 @@ export interface MaterialLots {
   unit: string;
   averageCost: number;
   lots: LotOption[];
+  // Lots with stock that production can't use (expired, held, other
+  // warehouse), each with the reason — shown, never allocatable.
+  unavailableLots?: Array<LotOption & { status: string; warehouse: string | null; reasonCode: string; reason: string }>;
   // Stock in this warehouse that isn't in any lot (valued at averageCost).
   untrackedQty: number;
 }

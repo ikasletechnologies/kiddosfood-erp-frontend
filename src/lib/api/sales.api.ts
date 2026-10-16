@@ -74,6 +74,19 @@ export const salesApi = {
   cancelInvoice: (id: string) => api.post(`/api/sales/invoices/${id}/cancel`),
 };
 
+// --- Production > Set Price (finished-goods lot pricing) and lot selection ---
+export const lotPricingApi = {
+  listLots: (params?: { search?: string; category?: string; status?: string; warehouseId?: string; from?: string; to?: string; location?: string; includeEmpty?: boolean; sku?: string }) =>
+    api.get('/api/sales/set-price/lots', { params }),
+  getLot: (id: string) => api.get(`/api/sales/set-price/lots/${id}`),
+  setPrice: (id: string, data: { sellingPrice: number; taxInclusive: boolean; reason?: string; acknowledgeBelowCost?: boolean; expectedPrice?: number | null }) =>
+    api.put(`/api/sales/set-price/lots/${id}/price`, data),
+  // Eligible lots of one product for a sale. scope "HQ" = Estimate / Sales
+  // Order / Proforma (HQ stock); otherwise the seller branch (POS / invoice).
+  saleLotOptions: (params: { productId: string; franchiseId?: string | null; scope?: 'HQ' }) =>
+    api.get('/api/sales/lot-options', { params }),
+};
+
 // --- Drafts Management ---
 export const draftsApi = {
   getDrafts: (type: string) => api.get('/api/drafts', { params: { type } }),

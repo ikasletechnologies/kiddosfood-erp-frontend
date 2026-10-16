@@ -185,7 +185,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
               gstRate: 0
             }));
             setItems(mapped);
-            setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.`);
+            // Production Planning sends the warehouse the shortage is for.
+            const prefillWarehouse = parsed.find((i: any) => i.warehouseId)?.warehouseId;
+            if (prefillWarehouse) setWarehouseId(prefillWarehouse);
+            const rounded = parsed.some((i: any) => i.canonicalShortage !== undefined);
+            setContextMessage(`Purchase Order started from Recipe. ${parsed.length} ingredients require restocking.${rounded ? " Weights are rounded up to the next whole gram so the order never falls short." : ""}`);
             setTimeout(() => sessionStorage.removeItem('prefilledPoItems'), 100);
           }
         } catch (e) {

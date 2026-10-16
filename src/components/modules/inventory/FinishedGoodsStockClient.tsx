@@ -9,7 +9,7 @@ import {
   Package, Search, RefreshCw, Send, Building2,
   Clock, Truck, CheckCircle2, AlertTriangle, ExternalLink,
   Layers, Filter, Eye, LayoutGrid, List, ArrowRight, ShieldCheck,
-  Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X, PackageX
+  Upload, Download, Edit2, UploadCloud, Loader2, Maximize2, X, PackageX, ChevronRight
 } from "lucide-react";
 import { clsx } from "clsx";
 import api, {
@@ -21,6 +21,7 @@ import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
 import BranchStockDrawer from "./BranchStockDrawer";
 import MinimizedImportWidget from "./MinimizedImportWidget";
+import FinishedGoodsLotsPanel from "./FinishedGoodsLotsPanel";
 import { Modal } from "@/components/ui/Modal";
 import { generateSKU } from "@/lib/utils/erp";
 
@@ -123,6 +124,8 @@ export default function FinishedGoodsStockClient() {
   const isUncatalogued = (item: InventoryDemandItem) => item.productId.startsWith("inv:");
 
   const [creatingItemId, setCreatingItemId] = useState<string | null>(null);
+  // Table view: product whose production lots are expanded (one at a time).
+  const [expandedLotsId, setExpandedLotsId] = useState<string | null>(null);
 
   // Finished Goods edit through the same Item Master screen
   // (/inventory/stock/edit -> EditItemForm -> rawMaterialsApi.update) Raw
@@ -1071,10 +1074,24 @@ export default function FinishedGoodsStockClient() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-                  {filtered.map((item) => (
-                    <tr key={item.productId} className="group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all">
+                  {filtered.map((item) => {
+                    const lotsOpen = expandedLotsId === item.productId;
+                    return (
+                    <React.Fragment key={item.productId}>
+                    <tr className={clsx("group hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-all", lotsOpen && "bg-orange-50/40 dark:bg-orange-500/5")}>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
+                          {item.sku && !isUncatalogued(item) ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedLotsId(lotsOpen ? null : item.productId)}
+                              title={lotsOpen ? "Hide production lots" : "Show production lots"}
+                              aria-expanded={lotsOpen}
+                              className="-ml-2 p-1 rounded hover:bg-slate-100 dark:hover:bg-white/5"
+                            >
+                              <ChevronRight size={14} className={clsx("text-slate-400 transition-transform", lotsOpen && "rotate-90 text-orange-500")} />
+                            </button>
+                          ) : <span className="w-[22px] -ml-2 shrink-0" />}
                           <div className={clsx(
                             "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0",
                             isUncatalogued(item) ? "bg-amber-500/10 text-amber-500" : "bg-orange-500/10 text-orange-500"
@@ -1172,7 +1189,16 @@ export default function FinishedGoodsStockClient() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                    {lotsOpen && item.sku && (
+                      <tr>
+                        <td colSpan={hasAnyBranchHoldings ? 7 : 6} className="p-0">
+                          <FinishedGoodsLotsPanel sku={item.sku} unit={item.unit} />
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

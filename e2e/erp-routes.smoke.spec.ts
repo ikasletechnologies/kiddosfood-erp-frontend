@@ -47,6 +47,7 @@ const moduleRoutes: Record<string, string[]> = {
     "/sales/returns",
     "/sales/delivery-challan",
     "/sales/eway-bill",
+    "/sales/set-price",
     "/dispatch/transit-stock",
     "/delivery",
   ],

@@ -19,6 +19,9 @@ import AddPartyModal from "@/components/modals/AddPartyModal";
 import AddInventoryProductForm from "@/components/modules/inventory/AddInventoryProductForm";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { exportReportToExcel } from "@/lib/excelExport";
+import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
+import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
+import { canViewCost } from "@/lib/profit-estimate";
 
 const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
   { value: "CUSTOMER", label: "Customer" },
@@ -162,6 +165,10 @@ interface LineItem {
   // metadata distinguishing which SKU variant this is (APPAM 450G vs
   // APPAM 900G). Never the transaction/stocking unit — `unit` above is.
   packSize?: { qty: number; unit: string } | null;
+  // Finished-goods lot this line sells from (Set Price): priced by the lot
+  // and deducted from exactly that lot. Null = standard batch/FIFO line.
+  lotId?: string | null;
+  lotNumber?: string | null;
 }
 
 // Line quantity in the item's stock (base) unit, via its unit conversions.
@@ -749,6 +756,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   taxPct,
                   taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
                   batchNumber: it.batchNumber || (validBatches.length > 0 ? validBatches[0].batchCode : ""),
+                  // The challan's lot travels into the invoice (lot traceability).
+                  lotId: it.inventoryBatchId || null,
+                  lotNumber: it.lotNumber || null,
                   sku: it.sku || matchedProd?.sku || "",
                   baseUnit: matchedProd?.baseUnit || matchedProd?.unit,
                   conversions: matchedProd?.conversions || [],
@@ -1054,7 +1064,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
-    const resolvedRate = getChannelPrice(p, partyType);
+    // Priced Set Price lots: show their price (not ₹0) and open the lot picker.
+    const shown = catalogPrice(getChannelPrice(p, partyType), partyType === "FRANCHISE" ? null : p.lotPricing);
+    const resolvedRate = shown.price ?? getChannelPrice(p, partyType);
+    if (shown.source === "LOT") setLotPickerIdx(idx);
 
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
@@ -1077,6 +1090,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         batchTracked: undefined,
         batchScope: undefined,
         batchesLoading: false,
+        lotId: null,
+        lotNumber: null,
       } : it
     ));
     setOpenItemDrop(null);
@@ -1084,6 +1099,27 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+  };
+
+  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
+  // Optional: split a product line into one line per finished-goods lot, each
+  // at the lot's own price and deducted from exactly that lot on save.
+  const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
+  const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
+  const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
+  const applyLots = (allocations: LotAllocation[]) => {
+    if (lotPickerIdx == null) return;
+    setItems(prev => applyLotSelection(prev, lotPickerIdx, allocations, lotKey, (base, a, i) => ({
+      ...base,
+      id: i === 0 ? base.id : Math.random().toString(36).slice(2),
+      lotId: a.lotId,
+      lotNumber: a.lotNumber,
+      batchNumber: a.batchNumber,
+      qty: a.quantity,
+      rate: a.price,
+      basePrice: a.price,
+    })));
+    setLotPickerIdx(null);
   };
 
   // Load sellable batches for every product line whose lots haven't been
@@ -1141,7 +1177,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       const conversions = p.conversions || [];
       const packSize = p.packSize || null;
 
-      const rateChanged = rate !== it.rate;
+      // A lot line keeps its lot's Set Price whatever the channel.
+      const rateChanged = !it.lotId && rate !== it.rate;
       const stockChanged = it.availableStock !== stock;
       const unitsMissing = !it.baseUnit || !it.conversions;
 
@@ -1227,6 +1264,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     if (!isDraft) {
       const batchClaims = new Map<string, number>();
       for (const it of validItems) {
+        // Lot lines are checked against their lot by the server.
+        if (it.lotId) continue;
         const name = it.itemSearch || "Product";
         const batch = (it.batchNumber || "").trim();
         if (it.productId && it.batchesLoading) {
@@ -1285,6 +1324,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           taxPercent: i.taxPct,
           discountAmount: (i.qty * i.rate * (i.discountPct || 0)) / 100,
           batchNumber: i.batchNumber || undefined,
+          inventoryBatchId: i.lotId || undefined,
         })),
         discountAmount: totalDisc,
         termsConditions: showTerms ? (termsText || undefined) : undefined,
@@ -1432,6 +1472,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         taxLabel: TAX_OPTIONS.find(o => o.value === (oi.taxPercent || oi.gstRate || 0))?.label || "NONE",
         batchNumber: oi.batchNumber || "",
         batches: [],
+        lotId: oi.inventoryBatchId || null,
+        lotNumber: oi.lotNumber || null,
       })));
     } else {
       setItems([makeItem(), makeItem()]);
@@ -2392,7 +2434,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                             <span className="ml-1 font-normal text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
                                           )}
                                         </div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">₹{getChannelPrice(p, partyType)}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">{catalogPrice(getChannelPrice(p, partyType), partyType === "FRANCHISE" ? null : p.lotPricing).label}</div>
                                       </div>
                                     </button>
                                   ))
@@ -2412,6 +2454,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               && !batches.some((b: any) => b.batchCode === current);
                             if (!item.productId) {
                               return <div className="text-xs text-center text-gray-400 dark:text-slate-500">—</div>;
+                            }
+                            // A Set Price lot line: the lot is the batch, priced by the lot.
+                            if (item.lotId) {
+                              return <LotLineControl productId={item.productId} lotNumber={item.lotNumber} onOpen={() => setLotPickerIdx(idx)} />;
                             }
                             if (item.batchesLoading || !item.batchScope) {
                               return <div className="text-xs text-center text-gray-400 dark:text-slate-500">Loading…</div>;
@@ -2445,6 +2491,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                 {currentInvalid && (
                                   <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 leading-tight">Invalid batch</div>
                                 )}
+                                {item.batchTracked && <LotLineControl productId={item.productId} onOpen={() => setLotPickerIdx(idx)} />}
                               </>
                             );
                           })()}
@@ -2866,6 +2913,23 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         )}
 
         {printDialog}
+        {lotPickerRow && (
+          <LotSelector
+            open
+            onClose={() => setLotPickerIdx(null)}
+            productId={lotPickerRow.productId}
+            productName={lotPickerRow.itemSearch}
+            // Same seller stock the invoice deducts from: HQ for a franchise
+            // party, otherwise the invoicing branch.
+            franchiseId={partyType === "FRANCHISE" ? undefined : batchFranchiseId}
+            quantity={lotPickerRow.lotId
+              ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)
+              : lotPickerRow.qty}
+            initial={currentLotQuantities(items, lotPickerRow.productId, lotKey)}
+            showCost={canViewCost(user)}
+            onApply={applyLots}
+          />
+        )}
       </div>
     );
   }

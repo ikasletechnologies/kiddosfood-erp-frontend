@@ -526,7 +526,9 @@ export default function LineItemsTable() {
                           onChange={(e) => {
                             const newUnit = e.target.value;
                             const newQty = convertQty(item.quantity, item.unit, newUnit);
-                            updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty) });
+                            // Price follows the unit too (₹100/KG → ₹0.1/G), so the line total is unchanged.
+                            const perNewUnit = convertQty(1, newUnit, item.unit);
+                            updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty), ...(item.price ? { price: roundForDisplay(item.price * perNewUnit) } : {}) });
                           }}
                         >
                           {options.map(u => <option key={u} value={u}>{u}</option>)}
@@ -833,7 +835,9 @@ export default function LineItemsTable() {
                     onChange={(e) => {
                       const newUnit = e.target.value;
                       const newQty = convertQty(item.quantity, item.unit, newUnit);
-                      updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty) });
+                      // Price follows the unit too (₹100/KG → ₹0.1/G), so the line total is unchanged.
+                            const perNewUnit = convertQty(1, newUnit, item.unit);
+                            updateItem(item.id, { unit: newUnit, quantity: roundForDisplay(newQty), ...(item.price ? { price: roundForDisplay(item.price * perNewUnit) } : {}) });
                     }}
                   >
                     {options.map(u => <option key={u} value={u}>{u}</option>)}

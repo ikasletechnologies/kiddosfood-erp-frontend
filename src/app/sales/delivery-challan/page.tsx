@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import { LotChip } from "@/components/sales/LotSelector";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -163,6 +164,10 @@ interface LineItem {
   remarks: string;
   baseUnit?: any;
   conversions?: any[];
+  // Finished-goods lot carried from the source invoice (traceability only —
+  // a challan never prices from it). Dispatch / conversion use this lot.
+  lotId?: string | null;
+  lotNumber?: string | null;
 }
 
 function makeItem(): LineItem {
@@ -634,6 +639,8 @@ export default function DeliveryChallanPage() {
           taxPct,
           taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
           batchNumber: it.batchNumber || "",
+          lotId: it.inventoryBatchId || null,
+          lotNumber: it.lotNumber || null,
           remarks: it.dispatchedQty > 0 ? `${it.dispatchedQty} of ${it.invoiceQty} already dispatched` : "",
         };
       }));
@@ -767,7 +774,8 @@ export default function DeliveryChallanPage() {
   // it's no longer usable there, and auto-pick the single valid batch when there's only one.
   useEffect(() => {
     setItems(prev => prev.map(it => {
-      if (!it.productId) return it;
+      // A lot line keeps the invoice's lot and its batch code.
+      if (!it.productId || it.lotId) return it;
       const valid = batches.filter(b => b.productId === it.productId && b.franchiseId === sourceFranchiseId && batchIsUsable(b));
       const stillValid = valid.some(b => (b.batchCode || b.id) === it.batchNumber);
       if (stillValid) return it;
@@ -1024,6 +1032,7 @@ export default function DeliveryChallanPage() {
           productId: it.productId || undefined,
           productName: it.itemSearch,
           batchNumber: it.batchNumber || undefined,
+          inventoryBatchId: it.lotId || undefined,
           quantity: it.qty,
           unit: it.unit,
           rate: it.rate,
@@ -1142,6 +1151,8 @@ export default function DeliveryChallanPage() {
           taxLabel: TAX_OPTIONS.find(o => o.value === taxPct)?.label || "NONE",
           batchNumber: it.batchNumber || "",
           remarks: it.remarks || "",
+          lotId: it.inventoryBatchId || null,
+          lotNumber: it.lotNumber || null,
         };
       }));
     } else {
@@ -1757,6 +1768,7 @@ export default function DeliveryChallanPage() {
                             placeholder="Optional line notes..."
                             className="w-full text-[11px] text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
                           />
+                          {it.lotId && <LotChip lotNumber={it.lotNumber} />}
                         </td>
 
 
@@ -3068,6 +3080,8 @@ function ConvertChallanToSaleModal({
             discountPct: Number(it.discountPercent ?? it.discountPct ?? 0),
             taxPct: Number(it.taxPercent ?? it.taxPct ?? 0),
             batchNumber: it.batchNumber || "",
+            inventoryBatchId: it.inventoryBatchId || null,
+            lotNumber: it.lotNumber || null,
             sku: r.sku
           };
         });
