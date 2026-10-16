@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ChefHat, IndianRupee } from "lucide-react";
+import { ChefHat, IndianRupee, Upload } from "lucide-react";
 import { clsx } from "clsx";
 import RecipeMasterTab from "@/components/modules/production/RecipeMasterTab";
 import RecipeCostingTab from "@/components/modules/production/RecipeCostingTab";
+import RecipeUploadsTab from "@/components/modules/production/RecipeUploadsTab";
 
 const TABS = [
   { id: "master", label: "Recipe Master", icon: ChefHat },
   { id: "costing", label: "Recipe Costing", icon: IndianRupee },
+  { id: "uploads", label: "Recipe Uploads", icon: Upload },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -53,6 +55,7 @@ export default function RecipesPage() {
       <div className="pt-2 w-full min-w-0">
         {activeTab === "master" && <RecipeMasterTab />}
         {activeTab === "costing" && <RecipeCostingTab />}
+        {activeTab === "uploads" && <RecipeUploadsTab />}
       </div>
     </div>
   );

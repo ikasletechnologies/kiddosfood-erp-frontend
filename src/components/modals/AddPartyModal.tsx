@@ -286,6 +286,60 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
 
   if (!isOpen) return null;
 
+  const validateVendorStepOne = () => {
+    const trimmedName = form.name.trim();
+    if (!trimmedName) {
+      toast.error("Vendor Name is required.");
+      return false;
+    }
+    if (!/^[A-Za-z0-9\s&.,\-()]+$/.test(trimmedName)) {
+      toast.error("Vendor Name must only contain alphanumeric characters, spaces, and standard symbols (& . , - ()).");
+      return false;
+    }
+    if (!form.contact.trim()) {
+      toast.error("Contact Number is required.");
+      return false;
+    }
+    if (!/^\d{10}$/.test(form.contact.trim())) {
+      toast.error("Contact Number must be a valid 10-digit number.");
+      return false;
+    }
+    if (contactErr) {
+      toast.error(contactErr);
+      return false;
+    }
+    if (form.email.trim() && emailErr) {
+      toast.error(emailErr);
+      return false;
+    }
+    if (!form.category.trim()) {
+      toast.error("Material Category is required.");
+      return false;
+    }
+    if (form.gstNumber.trim() && gstErr) {
+      toast.error(gstErr);
+      return false;
+    }
+    if (!form.billingAddress.trim()) {
+      toast.error("Billing Address is required.");
+      return false;
+    }
+    if (!form.shippingAddress.trim()) {
+      toast.error("Shipping Address is required.");
+      return false;
+    }
+    if (!/^\d{6}$/.test(form.pincode.trim())) {
+      toast.error("Pincode must be exactly 6 digits.");
+      return false;
+    }
+    return true;
+  };
+
+  const goToVendorStepTwo = () => {
+    if (!validateVendorStepOne()) return;
+    setVendorStep(2);
+  };
+
   const handleConfirm = async () => {
     if (saving) return;
     if (contactErr || emailErr || gstErr) {
@@ -781,7 +835,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
           </button>
 
           <button
-            onClick={partyType === 'vendor' && vendorStep === 1 ? () => setVendorStep(2) : handleConfirm}
+            onClick={partyType === 'vendor' && vendorStep === 1 ? goToVendorStepTwo : handleConfirm}
             disabled={saving}
             className="px-6 py-2.5 sm:py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs sm:text-sm font-semibold transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
           >

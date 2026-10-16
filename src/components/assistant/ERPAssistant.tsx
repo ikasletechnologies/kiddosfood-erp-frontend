@@ -217,7 +217,7 @@ export default function ERPAssistant() {
       <MessageCircle size={22} />
     </button>}
 
-    {open && <div className='pointer-events-none fixed inset-0 z-50 flex items-end justify-end bg-transparent sm:p-5'>
+    {open && <div className='pointer-events-none fixed inset-0 z-50 flex items-end justify-start bg-transparent sm:p-5'>
       <section className='pointer-events-auto flex h-[88vh] w-full flex-col overflow-hidden rounded-t-2xl border bg-background shadow-2xl sm:h-[min(760px,90vh)] sm:max-w-md sm:rounded-2xl'>
         <header className='flex items-center justify-between border-b bg-orange-500 px-4 py-3 text-white'>
           <div className='flex items-center gap-2'>

@@ -28,6 +28,8 @@ import { WarehouseApi, WarehouseBin, WarehouseBinDetail } from "@/lib/api/wareho
 import { formatDate } from "@/lib/utils";
 import toast from "react-hot-toast";
 import clsx from "clsx";
+import CentralWarehouse from "@/components/modules/inventory/CentralWarehouseClient";
+import RequireSuperAdmin from "@/components/auth/RequireSuperAdmin";
 
 interface WarehouseRecord {
   id: string;
@@ -46,6 +48,14 @@ interface WarehouseRecord {
 }
 
 export default function ManageWarehousesPage() {
+  return (
+    <RequireSuperAdmin>
+      <CentralWarehouse />
+    </RequireSuperAdmin>
+  );
+}
+
+function LegacyManageWarehousesPage() {
   const [warehouses, setWarehouses] = useState<WarehouseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");

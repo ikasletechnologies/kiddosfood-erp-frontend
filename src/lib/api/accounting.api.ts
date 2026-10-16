@@ -18,7 +18,7 @@ export const accountingApi = {
 };
 
 export const accountsApi = {
-  getAll: () => api.get('/api/accounts'),
+  getAll: (params?: { franchiseId?: string }) => api.get('/api/accounts', { params }),
   getById: (id: string) => api.get(`/api/accounts/${id}`),
   create: (data: { name: string, type: 'CASH' | 'BANK' | 'UPI', balance?: number, franchiseId?: string, isActive?: boolean }) => api.post('/api/accounts', data),
   delete: (id: string) => api.delete(`/api/accounts/${id}`),
