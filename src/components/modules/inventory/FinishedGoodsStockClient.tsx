@@ -14,8 +14,9 @@ import {
 import { clsx } from "clsx";
 import api, {
   productsFullApi, franchiseProductRequestsApi,
-  franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem, recallApi
+  franchiseOrdersApi, franchiseApi, rawMaterialsApi, InventoryDemandItem, recallApi, lotPricingApi
 } from "@/lib/api";
+import { formatINR, PRICE_TIERS } from "@/lib/lot-pricing";
 import { toast } from "react-hot-toast";
 import InventoryMetricCard from "./InventoryMetricCard";
 import ProductDemandDrawer from "./ProductDemandDrawer";
@@ -241,6 +242,23 @@ export default function FinishedGoodsStockClient() {
       .catch(() => {});
   }, []);
   const quarantinedOf = (sku?: string) => (sku ? quarantineBySku[sku.toUpperCase()] || 0 : 0);
+  // Product selling prices (Production > Set Price: Customer / Dealer /
+  // Franchise, excl. GST) and inventory value at production cost, per SKU.
+  // Shared by every lot of the product. Loaded independently, like the
+  // quarantine figures, so a failure never affects the stock numbers.
+  const [pricingBySku, setPricingBySku] = useState<Record<string, any>>({});
+  const [pricingShowCost, setPricingShowCost] = useState(false);
+  const loadPricing = useCallback(() => {
+    lotPricingApi.listProducts({ location: "HQ" })
+      .then((res) => {
+        const map: Record<string, any> = {};
+        for (const p of res.data?.products || []) map[String(p.sku).toUpperCase()] = p;
+        setPricingBySku(map);
+        setPricingShowCost(!!res.data?.showCost);
+      })
+      .catch(() => {});
+  }, []);
+  const pricingOf = (sku?: string) => (sku ? pricingBySku[sku.toUpperCase()] || null : null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [demandFilter, setDemandFilter] = useState<
@@ -604,7 +622,8 @@ export default function FinishedGoodsStockClient() {
 
   useEffect(() => {
     fetchDemandData();
-  }, [fetchDemandData]);
+    loadPricing();
+  }, [fetchDemandData, loadPricing]);
 
   // Real-time refresh listeners for instant updates
   useEffect(() => {
@@ -1068,6 +1087,8 @@ export default function FinishedGoodsStockClient() {
                     <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Available</th>
                     <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">HQ Reserved</th>
                     <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">In-Transit</th>
+                    <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Selling Price (C · D · F)</th>
+                    {pricingShowCost && <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Inventory Value</th>}
                     {hasAnyBranchHoldings && <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-center">Branch Holdings</th>}
                     <th className="px-4 sm:px-6 py-3.5 sm:py-4 text-right">Franchise Demand</th>
                     <th className="w-[70px] px-4 sm:px-6 py-3.5 sm:py-4 text-right">Edit</th>
@@ -1138,6 +1159,30 @@ export default function FinishedGoodsStockClient() {
                         {item.inTransitStock} <span className="text-[10px] font-normal">{item.unit}</span>
                       </td>
 
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        {(() => {
+                          const pr = pricingOf(item.sku);
+                          if (!pr) return <span className="text-slate-400">—</span>;
+                          return (
+                            <Link href="/sales/set-price" title="Customer · Dealer · Franchise (excl. GST) — edit in Set Price" className="hover:underline">
+                              {PRICE_TIERS.map((t, i) => (
+                                <span key={t.key} className={clsx("font-semibold", pr[t.key] != null ? "text-slate-800 dark:text-white" : "text-amber-600")}>
+                                  {i > 0 && <span className="text-slate-300"> · </span>}
+                                  {pr[t.key] != null ? formatINR(pr[t.key]) : "—"}
+                                </span>
+                              ))}
+                              {pr.pricingStatus !== "FULLY_PRICED" && <span className="block text-[10px] font-bold text-amber-600">Awaiting price</span>}
+                            </Link>
+                          );
+                        })()}
+                      </td>
+
+                      {pricingShowCost && (
+                        <td className="px-6 py-4 text-right whitespace-nowrap font-semibold text-slate-700 dark:text-slate-300">
+                          {pricingOf(item.sku)?.stockValue != null ? formatINR(pricingOf(item.sku).stockValue) : "—"}
+                        </td>
+                      )}
+
                       {hasAnyBranchHoldings && (
                         <td className="px-6 py-4 text-center">
                           <button
@@ -1191,8 +1236,8 @@ export default function FinishedGoodsStockClient() {
                     </tr>
                     {lotsOpen && item.sku && (
                       <tr>
-                        <td colSpan={hasAnyBranchHoldings ? 7 : 6} className="p-0">
-                          <FinishedGoodsLotsPanel sku={item.sku} unit={item.unit} />
+                        <td colSpan={(hasAnyBranchHoldings ? 8 : 7) + (pricingShowCost ? 1 : 0)} className="p-0">
+                          <FinishedGoodsLotsPanel sku={item.sku} unit={item.unit} prices={pricingOf(item.sku)} />
                         </td>
                       </tr>
                     )}

@@ -44,6 +44,8 @@ export const reportsApi = {
 
   // Party Reports
   getPartyStatement: (params?: any) => api.get('/api/reports/party-statement', { params }),
+  // Unified Party Statement: partyType ALL|CUSTOMER|DEALER|FRANCHISE|VENDOR, optional partyId, from/to (YYYY-MM-DD), search.
+  getPartyLedger: (params: { partyType?: string; partyId?: string; from?: string; to?: string; search?: string }) => api.get('/api/reports/party-ledger', { params }),
   getPartyProfitLoss: (params?: any) => api.get('/api/reports/party-profit-loss', { params }),
   getAllParties: (params?: any) => api.get('/api/reports/all-parties', { params }),
   getPartyInvoices: (params?: any) => api.get('/api/reports/party-invoices', { params }),

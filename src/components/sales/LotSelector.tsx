@@ -2,10 +2,11 @@
 
 // Lot selection for one product on a sales line (Estimate, Sales Order,
 // Proforma, Sale Invoice, POS). Lists the product's sellable finished-goods
-// lots with their own selling price, and lets the operator take quantities
-// from several lots. Each chosen lot becomes its own line, so lot-wise
-// amounts are kept exactly; the weighted average shown is for display only.
-// The server re-prices and re-checks every lot when the document is saved.
+// lots — stock, expiry, warehouse and (for cost viewers) each lot's own
+// production cost — and lets the operator take quantities from several lots.
+// Every lot sells at the line's price (the party's Set Price); the lot only
+// decides which stock is issued and what it cost. Each chosen lot becomes its
+// own line. The server re-checks every lot when the document is saved.
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Layers, Loader2, PackageOpen, Wand2 } from "lucide-react";
 import { clsx } from "clsx";
@@ -30,6 +31,8 @@ export interface LotSelectorProps {
   franchiseId?: string | null;
   /** Quantity on the line when the selector opened (used by "Fill oldest first"). */
   quantity?: number;
+  /** The line's selling price per unit excl. GST (the party's price) — the same for every lot. */
+  price: number;
   /** Quantities already chosen per lot (when re-opening the selector). */
   initial?: Record<string, number>;
   showCost?: boolean;
@@ -41,7 +44,7 @@ export interface LotSelectorProps {
 }
 
 export default function LotSelector(props: LotSelectorProps) {
-  const { open, onClose, productId, productName, scope, franchiseId, quantity, initial, showCost, onApply, onUseStandard } = props;
+  const { open, onClose, productId, productName, scope, franchiseId, quantity, price, initial, showCost, onApply, onUseStandard } = props;
   const [lots, setLots] = useState<SaleLot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [qty, setQty] = useState<Record<string, string>>({});
@@ -58,8 +61,8 @@ export default function LotSelector(props: LotSelectorProps) {
         setLots(list);
         props.onLoaded?.(list);
         // Re-opened: keep the current split. First open with exactly one
-        // priced lot: prefill it (nothing to choose between). With several
-        // differently priced lots nothing is pre-chosen — the operator picks.
+        // lot: prefill it (nothing to choose between). With several lots
+        // nothing is pre-chosen — the operator picks (or fills oldest first).
         const selectable = list.filter((l) => l.selectable);
         const start: Record<string, number> = initial && Object.keys(initial).length
           ? initial
@@ -74,11 +77,10 @@ export default function LotSelector(props: LotSelectorProps) {
   }, [open, productId, scope, franchiseId]);
 
   const selectable = useMemo(() => (lots || []).filter((l) => l.selectable), [lots]);
-  const pending = useMemo(() => (lots || []).filter((l) => !l.selectable), [lots]);
 
   const allocations = useMemo(() => selectable
-    .map((l) => toAllocation(l, Number(qty[l.id]) || 0))
-    .filter((a) => a.quantity > 0), [selectable, qty]);
+    .map((l) => toAllocation(l, Number(qty[l.id]) || 0, price))
+    .filter((a) => a.quantity > 0), [selectable, qty, price]);
   const summary = useMemo(() => summarizeAllocations(allocations), [allocations]);
   const errors = selectable
     .filter((l) => (Number(qty[l.id]) || 0) > l.availableQty + 1e-9 || (Number(qty[l.id]) || 0) < 0)
@@ -142,11 +144,9 @@ export default function LotSelector(props: LotSelectorProps) {
         </div>
       ) : (
         <div className="space-y-3">
-          {selectable.length === 0 && pending.length > 0 && (
-            <p className="rounded-lg bg-amber-50 dark:bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-              Every lot of this product is awaiting a selling price, so it can&apos;t be sold from a lot yet. An authorized user can price it in Production → Set Price.
-            </p>
-          )}
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Selling price <strong className="text-slate-800 dark:text-white">{price > 0 ? `${formatINR(price)} / unit` : "not set"}</strong> (excl. GST) for every lot — choose which lots the stock comes from.
+          </p>
           <div className="overflow-x-auto custom-scrollbar rounded-xl border border-slate-200 dark:border-white/10">
             <table className="w-full text-left text-[11px] min-w-[760px]">
               <thead className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 font-semibold uppercase tracking-wider whitespace-nowrap">
@@ -156,7 +156,6 @@ export default function LotSelector(props: LotSelectorProps) {
                   <th className="px-3 py-2.5">Expiry</th>
                   <th className="px-3 py-2.5">Warehouse</th>
                   <th className="px-3 py-2.5 text-right">Available</th>
-                  <th className="px-3 py-2.5 text-right">Price / Unit</th>
                   {showCost && <th className="px-3 py-2.5 text-right">Cost / Unit</th>}
                   <th className="px-3 py-2.5 text-right w-28">Quantity</th>
                   <th className="px-3 py-2.5 text-right">Amount</th>
@@ -164,28 +163,19 @@ export default function LotSelector(props: LotSelectorProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {[...selectable, ...pending].map((lot) => {
+                {selectable.map((lot) => {
                   const q = Number(qty[lot.id]) || 0;
                   const over = q > lot.availableQty + 1e-9;
-                  const p = showCost && q > 0 ? allocationProfit(toAllocation(lot, q)) : null;
+                  const p = showCost && q > 0 ? allocationProfit(toAllocation(lot, q, price)) : null;
                   return (
-                    <tr key={lot.id} className={clsx(!lot.selectable && "opacity-50", q > 0 && "bg-orange-50/40 dark:bg-orange-500/5")}>
+                    <tr key={lot.id} className={clsx(q > 0 && "bg-orange-50/40 dark:bg-orange-500/5")}>
                       <td className="px-3 py-2">
                         <p className="font-mono font-semibold text-slate-800 dark:text-white">{lot.lotNumber}</p>
-                        {!lot.selectable && <span className="text-[9px] font-bold text-amber-600">AWAITING PRICE</span>}
                       </td>
                       <td className="px-3 py-2 whitespace-nowrap text-slate-600 dark:text-slate-300">{formatDate(lot.productionDate)}</td>
                       <td className="px-3 py-2 whitespace-nowrap text-slate-600 dark:text-slate-300">{formatDate(lot.expiryDate)}</td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{lot.warehouse?.name || lot.location}</td>
                       <td className="px-3 py-2 text-right font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">{formatQty(lot.availableQty)} {lot.unit}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        {lot.selectable ? (
-                          <>
-                            <p className="font-bold text-slate-800 dark:text-white">{formatINR(lot.sellingPriceExclTax)}</p>
-                            <p className="text-[10px] text-slate-400">{formatINR(lot.sellingPriceInclTax)} incl. GST</p>
-                          </>
-                        ) : "—"}
-                      </td>
                       {showCost && <td className="px-3 py-2 text-right whitespace-nowrap text-slate-600 dark:text-slate-300">{formatINR(lot.unitCost ?? null)}</td>}
                       <td className="px-3 py-2 text-right">
                         <input
@@ -194,7 +184,6 @@ export default function LotSelector(props: LotSelectorProps) {
                           max={lot.availableQty}
                           step="any"
                           inputMode="decimal"
-                          disabled={!lot.selectable}
                           value={qty[lot.id] ?? ""}
                           onChange={(e) => setQty((prev) => ({ ...prev, [lot.id]: e.target.value }))}
                           aria-label={`Quantity from lot ${lot.lotNumber}`}
@@ -205,7 +194,7 @@ export default function LotSelector(props: LotSelectorProps) {
                         />
                       </td>
                       <td className="px-3 py-2 text-right font-semibold text-slate-800 dark:text-white whitespace-nowrap">
-                        {q > 0 && lot.sellingPriceExclTax != null ? formatINR(Math.round(lot.sellingPriceExclTax * q * 100) / 100) : "—"}
+                        {q > 0 && price > 0 ? formatINR(Math.round(price * q * 100) / 100) : "—"}
                       </td>
                       {showCost && (
                         <td className={clsx("px-3 py-2 text-right font-semibold whitespace-nowrap", p?.lineProfit == null ? "text-slate-400" : p.lineProfit < 0 ? "text-rose-600" : "text-emerald-600")}>
@@ -233,7 +222,7 @@ export default function LotSelector(props: LotSelectorProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
             <Stat label="Total Quantity" value={formatQty(summary.totalQuantity)} />
             <Stat label="Selling Value (excl. GST)" value={formatINR(summary.totalValue)} />
-            <Stat label="Avg Selling Price" value={formatINR(summary.weightedAvgPrice)} hint="Weighted, display only" />
+            <Stat label="Lots Chosen" value={String(allocations.length)} />
             {showCost ? (
               <Stat
                 label="Est. Gross Profit"
@@ -242,11 +231,11 @@ export default function LotSelector(props: LotSelectorProps) {
                 tone={summary.profit == null ? undefined : summary.profit < 0 ? "loss" : "profit"}
               />
             ) : (
-              <Stat label="Lots Chosen" value={String(allocations.length)} />
+              <Stat label="Price / Unit" value={formatINR(price)} hint="excl. GST" />
             )}
           </div>
           <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-            <Layers size={12} /> Each lot is added as its own line at its own price. Prices exclude GST; discounts can still be applied per line.
+            <Layers size={12} /> Each lot is added as its own line at the same price. Prices exclude GST; discounts can still be applied per line.
           </p>
         </div>
       )}

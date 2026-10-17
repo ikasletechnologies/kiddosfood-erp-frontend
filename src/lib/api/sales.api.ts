@@ -26,7 +26,7 @@ export const posSettlementApi = {
 // --- Sales Module (Quotations, Orders, Returns) ---
 export const salesApi = {
   // Estimated Sales Order profit/loss — server re-prices exactly as saving; read-only.
-  estimateOrderProfit: (data: { items: any[]; discountAmount?: number }) => api.post("/api/sales/orders/profitability", data),
+  estimateOrderProfit: (data: { items: any[]; discountAmount?: number; partyType?: string }) => api.post("/api/sales/orders/profitability", data),
   getQuotations: (params?: any) => api.get('/api/sales/quotations', { params }),
   createQuotation: (data: any) => api.post('/api/sales/quotations', data),
   getQuotationById: (id: string) => api.get(`/api/sales/quotations/${id}`),
@@ -79,8 +79,16 @@ export const lotPricingApi = {
   listLots: (params?: { search?: string; category?: string; status?: string; warehouseId?: string; from?: string; to?: string; location?: string; includeEmpty?: boolean; sku?: string }) =>
     api.get('/api/sales/set-price/lots', { params }),
   getLot: (id: string) => api.get(`/api/sales/set-price/lots/${id}`),
-  setPrice: (id: string, data: { sellingPrice: number; taxInclusive: boolean; reason?: string; acknowledgeBelowCost?: boolean; expectedPrice?: number | null }) =>
-    api.put(`/api/sales/set-price/lots/${id}/price`, data),
+  // Set Price: one row per finished product SKU with its Customer / Dealer /
+  // Franchise prices (stored excl. GST; may be entered incl. GST).
+  listProducts: (params?: { search?: string; category?: string; status?: string; warehouseId?: string; productId?: string; location?: string; inStock?: boolean }) =>
+    api.get('/api/sales/set-price/products', { params }),
+  getProduct: (id: string) => api.get(`/api/sales/set-price/products/${id}`),
+  setProductPrices: (id: string, data: {
+    customerPrice?: number | null; dealerPrice?: number | null; franchisePrice?: number | null;
+    taxInclusive: boolean; reason?: string; acknowledgeBelowCost?: boolean;
+    expected?: { customerPrice: number | null; dealerPrice: number | null; franchisePrice: number | null };
+  }) => api.put(`/api/sales/set-price/products/${id}/prices`, data),
   // Eligible lots of one product for a sale. scope "HQ" = Estimate / Sales
   // Order / Proforma (HQ stock); otherwise the seller branch (POS / invoice).
   saleLotOptions: (params: { productId: string; franchiseId?: string | null; scope?: 'HQ' }) =>

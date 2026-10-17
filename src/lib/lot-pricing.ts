@@ -1,10 +1,33 @@
-// Finished-goods lot pricing (Production > Set Price) and lot selection on sales
-// documents / POS. The server is authoritative for every price, cost and
-// stock check; these helpers only total and format what it returns, using
-// the same rules (money in whole paise, averages for display only).
+// Product selling prices (Production > Set Price) and finished-goods lot
+// selection on sales documents / POS. Every finished product SKU has three
+// prices — Customer, Dealer, Franchise — and the party on the document picks
+// one. Lots carry stock, production cost, expiry and traceability only; a lot
+// never changes a line's price. The server is authoritative for every price,
+// cost and stock check; these helpers only total and format what it returns
+// (money in whole paise, averages for display only).
 
-export const LOT_PRICING_PENDING = "PRICING_PENDING";
-export const LOT_PRICED = "PRICED";
+/** Set Price status of a product: all three prices set, or not yet. */
+export const PRODUCT_FULLY_PRICED = "FULLY_PRICED";
+export const PRODUCT_PRICING_PENDING = "PRICING_PENDING";
+
+export type PartyType = "CUSTOMER" | "DEALER" | "FRANCHISE";
+export const PRICE_TIERS: Array<{ key: "customerPrice" | "dealerPrice" | "franchisePrice"; label: string; party: PartyType }> = [
+  { key: "customerPrice", label: "Customer", party: "CUSTOMER" },
+  { key: "dealerPrice", label: "Dealer", party: "DEALER" },
+  { key: "franchisePrice", label: "Franchise", party: "FRANCHISE" },
+];
+
+/**
+ * The selling price for a party type: that tier's own price when set (> 0);
+ * otherwise the master base price, matching the server's resolver; otherwise
+ * null — never ₹0.
+ */
+export function partyPrice(p: { customerPrice?: number | null; dealerPrice?: number | null; franchisePrice?: number | null; basePrice?: number | null; price?: number | null } | null | undefined, party: PartyType): number | null {
+  if (!p) return null;
+  const tier = party === "DEALER" ? p.dealerPrice : party === "FRANCHISE" ? p.franchisePrice : p.customerPrice;
+  const pos = (v: unknown) => (Number(v) > 0 ? Number(v) : null);
+  return pos(tier) ?? pos(p.basePrice) ?? pos(p.price);
+}
 
 /** A lot as returned by /api/sales/lot-options and /api/sales/set-price/lots. */
 export interface SaleLot {
@@ -27,58 +50,28 @@ export interface SaleLot {
   reservedQty: number;
   availableQty: number;
   taxPercent: number;
-  pricingStatus: string;
-  sellingPrice: number | null;
-  priceTaxInclusive: boolean;
-  sellingPriceExclTax: number | null;
-  sellingPriceInclTax: number | null;
-  masterPrice: number | null;
   /** Present only for roles allowed to see cost. */
   unitCost?: number | null;
-  unitProfit?: number | null;
-  marginPct?: number | null;
-  belowCost?: boolean;
+  stockValue?: number | null;
   sellable?: boolean;
   selectable?: boolean;
-  pricedAt?: string | null;
   stockStatus?: string;
   category?: string | null;
-}
-
-/** Sellable Set Price lots of a product, as the product list API returns it (`lotPricing`). */
-export interface LotPriceSummary {
-  pricedLots: number;
-  pendingLots: number;
-  pricedQty: number;
-  pendingQty: number;
-  minPrice: number | null;
-  maxPrice: number | null;
+  productionBatchId?: string | null;
 }
 
 const rupee = (n: number) => `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
 /**
- * The price a product search should show. Priced Set Price lots win (that is
- * what a lot sale charges): one price, or a range when lots differ. Otherwise
- * the master/channel price; otherwise "Awaiting Price" when lots exist but
- * none is priced yet; otherwise "No price". Never shows ₹0 as a price.
+ * The price a product search should show: the party's price, or "Awaiting
+ * Price" when none is set yet. Never shows ₹0 as a price.
  */
-export function catalogPrice(masterPrice: number | null | undefined, lots?: LotPriceSummary | null): {
-  price: number | null; label: string; source: "LOT" | "MASTER" | "PENDING" | "NONE"; lotCount: number;
+export function catalogPrice(price: number | null | undefined): {
+  price: number | null; label: string; source: "MASTER" | "NONE";
 } {
-  if (lots && lots.pricedLots > 0 && lots.minPrice != null) {
-    const same = lots.maxPrice == null || Math.abs(lots.maxPrice - lots.minPrice) < 0.005;
-    return {
-      price: same ? lots.minPrice : null,
-      label: same ? rupee(lots.minPrice) : `${rupee(lots.minPrice)}–${rupee(lots.maxPrice!)}`,
-      source: "LOT",
-      lotCount: lots.pricedLots,
-    };
-  }
-  const master = Number(masterPrice) || 0;
-  if (master > 0) return { price: master, label: rupee(master), source: "MASTER", lotCount: 0 };
-  if (lots && lots.pendingLots > 0) return { price: null, label: "Awaiting Price", source: "PENDING", lotCount: 0 };
-  return { price: null, label: "No price", source: "NONE", lotCount: 0 };
+  const p = Number(price) || 0;
+  if (p > 0) return { price: p, label: rupee(p), source: "MASTER" };
+  return { price: null, label: "Awaiting Price", source: "NONE" };
 }
 
 /** One lot's share of a sales line, as chosen in the lot selector. */
@@ -87,7 +80,7 @@ export interface LotAllocation {
   lotNumber: string;
   batchNumber: string;
   quantity: number;
-  /** Selling price per packet excluding GST. */
+  /** The line's selling price per unit excluding GST (the party's price — the same for every lot). */
   price: number;
   unitCost: number | null;
   taxPercent: number;
@@ -102,7 +95,7 @@ const fmtAbs = (n: number) => `₹${Math.abs(n).toLocaleString("en-IN", { maximu
 
 export interface AllocationSummary {
   totalQuantity: number;
-  /** Σ quantity × lot price — exact, never rebuilt from the average. */
+  /** Σ quantity × price — exact, never rebuilt from an average. */
   totalValue: number;
   weightedAvgPrice: number | null;
   totalCost: number | null;
@@ -112,7 +105,7 @@ export interface AllocationSummary {
   costUnavailableLots: number;
 }
 
-/** 5 × ₹100 + 50 × ₹200 → ₹10,500 over 55 packets; average ₹190.91 (display only). */
+/** Totals of a lot split: Σ quantity × price, and cost/profit from each lot's own production cost. */
 export function summarizeAllocations(allocations: Array<Pick<LotAllocation, "quantity" | "price" | "unitCost">>): AllocationSummary {
   const lines = allocations.filter((a) => Number(a.quantity) > 0);
   const qty = lines.reduce((s, a) => s + Number(a.quantity), 0);
@@ -150,7 +143,7 @@ export function lotLossWarning(label: string, unitProfit: number | null, quantit
   return `Lot ${label} is being sold ${fmtAbs(unitProfit)} below production cost per packet. Estimated loss for ${units}: ${fmtAbs(lineProfit)}.`;
 }
 
-/** Set Price check: "Warning: Selling price is ₹17 below production cost per packet. Estimated loss: ₹17 per packet." */
+/** Price check against a production cost: "Warning: Selling price is ₹17 below production cost per packet. Estimated loss: ₹17 per packet." */
 export function priceCheck(price: number, taxInclusive: boolean, taxPercent: number, unitCost: number | null | undefined) {
   const t = Math.max(0, Number(taxPercent) || 0);
   const exclP = taxInclusive ? Math.round(paise(price) / (1 + t / 100)) : paise(price);
@@ -183,13 +176,13 @@ export function fifoSuggestion(lots: SaleLot[], quantity: number): Record<string
   return out;
 }
 
-export function toAllocation(lot: SaleLot, quantity: number): LotAllocation {
+export function toAllocation(lot: SaleLot, quantity: number, price: number): LotAllocation {
   return {
     lotId: lot.id,
     lotNumber: lot.lotNumber,
     batchNumber: lot.batchNumber,
     quantity,
-    price: lot.sellingPriceExclTax ?? 0,
+    price: Number(price) || 0,
     unitCost: lot.unitCost ?? null,
     taxPercent: lot.taxPercent,
   };

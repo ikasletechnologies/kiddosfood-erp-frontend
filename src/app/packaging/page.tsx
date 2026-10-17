@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -148,6 +148,12 @@ function isPackable(b: Batch) {
 function PackagingContent() {
   const searchParams = useSearchParams();
   const preselectBatchId = searchParams.get("batchId");
+  // Branch of the deep-linked batch (sent by Production on completion).
+  const preselectFranchiseId = searchParams.get("franchiseId");
+  // Deep link handled once, after that branch's batches have loaded.
+  const deepLinkDone = useRef(false);
+  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string>("");
 
   const [franchises, setFranchises] = useState<any[]>([]);
   const [franchiseId, setFranchiseId] = useState("");
@@ -193,7 +199,8 @@ function PackagingContent() {
         if (list.length > 0) {
           const hq = list.find((f: any) => f.isHQ);
           const fallback = [...list].sort((a: any, b: any) => a.name.localeCompare(b.name))[0];
-          setFranchiseId((hq || fallback).id);
+          const linked = preselectFranchiseId ? list.find((f: any) => f.id === preselectFranchiseId) : null;
+          setFranchiseId((linked || hq || fallback).id);
         } else {
           setLoading(false);
         }
@@ -214,6 +221,7 @@ function PackagingContent() {
         productionApi.getPackagings(franchiseId),
       ]);
       setBatches(bRes.data || []);
+      setLoadedFor(franchiseId);
       setLegacyTicketCount((tRes.data || []).filter((t: any) => t.status === "AWAITING_CONFIRMATION").length);
     } catch {
       toast.error("Failed to load production batches");
@@ -322,12 +330,22 @@ function PackagingContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sizeSignature, withMatchedProduct]);
 
-  // Deep link from Production Runs (?batchId=…).
+  // Deep link from Production (?batchId=…, sent after Confirm Completion):
+  // select exactly that batch, or say why it can't be — never another batch.
   useEffect(() => {
-    if (!preselectBatchId || selectedId || batches.length === 0) return;
+    if (!preselectBatchId || deepLinkDone.current || !franchiseId || loadedFor !== franchiseId) return;
+    deepLinkDone.current = true;
     const b = batches.find((x) => x.id === preselectBatchId);
-    if (b && isPackable(b)) selectBatch(b);
-  }, [preselectBatchId, batches, selectedId, selectBatch]);
+    if (!b) {
+      setDeepLinkError("The completed production batch wasn't found in Packaging for this location. It may belong to another branch or was already packed.");
+      return;
+    }
+    if (!isPackable(b)) {
+      setDeepLinkError(`Batch ${b.batchCode || ""} can't be packed right now: ${packagingBlocker(b) || "no bulk quantity is left to pack"}.`);
+      return;
+    }
+    selectBatch(b);
+  }, [preselectBatchId, batches, franchiseId, loadedFor, selectBatch]);
 
   const updateRow = (key: string, patch: Partial<PackRow>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -479,6 +497,19 @@ function PackagingContent() {
               {legacyTicketCount} packaging run{legacyTicketCount === 1 ? "" : "s"} started in the previous two-step flow {legacyTicketCount === 1 ? "is" : "are"} still awaiting confirmation.
             </span>
             <Link href="/packaging/confirm" className="font-bold underline shrink-0">Review &amp; confirm them</Link>
+          </div>
+        )}
+
+        {deepLinkError && (
+          <div role="alert" className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 text-xs text-rose-700 dark:text-rose-300">
+            <span className="flex items-center gap-2 font-medium">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {deepLinkError}
+            </span>
+            <span className="flex items-center gap-3 shrink-0">
+              <Link href="/production/batches?tab=ACTIVE_RUNS" className="font-bold underline">Back to Production</Link>
+              <button type="button" onClick={() => setDeepLinkError(null)} aria-label="Dismiss" className="p-0.5 rounded hover:bg-rose-100 dark:hover:bg-white/5"><X className="h-3.5 w-3.5" /></button>
+            </span>
           </div>
         )}
 

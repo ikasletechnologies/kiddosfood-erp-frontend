@@ -10,7 +10,7 @@ import {
   CheckCircle2, AlertCircle, FileText, Loader2, ArrowUpRight
 } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi, dealersApi, lotPricingApi } from "@/lib/api";
+import { customersApi, franchiseApi, accountsApi, posApi, salesApi, franchiseOrdersApi, dealersApi } from "@/lib/api";
 import AddPartyModal from "@/components/modals/AddPartyModal";
 import api from "@/lib/api/base";
 import { toast } from "react-hot-toast";
@@ -19,8 +19,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/context/AuthContext";
 import { canViewCost, signedMoney, toneOf, useProfitEstimate } from "@/lib/profit-estimate";
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
-import LotSelector, { LotChip } from "@/components/sales/LotSelector";
-import { catalogPrice, LotAllocation, LotPriceSummary, SaleLot } from "@/lib/lot-pricing";
+import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
+import { catalogPrice, LotAllocation, SaleLot } from "@/lib/lot-pricing";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -366,8 +366,6 @@ export default function POSPage() {
           packSize: p.packSize as { qty: number; unit: string } | null | undefined,
           discountType: p.discountType || "PERCENT",
           discountValue: p.discountValue || 0,
-          // Set Price lots: what a lot sale charges (shown when the master price is empty).
-          lotPricing: (p.lotPricing || null) as LotPriceSummary | null,
         }));
         setProducts(mapped);
         const cats = Array.from(new Set(mapped.map(p => p.category).filter(Boolean))) as string[];
@@ -497,11 +495,9 @@ export default function POSPage() {
   // configured, otherwise fall back to the generic base price.
   // Search display, add-to-cart and the channel re-price below all read the
   // same backend-resolved price, so a displayed price is always billable.
-  // Price shown in search / scan: Set Price lot price when the product has
-  // priced lots (what a lot sale charges), else the channel price, else
-  // "Awaiting Price" / "No price". Franchise bills don't use lots.
-  const posPriceLabel = (p: any) =>
-    catalogPrice(getPrice(p, partyType), partyType === "FRANCHISE" ? null : p?.lotPricing);
+  // Price shown in search / scan: the product's Set Price for the active
+  // mode (Customer / Dealer / Franchise), or "Awaiting Price" — never ₹0.
+  const posPriceLabel = (p: any) => catalogPrice(getPrice(p, partyType));
 
   const getPrice = (p: any, type: string): number => {
     const v = Number(p.sellingPrices?.[type]);
@@ -531,16 +527,16 @@ export default function POSPage() {
     );
   };
 
-  // ── Lot selection (Set Price lots) ─────────────────────────────────────────
-  // Fast billing stays as it was: a product with no priced lot gets the
-  // standard line; with exactly one priced lot, that lot is chosen
-  // automatically; only when several priced lots exist does the compact lot
-  // selector open. Re-scanning a product already on a lot line adds one to
-  // that lot while it has stock.
+  // ── Lot selection (finished-goods lots) ───────────────────────────────────
+  // Fast billing: scanning / picking a product adds the standard line (stock
+  // issued oldest lot first). A cashier can still pin a line to specific lots
+  // with "Select lots"; every lot sells at the mode's price — a lot only
+  // decides which stock is issued. Re-scanning a product already on a lot
+  // line adds one to that lot while it has stock.
   const [lotPicker, setLotPicker] = useState<{ product: any } | null>(null);
   const lotOptionsRef = useRef<Record<string, SaleLot[]>>({});
   const lotLine = (p: any, lot: SaleLot, quantity: number): CartItem => {
-    const price = lot.sellingPriceExclTax ?? 0;
+    const price = getPrice(p, partyType);
     return {
       id: `${p.id}::${lot.id}`, productId: p.id, lotId: lot.id, lotNumber: lot.lotNumber,
       name: p.name, sku: p.sku, price, quantity, taxPercent: lot.taxPercent, stock: lot.availableQty,
@@ -548,33 +544,12 @@ export default function POSPage() {
     };
   };
 
-  const addToCart = async (p: any) => {
-    if (partyType === "FRANCHISE" || cart.some(i => i.id === p.id)) { addStandardToCart(p); return; }
+  const addToCart = (p: any) => {
     const lotLines = cart.filter(i => productIdOf(i) === p.id && i.lotId);
-    if (lotLines.length) {
-      const room = [...lotLines].reverse().find(i => i.stock == null || i.quantity < i.stock);
-      if (room) setCart(prev => prev.map(i => i.id === room.id ? { ...i, quantity: i.quantity + 1 } : i));
-      else setLotPicker({ product: p });
-      return;
-    }
-    let lots: SaleLot[] = [];
-    try {
-      const res = await lotPricingApi.saleLotOptions({ productId: p.id, franchiseId: (authUser as any)?.franchiseId || undefined });
-      lots = res.data?.lots ?? [];
-    } catch {
-      // Lot lookup failed — fall back to the standard line (server prices it).
-    }
-    lotOptionsRef.current[p.id] = lots;
-    const eligible = lots.filter(l => l.selectable && l.availableQty >= 1);
-    if (eligible.length === 0) { addStandardToCart(p); return; }
-    if (eligible.length === 1) {
-      const line = lotLine(p, eligible[0], 1);
-      setCart(prev => prev.some(i => i.id === line.id)
-        ? prev.map(i => i.id === line.id ? { ...i, quantity: i.quantity + 1 } : i)
-        : [...prev, line]);
-      return;
-    }
-    setLotPicker({ product: p });
+    if (!lotLines.length) { addStandardToCart(p); return; }
+    const room = [...lotLines].reverse().find(i => i.stock == null || i.quantity < i.stock);
+    if (room) setCart(prev => prev.map(i => i.id === room.id ? { ...i, quantity: i.quantity + 1 } : i));
+    else setLotPicker({ product: p });
   };
 
   // Replaces every line of the product (standard or lot) with the chosen lots.
@@ -604,8 +579,8 @@ export default function POSPage() {
     setCart(prev => prev.map(item => {
       const p = products.find(pr => pr.id === productIdOf(item));
       if (!p) return item;
-      // A lot line keeps its lot's Set Price; only its discount follows the channel.
-      const price = item.lotId ? item.price : getPrice(p, partyType);
+      // Lot lines too: a lot never prices a line, the mode's price does.
+      const price = getPrice(p, partyType);
       // Keep a cashier-edited discount (bounded to the new price).
       const itemDiscount = item.discountEdited ? Math.min(item.itemDiscount, price) : getItemDiscount(p, partyType, price);
       return price === item.price && itemDiscount === item.itemDiscount ? item : { ...item, price, itemDiscount };
@@ -1086,11 +1061,6 @@ export default function POSPage() {
                       </div>
                       <div className="text-sm font-black text-right" style={{ color: BRAND_ORANGE }}>
                         {posPriceLabel(p).label}
-                        {posPriceLabel(p).source === "LOT" && (
-                          <span className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                            {posPriceLabel(p).lotCount > 1 ? `${posPriceLabel(p).lotCount} lots` : "Lot price"}
-                          </span>
-                        )}
                       </div>
                     </button>
                   ))}
@@ -1155,11 +1125,12 @@ export default function POSPage() {
                       <td className="px-3 py-2.5 font-mono text-gray-600 dark:text-slate-300">{item.id.substring(0,6).toUpperCase()}</td>
                       <td className="px-3 py-2.5 font-bold text-gray-800 dark:text-white max-w-[220px]">
                         <span className="block truncate">{item.name}</span>
-                        {item.lotId && (
+                        {partyType !== "FRANCHISE" && (
                           <span onClick={(e) => e.stopPropagation()}>
-                            <LotChip
+                            <LotLineControl
+                              productId={productIdOf(item)}
                               lotNumber={item.lotNumber}
-                              onClick={() => { const p = products.find(x => x.id === productIdOf(item)); if (p) setLotPicker({ product: p }); }}
+                              onOpen={() => { const p = products.find(x => x.id === productIdOf(item)); if (p) setLotPicker({ product: p }); }}
                             />
                           </span>
                         )}
@@ -1997,6 +1968,7 @@ export default function POSPage() {
           onClose={() => setLotPicker(null)}
           productId={lotPicker.product.id}
           productName={lotPicker.product.name}
+          price={getPrice(lotPicker.product, partyType)}
           franchiseId={(authUser as any)?.franchiseId || undefined}
           quantity={Math.max(1, cart.filter(i => productIdOf(i) === lotPicker.product.id).reduce((s, i) => s + i.quantity, 0))}
           initial={Object.fromEntries(cart.filter(i => productIdOf(i) === lotPicker.product.id && i.lotId).map(i => [i.lotId as string, i.quantity]))}

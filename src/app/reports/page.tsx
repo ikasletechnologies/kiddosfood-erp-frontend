@@ -62,6 +62,7 @@ import CentralItemDetailReport from "./components/ItemDetailReport";
 import CentralSalePurchaseByCategoryReport from "./components/SalePurchaseByCategoryReport";
 import CentralStockSummaryByCategoryReport from "./components/StockSummaryByCategoryReport";
 import CentralItemWiseDiscountReport from "./components/ItemWiseDiscountReport";
+import PartyStatementReport from "@/components/reports/PartyStatementReport";
 // GSTR-1/2/3B/9, HSN Summary and SAC now live as dedicated pages under
 // /reports/gst/* — see src/app/reports/gst/*/page.tsx.
 
@@ -2684,7 +2685,8 @@ function ReportsContent() {
 
     // Party Statement has no meaning without a party — never fire the request
     // while none is selected, and show a distinct prompt instead of an empty table.
-    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+    // Party Statement loads through its own panel (PartyStatementReport).
+    if (activeChild.id === "Party Statement") {
       setLoading(false);
       setReportData({
         kpiValue: "—",
@@ -2725,20 +2727,7 @@ function ReportsContent() {
     };
   }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage, selectedPartyId, selectedPartyType]);
 
-  // Party picker list for Party Statement — fetched once (not on every keystroke
-  // or statement fetch), reusing the same endpoint's "no partyId" browse response
-  // instead of a separate call or loading every party on each statement request.
-  const partyOptionsFetchedRef = useRef(false);
-  useEffect(() => {
-    if (!mounted || activeChild?.id !== "Party Statement" || partyOptionsFetchedRef.current) return;
-    partyOptionsFetchedRef.current = true;
-    setPartyOptionsLoading(true);
-    reportsApi
-      .getPartyStatement({})
-      .then((res) => setPartyOptions(toArr(res.data?.customers)))
-      .catch(() => setPartyOptions([]))
-      .finally(() => setPartyOptionsLoading(false));
-  }, [mounted, activeChild]);
+  // (The Party Statement party list is loaded by PartyStatementReport itself.)
 
   const filteredPartyOptions = useMemo(() => {
     const q = partyPickerQuery.trim().toLowerCase();
@@ -2833,7 +2822,8 @@ function ReportsContent() {
 
   const handleExportExcel = async () => {
     if (!activeChild) return;
-    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+    // Party Statement loads through its own panel (PartyStatementReport).
+    if (activeChild.id === "Party Statement") {
       toast.error("Select a party first");
       return;
     }
@@ -2923,7 +2913,8 @@ function ReportsContent() {
 
   const handleExportCSV = async () => {
     if (!activeChild) return;
-    if (activeChild.id === "Party Statement" && !selectedPartyId) {
+    // Party Statement loads through its own panel (PartyStatementReport).
+    if (activeChild.id === "Party Statement") {
       toast.error("Select a party first");
       return;
     }
@@ -3129,6 +3120,11 @@ function ReportsContent() {
 
       <div className="p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0 print:p-0 print:m-0 print:max-w-none print:space-y-3">
 
+        {/* Party Statement: its own unified panel (party type / party / period / ledger). */}
+        {activeChild?.id === "Party Statement" ? (
+          <PartyStatementReport key={`${selectedPartyType}:${selectedPartyId}`} initialPartyId={selectedPartyId} initialPartyType={selectedPartyType} />
+        ) : (
+        <>
         {/* ── Top Summary / KPI Cards ── */}
         {isPaymentRegister && paymentSummary ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 sm:gap-4 w-full min-w-0 print:grid-cols-3 print:gap-2 print:mb-3">
@@ -3921,6 +3917,8 @@ function ReportsContent() {
         )}
           </div>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

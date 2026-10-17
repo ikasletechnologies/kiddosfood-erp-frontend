@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Search, RefreshCw, Calendar, 
   ChevronRight, ArrowUpRight, Filter, ShoppingBag,
@@ -9,7 +9,7 @@ import { FileText, Search, RefreshCw, Calendar,
   Check, User, ClipboardList, Wallet, Sparkles, Image as ImageIcon, Link as LinkIcon,
   AlertTriangle, X, Pencil } from "lucide-react";
 import { clsx } from "clsx";
-import { customersApi, productsFullApi, settingsApi, salesApi } from "@/lib/api";
+import { customersApi, dealersApi, franchiseApi, productsFullApi, settingsApi, salesApi } from "@/lib/api";
 import { useAttachments, AttachmentList } from "@/components/common/Attachments";
 import { useToast } from "@/context/ToastContext";
 import api from "@/lib/api/base";
@@ -19,7 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { canViewCost, useProfitEstimate } from "@/lib/profit-estimate";
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
 import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
-import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
+import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation, partyPrice, PartyType } from "@/lib/lot-pricing";
 
 // No hardcoded state here — the seller's GST registration state must come
 // from the real HQ franchise (see SettingsService.getCompanyProfile),
@@ -126,10 +126,15 @@ interface LineItem {
   remarks: string;
   baseUnit?: any;
   conversions?: any[];
-  // Finished-goods lot this line sells from (Set Price); null = standard line.
+  // Finished-goods lot this line takes stock from; null = standard line.
   lotId?: string | null;
   lotNumber?: string | null;
+  // The party's list price when the line was priced — a rate that differs
+  // from it was edited by hand (asked before a party change replaces it).
+  autoRate?: number | null;
 }
+
+const PARTY_LABEL: Record<PartyType, string> = { CUSTOMER: "Customer", DEALER: "Dealer", FRANCHISE: "Franchise" };
 
 function makeItem(): LineItem {
   return {
@@ -204,7 +209,15 @@ export default function SalesOrdersPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [franchises, setFranchises] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  // Every party an order can be for; _type is where it came from.
+  const allParties = useMemo(() => [
+    ...customers.map((c: any) => ({ ...c, _type: "CUSTOMER" as PartyType })),
+    ...dealers.filter((d: any) => d.status !== "INACTIVE").map((d: any) => ({ id: d.id, name: d.name, phone: d.phone || "", state: d.state, _type: "DEALER" as PartyType })),
+    ...franchises.filter((fr: any) => !fr.isHQ).map((fr: any) => ({ id: fr.id, name: fr.name, phone: fr.contactNum || "", _type: "FRANCHISE" as PartyType })),
+  ], [customers, dealers, franchises]);
 
   // List view filters
   const [dateFilter, setDateFilter] = useState("THIS_MONTH");
@@ -229,6 +242,9 @@ export default function SalesOrdersPage() {
   });
 
   // Active Sale Order Form State
+  // Party type comes from the party picked (Customer / Dealer / Franchise
+  // master) and selects that tier's price for every line.
+  const [partyType, setPartyType] = useState<PartyType>("CUSTOMER");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
@@ -319,7 +335,7 @@ export default function SalesOrdersPage() {
     const seq = ++fetchSeqRef.current;
     setLoading(true);
     try {
-      const [custRes, prodRes, ordRes, invRes, companyRes] = await Promise.allSettled([
+      const [custRes, prodRes, ordRes, invRes, companyRes, dealerRes, franRes] = await Promise.allSettled([
         customersApi.getAll(),
         productsFullApi.getAll(),
         // Date range is applied by the server (business-timezone days), so
@@ -329,6 +345,8 @@ export default function SalesOrdersPage() {
         }).catch(() => ({ data: [] })),
         api.get("/api/sales/invoices").catch(() => ({ data: [] })),
         settingsApi.getCompanyProfile().catch(() => ({ data: null })),
+        dealersApi.getAll().catch(() => ({ data: [] })),
+        franchiseApi.getAll().catch(() => ({ data: [] })),
       ]);
 
       const invoices = invRes.status === "fulfilled" ? ((invRes.value as any).data || []) : [];
@@ -391,6 +409,11 @@ export default function SalesOrdersPage() {
       if (seq !== fetchSeqRef.current) return;
       setOrders(salesOrders);
       if (custRes.status === "fulfilled") setCustomers((custRes.value as any).data || []);
+      if (dealerRes.status === "fulfilled") setDealers((dealerRes.value as any).data || []);
+      if (franRes.status === "fulfilled") {
+        const fr = (franRes.value as any).data;
+        setFranchises(Array.isArray(fr) ? fr : fr?.data || []);
+      }
       if (prodRes.status === "fulfilled") setProducts((prodRes.value as any).data || []);
       if (companyRes.status === "fulfilled") {
         setCompanyState((companyRes.value as any).data?.state || "");
@@ -454,7 +477,12 @@ export default function SalesOrdersPage() {
           autoOpenedIdRef.current = convertEstId;
           const est = res.data;
           setSourceQuotationId(est.id);
-          setSelectedCustomer(est.customer || (est.customerId ? { id: est.customerId, name: est.customerName, phone: est.customerPhone } : null));
+          // The order keeps the Estimate's party (and so its price tier).
+          const estType: PartyType = est.partyType === "DEALER" || est.partyType === "FRANCHISE" ? est.partyType : "CUSTOMER";
+          setPartyType(estType);
+          setSelectedCustomer(estType !== "CUSTOMER"
+            ? { id: est.partyId || "", name: est.customerName || "", phone: est.customerPhone || "", _type: estType }
+            : est.customer || (est.customerId ? { id: est.customerId, name: est.customerName, phone: est.customerPhone } : null));
           setCustomerSearch(est.customerName || est.customer?.name || "");
           setCustomerPhone(est.customerPhone || est.customer?.phone || "");
           setStateOfSupply(est.stateOfSupply || "");
@@ -531,6 +559,7 @@ export default function SalesOrdersPage() {
         : parseFloat((gross * (it.discountPct || 0) / 100).toFixed(2));
       return { productId: it.productId || undefined, productName: it.itemSearch, quantity: it.qty, unit: it.unit, rate: it.rate, discountPercent: it.discountPct || 0, discountAmount: discAmt, inventoryBatchId: it.lotId || undefined };
     }),
+    partyType,
   };
   const profitKey = profitRows.length ? JSON.stringify(profitPayload) : "";
   const profit = useProfitEstimate(() => salesApi.estimateOrderProfit(profitPayload), profitKey, showProfit && view !== "list");
@@ -563,20 +592,26 @@ export default function SalesOrdersPage() {
 
   // ── Actions ──────────────────────────────────────────────────────────────────
 
+  // Picking a party sets its type (from the master it came from) and, when
+  // the type changes, re-prices the lines to that type's prices.
   const selectCustomer = (c: any) => {
+    const nextType: PartyType = c._type || "CUSTOMER";
     setSelectedCustomer(c);
     setCustomerSearch(c.name);
     setCustomerPhone(c.phone || "");
     setShowCustomerDrop(false);
+    if (nextType !== partyType) {
+      setPartyType(nextType);
+      repriceForParty(nextType);
+    }
   };
 
-  // This screen is Customer-only (no Dealer/Franchise selector exists in
-  // this UI — see the Sales Order channel-pricing fix), so the Item
-  // Master's "Customer Retail Discount" always applies here when
-  // configured. This only auto-fills the line's discount fields as a
-  // starting point — the operator can still freely edit them via the
-  // existing manual discount inputs.
-  const getAutoDiscount = (p: any, price: number) => {
+  // The Item Master's "Customer Retail Discount" applies to Customer parties
+  // only (Dealer/Franchise never receive it). This only auto-fills the line's
+  // discount fields as a starting point — the operator can still freely edit
+  // them via the existing manual discount inputs.
+  const getAutoDiscount = (p: any, price: number, type: PartyType = partyType) => {
+    if (type !== "CUSTOMER") return { discountPct: 0, discountAmount: 0 };
     const val = Number(p.discountValue) || 0;
     if (val <= 0 || price <= 0) return { discountPct: 0, discountAmount: 0 };
     const discountAmount = p.discountType === "FLAT" ? Math.min(val, price) : Math.min(price, price * val / 100);
@@ -591,10 +626,8 @@ export default function SalesOrdersPage() {
     const conversions = p.conversions || [];
     const unitOptions = getUnitOptions({ baseUnit, conversions } as LineItem);
     const defaultUnit = unitOptions === UNITS ? (p.unit || "NONE") : unitOptions[0].code;
-    // A product priced through Set Price lots shows its lot price (never ₹0);
-    // the lot picker then sets each line's exact lot and price.
-    const shown = catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing);
-    const rate = shown.price ?? (p.customerPrice || p.basePrice || p.price || 0);
+    // The selected party's price (Set Price: Customer / Dealer / Franchise).
+    const rate = partyPrice(p, partyType) ?? 0;
     const { discountPct, discountAmount } = getAutoDiscount(p, rate);
 
     setItems(prev => prev.map((it, i) =>
@@ -613,11 +646,38 @@ export default function SalesOrdersPage() {
         conversions,
         lotId: null,
         lotNumber: null,
+        autoRate: rate,
       } : it
     ));
     setOpenItemDrop(null);
-    // Priced lots exist: show them right away to pick one or more lots.
-    if (shown.source === "LOT") setLotPickerIdx(idx);
+  };
+
+  // Party type changed with items already on the order: every line moves to
+  // the new type's price. Lines whose price was edited by hand are only
+  // replaced after confirming; otherwise they keep the negotiated price.
+  const repriceForParty = (next: PartyType) => {
+    const priced = items.filter(it => it.productId && products.some((pr: any) => pr.id === it.productId));
+    if (!priced.length) return;
+    const listPrice = (it: LineItem) => {
+      const p = products.find((pr: any) => pr.id === it.productId);
+      return it.autoRate ?? (p ? partyPrice(p, partyType) : null);
+    };
+    const edited = priced.filter(it => { const a = listPrice(it); return a != null && Math.abs((it.rate || 0) - a) > 0.001; });
+    const replaceEdited = edited.length > 0 && window.confirm(
+      `${edited.length} line${edited.length === 1 ? " has a price" : "s have prices"} edited by hand. Replace ${edited.length === 1 ? "it" : "them"} with ${PARTY_LABEL[next]} prices too?\n\nOK — use ${PARTY_LABEL[next]} prices for every line\nCancel — keep the edited prices`
+    );
+    setItems(prev => prev.map(it => {
+      if (!it.productId) return it;
+      const p = products.find((pr: any) => pr.id === it.productId);
+      if (!p) return it;
+      const a = it.autoRate ?? partyPrice(p, partyType);
+      const isEdited = a != null && Math.abs((it.rate || 0) - a) > 0.001;
+      const rate = partyPrice(p, next) ?? 0;
+      if (isEdited && !replaceEdited) return { ...it, autoRate: rate };
+      const { discountPct, discountAmount } = getAutoDiscount(p, rate, next);
+      return { ...it, rate, autoRate: rate, discountPct, discountAmount };
+    }));
+    showToast(`Prices switched to ${PARTY_LABEL[next]} prices`, "info");
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
@@ -660,6 +720,7 @@ export default function SalesOrdersPage() {
     setReadOnly(false);
     setViewOrderRef(null);
     setSourceQuotationId(null);
+    setPartyType("CUSTOMER");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setCustomerPhone("");
@@ -679,7 +740,7 @@ export default function SalesOrdersPage() {
 
   const handleSave = async (status: "DRAFT" | "OPEN" | "OVERDUE") => {
     if (!selectedCustomer && status !== "DRAFT") {
-      showToast("Please select a customer", "error");
+      showToast("Please select a party", "error");
       return;
     }
     if (customerPhone && customerPhone.length !== 10 && status !== "DRAFT") {
@@ -707,7 +768,10 @@ export default function SalesOrdersPage() {
     }
 
     const apiPayload = {
-      customerId: selectedCustomer?.id || undefined,
+      // The server prices every line from this party type's prices.
+      partyType,
+      partyId: partyType !== "CUSTOMER" ? selectedCustomer?.id || undefined : undefined,
+      customerId: partyType === "CUSTOMER" ? selectedCustomer?.id || undefined : undefined,
       customerName: selectedCustomer?.name || customerSearch || undefined,
       customerPhone: customerPhone || undefined,
       orderDate: orderDate || undefined,
@@ -736,7 +800,7 @@ export default function SalesOrdersPage() {
           discountAmount: discAmt,
           discount: discAmt,
           taxPercent: it.taxPct,
-          // The server prices this line from the lot's Set Price and keeps the lot.
+          // Stock is taken from this lot; the price is the party's price.
           inventoryBatchId: it.lotId || undefined,
         };
       })
@@ -794,7 +858,12 @@ export default function SalesOrdersPage() {
       phone: order.customerPhone || order.customer?.phone || "",
       state: order.stateOfSupply || order.customer?.state || ""
     } : null);
-    setSelectedCustomer(finalCust);
+    const loadedType: PartyType = order.partyType === "DEALER" || order.partyType === "FRANCHISE" ? order.partyType : "CUSTOMER";
+    setPartyType(loadedType);
+    setSelectedCustomer(loadedType === "CUSTOMER"
+      ? finalCust
+      : allParties.find((p: any) => p._type === loadedType && p.id === order.partyId)
+        || { id: order.partyId || "", name: order.customerName || "", phone: order.customerPhone || "", _type: loadedType });
 
     setCustomerSearch(raw.customerSearch || order.customerName || finalCust?.name || "");
     setCustomerPhone(raw.customerPhone || order.customerPhone || finalCust?.phone || "");
@@ -860,10 +929,10 @@ export default function SalesOrdersPage() {
     setView("edit");
   };
 
-  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
+  // ── Lot selection (finished-goods lots) ─────────────────────────────────────
   // Optional: a product line can be split into one line per finished-goods
-  // lot, each at the lot's own price. Everything else on the line (discount,
-  // unit, GST) works exactly as before; the server re-prices lot lines.
+  // lot, all at the line's (party) price. Everything else on the line
+  // (discount, unit, GST) works exactly as before.
   const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
   const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
   const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
@@ -1040,7 +1109,7 @@ export default function SalesOrdersPage() {
 
   const lockFromQuotation = !!sourceQuotationId;
 
-  const filteredCustomers = customers.filter(c =>
+  const filteredCustomers = allParties.filter((c: any) =>
     !customerSearch ||
     c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
     c.phone?.includes(customerSearch)
@@ -1113,7 +1182,14 @@ export default function SalesOrdersPage() {
               {/* Left: Party + Phone */}
               <div className="space-y-3 sm:space-y-4 min-w-0">
                 <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party / Customer <span className="text-rose-500">*</span></label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
+                    <span>Party / Customer <span className="text-rose-500">*</span></span>
+                    {selectedCustomer && (
+                      <span className="px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-500/10 text-[10px] font-bold text-orange-700 dark:text-orange-400">
+                        {PARTY_LABEL[partyType]} prices
+                      </span>
+                    )}
+                  </label>
                   <div
                     className={clsx(
                       "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
@@ -1146,11 +1222,11 @@ export default function SalesOrdersPage() {
                     <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2.5rem)] sm:w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
                       <div className="max-h-52 overflow-y-auto custom-scrollbar">
                         {filteredCustomers.length === 0 ? (
-                          <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No customers found</div>
+                          <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No parties found</div>
                         ) : (
-                          filteredCustomers.map(c => (
+                          filteredCustomers.map((c: any) => (
                             <button
-                              key={c.id}
+                              key={`${c._type}-${c.id}`}
                               type="button"
                               className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left cursor-pointer"
                               onClick={() => selectCustomer(c)}
@@ -1159,6 +1235,12 @@ export default function SalesOrdersPage() {
                                 <div className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.name}</div>
                                 <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
                               </div>
+                              <span className={clsx(
+                                "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold",
+                                c._type === "DEALER" ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                                  : c._type === "FRANCHISE" ? "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+                                  : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-slate-300"
+                              )}>{PARTY_LABEL[c._type as PartyType] || "Customer"}</span>
                             </button>
                           ))
                         )}
@@ -1323,7 +1405,7 @@ export default function SalesOrdersPage() {
                                     <strong className="text-gray-800 dark:text-white">{p.name}</strong>
                                     <div className="text-gray-400 dark:text-slate-500">SKU: {p.sku || "—"}</div>
                                   </div>
-                                  <span className="text-[#f58220] font-mono font-bold">{catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing).label}</span>
+                                  <span className="text-[#f58220] font-mono font-bold">{catalogPrice(partyPrice(p, partyType)).label}</span>
                                 </button>
                               ))
                             )}
@@ -1490,7 +1572,7 @@ export default function SalesOrdersPage() {
                                   <strong className="text-gray-800 dark:text-white truncate block">{p.name}</strong>
                                   <div className="text-gray-400 dark:text-slate-500 text-[10px]">SKU: {p.sku || "—"}</div>
                                 </div>
-                                <span className="text-[#f58220] font-mono font-bold shrink-0">{catalogPrice(p.customerPrice || p.basePrice || p.price || 0, p.lotPricing).label}</span>
+                                <span className="text-[#f58220] font-mono font-bold shrink-0">{catalogPrice(partyPrice(p, partyType)).label}</span>
                               </button>
                             ))
                           )}
@@ -1803,6 +1885,7 @@ export default function SalesOrdersPage() {
             onClose={() => setLotPickerIdx(null)}
             productId={lotPickerRow.productId}
             productName={lotPickerRow.itemSearch}
+            price={Number(lotPickerRow.rate) || 0}
             scope="HQ"
             quantity={lotPickerRow.lotId
               ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)

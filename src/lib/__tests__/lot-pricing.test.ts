@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { allocationProfit, applyLotSelection, catalogPrice, currentLotQuantities, fifoSuggestion, priceCheck, splitRowIntoLots, summarizeAllocations, SaleLot } from "../lot-pricing";
+import { allocationProfit, applyLotSelection, catalogPrice, currentLotQuantities, fifoSuggestion, partyPrice, priceCheck, splitRowIntoLots, summarizeAllocations, toAllocation, SaleLot } from "../lot-pricing";
 
 const lot = (id: string, availableQty: number, selectable = true): SaleLot => ({
   id, lotNumber: `L-${id}`, batchNumber: `B-${id}`, productId: "p", productName: "APPAM 500g", sku: "FG-APM-500G", unit: "packet",
   packSize: "500g", productionBatchCode: null, productionDate: null, packagingDate: null, expiryDate: null, warehouse: null,
   location: "HQ", producedQty: availableQty, currentQty: availableQty, reservedQty: 0, availableQty, taxPercent: 5,
-  pricingStatus: selectable ? "PRICED" : "PRICING_PENDING", sellingPrice: 100, priceTaxInclusive: false,
-  sellingPriceExclTax: 100, sellingPriceInclTax: 105, masterPrice: null, selectable,
+  unitCost: 20, selectable,
 });
 
 describe("lot-pricing", () => {
@@ -41,7 +40,7 @@ describe("lot-pricing", () => {
     expect(priceCheck(100, false, 5, null).unitProfit).toBeNull();
   });
 
-  it("suggests oldest selectable lots first and skips unpriced lots", () => {
+  it("suggests oldest selectable lots first and skips unavailable lots", () => {
     expect(fifoSuggestion([lot("A", 30), lot("P", 99, false), lot("B", 70)], 55)).toEqual({ A: 30, B: 25 });
     expect(fifoSuggestion([lot("A", 30)], 10)).toEqual({ A: 10 });
   });
@@ -67,13 +66,25 @@ describe("lot-pricing", () => {
     expect(plain.map((r) => `${r.id}:${r.lotId ?? ""}`)).toEqual(["x:A", "y:"]);
   });
 
-  it("search shows the lot price instead of ₹0 / No price", () => {
-    const one = { pricedLots: 1, pendingLots: 1, pricedQty: 6, pendingQty: 2, minPrice: 500, maxPrice: 500 };
-    expect(catalogPrice(0, one)).toMatchObject({ price: 500, label: "₹500", source: "LOT" });
-    expect(catalogPrice(150, { ...one, pricedLots: 2, minPrice: 100, maxPrice: 200 })).toMatchObject({ price: null, label: "₹100–₹200", source: "LOT" });
-    expect(catalogPrice(150, null)).toMatchObject({ price: 150, source: "MASTER" });
-    expect(catalogPrice(0, { ...one, pricedLots: 0, minPrice: null, maxPrice: null })).toMatchObject({ label: "Awaiting Price", source: "PENDING" });
-    expect(catalogPrice(0, null).label).toBe("No price");
+  it("search shows the party's price, never ₹0", () => {
+    expect(catalogPrice(150)).toMatchObject({ price: 150, label: "₹150", source: "MASTER" });
+    expect(catalogPrice(0)).toMatchObject({ price: null, label: "Awaiting Price", source: "NONE" });
+    expect(catalogPrice(null).label).toBe("Awaiting Price");
+  });
+
+  it("picks the price tier for the party type", () => {
+    const p = { customerPrice: 10, dealerPrice: 8, franchisePrice: 7, basePrice: 7 };
+    expect(partyPrice(p, "CUSTOMER")).toBe(10);
+    expect(partyPrice(p, "DEALER")).toBe(8);
+    expect(partyPrice(p, "FRANCHISE")).toBe(7);
+    expect(partyPrice({ customerPrice: 10, dealerPrice: 0, franchisePrice: 0, basePrice: 0 }, "DEALER")).toBeNull();
+  });
+
+  it("every lot sells at the line's price; cost stays per lot", () => {
+    const a = toAllocation(lot("A", 10), 4, 10);
+    expect(a.price).toBe(10);
+    expect(a.unitCost).toBe(20);
+    expect(allocationProfit(a).unitProfit).toBe(-10);
   });
 
   it("splits one row into one row per lot, keeping other rows", () => {

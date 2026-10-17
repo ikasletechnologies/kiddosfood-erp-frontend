@@ -878,9 +878,8 @@ export default function EstimationsPageClient({
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
     const rawUnit = p.unit || (p.baseUnit ? (typeof p.baseUnit === 'string' ? p.baseUnit : p.baseUnit.shortName || p.baseUnit.name) : "NONE");
-    // Priced Set Price lots: show their price (not ₹0) and open the lot picker.
-    const shown = catalogPrice(getChannelPrice(p, partyType), p.lotPricing);
-    const rate = shown.price ?? getChannelPrice(p, partyType);
+    // The party's price (Set Price: Customer / Dealer / Franchise).
+    const rate = getChannelPrice(p, partyType);
     const { discountPct, discountAmount } = getAutoDiscount(p, rate, partyType);
     const packSize = getProductPackSize(p);
     const displayName = packSize && !p.name.includes(packSize)
@@ -905,13 +904,12 @@ export default function EstimationsPageClient({
       } : it
     ));
     setOpenItemDrop(null);
-    if (shown.source === "LOT") setLotPickerIdx(idx);
   };
 
-  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
-  // Optional: split a product line into one line per finished-goods lot, each
-  // at the lot's own price. Estimates/Proformas reserve and deduct nothing;
-  // the lot is re-checked when the document is converted.
+  // ── Lot selection (finished-goods lots) ─────────────────────────────────────
+  // Optional: split a product line into one line per finished-goods lot, all
+  // at the line's (party) price. Estimates/Proformas reserve and deduct
+  // nothing; the lot is re-checked when the document is converted.
   const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
   const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
   const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
@@ -939,8 +937,8 @@ export default function EstimationsPageClient({
   useEffect(() => {
     if (!products.length) return;
     setItems(prev => prev.map(it => {
-      // A lot line is priced by its lot (Set Price), not the channel price.
-      if (!it.productId || it.lotId) return it;
+      // Lot lines too: a lot never prices a line, the party's price does.
+      if (!it.productId) return it;
       const p = products.find((pr: any) => pr.id === it.productId);
       if (!p) return it;
       const rate = getChannelPrice(p, partyType);
@@ -1976,8 +1974,8 @@ export default function EstimationsPageClient({
                                         </div>
                                         <div className="text-right shrink-0">
                                           <div className="text-sm font-bold text-gray-900 dark:text-white">
-                                            {/* Set Price lot price when the product has priced lots; never ₹0. */}
-                                            {catalogPrice(price, p.lotPricing).label}
+                                            {/* The party's Set Price; "Awaiting Price" instead of ₹0. */}
+                                            {catalogPrice(price).label}
                                           </div>
                                           <div className="text-[10px] text-gray-400 dark:text-slate-500 uppercase tracking-wider">
                                             per {unitText}
@@ -2299,6 +2297,7 @@ export default function EstimationsPageClient({
             onClose={() => setLotPickerIdx(null)}
             productId={lotPickerRow.productId}
             productName={lotPickerRow.itemSearch}
+            price={Number(lotPickerRow.rate) || 0}
             scope="HQ"
             quantity={lotPickerRow.lotId
               ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)

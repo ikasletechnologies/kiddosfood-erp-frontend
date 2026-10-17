@@ -1064,10 +1064,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
   const selectProduct = (idx: number, p: any) => {
     const taxPct = p.gstRate ?? p.taxPercent ?? 0;
-    // Priced Set Price lots: show their price (not ₹0) and open the lot picker.
-    const shown = catalogPrice(getChannelPrice(p, partyType), partyType === "FRANCHISE" ? null : p.lotPricing);
-    const resolvedRate = shown.price ?? getChannelPrice(p, partyType);
-    if (shown.source === "LOT") setLotPickerIdx(idx);
+    // The party's price (Set Price: Customer / Dealer / Franchise).
+    const resolvedRate = getChannelPrice(p, partyType);
 
     setItems(prev => prev.map((it, i) =>
       i === idx ? {
@@ -1101,9 +1099,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
 
-  // ── Lot selection (Set Price lots) ──────────────────────────────────────────
-  // Optional: split a product line into one line per finished-goods lot, each
-  // at the lot's own price and deducted from exactly that lot on save.
+  // ── Lot selection (finished-goods lots) ─────────────────────────────────────
+  // Optional: split a product line into one line per finished-goods lot, all
+  // at the line's (party) price, deducted from exactly that lot on save.
   const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
   const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
   const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
@@ -1177,8 +1175,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       const conversions = p.conversions || [];
       const packSize = p.packSize || null;
 
-      // A lot line keeps its lot's Set Price whatever the channel.
-      const rateChanged = !it.lotId && rate !== it.rate;
+      // Lot lines follow the party price too (a lot never prices a line).
+      const rateChanged = rate !== it.rate;
       const stockChanged = it.availableStock !== stock;
       const unitsMissing = !it.baseUnit || !it.conversions;
 
@@ -2434,7 +2432,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                             <span className="ml-1 font-normal text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
                                           )}
                                         </div>
-                                        <div className="text-xs text-gray-400 dark:text-slate-500">{catalogPrice(getChannelPrice(p, partyType), partyType === "FRANCHISE" ? null : p.lotPricing).label}</div>
+                                        <div className="text-xs text-gray-400 dark:text-slate-500">{catalogPrice(getChannelPrice(p, partyType)).label}</div>
                                       </div>
                                     </button>
                                   ))
@@ -2455,7 +2453,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                             if (!item.productId) {
                               return <div className="text-xs text-center text-gray-400 dark:text-slate-500">—</div>;
                             }
-                            // A Set Price lot line: the lot is the batch, priced by the lot.
+                            // A lot line: the lot is the batch (priced by the party, like any line).
                             if (item.lotId) {
                               return <LotLineControl productId={item.productId} lotNumber={item.lotNumber} onOpen={() => setLotPickerIdx(idx)} />;
                             }
@@ -2919,6 +2917,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             onClose={() => setLotPickerIdx(null)}
             productId={lotPickerRow.productId}
             productName={lotPickerRow.itemSearch}
+            price={Number(lotPickerRow.rate) || 0}
             // Same seller stock the invoice deducts from: HQ for a franchise
             // party, otherwise the invoicing branch.
             franchiseId={partyType === "FRANCHISE" ? undefined : batchFranchiseId}

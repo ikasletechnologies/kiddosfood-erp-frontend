@@ -1,19 +1,22 @@
 "use client";
 
-// Production > Set Price — selling price per finished-goods lot.
+// Production > Set Price — the Customer / Dealer / Franchise selling prices of
+// each finished product SKU (pack size is part of the SKU, so APPAM 250g and
+// APPAM 500g are priced separately).
 //
-// Every confirmed packaging run is its own lot with its own production cost
-// (from the packaging cost snapshot, read-only here). This screen gives each
-// lot its own selling price; older lots keep theirs when the same SKU is
-// produced again. Price changes are audited server-side and never alter
-// finalized invoices.
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock, Eye, History, Layers, Loader2, Package, Pencil, RefreshCw, Search, Tags } from "lucide-react";
+// Prices are set once, after the product's first packaging. Later production
+// runs add lots with their own production cost but reuse these prices — they
+// are never reset or raised automatically. Sales Orders, Estimates, Invoices
+// and POS pick the price for the party type. Prices are stored excl. GST and
+// every change is audited.
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronRight, Eye, History, Loader2, Pencil, RefreshCw, Search, SlidersHorizontal, Tags, X } from "lucide-react";
 import { clsx } from "clsx";
 import { Modal } from "@/components/ui/Modal";
 import { franchiseApi, lotPricingApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatINR, priceCheck, LOT_PRICED, LOT_PRICING_PENDING, SaleLot } from "@/lib/lot-pricing";
+import { formatINR, priceCheck, PRICE_TIERS, PRODUCT_FULLY_PRICED, PRODUCT_PRICING_PENDING } from "@/lib/lot-pricing";
+import FinishedGoodsLotsPanel from "@/components/modules/inventory/FinishedGoodsLotsPanel";
 
 const INPUT = "w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500";
 const LABEL = "block text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1";
@@ -23,48 +26,72 @@ const formatDate = (d?: string | null) =>
 const formatQty = (n: number) => (Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 const apiError = (e: any, fallback: string) => e?.response?.data?.error || fallback;
 
-type Filters = { search: string; category: string; status: string; warehouseId: string; from: string; to: string; location: string; includeEmpty: boolean };
-const EMPTY_FILTERS: Filters = { search: "", category: "", status: "", warehouseId: "", from: "", to: "", location: "HQ", includeEmpty: false };
+type TierKey = "customerPrice" | "dealerPrice" | "franchisePrice";
+type Tier = { key: TierKey; label: string; price: number | null; priceInclTax: number | null; unitProfit?: number | null; marginPct?: number | null; belowCost?: boolean };
+type ProductRow = {
+  id: string;
+  productId: string | null;
+  name: string;
+  sku: string;
+  category: string | null;
+  unit: string;
+  packSize: string | null;
+  location: string;
+  taxPercent: number;
+  customerPrice: number | null;
+  dealerPrice: number | null;
+  franchisePrice: number | null;
+  tiers: Tier[];
+  pricingStatus: string;
+  missingTiers: string[];
+  lotCount: number;
+  availableQty: number;
+  totalQty: number;
+  warehouses: Array<{ id: string; name: string }>;
+  latestLotNumber: string | null;
+  latestProductionAt: string | null;
+  legacyLotPrice: { price: number; lotNumber: string } | null;
+  latestCost?: number | null;
+  stockValue?: number | null;
+};
+
+type StatusTab = typeof PRODUCT_PRICING_PENDING | typeof PRODUCT_FULLY_PRICED | "ALL";
+type Filters = { search: string; category: string; warehouseId: string; productId: string; location: string; inStock: boolean };
+const EMPTY_FILTERS: Filters = { search: "", category: "", warehouseId: "", productId: "", location: "HQ", inStock: false };
 
 export default function SetPriceClient() {
   const { showToast } = useToast();
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
-  const [data, setData] = useState<{ lots: SaleLot[]; summary: any; categories: string[]; canEdit: boolean; showCost: boolean } | null>(null);
+  const [tab, setTab] = useState<StatusTab>(PRODUCT_PRICING_PENDING);
+  const [showFilters, setShowFilters] = useState(false);
+  const [data, setData] = useState<{ products: ProductRow[]; summary: any; categories: string[]; warehouses: Array<{ id: string; name: string }>; canEdit: boolean; showCost: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [branches, setBranches] = useState<Array<{ id: string; name: string; isHQ?: boolean }>>([]);
-  const [warehouses, setWarehouses] = useState<Array<{ id: string; name: string }>>([]);
-  const [pricing, setPricing] = useState<SaleLot | null>(null);
+  const [branches, setBranches] = useState<Array<{ id: string; name: string }>>([]);
+  const [editing, setEditing] = useState<ProductRow | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setFilters((f) => ({ ...f, [k]: v }));
 
+  // Status is filtered here (not on the server) so every tab count stays right.
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await lotPricingApi.listLots({
+      const res = await lotPricingApi.listProducts({
         search: filters.search || undefined,
         category: filters.category || undefined,
-        status: filters.status || undefined,
         warehouseId: filters.warehouseId || undefined,
-        from: filters.from || undefined,
-        to: filters.to || undefined,
+        productId: filters.productId || undefined,
         location: filters.location || undefined,
-        includeEmpty: filters.includeEmpty || undefined,
+        inStock: filters.inStock || undefined,
       });
       setData(res.data);
-      // Warehouse options come from the lots themselves (only real holders).
-      if (!filters.warehouseId) {
-        const seen = new Map<string, string>();
-        (res.data?.lots || []).forEach((l: SaleLot) => { if (l.warehouse) seen.set(l.warehouse.id, l.warehouse.name); });
-        setWarehouses(Array.from(seen.entries()).map(([id, name]) => ({ id, name })));
-      }
     } catch (e) {
-      showToast(apiError(e, "Failed to load finished-goods lots"), "error");
+      showToast(apiError(e, "Failed to load products"), "error");
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters, showToast]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -75,170 +102,226 @@ export default function SetPriceClient() {
     franchiseApi.getAll().then((r) => setBranches((r.data?.data || r.data || []).filter((f: any) => !f.isHQ))).catch(() => setBranches([]));
   }, []);
 
-  const lots = data?.lots || [];
-  const summary = data?.summary;
+  const all = useMemo(() => data?.products || [], [data]);
+  const rows = useMemo(() => (tab === "ALL" ? all : all.filter((p) => p.pricingStatus === tab)), [all, tab]);
+  const counts: Record<StatusTab, number> = {
+    [PRODUCT_PRICING_PENDING]: all.filter((p) => p.pricingStatus === PRODUCT_PRICING_PENDING).length,
+    [PRODUCT_FULLY_PRICED]: all.filter((p) => p.pricingStatus === PRODUCT_FULLY_PRICED).length,
+    ALL: all.length,
+  } as Record<StatusTab, number>;
   const showCost = !!data?.showCost;
   const canEdit = !!data?.canEdit;
+  const activeFilters = [filters.category, filters.warehouseId, filters.productId, filters.location !== "HQ" ? filters.location : "", filters.inStock ? "1" : ""].filter(Boolean).length;
+  const cols = 7 + (showCost ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0"><Tags size={20} /></div>
-          <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">Set Price</h1>
-            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">Selling price for each finished-goods production lot</p>
-          </div>
-        </div>
-        <button onClick={load} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 self-start sm:self-auto">
-          <RefreshCw size={14} className={clsx(loading && "animate-spin")} /> Refresh
-        </button>
-      </div>
-
       <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 w-full min-w-0">
-        {/* Summary */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <SummaryCard icon={<Layers size={16} />} label="Finished Goods Lots" value={summary ? String(summary.totalLots) : "—"} />
-          <SummaryCard icon={<Clock size={16} />} label="Awaiting Pricing" value={summary ? String(summary.awaitingPricing) : "—"} tone={summary?.awaitingPricing ? "warn" : undefined} onClick={() => set("status", filters.status === LOT_PRICING_PENDING ? "" : LOT_PRICING_PENDING)} active={filters.status === LOT_PRICING_PENDING} />
-          <SummaryCard icon={<CheckCircle2 size={16} />} label="Priced Lots" value={summary ? String(summary.pricedLots) : "—"} onClick={() => set("status", filters.status === LOT_PRICED ? "" : LOT_PRICED)} active={filters.status === LOT_PRICED} />
-          <SummaryCard icon={<Package size={16} />} label="Available Priced Stock" value={summary ? `${formatQty(summary.availablePricedQty)} pkts` : "—"} hint={summary ? `${formatINR(summary.availablePricedValue)} excl. GST` : undefined} />
+        {/* Title */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="p-2 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0"><Tags size={18} /></div>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight">Set Price</h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Set Customer, Dealer and Franchise prices once per product. New production lots reuse them automatically.</p>
+            </div>
+          </div>
+          <button onClick={load} title="Refresh" className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-slate-300 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:bg-gray-50">
+            <RefreshCw size={14} className={clsx(loading && "animate-spin")} /> Refresh
+          </button>
         </div>
 
-        {/* Filters */}
-        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-3 sm:p-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 items-end">
-          <div className="col-span-2">
-            <label className={LABEL}>Search</label>
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className={clsx(INPUT, "pl-8")} placeholder="Product, SKU or lot" value={filters.search} onChange={(e) => set("search", e.target.value)} />
+        <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden">
+          {/* Status tabs */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-3 sm:px-4 pt-3">
+            <div className="flex gap-1 bg-gray-100 dark:bg-white/5 p-1 rounded-xl">
+              {([
+                [PRODUCT_PRICING_PENDING, "Awaiting prices"],
+                [PRODUCT_FULLY_PRICED, "Priced"],
+                ["ALL", "All products"],
+              ] as Array<[StatusTab, string]>).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  className={clsx("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors", tab === id ? "bg-white dark:bg-[#13151f] text-gray-900 dark:text-white shadow-sm" : "text-gray-500 hover:text-gray-800 dark:hover:text-white")}
+                >
+                  {label}
+                  <span className={clsx("min-w-[20px] px-1.5 rounded-full text-[10px] font-bold", id === PRODUCT_PRICING_PENDING && counts[id] > 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300" : "bg-gray-200 text-gray-600 dark:bg-white/10 dark:text-slate-300")}>
+                    {counts[id]}
+                  </span>
+                </button>
+              ))}
             </div>
-          </div>
-          <div>
-            <label className={LABEL}>Category</label>
-            <select className={INPUT} value={filters.category} onChange={(e) => set("category", e.target.value)}>
-              <option value="">All</option>
-              {(data?.categories || []).map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className={LABEL}>Produced from</label>
-            <input type="date" className={INPUT} value={filters.from} onChange={(e) => set("from", e.target.value)} />
-          </div>
-          <div>
-            <label className={LABEL}>Produced to</label>
-            <input type="date" className={INPUT} value={filters.to} onChange={(e) => set("to", e.target.value)} />
-          </div>
-          <div>
-            <label className={LABEL}>Pricing status</label>
-            <select className={INPUT} value={filters.status} onChange={(e) => set("status", e.target.value)}>
-              <option value="">All</option>
-              <option value={LOT_PRICING_PENDING}>Awaiting pricing</option>
-              <option value={LOT_PRICED}>Priced</option>
-            </select>
-          </div>
-          <div>
-            <label className={LABEL}>Warehouse</label>
-            <select className={INPUT} value={filters.warehouseId} onChange={(e) => set("warehouseId", e.target.value)}>
-              <option value="">All</option>
-              {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          </div>
-          {canEdit ? (
-            <div>
-              <label className={LABEL}>Location</label>
-              <select className={INPUT} value={filters.location} onChange={(e) => set("location", e.target.value)}>
-                <option value="HQ">HQ</option>
-                <option value="ALL">All locations</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
-            </div>
-          ) : <div />}
-          <label className="col-span-2 md:col-span-4 lg:col-span-8 flex items-center gap-2 text-[11px] font-semibold text-gray-500 cursor-pointer">
-            <input type="checkbox" checked={filters.includeEmpty} onChange={(e) => set("includeEmpty", e.target.checked)} className="rounded" />
-            Include sold-out lots
-            {(filters !== EMPTY_FILTERS) && (
-              <button type="button" onClick={() => setFilters(EMPTY_FILTERS)} className="ml-auto text-orange-600 hover:underline">Clear filters</button>
+            {data?.summary && (
+              <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                Stock ready to sell: <strong className="text-gray-800 dark:text-white">{formatQty(data.summary.availableQty)}</strong>
+                {showCost && data.summary.stockValue != null && <> · Inventory value {formatINR(data.summary.stockValue)}</>}
+              </p>
             )}
-          </label>
-        </div>
+          </div>
 
-        {/* Table */}
-        <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-b border-gray-100 dark:border-white/5">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input className={clsx(INPUT, "pl-9 pr-8")} placeholder="Search product or SKU" value={filters.search} onChange={(e) => set("search", e.target.value)} />
+              {filters.search && <X size={14} onClick={() => set("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer" />}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFilters((s) => !s)}
+              className={clsx("inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border", showFilters || activeFilters ? "border-orange-300 text-orange-700 bg-orange-50 dark:bg-orange-500/10" : "border-gray-200 dark:border-white/10 text-gray-600 dark:text-slate-300")}
+            >
+              <SlidersHorizontal size={14} /> Filters{activeFilters ? ` (${activeFilters})` : ""}
+            </button>
+            {(activeFilters > 0 || filters.search) && (
+              <button type="button" onClick={() => setFilters(EMPTY_FILTERS)} className="text-xs font-semibold text-gray-500 hover:text-orange-600">Clear</button>
+            )}
+          </div>
+
+          {showFilters && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 px-3 sm:px-4 py-3 bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-white/5">
+              <div>
+                <label className={LABEL}>Product</label>
+                <select className={INPUT} value={filters.productId} onChange={(e) => set("productId", e.target.value)}>
+                  <option value="">All</option>
+                  {all.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL}>Category</label>
+                <select className={INPUT} value={filters.category} onChange={(e) => set("category", e.target.value)}>
+                  <option value="">All</option>
+                  {(data?.categories || []).map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL}>Warehouse</label>
+                <select className={INPUT} value={filters.warehouseId} onChange={(e) => set("warehouseId", e.target.value)}>
+                  <option value="">All</option>
+                  {(data?.warehouses || []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </div>
+              {canEdit && (
+                <div>
+                  <label className={LABEL}>Location</label>
+                  <select className={INPUT} value={filters.location} onChange={(e) => set("location", e.target.value)}>
+                    <option value="HQ">HQ</option>
+                    <option value="ALL">All locations</option>
+                    {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+              )}
+              <label className="flex items-end gap-2 pb-2 text-xs font-semibold text-gray-600 dark:text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={filters.inStock} onChange={(e) => set("inStock", e.target.checked)} className="rounded" />
+                In stock only
+              </label>
+            </div>
+          )}
+
+          {/* Products */}
           <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-xs min-w-[980px]">
-              <thead className="bg-gray-50/70 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-[10px] font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">
+            <table className="w-full text-left text-xs min-w-[900px]">
+              <thead className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 whitespace-nowrap">
                 <tr>
-                  <th className="px-4 py-3">Product</th>
-                  <th className="px-4 py-3">Production Lot</th>
-                  <th className="px-4 py-3">Produced</th>
-                  <th className="px-4 py-3 text-right">Available</th>
-                  {showCost && <th className="px-4 py-3 text-right">Cost / Packet</th>}
-                  <th className="px-4 py-3 text-right">Selling / Packet</th>
-                  {showCost && <th className="px-4 py-3 text-right">Est. Profit / Loss</th>}
-                  <th className="px-4 py-3 text-center">Status</th>
-                  <th className="px-4 py-3 text-right">Action</th>
+                  <th className="px-4 py-2.5">Product</th>
+                  <th className="px-4 py-2.5 text-right">Available</th>
+                  {showCost && <th className="px-4 py-2.5 text-right">Latest cost / unit</th>}
+                  {PRICE_TIERS.map((t) => <th key={t.key} className="px-4 py-2.5 text-right">{t.label} price</th>)}
+                  <th className="px-4 py-2.5">Status</th>
+                  <th className="px-4 py-2.5 w-[120px]" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                 {loading && !data ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400"><Loader2 className="inline animate-spin mr-2" size={16} />Loading lots…</td></tr>
-                ) : lots.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-12 text-center text-gray-400">No finished-goods lots match these filters. Lots are created when packaging is confirmed.</td></tr>
-                ) : lots.map((lot) => {
-                  const priced = lot.pricingStatus === LOT_PRICED;
+                  <tr><td colSpan={cols} className="px-4 py-14 text-center text-gray-400"><Loader2 className="inline animate-spin mr-2" size={16} />Loading products…</td></tr>
+                ) : rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={cols} className="px-4 py-14 text-center">
+                      {tab === PRODUCT_PRICING_PENDING && all.length > 0 ? (
+                        <p className="text-sm font-semibold text-emerald-600">Every product has all three prices. 🎉</p>
+                      ) : (
+                        <p className="text-gray-400">No products match. A product appears here after its first packaging is confirmed.</p>
+                      )}
+                    </td>
+                  </tr>
+                ) : rows.map((p) => {
+                  const open = expanded === p.id;
+                  const priced = p.pricingStatus === PRODUCT_FULLY_PRICED;
                   return (
-                    <tr key={lot.id} className="hover:bg-gray-50/60 dark:hover:bg-white/[0.02]">
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-gray-900 dark:text-white uppercase">{lot.productName}</p>
-                        <p className="text-[10px] font-mono text-gray-400">{lot.sku}{lot.packSize ? ` · ${lot.packSize}` : ""}{lot.location !== "HQ" ? ` · ${lot.location}` : ""}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-mono font-semibold text-gray-800 dark:text-slate-200">{lot.lotNumber}</p>
-                        {lot.warehouse && <p className="text-[10px] text-gray-400">{lot.warehouse.name}</p>}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-gray-600 dark:text-slate-300">{formatDate(lot.productionDate)}</td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <p className="font-bold text-gray-900 dark:text-white">{formatQty(lot.availableQty)} {lot.unit}</p>
-                        {lot.reservedQty > 0 && <p className="text-[10px] text-purple-600">{formatQty(lot.reservedQty)} reserved</p>}
-                      </td>
-                      {showCost && <td className="px-4 py-3 text-right whitespace-nowrap text-gray-700 dark:text-slate-300">{formatINR(lot.unitCost ?? null)}</td>}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        {priced ? (
-                          <>
-                            <p className="font-bold text-gray-900 dark:text-white">{formatINR(lot.sellingPrice)}</p>
-                            <p className="text-[10px] text-gray-400">{lot.priceTaxInclusive ? "incl. GST" : "excl. GST"}</p>
-                          </>
-                        ) : <span className="text-gray-400">—</span>}
-                      </td>
-                      {showCost && (
-                        <td className={clsx("px-4 py-3 text-right whitespace-nowrap font-semibold", lot.unitProfit == null ? "text-gray-400" : lot.unitProfit < 0 ? "text-rose-600" : "text-emerald-600")}>
-                          {lot.unitProfit == null ? "—" : (
-                            <>
-                              {lot.unitProfit < 0 ? "−" : "+"}{formatINR(Math.abs(lot.unitProfit))}
-                              {lot.marginPct != null && <span className="block text-[10px] font-normal">{lot.marginPct}% margin</span>}
-                            </>
+                    <Fragment key={p.id}>
+                      <tr className={clsx("hover:bg-gray-50/60 dark:hover:bg-white/[0.02] align-middle", open && "bg-orange-50/30 dark:bg-orange-500/5")}>
+                        <td className="px-4 py-3 max-w-[280px]">
+                          <div className="flex items-start gap-1.5">
+                            <button type="button" onClick={() => setExpanded(open ? null : p.id)} title={open ? "Hide production lots" : "View production lots"} aria-expanded={open} className="mt-0.5 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-white/5">
+                              <ChevronRight size={14} className={clsx("text-gray-400 transition-transform", open && "rotate-90 text-orange-500")} />
+                            </button>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 dark:text-white truncate" title={p.name}>{p.name}</p>
+                              <p className="text-[10px] text-gray-400 truncate">
+                                <span className="font-mono">{p.sku}</span>
+                                {p.packSize ? ` · ${p.packSize}` : ""}
+                                {p.location !== "HQ" ? ` · ${p.location}` : ""}
+                                {` · ${p.lotCount} lot${p.lotCount === 1 ? "" : "s"}`}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <span className="font-bold text-gray-900 dark:text-white">{formatQty(p.availableQty)}</span> <span className="text-gray-400">{p.unit}</span>
+                        </td>
+                        {showCost && <td className="px-4 py-3 text-right whitespace-nowrap text-gray-600 dark:text-slate-300">{formatINR(p.latestCost ?? null)}</td>}
+                        {p.tiers.map((t) => (
+                          <td key={t.key} className="px-4 py-3 text-right whitespace-nowrap">
+                            {t.price != null ? (
+                              <>
+                                <p className={clsx("font-bold", t.belowCost ? "text-rose-600" : "text-gray-900 dark:text-white")}>
+                                  {t.belowCost && <AlertTriangle size={11} className="inline mr-1 -mt-0.5" aria-label="Below latest production cost" />}
+                                  {formatINR(t.price)}
+                                </p>
+                                <p className="text-[10px] text-gray-400">
+                                  {showCost && t.marginPct != null ? <span className={clsx((t.unitProfit ?? 0) < 0 ? "text-rose-600" : "text-emerald-600")}>{t.marginPct}% · </span> : null}
+                                  {formatINR(t.priceInclTax)} incl.
+                                </p>
+                              </>
+                            ) : (
+                              <span className="text-[11px] font-semibold text-amber-600">Not set</span>
+                            )}
+                          </td>
+                        ))}
+                        <td className="px-4 py-3">
+                          {priced ? (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10">PRICED</span>
+                          ) : (
+                            <div>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full text-amber-700 bg-amber-50 dark:bg-amber-500/10">AWAITING</span>
+                              {p.legacyLotPrice && <p className="text-[10px] text-gray-400 mt-1">Old lot price {formatINR(p.legacyLotPrice.price)}</p>}
+                            </div>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            {canEdit && (
+                              <button
+                                onClick={() => setEditing(p)}
+                                className={clsx("inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold", priced ? "text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200" : "text-white bg-orange-500 hover:bg-orange-600")}
+                              >
+                                {priced ? <><Pencil size={12} /> Edit</> : "Set price"}
+                              </button>
+                            )}
+                            <button onClick={() => setViewing(p.id)} title="Product details & price history" className="p-1.5 rounded-lg text-gray-500 hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-white/5"><Eye size={14} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                      {open && (
+                        <tr>
+                          <td colSpan={cols} className="p-0">
+                            <FinishedGoodsLotsPanel sku={p.sku} unit={p.unit} prices={p} />
+                          </td>
+                        </tr>
                       )}
-                      <td className="px-4 py-3 text-center">
-                        <span className={clsx("text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap", priced ? "text-emerald-700 bg-emerald-50 dark:bg-emerald-500/10" : "text-amber-700 bg-amber-50 dark:bg-amber-500/10")}>
-                          {priced ? "PRICED" : "AWAITING PRICE"}
-                        </span>
-                        {lot.belowCost && <AlertTriangle size={12} className="inline ml-1 text-rose-500" aria-label="Below production cost" />}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex gap-1.5">
-                          {canEdit && (
-                            <button onClick={() => setPricing(lot)} className={clsx("inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold", priced ? "bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 hover:bg-gray-200" : "bg-orange-500 text-white hover:bg-orange-600")}>
-                              {priced ? <><Pencil size={12} /> Edit Price</> : <><Tags size={12} /> Set Price</>}
-                            </button>
-                          )}
-                          <button onClick={() => setViewing(lot.id)} title="View lot" className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-slate-300 hover:bg-gray-200">
-                            <Eye size={12} /> View
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -247,70 +330,68 @@ export default function SetPriceClient() {
         </div>
       </div>
 
-      {pricing && (
-        <SetPriceModal
-          lot={pricing}
+      {editing && (
+        <SetPricesModal
+          product={editing}
           showCost={showCost}
-          onClose={() => setPricing(null)}
-          onSaved={() => { setPricing(null); load(); }}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
         />
       )}
-      {viewing && <ViewLotModal lotId={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <ViewProductModal id={viewing} onClose={() => setViewing(null)} />}
     </div>
   );
 }
 
-function SummaryCard({ icon, label, value, hint, tone, onClick, active }: { icon: React.ReactNode; label: string; value: string; hint?: string; tone?: "warn"; onClick?: () => void; active?: boolean }) {
-  const Tag = onClick ? "button" : "div";
-  return (
-    <Tag
-      onClick={onClick}
-      className={clsx(
-        "text-left bg-white dark:bg-card rounded-xl border p-3 sm:p-4 flex items-start gap-3 transition-colors",
-        active ? "border-orange-400 ring-2 ring-orange-500/20" : "border-gray-200 dark:border-white/5",
-        onClick && "hover:border-orange-300",
-      )}
-    >
-      <div className={clsx("p-2 rounded-lg shrink-0", tone === "warn" ? "bg-amber-50 text-amber-600 dark:bg-amber-500/10" : "bg-orange-50 text-[#f58220] dark:bg-orange-500/10")}>{icon}</div>
-      <div className="min-w-0">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
-        <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">{value}</p>
-        {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
-      </div>
-    </Tag>
-  );
-}
-
-function SetPriceModal({ lot, showCost, onClose, onSaved }: { lot: SaleLot; showCost: boolean; onClose: () => void; onSaved: () => void }) {
+function SetPricesModal({ product, showCost, onClose, onSaved }: { product: ProductRow; showCost: boolean; onClose: () => void; onSaved: () => void }) {
   const { showToast } = useToast();
-  const editing = lot.pricingStatus === LOT_PRICED;
-  const [price, setPrice] = useState(editing ? String(lot.sellingPrice) : (lot.masterPrice ? String(lot.masterPrice) : ""));
-  const [taxInclusive, setTaxInclusive] = useState(editing ? lot.priceTaxInclusive : false);
+  const editing = PRICE_TIERS.some((t) => product[t.key] != null);
+  const [values, setValues] = useState<Record<TierKey, string>>({
+    customerPrice: product.customerPrice != null ? String(product.customerPrice) : "",
+    dealerPrice: product.dealerPrice != null ? String(product.dealerPrice) : "",
+    franchisePrice: product.franchisePrice != null ? String(product.franchisePrice) : "",
+  });
+  const [taxInclusive, setTaxInclusive] = useState(false);
   const [reason, setReason] = useState("");
   const [ackBelowCost, setAckBelowCost] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const value = Number(price);
-  const valid = Number.isFinite(value) && value > 0;
-  const check = useMemo(() => valid ? priceCheck(value, taxInclusive, lot.taxPercent, lot.unitCost) : null, [valid, value, taxInclusive, lot.taxPercent, lot.unitCost]);
-  const unchanged = editing && valid && Math.abs(value - (lot.sellingPrice || 0)) < 0.001 && taxInclusive === lot.priceTaxInclusive;
+  const cost = showCost ? product.latestCost ?? null : null;
+  const checks = PRICE_TIERS.map((t) => {
+    const raw = values[t.key].trim();
+    const n = Number(raw);
+    const valid = raw !== "" && Number.isFinite(n) && n > 0;
+    return { ...t, raw, n, valid, invalid: raw !== "" && !valid, check: valid ? priceCheck(n, taxInclusive, product.taxPercent, cost) : null };
+  });
+  const filled = checks.filter((c) => c.valid);
+  const invalid = checks.some((c) => c.invalid);
+  const below = checks.filter((c) => c.check?.belowCost);
+  const willBeComplete = filled.length === PRICE_TIERS.length;
+  const unchanged = !taxInclusive && checks.every((c) => {
+    const cur = product[c.key];
+    return c.valid ? cur != null && Math.abs(cur - c.n) < 0.001 : cur == null;
+  });
 
+  // Converting excl./incl. keeps the same figures typed — say which basis applies.
   const save = async () => {
-    if (!valid || unchanged) return;
-    if (check?.belowCost && !ackBelowCost) return;
+    if (invalid || !filled.length || unchanged) return;
+    if (below.length && !ackBelowCost) return;
     setSaving(true);
     try {
-      await lotPricingApi.setPrice(lot.id, {
-        sellingPrice: Math.round(value * 100) / 100,
+      await lotPricingApi.setProductPrices(product.id, {
+        customerPrice: checks[0].valid ? Math.round(checks[0].n * 100) / 100 : null,
+        dealerPrice: checks[1].valid ? Math.round(checks[1].n * 100) / 100 : null,
+        franchisePrice: checks[2].valid ? Math.round(checks[2].n * 100) / 100 : null,
         taxInclusive,
         reason: reason.trim() || undefined,
         acknowledgeBelowCost: ackBelowCost || undefined,
-        expectedPrice: editing ? lot.sellingPrice : null,
+        expected: { customerPrice: product.customerPrice, dealerPrice: product.dealerPrice, franchisePrice: product.franchisePrice },
       });
-      showToast(`Lot ${lot.lotNumber} priced at ${formatINR(value)}`, "success");
+      showToast(`${product.name}: prices saved${willBeComplete ? "" : " (still awaiting the remaining price)"}`, "success");
       onSaved();
     } catch (e: any) {
-      showToast(apiError(e, "Failed to save price"), "error");
+      if (e?.response?.data?.code === "BELOW_COST_CONFIRMATION_REQUIRED") setAckBelowCost(false);
+      showToast(apiError(e, "Failed to save prices"), "error");
     } finally {
       setSaving(false);
     }
@@ -320,133 +401,193 @@ function SetPriceModal({ lot, showCost, onClose, onSaved }: { lot: SaleLot; show
     <Modal
       isOpen
       onClose={onClose}
-      size="2xl"
-      title={editing ? "EDIT LOT PRICE" : "SET LOT PRICE"}
+      size="lg"
+      title={editing ? "Edit prices" : "Set prices"}
       footer={
-        <div className="flex justify-end gap-2 w-full">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300">Cancel</button>
-          <button
-            onClick={save}
-            disabled={!valid || unchanged || saving || (!!check?.belowCost && !ackBelowCost)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saving && <Loader2 size={13} className="animate-spin" />} Save Price
-          </button>
+        <div className="flex items-center justify-between gap-2 w-full">
+          <p className="text-[11px] text-gray-400">{willBeComplete ? "All three prices set — product will be Priced." : "Leave a price blank if it isn't decided yet."}</p>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-xs font-semibold text-gray-600 dark:text-slate-300 bg-gray-100 dark:bg-white/5 hover:bg-gray-200">Cancel</button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || invalid || !filled.length || unchanged || (below.length > 0 && !ackBelowCost)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving && <Loader2 size={13} className="animate-spin" />} Save prices
+            </button>
+          </div>
         </div>
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
-          <Detail label="Product" value={lot.productName} wide />
-          <Detail label="SKU" value={lot.sku} mono />
-          <Detail label="Production Lot" value={lot.lotNumber} mono />
-          <Detail label="Production Date" value={formatDate(lot.productionDate)} />
-          <Detail label="Pack Size" value={lot.packSize || "—"} />
-          <Detail label="Available" value={`${formatQty(lot.availableQty)} ${lot.unit}`} />
-          {showCost && <Detail label="Production Cost / Packet" value={formatINR(lot.unitCost ?? null)} hint="From packaging cost (read-only)" />}
-          <Detail label="GST" value={`${lot.taxPercent}%`} />
+        <div className="rounded-xl bg-gray-50 dark:bg-white/[0.03] px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+          <Detail label="Product" value={product.name} wide />
+          <Detail label="SKU" value={product.sku} mono />
+          <Detail label="Pack size" value={product.packSize || "—"} />
+          <Detail label="In stock" value={`${formatQty(product.availableQty)} ${product.unit}`} />
+          {showCost && <Detail label="Latest production cost" value={formatINR(cost)} hint={product.latestLotNumber ? `lot ${product.latestLotNumber}` : undefined} />}
+          <Detail label="GST" value={`${product.taxPercent}%`} />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label className={LABEL}>Selling Price / Packet (₹)</label>
-            <input type="number" min={0} step="0.01" inputMode="decimal" autoFocus className={INPUT} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
-            {!editing && lot.masterPrice ? <p className="text-[10px] text-gray-400 mt-1">Pre-filled from Product Master price {formatINR(lot.masterPrice)}</p> : null}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs font-semibold text-gray-600 dark:text-slate-300">Prices per {product.unit.toLowerCase()}</p>
+          <div className="flex gap-1 bg-gray-100 dark:bg-white/5 p-1 rounded-xl">
+            {[false, true].map((incl) => (
+              <button
+                key={String(incl)}
+                type="button"
+                onClick={() => setTaxInclusive(incl)}
+                className={clsx("px-3 py-1 rounded-lg text-[11px] font-semibold", taxInclusive === incl ? "bg-white dark:bg-[#13151f] text-gray-900 dark:text-white shadow-sm" : "text-gray-500")}
+              >
+                {incl ? "Including GST" : "Excluding GST"}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className={LABEL}>Price entered</label>
-            <div className="flex rounded-xl border border-gray-300 dark:border-white/10 overflow-hidden text-xs font-semibold">
-              {[false, true].map((incl) => (
-                <button key={String(incl)} type="button" onClick={() => setTaxInclusive(incl)} className={clsx("flex-1 py-2", taxInclusive === incl ? "bg-orange-500 text-white" : "bg-white dark:bg-[#13151f] text-gray-600 dark:text-slate-300")}>
-                  {incl ? "Including GST" : "Excluding GST"}
-                </button>
-              ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {checks.map((c) => (
+            <div key={c.key} className={clsx("rounded-xl border p-3", c.check?.belowCost ? "border-rose-300 bg-rose-50/40 dark:bg-rose-500/5" : "border-gray-200 dark:border-white/10")}>
+              <label className={LABEL} htmlFor={`price-${c.key}`}>{c.label} price</label>
+              <div className="flex items-center rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-[#13151f] focus-within:border-orange-400">
+                <span className="pl-2.5 text-sm text-gray-400">₹</span>
+                <input
+                  id={`price-${c.key}`}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={values[c.key]}
+                  onChange={(e) => setValues((v) => ({ ...v, [c.key]: e.target.value }))}
+                  placeholder="Not set"
+                  className="w-full px-2 py-2 text-sm font-semibold bg-transparent outline-none text-gray-900 dark:text-white"
+                />
+              </div>
+              <div className="mt-1.5 min-h-[30px] text-[10px] leading-snug text-gray-500">
+                {c.invalid ? (
+                  <span className="font-semibold text-rose-600">Enter a price above ₹0</span>
+                ) : c.check ? (
+                  <>
+                    <p>{taxInclusive ? `${formatINR(c.check.priceExclTax)} excl. GST` : `${formatINR(c.check.priceInclTax)} incl. GST`}</p>
+                    {c.check.unitProfit != null && (
+                      <p className={clsx("font-semibold", c.check.belowCost ? "text-rose-600" : "text-emerald-600")}>
+                        {c.check.belowCost ? `Loss ${formatINR(Math.abs(c.check.unitProfit))}` : `Profit ${formatINR(c.check.unitProfit)}`} · {c.check.marginPct}%
+                      </p>
+                    )}
+                  </>
+                ) : product[c.key] == null ? (
+                  <span className="text-amber-600">Required for Priced status</span>
+                ) : null}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
-        {check && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <Detail label="Price excl. GST" value={formatINR(check.priceExclTax)} />
-            <Detail label="Price incl. GST" value={formatINR(check.priceInclTax)} />
-            {showCost && <Detail label="Est. Profit / Packet" value={check.unitProfit == null ? "—" : `${check.unitProfit < 0 ? "−" : "+"}${formatINR(Math.abs(check.unitProfit))}`} tone={check.unitProfit == null ? undefined : check.unitProfit < 0 ? "loss" : "profit"} />}
-            {showCost && <Detail label="Est. Margin" value={check.marginPct == null ? "—" : `${check.marginPct}%`} tone={check.marginPct == null ? undefined : check.marginPct < 0 ? "loss" : "profit"} />}
-          </div>
+        {product.legacyLotPrice && !editing && (
+          <p className="text-[11px] text-gray-500">
+            Earlier lot price (old per-lot pricing): <strong>{formatINR(product.legacyLotPrice.price)}</strong> excl. GST on lot {product.legacyLotPrice.lotNumber}. Shown for reference only.
+          </p>
         )}
 
-        {check?.warning && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-500/10 dark:border-rose-500/30 p-3 space-y-2" role="alert">
-            <p className="text-xs font-semibold text-rose-700 dark:text-rose-400 flex items-start gap-1.5"><AlertTriangle size={14} className="shrink-0 mt-px" />{check.warning}</p>
-            <label className="flex items-center gap-2 text-[11px] font-semibold text-rose-700 dark:text-rose-400 cursor-pointer">
-              <input type="checkbox" checked={ackBelowCost} onChange={(e) => setAckBelowCost(e.target.checked)} className="rounded" />
-              I confirm this lot should be sold below its production cost.
-            </label>
-          </div>
+        {below.length > 0 && (
+          <label className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-500/10 px-3 py-2.5 text-xs text-rose-700 dark:text-rose-300 cursor-pointer">
+            <input type="checkbox" checked={ackBelowCost} onChange={(e) => setAckBelowCost(e.target.checked)} className="mt-0.5 rounded" />
+            <span>
+              <strong>{below.map((b) => b.label).join(", ")}</strong> {below.length > 1 ? "prices are" : "price is"} below the latest production cost ({formatINR(cost)}). Sales at this price make a loss. Tick to save anyway.
+            </span>
+          </label>
         )}
 
         {editing && (
           <div>
-            <label className={LABEL}>Reason for change (optional, kept in price history)</label>
-            <input className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="e.g. festival pricing" />
+            <label className={LABEL} htmlFor="price-reason">Reason for change (optional)</label>
+            <input id="price-reason" className={INPUT} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Revised distributor rates" maxLength={500} />
           </div>
         )}
-        <p className="text-[10px] text-gray-400">The new price applies to new sales from this lot only. Saved invoices keep the price they were billed at; other lots of this product keep their own prices.</p>
+        <p className="text-[10px] text-gray-400">
+          Prices are stored excluding GST and apply to every lot of this product, now and in future production. Existing invoices and orders keep their prices.
+        </p>
       </div>
     </Modal>
   );
 }
 
-function ViewLotModal({ lotId, onClose }: { lotId: string; onClose: () => void }) {
-  const [lot, setLot] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+function ViewProductModal({ id, onClose }: { id: string; onClose: () => void }) {
+  const { showToast } = useToast();
+  const [p, setP] = useState<(ProductRow & { history: any[] }) | null>(null);
   useEffect(() => {
-    lotPricingApi.getLot(lotId).then((r) => setLot(r.data)).catch((e) => setError(apiError(e, "Failed to load lot")));
-  }, [lotId]);
+    lotPricingApi.getProduct(id).then((r) => setP(r.data)).catch((e) => { showToast(apiError(e, "Failed to load product"), "error"); onClose(); });
+  }, [id, onClose, showToast]);
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={lot ? `LOT ${lot.lotNumber}` : "LOT DETAILS"}>
-      {error ? <p className="text-sm text-rose-600">{error}</p> : !lot ? (
-        <div className="py-8 text-center text-xs text-gray-400"><Loader2 size={16} className="inline animate-spin mr-2" />Loading…</div>
+    <Modal isOpen onClose={onClose} size="xl" title={p ? p.name : "Product"}>
+      {!p ? (
+        <div className="py-10 text-center text-xs text-gray-400"><Loader2 className="inline animate-spin mr-2" size={14} />Loading…</div>
       ) : (
-        <div className="space-y-4 text-xs">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Detail label="Product" value={lot.productName} wide />
-            <Detail label="SKU" value={lot.sku} mono />
-            <Detail label="Production Batch" value={lot.productionBatchCode || "—"} mono />
-            <Detail label="Pack Size" value={lot.packSize || "—"} />
-            <Detail label="Produced" value={`${formatQty(lot.producedQty)} ${lot.unit}`} />
-            <Detail label="Available" value={`${formatQty(lot.availableQty)} ${lot.unit}`} />
-            <Detail label="Reserved" value={`${formatQty(lot.reservedQty)} ${lot.unit}`} />
-            <Detail label="Production Date" value={formatDate(lot.productionDate)} />
-            <Detail label="Packaging Date" value={formatDate(lot.packagingDate)} />
-            <Detail label="Expiry" value={formatDate(lot.expiryDate)} />
-            <Detail label="Warehouse" value={lot.warehouse?.name || lot.location} />
-            <Detail label="Stock Status" value={String(lot.stockStatus || "").replace(/_/g, " ")} />
-            {lot.unitCost !== undefined && <Detail label="Production Cost / Packet" value={formatINR(lot.unitCost)} />}
-            <Detail label="Selling Price" value={lot.sellingPrice ? `${formatINR(lot.sellingPrice)} ${lot.priceTaxInclusive ? "incl." : "excl."} GST` : "Awaiting price"} />
-            {lot.unitProfit !== undefined && <Detail label="Est. Profit / Packet" value={lot.unitProfit == null ? "—" : `${lot.unitProfit < 0 ? "−" : "+"}${formatINR(Math.abs(lot.unitProfit))}`} tone={lot.unitProfit == null ? undefined : lot.unitProfit < 0 ? "loss" : "profit"} />}
-            {lot.pricedAt && <Detail label="Last Priced" value={`${formatDate(lot.pricedAt)}${lot.pricedByName ? ` · ${lot.pricedByName}` : ""}`} />}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <Detail label="SKU" value={p.sku} mono />
+            <Detail label="Pack size" value={p.packSize || "—"} />
+            <Detail label="Available" value={`${formatQty(p.availableQty)} ${p.unit}`} hint={`${formatQty(p.totalQty)} on hand · ${p.lotCount} lots`} />
+            <Detail label="Status" value={p.pricingStatus === PRODUCT_FULLY_PRICED ? "Priced" : `Awaiting ${p.missingTiers.join(", ")}`} />
+            {p.latestCost !== undefined && <Detail label="Latest production cost" value={formatINR(p.latestCost ?? null)} hint={p.latestLotNumber ? `lot ${p.latestLotNumber}` : undefined} />}
+            {p.stockValue !== undefined && <Detail label="Inventory value" value={formatINR(p.stockValue ?? null)} hint="at production cost" />}
+            <Detail label="GST" value={`${p.taxPercent}%`} />
+            <Detail label="Last produced" value={formatDate(p.latestProductionAt)} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {p.tiers.map((t) => (
+              <div key={t.key} className="rounded-xl border border-gray-200 dark:border-white/10 px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{t.label} price</p>
+                <p className={clsx("text-base font-bold", t.price == null ? "text-amber-600" : t.belowCost ? "text-rose-600" : "text-gray-900 dark:text-white")}>{t.price != null ? formatINR(t.price) : "Not set"}</p>
+                {t.price != null && (
+                  <p className="text-[10px] text-gray-400">
+                    {formatINR(t.priceInclTax)} incl. GST{t.marginPct != null ? ` · ${t.marginPct}% margin` : ""}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
 
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1.5"><History size={13} /> Price history</p>
-            {lot.history.length === 0 ? <p className="text-gray-400">No price set yet.</p> : (
-              <div className="rounded-xl border border-gray-200 dark:border-white/10 overflow-x-auto">
-                <table className="w-full text-left min-w-[520px]">
-                  <thead className="bg-gray-50 dark:bg-white/[0.02] text-[10px] uppercase tracking-wider text-gray-500">
-                    <tr><th className="px-3 py-2">When</th><th className="px-3 py-2 text-right">From</th><th className="px-3 py-2 text-right">To</th><th className="px-3 py-2">By</th><th className="px-3 py-2">Reason</th></tr>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1.5 flex items-center gap-1.5"><History size={12} /> Price history</p>
+            {p.history.length === 0 ? (
+              <p className="text-xs text-gray-400">No price changes yet.</p>
+            ) : (
+              <div className="overflow-x-auto custom-scrollbar rounded-xl border border-gray-200 dark:border-white/10">
+                <table className="w-full text-left text-[11px] min-w-[620px]">
+                  <thead className="bg-gray-50 dark:bg-white/[0.03] text-gray-500 font-semibold uppercase tracking-wider">
+                    <tr>
+                      <th className="px-3 py-2">When</th>
+                      {PRICE_TIERS.map((t) => <th key={t.key} className="px-3 py-2 text-right">{t.label}</th>)}
+                      <th className="px-3 py-2">By / reason</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                    {lot.history.map((h: any) => (
+                    {p.history.map((h) => (
                       <tr key={h.id}>
-                        <td className="px-3 py-2 whitespace-nowrap">{new Date(h.effectiveAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
-                        <td className="px-3 py-2 text-right">{h.previousPrice != null ? formatINR(h.previousPrice) : "—"}</td>
-                        <td className="px-3 py-2 text-right font-semibold">
-                          {formatINR(h.newPrice)} <span className="text-[10px] font-normal text-gray-400">{h.taxInclusive ? "incl." : "excl."}</span>
-                          {h.belowCost && <AlertTriangle size={11} className="inline ml-1 text-rose-500" aria-label="Below cost" />}
+                        <td className="px-3 py-2 whitespace-nowrap">{new Date(h.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
+                        {PRICE_TIERS.map((t) => {
+                          const before = h.previous?.[t.key];
+                          const after = h.prices?.[t.key];
+                          const changed = (before ?? null) !== (after ?? null);
+                          return (
+                            <td key={t.key} className="px-3 py-2 text-right whitespace-nowrap">
+                              {changed && before != null && <span className="text-gray-400 line-through mr-1">{formatINR(before)}</span>}
+                              <span className={clsx(changed ? "font-bold text-gray-900 dark:text-white" : "text-gray-500")}>{after != null ? formatINR(after) : "—"}</span>
+                            </td>
+                          );
+                        })}
+                        <td className="px-3 py-2">
+                          <p className="text-gray-700 dark:text-slate-200">{h.by || "—"}</p>
+                          <p className="text-[10px] text-gray-400">
+                            {h.enteredTaxInclusive ? "Entered incl. GST" : "Entered excl. GST"}
+                            {h.belowCost?.length ? ` · below cost: ${h.belowCost.join(", ")}` : ""}
+                            {h.reason ? ` · ${h.reason}` : ""}
+                          </p>
                         </td>
-                        <td className="px-3 py-2">{h.changedBy || "—"}</td>
-                        <td className="px-3 py-2 text-gray-500">{h.reason || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -454,17 +595,21 @@ function ViewLotModal({ lotId, onClose }: { lotId: string; onClose: () => void }
               </div>
             )}
           </div>
+
+          <div className="-mx-6 -mb-6">
+            <FinishedGoodsLotsPanel sku={p.sku} unit={p.unit} prices={p} includeEmpty />
+          </div>
         </div>
       )}
     </Modal>
   );
 }
 
-function Detail({ label, value, hint, mono, wide, tone }: { label: string; value: string; hint?: string; mono?: boolean; wide?: boolean; tone?: "profit" | "loss" }) {
+function Detail({ label, value, hint, mono, wide }: { label: string; value: string; hint?: string; mono?: boolean; wide?: boolean }) {
   return (
-    <div className={clsx("rounded-lg bg-gray-50 dark:bg-white/[0.03] px-3 py-2 min-w-0", wide && "col-span-2")}>
-      <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
-      <p className={clsx("font-semibold truncate", mono && "font-mono", tone === "loss" ? "text-rose-600" : tone === "profit" ? "text-emerald-600" : "text-gray-800 dark:text-slate-100")}>{value}</p>
+    <div className={clsx("min-w-0", wide && "col-span-2")}>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">{label}</p>
+      <p className={clsx("font-semibold text-gray-800 dark:text-slate-100 truncate", mono && "font-mono")} title={value}>{value}</p>
       {hint && <p className="text-[10px] text-gray-400">{hint}</p>}
     </div>
   );

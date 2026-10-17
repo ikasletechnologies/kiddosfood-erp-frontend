@@ -1,12 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import clsx from "clsx";
 import { RotateCcw } from "lucide-react";
 import {
   AllocationDraft, MaterialLots, UNTRACKED,
   allocatedTotal, allocationCost, allocationError,
 } from "@/lib/lot-allocation";
-import { autoQty, formatQty } from "@/lib/qty-display";
+import { autoQty, convertQty, defaultDisplayUnit, entryUnitsFor, formatQty, inputValueIn } from "@/lib/qty-display";
 
 const inr = (n: number) => `₹${(Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const day = (d: string | null) => (d ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "—");
@@ -35,7 +36,40 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
       : []),
   ];
 
-  const set = (key: string, value: string) => onChange({ ...draft, [key]: value });
+  // Each lot can be entered in g or KG (ml or L); the draft always holds the stock unit.
+  const units = entryUnitsFor(unit);
+  const [entryUnits, setEntryUnits] = useState<Record<string, string>>({});
+  // What the operator typed, in their chosen unit — kept so "0." or "37." isn't reformatted mid-typing.
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const entryUnitOf = (key: string) => entryUnits[key] ?? defaultDisplayUnit(unit);
+
+  const toStock = (text: string, from: string): string => {
+    if (text.trim() === "") return "";
+    const v = convertQty(Number(text), from, unit);
+    return v == null || !Number.isFinite(v) ? text : String(v);
+  };
+  const textFor = (key: string): string => {
+    const stock = draft[key] ?? "";
+    const typed = texts[key];
+    const from = entryUnitOf(key);
+    // Show the typed text while it still matches the draft; otherwise (reset, oldest first) derive it.
+    if (typed != null && (typed === "") === (stock === "") && (Number(toStock(typed, from)) || 0) === (Number(stock) || 0)) return typed;
+    if (stock === "") return "";
+    return inputValueIn(Number(stock) || 0, unit, from) ?? stock;
+  };
+
+  const set = (key: string, text: string) => {
+    setTexts((t) => ({ ...t, [key]: text }));
+    onChange({ ...draft, [key]: toStock(text, entryUnitOf(key)) });
+  };
+  const changeUnit = (key: string, next: string) => {
+    setEntryUnits((u) => ({ ...u, [key]: next }));
+    setTexts((t) => {
+      const rest = { ...t };
+      delete rest[key];
+      return rest;
+    });
+  };
 
   return (
     <div className="bg-orange-50/30 dark:bg-white/[0.02] border-t border-orange-100 dark:border-white/5 px-3 sm:px-5 py-3 space-y-2">
@@ -56,7 +90,7 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
         </p>
       ) : (
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full min-w-[640px] text-left text-[11px] font-semibold text-gray-700 dark:text-slate-300">
+          <table className="w-full min-w-[700px] text-left text-[11px] font-semibold text-gray-700 dark:text-slate-300">
             <thead>
               <tr className="text-[9px] font-bold uppercase tracking-wider text-gray-400 dark:text-slate-500">
                 <th className="py-1.5 pr-2">Lot</th>
@@ -65,14 +99,13 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
                 <th className="py-1.5 px-2">Expiry</th>
                 <th className="py-1.5 px-2 text-right">Available</th>
                 <th className="py-1.5 px-2 text-right">Unit cost</th>
-                <th className="py-1.5 px-2 text-right w-[110px]">Allocate ({unit})</th>
+                <th className="py-1.5 px-2 text-right w-[170px]">Allocate</th>
                 <th className="py-1.5 pl-2 text-right">Cost</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-orange-100/70 dark:divide-white/5">
               {rows.map((r) => {
-                const v = draft[r.key] ?? "";
-                const q = Number(v) || 0;
+                const q = Number(draft[r.key]) || 0;
                 const over = q > r.availableQty + 0.0005;
                 return (
                   <tr key={r.key}>
@@ -83,21 +116,35 @@ export default function IngredientLotPanel({ material, required, draft, edited, 
                     <td className="py-1.5 px-2 text-right whitespace-nowrap">{formatQty(r.availableQty, unit, "down")}</td>
                     <td className="py-1.5 px-2 text-right whitespace-nowrap">{inr(r.unitCost)}/{unit}</td>
                     <td className="py-1.5 px-2 text-right">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        step="any"
-                        value={v}
-                        aria-label={`Allocate from ${r.lotNumber}`}
-                        onChange={(e) => set(r.key, e.target.value)}
-                        className={clsx(
-                          "w-full rounded-lg border px-2 py-1 text-right text-xs font-bold bg-white dark:bg-white/5 dark:text-white outline-none focus:ring-2 focus:ring-orange-200",
-                          over ? "border-rose-400" : "border-gray-200 dark:border-white/10"
-                        )}
-                      />
-                      {/* Entered in the stock unit (exact); shown in g/ml when that reads better. */}
-                      {q > 0 && autoQty(q, unit).unit.toUpperCase() !== unit.toUpperCase() && (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          value={textFor(r.key)}
+                          aria-label={`Allocate from ${r.lotNumber}`}
+                          onChange={(e) => set(r.key, e.target.value)}
+                          className={clsx(
+                            "min-w-0 flex-1 rounded-lg border px-2 py-1 text-right text-xs font-bold bg-white dark:bg-white/5 dark:text-white outline-none focus:ring-2 focus:ring-orange-200",
+                            over ? "border-rose-400" : "border-gray-200 dark:border-white/10"
+                          )}
+                        />
+                        <select
+                          aria-label={`Unit for ${r.lotNumber}`}
+                          value={entryUnitOf(r.key)}
+                          onChange={(e) => changeUnit(r.key, e.target.value)}
+                          disabled={units.length < 2}
+                          title={units.length < 2 ? `Stocked in ${unit}` : `Stocked in ${unit}; converted exactly`}
+                          className="w-14 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#13151f] px-1 py-1 text-xs font-bold text-gray-600 dark:text-slate-300 outline-none focus:ring-2 focus:ring-orange-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                        >
+                          {(units.includes(entryUnitOf(r.key)) ? units : [entryUnitOf(r.key), ...units]).map((u) => (
+                            <option key={u} value={u} className="dark:bg-card">{u}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {/* Stored in the stock unit; echo it in the other unit when that reads differently. */}
+                      {q > 0 && autoQty(q, unit).unit.toUpperCase() !== entryUnitOf(r.key).toUpperCase() && (
                         <span className="block text-[10px] font-semibold text-gray-400 mt-0.5">= {formatQty(q, unit)}</span>
                       )}
                     </td>

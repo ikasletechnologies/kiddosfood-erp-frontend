@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import { Modal } from "@/components/ui/Modal";
 import clsx from "clsx";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { convertUnit } from "@/lib/unitConversion";
 import { PRODUCTION_FEATURES, QC_NOT_REQUIRED } from "@/config/production-features";
 import { plannedYieldOf, yieldVariance, fmtYield, fmtSigned, varianceTone } from "@/lib/production-yield";
@@ -40,6 +41,9 @@ export default function ActiveProductionRunsClient() {
   const [remarks, setRemarks] = useState<string>("");
   const [expiryDate, setExpiryDate] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  // A batch just completed and handed to Packaging. Shown as a fallback link
+  // in case the automatic redirect doesn't happen — never re-submitted.
+  const [completedForPackaging, setCompletedForPackaging] = useState<{ id: string; batchCode: string; href: string } | null>(null);
   const [warehouseStockByWarehouse, setWarehouseStockByWarehouse] = useState<Record<string, any[]>>({});
 
   // Cancel Run Modal State
@@ -196,16 +200,24 @@ export default function ActiveProductionRunsClient() {
           : undefined,
       });
       const batch = res.data?.batch;
-      const otherActiveRuns = history.filter(
-        (h) => h.id !== batchToApprove.id && (h.status === "IN_PROGRESS" || h.status === "STOPPED")
-      ).length;
       setShowApprovalModal(false);
       setBatchToApprove(null);
       fetchHistory();
-      if (batch?.qcStatus === QC_NOT_REQUIRED) {
-        toast.success(`${batch.batchCode} completed — ready for packaging`);
-        // Last open run: take the operator straight to the next step.
-        if (otherActiveRuns === 0) router.push(`/packaging?batchId=${batch.id}`);
+      if (batch?.id && batch.qcStatus === QC_NOT_REQUIRED) {
+        // Completion is confirmed by the server: go straight to Packaging with
+        // this exact batch (its database id) selected. The batch's branch is
+        // passed too, so Packaging looks in the right place.
+        const params = new URLSearchParams({ batchId: batch.id });
+        const branchId = batch.franchiseId || batchToApprove.franchiseId;
+        if (branchId) params.set("franchiseId", branchId);
+        const href = `/packaging?${params.toString()}`;
+        setCompletedForPackaging({ id: batch.id, batchCode: batch.batchCode, href });
+        toast.success(`${batch.batchCode} completed — opening Packaging`);
+        try {
+          router.push(href);
+        } catch {
+          toast.error("Couldn't open Packaging automatically — use the Open Packaging link.");
+        }
       } else {
         toast.success("Production completed & added to Batch Registry");
       }
@@ -280,6 +292,17 @@ export default function ActiveProductionRunsClient() {
 
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-300 w-full min-w-0">
+      {completedForPackaging && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3 text-xs">
+          <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 size={14} className="inline mr-1.5 -mt-0.5" />
+            {completedForPackaging.batchCode} completed and ready for packaging.
+          </span>
+          <Link href={completedForPackaging.href} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#f58220] text-white font-bold hover:bg-orange-600">
+            <PackageCheck size={13} /> Open Packaging
+          </Link>
+        </div>
+      )}
       {activeRuns.length === 0 ? (
         <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-2xl py-20 flex flex-col items-center justify-center text-center space-y-3 p-6 shadow-2xs">
           <div className="w-14 h-14 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center text-[#f58220]">

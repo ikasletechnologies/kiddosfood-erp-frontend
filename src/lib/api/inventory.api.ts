@@ -198,6 +198,19 @@ export const productBatchesApi = {
     api.get('/api/production/batches', { params }),
 };
 
+// Inventory > Expiry Tracking: lot-wise expiry for one view (finished goods or raw materials).
+export const expiryTrackingApi = {
+  list: (params: {
+    view: 'FINISHED' | 'RAW';
+    franchiseId?: string;
+    warehouseId?: string;
+    productId?: string;
+    search?: string;
+    status?: string;
+    includeZero?: boolean;
+  }) => api.get('/api/inventory/expiry-tracking', { params }),
+};
+
 export const recallApi = {
   getEligibility: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall/eligibility`),
   getState: (batchId: string) => api.get(`/api/production/batches/${batchId}/recall`),
