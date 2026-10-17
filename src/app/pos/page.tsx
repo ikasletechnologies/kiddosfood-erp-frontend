@@ -445,22 +445,30 @@ export default function POSPage() {
     }
   };
 
+  // Party list: everyone of the active type as soon as the box is opened,
+  // narrowed as the cashier types (from the first letter). Inactive dealers
+  // and the HQ franchise can't be billed, so they aren't offered.
   useEffect(() => {
-    if (partySearch.trim().length < 2) { setPartyResults([]); return; }
+    if (!showPartyDrop) return;
     const q = partySearch.trim();
-    let req: Promise<any>;
-    if (partyType === "CUSTOMER") {
-      req = customersApi.search(q);
-    } else if (partyType === "FRANCHISE") {
-      req = franchiseApi.getAll({ search: q });
-    } else {
-      req = api.get("/api/dealers", { params: { search: q } });
-    }
-    req.then(res => {
-      const data = res.data?.data || res.data || [];
-      setPartyResults(Array.isArray(data) ? data.slice(0, 6) : []);
-    }).catch(() => setPartyResults([]));
-  }, [partySearch, partyType]);
+    let cancelled = false;
+    const t = setTimeout(() => {
+      const params = q ? { search: q } : undefined;
+      const req: Promise<any> =
+        partyType === "CUSTOMER" ? (q ? customersApi.search(q) : api.get("/api/customers"))
+        : partyType === "FRANCHISE" ? franchiseApi.getAll(params)
+        : api.get("/api/dealers", { params });
+      req.then(res => {
+        if (cancelled) return;
+        const data = res.data?.data || res.data || [];
+        const list = (Array.isArray(data) ? data : [])
+          .filter((p: any) => !(partyType === "DEALER" && p.status === "INACTIVE") && !(partyType === "FRANCHISE" && p.isHQ))
+          .filter((p: any) => !q || [p.name, p.phone, p.contactNum].some((v) => v && String(v).toLowerCase().includes(q.toLowerCase())));
+        setPartyResults(list.slice(0, 50));
+      }).catch(() => { if (!cancelled) setPartyResults([]); });
+    }, q ? 200 : 0);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [partySearch, partyType, showPartyDrop]);
 
   // Close party dropdown on outside click
   useEffect(() => {
@@ -1258,11 +1266,12 @@ export default function POSPage() {
                     Add {activeTab.label}
                     {partySearch.trim() && <span className="font-normal text-gray-400 dark:text-slate-500 truncate">“{partySearch.trim()}”</span>}
                   </button>
-                  {partySearch.trim().length >= 2 && partyResults.length === 0 && (
+                  {partyResults.length === 0 && (
                     <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
                       No {activeTab.label.toLowerCase()} found
                     </div>
                   )}
+                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   {partyResults.map(p => (
                     <button
                       key={p.id}
@@ -1278,6 +1287,7 @@ export default function POSPage() {
                       </div>
                     </button>
                   ))}
+                  </div>
                 </div>
               )}
             </div>

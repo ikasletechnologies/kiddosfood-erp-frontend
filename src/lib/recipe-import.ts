@@ -62,6 +62,8 @@ export interface RecipeDraft {
   yieldUnit: string;
   lines: LineDraft[];
   productIds: string[];
+  /** Updating an existing recipe: replace its Additional Expenses with the defaults. */
+  replaceExpenses?: boolean;
 }
 
 export const QTY_UNITS = ["G", "KG", "MG", "ML", "L", "PCS"];
@@ -147,6 +149,9 @@ export function toDecision(d: RecipeDraft) {
       newMaterial: l.action === "CREATE" ? { name: l.newName.trim(), unit: l.newUnit } : undefined,
     })),
     productIds: d.productIds,
+    // New recipes always get the default expenses; an update keeps the
+    // recipe's own unless this is ticked.
+    replaceExpenses: d.mode === "NEW_VERSION" ? !!d.replaceExpenses : undefined,
   };
 }
 

@@ -33,6 +33,17 @@ export const DEFAULT_CATEGORIES: ExpenseCategory[] = [
   { code: PACKAGING_MATERIAL, label: "Packaging Materials" },
 ];
 
+/**
+ * What a new recipe starts with when the server's defaults can't be loaded
+ * (the server's /costing-settings defaultExpenses win): ₹5 per packet.
+ */
+export const DEFAULT_RECIPE_EXPENSES: RecipeExpensePayload[] = [
+  { category: "MANPOWER", enabled: true, basis: "PER_PACKET", rate: 1, sizeRates: [] },
+  { category: "ELECTRICITY", enabled: true, basis: "PER_PACKET", rate: 1, sizeRates: [] },
+  { category: "OTHER", enabled: true, basis: "PER_PACKET", rate: 1, sizeRates: [] },
+  { category: PACKAGING_MATERIAL, enabled: true, basis: "PER_PACKET", rate: 2, sizeRates: [] },
+];
+
 const PACK_SIZE = /^\d+(?:\.\d+)?\s*(g|gm|gms|kg|kgs|ml|l|ltr|litre|pc|pcs|unit|units|nos)$/i;
 const newKey = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 

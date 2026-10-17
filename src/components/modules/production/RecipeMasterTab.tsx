@@ -25,7 +25,7 @@ import { recipesApi, rawMaterialsApi, productsApi, productsFullApi, productionAp
 import RecipeExpensesEditor from "./RecipeExpensesEditor";
 import RecipeFormulationView from "./RecipeFormulationView";
 import { RECIPE_FILTERS, RecipeFilter, matchesRecipeFilter, matchesRecipeSearch } from "@/lib/recipe-master-filter";
-import { DEFAULT_CATEGORIES, ExpenseCategory, RecipeExpenseDraft, draftsFrom, expenseSummary, expensesPayloadFrom } from "@/lib/recipe-expenses";
+import { DEFAULT_CATEGORIES, DEFAULT_RECIPE_EXPENSES, ExpenseCategory, RecipeExpenseDraft, draftsFrom, expenseSummary, expensesPayloadFrom } from "@/lib/recipe-expenses";
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDateTime } from "@/lib/utils";
@@ -112,6 +112,8 @@ export default function RecipeMasterTab() {
   const [form, setForm] = useState({ ...emptyForm });
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_CATEGORIES);
   const [expenseDrafts, setExpenseDrafts] = useState<RecipeExpenseDraft[]>(() => draftsFrom(null, DEFAULT_CATEGORIES));
+  // Expenses a new recipe starts with (admin defaults from the server; ₹5/packet fallback).
+  const [defaultExpenses, setDefaultExpenses] = useState<any[]>(DEFAULT_RECIPE_EXPENSES);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -236,7 +238,10 @@ export default function RecipeMasterTab() {
     await importsRequest;
     // Expense categories are configurable; the defaults cover a failed load.
     productionApi.getCostingSettings()
-      .then((res) => { if (res.data?.categories?.length) setExpenseCategories(res.data.categories); })
+      .then((res) => {
+        if (res.data?.categories?.length) setExpenseCategories(res.data.categories);
+        if (Array.isArray(res.data?.defaultExpenses)) setDefaultExpenses(res.data.defaultExpenses);
+      })
       .catch(() => {});
   }, []);
 
@@ -245,7 +250,8 @@ export default function RecipeMasterTab() {
   const openCreate = () => {
     setIsAddingCategory(false);
     setForm({ ...emptyForm });
-    setExpenseDrafts(draftsFrom(null, expenseCategories));
+    // Prefilled with the default expenses — editable, and saved with the recipe.
+    setExpenseDrafts(draftsFrom(defaultExpenses, expenseCategories));
     setEditingId(null);
     setError("");
     setShowForm(true);

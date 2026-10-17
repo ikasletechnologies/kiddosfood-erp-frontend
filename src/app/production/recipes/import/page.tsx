@@ -201,7 +201,7 @@ function RecipeImport() {
     try {
       const res = await recipeImportsApi.confirm(review.session.id, selected.key, toDecision(draft));
       const s = res.data.status;
-      toast.success(s.state === "UNCHANGED" ? s.message : `Imported "${draft.name}" as formulation v${s.version}.`);
+      toast.success(s.state === "UNCHANGED" ? s.message : `Imported "${draft.name}" as formulation v${s.version}.${res.data.expenses === "DEFAULTS_APPLIED" ? " Default Additional Expenses (₹5/packet) added — edit them in Recipe Master." : ""}`);
       if (res.data.createdMaterials?.some((m: any) => !m.reused)) toast.success(`New raw material${res.data.createdMaterials.length > 1 ? "s" : ""} added: ${res.data.createdMaterials.filter((m: any) => !m.reused).map((m: any) => m.name).join(", ")}`);
       const keep = new Set(touched);
       keep.delete(selected.key);
@@ -529,6 +529,12 @@ function RecipeReview({ recipe: r, draft: d, materials, products, busy, setDraft
               <label className="flex items-center gap-1.5"><input type="radio" checked={d.mode === "NEW_VERSION"} onChange={() => setDraft({ mode: "NEW_VERSION", existingRecipeId: d.existingRecipeId || r.existingRecipes[0].id })} /> Update existing recipe (new formulation version)</label>
               <label className="flex items-center gap-1.5"><input type="radio" checked={d.mode === "CREATE"} onChange={() => setDraft({ mode: "CREATE" })} /> Create a separate recipe</label>
             </div>
+            {d.mode === "NEW_VERSION" && (
+              <label className="flex items-start gap-1.5 text-[11px] text-gray-600 dark:text-slate-300">
+                <input type="checkbox" className="mt-0.5" checked={!!d.replaceExpenses} onChange={(e) => setDraft({ replaceExpenses: e.target.checked })} />
+                <span>Replace this recipe&apos;s Additional Expenses with the defaults (₹5 per packet). Unticked, its saved expenses are kept; a recipe with none gets the defaults.</span>
+              </label>
+            )}
             {existing && (
               <div className="grid sm:grid-cols-2 gap-3 text-[11px]">
                 <div>
