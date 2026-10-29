@@ -25,6 +25,8 @@ import MinimizedImportWidget from "./MinimizedImportWidget";
 import FinishedGoodsLotsPanel from "./FinishedGoodsLotsPanel";
 import { Modal } from "@/components/ui/Modal";
 import { generateSKU } from "@/lib/utils/erp";
+import { useFinishedGoodsLowStock, FinishedGoodsLowStockNotice, FinishedGoodsStockBadge } from './FinishedGoodsLowStockSettings';
+import { finishedGoodsStockStatus } from '@/lib/finished-goods-stock';
 
 // HQ is now the explicit Franchise.isHQ field, not an id/name guess — a
 // franchise named anything (e.g. "Default") is HQ iff isHQ is true.
@@ -91,6 +93,7 @@ function summarizeStock(matchedItems: any[], franchises: any[]) {
 
 export default function FinishedGoodsStockClient() {
   const router = useRouter();
+  const { threshold } = useFinishedGoodsLowStock();
   // Finished Goods edit through the Inventory Item Master editor
   // (/inventory/stock/edit -> EditItemForm -> rawMaterialsApi.update), the
   // same full item-master screen Raw Materials uses — not the standalone
@@ -643,10 +646,8 @@ export default function FinishedGoodsStockClient() {
   // Stock-level rules — shared by the Out of Stock / Low Stock filter tabs
   // AND their summary cards, so a card count always equals its tab's rows.
   const isOutOfStock = (item: InventoryDemandItem) => item.hqAvailableStock <= 0;
-  // Unknown threshold (no HQ item matched yet) is treated as "not low" —
-  // there's nothing to compare against, so it shouldn't false-alarm.
   const isLowStock = (item: InventoryDemandItem) =>
-    item.hqMinimumStock !== undefined && item.hqAvailableStock > 0 && item.hqAvailableStock <= item.hqMinimumStock;
+    threshold !== null && finishedGoodsStockStatus(item.hqAvailableStock, threshold) === 'LOW_STOCK';
 
   // Filters
   const filtered = demandItems.filter((item) => {
@@ -658,7 +659,7 @@ export default function FinishedGoodsStockClient() {
 
     let matchDemand = true;
     if (demandFilter === "IN_STOCK") {
-      matchDemand = item.hqAvailableStock > 0;
+      matchDemand = threshold !== null && finishedGoodsStockStatus(item.hqAvailableStock, threshold) === 'IN_STOCK';
     } else if (demandFilter === "OUT_OF_STOCK") {
       matchDemand = isOutOfStock(item);
     } else if (demandFilter === "LOW_STOCK") {
@@ -731,6 +732,7 @@ export default function FinishedGoodsStockClient() {
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 w-full min-w-0">
+      <FinishedGoodsLowStockNotice />
       {/* Top Metric Cards Strip */}
       {/* 8 cards → two rows of 4 on desktop (was 6 across). */}
       <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
@@ -760,12 +762,12 @@ export default function FinishedGoodsStockClient() {
         />
         <InventoryMetricCard
           label="Low Stock"
-          value={`${stats.lowStockCount} SKU${stats.lowStockCount === 1 ? "" : "s"}`}
-          subtext="At or below minimum stock"
+          value={threshold === null ? '—' : `${stats.lowStockCount} SKU${stats.lowStockCount === 1 ? "" : "s"}`}
+          subtext={threshold === null ? 'Loading global stock setting...' : `Low Stock Alert: ≤ ${threshold} PC`}
           icon={AlertTriangle}
           colorTheme="amber"
           badge={stats.lowStockCount > 0 ? "Reorder" : undefined}
-          onClick={() => setDemandFilter("LOW_STOCK")}
+          onClick={() => { if (threshold !== null) setDemandFilter("LOW_STOCK"); }}
         />
         <InventoryMetricCard
           label="HQ Reserved Stock"
@@ -957,6 +959,7 @@ export default function FinishedGoodsStockClient() {
                           <h3 className="text-base font-bold text-slate-905 dark:text-white leading-tight">
                             {item.productName}
                           </h3>
+                          <FinishedGoodsStockBadge available={item.hqAvailableStock} />
                           <p className="text-xs font-mono text-slate-400 mt-1 uppercase tracking-wider">
                             SKU: {item.sku || "N/A"} · UNIT: <strong>{item.unit}</strong>
                           </p>
@@ -1133,6 +1136,7 @@ export default function FinishedGoodsStockClient() {
                             <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
                               SKU: {item.sku || "N/A"} · Unit: {item.unit}
                             </p>
+                            <FinishedGoodsStockBadge available={item.hqAvailableStock} />
                             {isUncatalogued(item) && (
                               <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
                                 Not available in POS — no Product catalog entry

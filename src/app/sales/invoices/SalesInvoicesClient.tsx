@@ -1,4 +1,8 @@
 "use client";
+import { InvoiceCards, InvoiceViewSwitcher, useInvoiceListView } from "@/components/sales/InvoiceListViews";
+import InvoiceLotAllocation from "@/components/sales/InvoiceLotAllocation";
+import InvoiceEWayBills from "@/components/sales/InvoiceEWayBills";
+
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
@@ -169,6 +173,7 @@ interface LineItem {
   // and deducted from exactly that lot. Null = standard batch/FIFO line.
   lotId?: string | null;
   lotNumber?: string | null;
+  lotAllocations?: LotAllocation[];
 }
 
 // Line quantity in the item's stock (base) unit, via its unit conversions.
@@ -331,6 +336,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const { showToast } = useToast();
   const router = useRouter();
   const { user } = useAuth();
+  const [listView, setListView] = useInvoiceListView(user?.id);
   const isFranchiseUser = user?.role?.toUpperCase() === "FRANCHISE_ADMIN" || user?.role?.toUpperCase() === "FRANCHISE_STAFF" || Boolean(user?.franchiseId);
 
   const [franchises, setFranchises] = useState<any[]>([]);
@@ -488,7 +494,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       setSourceOrderType("FRANCHISE");
       Promise.all([
         api.get(`/api/franchise-orders/${franchiseOrderId}`),
-        productsFullApi.getAll({ stockSource: "HQ" }).catch(() => ({ data: [] })),
+        productsFullApi.getAll({ stockSource: "HQ", includeAll: true }).catch(() => ({ data: [] })),
         franchiseApi.getAll().catch(() => ({ data: [] })),
       ])
         .then(([foRes, prodRes, franRes]) => {
@@ -803,8 +809,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       const activeFranchise = isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined);
       const [invRes, custRes, prodRes, franRes, dealRes, draftRes] = await Promise.allSettled([
         api.get(`/api/sales/invoices?startDate=${dateFrom}&endDate=${dateTo}${activeFranchise ? `&franchiseId=${activeFranchise}` : ""}`).catch(() => ({ data: [] })),
-        customersApi.getAll(activeFranchise ? { franchiseId: activeFranchise } : undefined),
-        productsFullApi.getAll(activeFranchise ? { franchiseId: activeFranchise } : { stockSource: "HQ" }),
+        customersApi.getAll(activeFranchise ? { franchiseId: activeFranchise, includeAll: true } : undefined),
+        productsFullApi.getAll(activeFranchise ? { franchiseId: activeFranchise, includeAll: true } : { stockSource: "HQ", includeAll: true }),
         franchiseApi.getAll(),
         dealersApi.getAll().catch(() => ({ data: [] })),
         draftsApi.getDrafts("SALES_INVOICE").catch(() => ({ data: [] })),
@@ -1090,74 +1096,36 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         batchesLoading: false,
         lotId: null,
         lotNumber: null,
+        lotAllocations: undefined,
       } : it
     ));
     setOpenItemDrop(null);
   };
 
   const updateItem = (idx: number, field: keyof LineItem, value: any) => {
-    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
+    setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value, ...(['qty', 'unit', 'productId'].includes(field) ? { lotId: null, lotNumber: null, batchNumber: '', lotAllocations: undefined } : {}) } : it));
   };
 
   // ── Lot selection (finished-goods lots) ─────────────────────────────────────
   // Optional: split a product line into one line per finished-goods lot, all
   // at the line's (party) price, deducted from exactly that lot on save.
-  const [lotPickerIdx, setLotPickerIdx] = useState<number | null>(null);
-  const lotKey = (r: LineItem) => ({ productId: r.productId, lotId: r.lotId, qty: r.qty });
-  const lotPickerRow = lotPickerIdx != null ? items[lotPickerIdx] : null;
-  const applyLots = (allocations: LotAllocation[]) => {
-    if (lotPickerIdx == null) return;
-    setItems(prev => applyLotSelection(prev, lotPickerIdx, allocations, lotKey, (base, a, i) => ({
-      ...base,
-      id: i === 0 ? base.id : Math.random().toString(36).slice(2),
-      lotId: a.lotId,
-      lotNumber: a.lotNumber,
-      batchNumber: a.batchNumber,
-      qty: a.quantity,
-      rate: a.price,
-      basePrice: a.price,
-    })));
-    setLotPickerIdx(null);
-  };
-
-  // Load sellable batches for every product line whose lots haven't been
-  // fetched for the current seller scope (new product, copied/converted
-  // invoice, or a branch/party change). Lots come from the inventory batch
-  // records the server validates against, never typed free-hand.
   const batchFranchiseId = isFranchiseUser ? user?.franchiseId : (selectedFranchiseId || undefined);
-  const batchScopeKey = `${batchFranchiseId || ""}|${partyType}`;
+  const allocationScope = partyType === 'FRANCHISE' ? 'HQ' : batchFranchiseId || 'HQ';
+  const previousAllocationScope = useRef(allocationScope);
   useEffect(() => {
-    const pending = items.filter(it => it.productId && !it.batchesLoading && it.batchScope !== batchScopeKey);
-    if (!pending.length) return;
-    const ids = new Set(pending.map(it => it.id));
-    setItems(prev => prev.map(it => ids.has(it.id) ? { ...it, batchesLoading: true, batchScope: batchScopeKey } : it));
-    pending.forEach(async (line) => {
-      let batchTracked = false;
-      let batches: any[] = [];
-      try {
-        const res: any = await api.get("/api/sales/invoices/batch-options", {
-          params: { productId: line.productId, franchiseId: batchFranchiseId, partyType },
-        });
-        batchTracked = !!res?.data?.batchTracked;
-        batches = Array.isArray(res?.data?.batches) ? res.data.batches : [];
-      } catch {
-        // Leave the line unresolved; the server still validates on save.
-      }
-      setItems(prev => prev.map(it => {
-        if (it.id !== line.id || it.productId !== line.productId || it.batchScope !== batchScopeKey) return it;
-        const current = (it.batchNumber || "").trim();
-        return {
-          ...it,
-          batchesLoading: false,
-          batchTracked,
-          batches,
-          // Default to the oldest sellable lot (same order the server uses
-          // for FIFO); keep an existing pick so an invalid one stays visible.
-          batchNumber: current || (batchTracked && batches.length ? batches[0].batchCode : ""),
-        };
-      }));
+    if (previousAllocationScope.current !== allocationScope) {
+      setItems(previous => previous.map(line => ({ ...line, lotId: null, lotNumber: null, batchNumber: '', lotAllocations: undefined })));
+      previousAllocationScope.current = allocationScope;
+    }
+  }, [allocationScope]);
+  const applyInvoiceLots = (idx: number, allocations: LotAllocation[]) => {
+    setItems(previous => {
+      const base = previous[idx]; if (!base) return previous;
+      const chosen = allocations.reduce((sum, allocation) => sum + allocation.quantity, 0);
+      if (chosen > base.qty + 0.0001) return previous;
+      return previous.map((line, i) => i === idx ? { ...base, lotAllocations: allocations, lotId: null, lotNumber: null, batchNumber: '' } : line);
     });
-  }, [items, batchScopeKey, batchFranchiseId, partyType]);
+  };
 
   // Line items are priced at selection-time; if the party channel changes
   // after items are already picked, re-derive each line's rate against the
@@ -1249,45 +1217,18 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     const validItems = items.filter(i => (i.productId || i.itemSearch.trim()) && i.qty > 0 && i.rate > 0);
     if (!isDraft && validItems.length === 0) { showToast("Add at least one item with price", "error"); return null; }
 
-    if (!isDraft && hasInsufficientStock) {
-      const details = insufficientItems
-        .map((i: any) => `"${i.name}" (Available: ${i.available} ${i.unit}, Required: ${i.required} ${i.unit})`)
-        .join(", ");
-      showToast(`Cannot create invoice: Insufficient stock for ${details}`, "error");
-      return null;
-    }
-
-    // Batch validation before posting (drafts may hold an incomplete pick).
-    // The server re-checks all of this; this just stops a doomed save early.
-    if (!isDraft) {
-      const batchClaims = new Map<string, number>();
-      for (const it of validItems) {
-        // Lot lines are checked against their lot by the server.
-        if (it.lotId) continue;
-        const name = it.itemSearch || "Product";
-        const batch = (it.batchNumber || "").trim();
-        if (it.productId && it.batchesLoading) {
-          showToast(`Loading batches for "${name}" — please try again in a moment`, "error");
-          return null;
-        }
-        if (!it.productId || !it.batchScope) {
-          if (batch && !it.productId) { showToast(`"${name}": ${INVALID_BATCH_MSG}`, "error"); return null; }
-          continue;
-        }
-        if (!batch) {
-          if (it.batchTracked) { showToast(`Select a batch for "${name}"`, "error"); return null; }
-          continue;
-        }
-        const option = (it.batches || []).find((b: any) => b.batchCode === batch);
-        if (!option) { showToast(`"${name}" batch "${batch}": ${INVALID_BATCH_MSG}`, "error"); return null; }
-        const key = `${it.productId}|${batch}`;
-        const claimed = (batchClaims.get(key) || 0) + lineBaseQty(it);
-        batchClaims.set(key, claimed);
-        if (claimed > Number(option.quantity || 0) + 0.0001) {
-          showToast(`Insufficient stock in batch "${batch}" for "${name}" (Available: ${option.quantity}, Required: ${claimed})`, "error");
-          return null;
-        }
-      }
+    // Confirm proposed quantities that the user intentionally leaves unallocated.
+    let pendingAllocationConfirmed = false;
+    const pendingCandidates = validItems.filter(i => i.productId && (i.lotAllocations?.reduce((sum, a) => sum + a.quantity, 0) ?? (i.lotId ? i.qty : 0)) < i.qty);
+    const pendingChecks = !isDraft ? await Promise.all(pendingCandidates.map(async i => {
+      try {
+        const result = await api.get('/api/sales/invoices/lot-suggestions', { params: { productId: i.productId, quantity: i.qty, unit: i.unit, franchiseId: partyType === 'FRANCHISE' ? undefined : batchFranchiseId } });
+        return result.data.lots.length > 1 || (result.data.lots.length > 0 && i.lotAllocations?.length === 0);
+      } catch { return true; }
+    })) : [];
+    if (pendingChecks.some(Boolean)) {
+      pendingAllocationConfirmed = window.confirm('Some invoice quantities have no selected stock lot. They will remain pending fulfilment and no stock will be deducted. Save this invoice?');
+      if (!pendingAllocationConfirmed) return null;
     }
     let created: any = null;
 
@@ -1313,6 +1254,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         sourceFranchiseOrderId: sourceFranchiseOrderId || undefined,
         sourceDeliveryChallanId: sourceDeliveryChallanId || undefined,
         isDraft,
+        pendingAllocationConfirmed,
         items: itemsToSave.map(i => ({
           productId: i.productId || undefined,
           productName: i.itemSearch,
@@ -1323,6 +1265,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           discountAmount: (i.qty * i.rate * (i.discountPct || 0)) / 100,
           batchNumber: i.batchNumber || undefined,
           inventoryBatchId: i.lotId || undefined,
+          lotAllocations: i.lotAllocations?.map(a => ({ lotId: a.lotId, quantity: a.quantity })),
         })),
         discountAmount: totalDisc,
         termsConditions: showTerms ? (termsText || undefined) : undefined,
@@ -1713,8 +1656,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     return (
       <div className="flex flex-col bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 min-h-screen w-full min-w-0">
         {/* Top bar */}
-        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-2xs w-full min-w-0">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4 shrink-0 shadow-2xs w-full min-w-0">
+          <div className="flex flex-1 items-center gap-3 min-w-0">
             <button
               onClick={() => {
                 setViewInvoice(null);
@@ -1725,8 +1668,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               <ArrowLeft size={18} />
             </button>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white break-words">
                   Sale Invoice — {order.invoiceNum || (figs.status === "DRAFT" ? "Draft" : "—")}
                 </h2>
                 <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border shrink-0", statusStyle.color, statusStyle.bg, statusStyle.border)}>
@@ -1740,10 +1683,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               )}
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-2 xl:justify-end xl:shrink-0">
             <button
               onClick={() => handlePrint(inv)}
-              className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+              className="h-9 px-3.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5 whitespace-nowrap shadow-2xs"
             >
               <Printer size={14} />
               <span>Print / Download</span>
@@ -1753,7 +1696,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 onClick={() => router.push(
                   `/sales/payment-in?invoiceId=${invoice.id}&partyType=${order.partyType || "CUSTOMER"}&partyId=${order.partyId || order.customerId || ""}`
                 )}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="h-9 px-3.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
               >
                 Record Payment
               </button>
@@ -1762,14 +1705,14 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
               // A draft isn't posted yet — there's no invoice to raise a challan against.
               <button
                 onClick={() => { setViewInvoice(null); loadDraft(inv); }}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                className="h-9 px-3.5 text-xs font-semibold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
               >
                 Edit Draft
               </button>
             ) : (
               <button
                 onClick={() => router.push(`/sales/delivery-challan?sourceInvoiceId=${order.id || inv.orderId}`)}
-                className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+                className="h-9 px-3.5 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-card border border-slate-300 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center whitespace-nowrap"
               >
                 Create Delivery Challan
               </button>
@@ -1858,6 +1801,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
           </div>
 
           {/* Products Sold Table */}
+          {invoice.id && figs.status !== "DRAFT" && <InvoiceEWayBills invoiceId={invoice.id} cancelled={figs.status === "CANCELLED"} />}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
             <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 bg-gray-50/60 dark:bg-white/[0.02] flex items-center justify-between">
               <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Products Sold</span>
@@ -2290,12 +2234,12 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </div>
 
             <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm border-collapse min-w-[760px]">
+              <table className="invoice-items-table w-full text-sm border-collapse min-w-[760px]">
                 <thead>
                   <tr className="bg-gray-50/75 dark:bg-white/[0.02] border-b border-gray-200 dark:border-white/5 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="w-8 px-3 py-2.5 text-center">#</th>
                     <th className="px-3 py-2.5 text-left">Item</th>
-                    <th className="w-28 px-2 py-2.5 text-center">Batch No.</th>
+                    <th className="w-64 px-3 py-2.5 text-left">Stock &amp; Lot Allocation</th>
                     <th className="w-16 px-2 py-2.5 text-center">Qty</th>
                     <th className="w-24 px-2 py-2.5 text-center">Unit</th>
                     <th className="w-24 px-3 py-2.5 text-right">Price/Unit</th>
@@ -2307,9 +2251,15 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                   {items.map((item, idx) => {
+                    const factor = lineBaseQty({ ...item, qty: 1 }) || 1;
+                    const manualClaims: Record<string, number> = {};
+                    for (const peer of items) if (peer.id !== item.id && peer.productId === item.productId) {
+                      const peerFactor = lineBaseQty({ ...peer, qty: 1 }) || 1;
+                      for (const allocation of peer.lotAllocations ?? (peer.lotId ? [{ lotId: peer.lotId, quantity: peer.qty }] : [])) manualClaims[allocation.lotId] = (manualClaims[allocation.lotId] || 0) + allocation.quantity * peerFactor / factor;
+                    }
                     const { discAmt, taxAmt, amount } = computeRow(item, withTax);
                     const filtProd = products.filter(p =>
-                      !item.itemSearch || (p.name || "").toLowerCase().includes(item.itemSearch.toLowerCase())
+                      !item.itemSearch || [p.name, p.sku, p.inventorySku, p.barcode].some(value => String(value || "").toLowerCase().includes(item.itemSearch.toLowerCase()))
                     ).slice(0, 10);
 
                     return (
@@ -2358,32 +2308,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                             </div>
                           )}
 
-                          {item.productId && (
-                            <div className="text-[10px] text-gray-500 dark:text-slate-400 mt-1 leading-tight">
-                              {(() => {
-                                let req = item.qty;
-                                const u = String(item.unit).toUpperCase();
-                                let conv = item.conversions?.find((c: any) => 
-                                  c.unitId === item.unit || 
-                                  c.unit?.code === item.unit || 
-                                  c.unit?.name?.toUpperCase() === u || 
-                                  c.unit?.shortName?.toUpperCase() === u
-                                );
-                                if (conv) req = item.qty * conv.multiplier;
-                                
-                                const baseName = item.baseUnit?.shortName || item.baseUnit?.name || "Units";
-                                const isInsufficient = req > (item.availableStock || 0);
-                                
-                                return (
-                                  <>
-                                    Available: {item.availableStock || 0} {baseName}
-                                    {req > 0 && ` | Req: ${req} ${baseName}`}
-                                    {isInsufficient && <span className="text-red-500 dark:text-red-400 font-semibold block mt-0.5">❌ Insufficient Stock</span>}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          )}
+
 
                           {openItemDrop === item.id && itemDropRect && (
                             <div
@@ -2423,7 +2348,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                     <button
                                       key={p.id}
                                       className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-left border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                                      onMouseDown={() => selectProduct(idx, p)}
+                                      type="button"
+                                      onMouseDown={(event) => event.preventDefault()}
+                                      onClick={() => selectProduct(idx, p)}
                                     >
                                       <div>
                                         <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">
@@ -2433,6 +2360,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                           )}
                                         </div>
                                         <div className="text-xs text-gray-400 dark:text-slate-500">{catalogPrice(getChannelPrice(p, partyType)).label}</div>
+                                        <div className="mt-0.5 text-[10px] text-slate-400">{p.inventorySku || p.sku || ""} · {p.currentStock ?? 0} {p.unit || "PC"} · {(p.currentStock || 0) > 0 ? "In Stock" : "Out of Stock"}</div>
                                       </div>
                                     </button>
                                   ))
@@ -2442,57 +2370,16 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                           )}
                         </td>
 
-                        {/* BATCH NO */}
-                        <td className="px-2 py-2.5">
-                          {(() => {
-                            // Only lots from inventory can be picked — no free-text entry.
-                            const batches = item.batches || [];
-                            const current = (item.batchNumber || "").trim();
-                            const currentInvalid = !!current && !!item.batchScope && !item.batchesLoading
-                              && !batches.some((b: any) => b.batchCode === current);
-                            if (!item.productId) {
-                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500">—</div>;
-                            }
-                            // A lot line: the lot is the batch (priced by the party, like any line).
-                            if (item.lotId) {
-                              return <LotLineControl productId={item.productId} lotNumber={item.lotNumber} onOpen={() => setLotPickerIdx(idx)} />;
-                            }
-                            if (item.batchesLoading || !item.batchScope) {
-                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500">Loading…</div>;
-                            }
-                            if (!item.batchTracked && !current) {
-                              return <div className="text-xs text-center text-gray-400 dark:text-slate-500" title="This item's stock isn't tracked in batches">Not required</div>;
-                            }
-                            return (
-                              <>
-                                <select
-                                  value={current}
-                                  onChange={e => updateItem(idx, "batchNumber", e.target.value)}
-                                  title={currentInvalid ? INVALID_BATCH_MSG : undefined}
-                                  className={clsx(
-                                    "w-full text-xs text-gray-700 dark:text-slate-200 outline-none bg-transparent cursor-pointer border rounded-lg px-2 py-1",
-                                    currentInvalid || (item.batchTracked && !current) ? "border-rose-400 dark:border-rose-500/60" : "border-gray-200 dark:border-white/10"
-                                  )}
-                                >
-                                  <option value="" className="dark:bg-card">
-                                    {batches.length ? "Select Batch" : "No sellable batch"}
-                                  </option>
-                                  {currentInvalid && (
-                                    <option value={current} disabled className="dark:bg-card">{current} (invalid)</option>
-                                  )}
-                                  {batches.map((b: any) => (
-                                    <option key={b.batchCode} value={b.batchCode} className="dark:bg-card">
-                                      {b.batchCode} · {Number(b.quantity)} left{b.expDate ? ` · Exp ${formatDate(b.expDate)}` : ""}
-                                    </option>
-                                  ))}
-                                </select>
-                                {currentInvalid && (
-                                  <div className="text-[10px] text-rose-600 dark:text-rose-400 mt-0.5 leading-tight">Invalid batch</div>
-                                )}
-                                {item.batchTracked && <LotLineControl productId={item.productId} onOpen={() => setLotPickerIdx(idx)} />}
-                              </>
-                            );
-                          })()}
+                        {/* Stock suggestions never reserve or deduct inventory. */}
+                        <td className="px-3 py-2.5 align-top min-w-0">
+                          {item.productId ? <InvoiceLotAllocation
+                            autoPrompt={user?.role === 'SUPER_ADMIN'}
+                            productId={item.productId} productName={item.itemSearch} sku={products.find(p => p.id === item.productId)?.sku}
+                            quantity={item.qty} unit={item.unit} price={item.rate * (1 - (item.discountPct || 0) / 100)}
+                            selectedLotId={item.lotId || undefined} selections={item.lotAllocations} manualClaims={manualClaims}
+                            franchiseId={partyType === 'FRANCHISE' ? undefined : batchFranchiseId} showCost={canViewCost(user)}
+                            onManualApply={values => applyInvoiceLots(idx, values)}
+                          /> : <span className="text-xs text-slate-400">Select a product</span>}
                         </td>
 
                         {/* QTY */}
@@ -2738,25 +2625,28 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
 
         </div>
 
-        {/* Insufficient Stock Warning Banner */}
-        {hasInsufficientStock && (
-          <div className="bg-red-50 dark:bg-red-500/10 border-t border-b sm:border border-red-200 dark:border-red-500/20 sm:rounded-xl p-3 sm:mx-6 mb-2 text-xs sm:text-sm text-red-700 dark:text-red-400 shrink-0">
-            <div className="flex items-center gap-2 font-bold mb-1">
-              <AlertTriangle size={16} className="text-red-600 dark:text-red-400 shrink-0" />
-              <span>Cannot create invoice: Insufficient stock for {insufficientItems.map((i: any) => `"${i.name}"`).join(", ")}</span>
-            </div>
-            <ul className="list-disc list-inside space-y-0.5 ml-1 text-xs text-red-600 dark:text-red-300">
-              {insufficientItems.map((item: any, idx: number) => (
-                <li key={idx}>
-                  <span className="font-semibold">{item.name}</span>: Available: {item.available} {item.unit}, Required: {item.required} {item.unit}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <p className="px-4 sm:px-6 pb-2 text-[11px] text-slate-500">Payment and fulfilment are separate. Save this invoice now, then dispatch available quantities through Delivery Challan.</p>
 
+        <style jsx global>{`
+          @media (max-width: 639px) {
+            .invoice-items-table { display: block; min-width: 0 !important; width: 100%; }
+            .invoice-items-table thead { display: none; }
+            .invoice-items-table tbody { display: block; }
+            .invoice-items-table tbody tr { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); border: 1px solid #e2e8f0; border-radius: 14px; margin: 12px; padding: 8px; gap: 4px; }
+            .invoice-items-table td { display: block; min-width: 0; width: auto !important; }
+            .invoice-items-table td:first-child { display: none; }
+            .invoice-items-table td:nth-child(2), .invoice-items-table td:nth-child(3), .invoice-items-table td:nth-child(8) { grid-column: 1 / -1; }
+            .invoice-items-table td:nth-child(4)::before { content: 'Quantity'; }
+            .invoice-items-table td:nth-child(5)::before { content: 'Unit'; }
+            .invoice-items-table td:nth-child(6)::before { content: 'Selling price'; }
+            .invoice-items-table td:nth-child(7)::before { content: 'Discount %'; }
+            .invoice-items-table td:nth-child(8)::before { content: 'GST'; }
+            .invoice-items-table td:nth-child(9)::before { content: 'Amount'; }
+            .invoice-items-table td::before { display: block; margin-bottom: 5px; font-size: 10px; color: #64748b; }
+          }
+        `}</style>
         {/* Action Bar */}
-        <div className="bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between sm:justify-end gap-2.5 sm:gap-3 shrink-0 shadow-2xs w-full min-w-0">
+        <div className="sticky bottom-0 z-20 bg-white dark:bg-card border-t border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between sm:justify-end gap-2.5 sm:gap-3 shrink-0 shadow-2xs w-full min-w-0">
           <button
             type="button"
             onClick={handleBack}
@@ -2797,7 +2687,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                 <div className="absolute bottom-full right-0 mb-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl text-xs w-56 z-50 p-1 animate-in zoom-in-95 duration-150">
                   <button
                     className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving || hasInsufficientStock}
+                    disabled={saving}
                     onClick={saveAndShareWhatsApp}
                     title="Save the invoice and send the details on WhatsApp"
                   >
@@ -2805,7 +2695,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   </button>
                   <button
                     className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving || hasInsufficientStock}
+                    disabled={saving}
                     onClick={saveAndPrint}
                     title="Save the invoice and print / download it"
                   >
@@ -2813,9 +2703,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   </button>
                   <button
                     className="w-full px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-slate-200 rounded-lg flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={saving || hasInsufficientStock}
+                    disabled={saving}
                     onClick={async () => {
-                      if (hasInsufficientStock) return;
+
                       setShowShareDrop(false);
                       // Only clear the form when the save actually succeeded.
                       const saved = await handleSave(false);
@@ -2840,8 +2730,8 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             <button
               type="button"
               onClick={() => handleSave(false)}
-              disabled={saving || hasInsufficientStock}
-              title={hasInsufficientStock ? "Cannot save: Insufficient stock for one or more items" : ""}
+              disabled={saving}
+              title="Save invoice; fulfilment is handled separately"
               className="flex items-center gap-1.5 px-5 sm:px-6 py-2 text-xs sm:text-sm font-bold text-white bg-[#f58220] hover:bg-[#e8740e] rounded-xl shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none transition-all cursor-pointer"
             >
               <Check size={16} /> <span>{saving ? "Saving..." : "Save"}</span>
@@ -2911,24 +2801,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         )}
 
         {printDialog}
-        {lotPickerRow && (
-          <LotSelector
-            open
-            onClose={() => setLotPickerIdx(null)}
-            productId={lotPickerRow.productId}
-            productName={lotPickerRow.itemSearch}
-            price={Number(lotPickerRow.rate) || 0}
-            // Same seller stock the invoice deducts from: HQ for a franchise
-            // party, otherwise the invoicing branch.
-            franchiseId={partyType === "FRANCHISE" ? undefined : batchFranchiseId}
-            quantity={lotPickerRow.lotId
-              ? Object.values(currentLotQuantities(items, lotPickerRow.productId, lotKey)).reduce((s, q) => s + q, 0)
-              : lotPickerRow.qty}
-            initial={currentLotQuantities(items, lotPickerRow.productId, lotKey)}
-            showCost={canViewCost(user)}
-            onApply={applyLots}
-          />
-        )}
+
       </div>
     );
   }
@@ -2994,233 +2867,13 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     showToast(`Exported ${filtered.length} invoices to Excel`, "success");
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
-
-      {/* ── Page Header Toolbar ── */}
-      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
-            <Receipt className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-              Sale Invoices
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
-              Create, track, and manage GST sale invoices
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportExcel}
-            className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 text-xs sm:text-sm font-semibold px-3.5 py-2.5 rounded-xl shadow-2xs hover:bg-gray-50 dark:hover:bg-white/5 transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
-            title="Excel Report"
-          >
-            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span>Excel Report</span>
-          </button>
-          <button
-            onClick={openCreate}
-            className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
-          >
-            <Plus className="h-4 w-4 shrink-0" /> <span>New Invoice</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
-
-        {/* ── Summary Strip ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 w-full min-w-0">
-          {[
-            { label: "Total Sales",   value: `₹${totalAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
-            { label: "Received",      value: `₹${receivedAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
-            { label: "Balance Due",   value: `₹${balanceAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,   color: "text-rose-600 dark:text-rose-400",    dot: "bg-rose-500" },
-          ].map(s => (
-            <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-3.5 sm:p-4 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
-              <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 font-medium truncate">{s.label}</p>
-                <p className={clsx("text-base sm:text-xl font-bold truncate", s.color)}>{s.value}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Filters Row ── */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
-          <div className="relative flex-1 min-w-0 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search invoice or customer..."
-              className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-            />
-            {search && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setSearch("")} 
-              />
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between sm:justify-end min-w-0">
-            <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar p-0.5 bg-white dark:bg-card shrink-0">
-              {STATUS_FILTERS.map(({ value: s, label }) => (
-                <button
-                  key={s}
-                  onClick={() => setStatusFilter(s)}
-                  className={clsx(
-                    "px-3 py-1.5 sm:py-2 text-xs font-medium transition-colors rounded-lg whitespace-nowrap shrink-0",
-                    statusFilter === s ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1.5 sm:gap-2 border border-gray-200 dark:border-white/10 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 relative shrink-0">
-              <div className="flex items-center gap-1 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowFromCal(v => !v)}>
-                <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
-                <span className="font-medium">{fmt(dateFrom)}</span>
-              </div>
-              {showFromCal && (
-                <div className="absolute top-full left-0 mt-1.5 z-50" ref={fromCalRef}>
-                  <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
-                </div>
-              )}
-              <span className="text-gray-300 dark:text-slate-600 px-0.5">to</span>
-              <div className="flex items-center gap-1 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowToCal(v => !v)}>
-                <span className="font-medium">{fmt(dateTo)}</span>
-                <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
-              </div>
-              {showToCal && (
-                <div className="absolute top-full right-0 mt-1.5 z-50" ref={toCalRef}>
-                  <MiniCalendar value={dateTo} onChange={setDateTo} onClose={() => setShowToCal(false)} />
-                </div>
-              )}
-            </div>
-
-            <button 
-              onClick={fetchData} 
-              className="p-2 sm:p-2.5 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-colors cursor-pointer shrink-0" 
-              title="Refresh"
-              aria-label="Refresh Invoices"
-            >
-              <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
-            </button>
-          </div>
-        </div>
-
-        {/* ── Empty State ── */}
-        {loading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-2">
-            <RefreshCw className="h-8 w-8 animate-spin text-[#f58220] opacity-70" />
-            <p className="text-xs text-gray-500 dark:text-slate-400">Loading invoices...</p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4 shadow-2xs w-full min-w-0">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center">
-              <Receipt className="h-7 w-7 sm:h-8 sm:w-8 text-[#f58220]" />
-            </div>
-            <div className="max-w-md">
-              <p className="text-gray-900 dark:text-white font-bold text-base sm:text-lg">No Invoices Found</p>
-              <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">
-                {search || statusFilter !== "ALL"
-                  ? "No sale invoices match your search or filter criteria."
-                  : "Create an invoice to start billing your customers."}
-              </p>
-            </div>
-            <button
-              onClick={openCreate}
-              className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
-            >
-              <Plus className="h-4 w-4" /> Create Invoice
-            </button>
-          </div>
-        ) : (
-          /* ── Table ── */
-          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0">
-            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-              <table className="w-full text-sm min-w-[760px]">
-                <thead>
-                  <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-semibold border-b border-gray-200 dark:border-white/5 uppercase tracking-wider">
-                    <th className="text-left px-4 py-3">Date</th>
-                    <th className="text-left px-4 py-3">Invoice No</th>
-                    <th className="text-left px-4 py-3">Party Name</th>
-                    <th className="text-left px-4 py-3">Transaction</th>
-                    <th className="text-left px-4 py-3">Payment Type</th>
-                    <th className="text-right px-4 py-3">Amount</th>
-                    <th className="text-right px-4 py-3">Balance</th>
-                    <th className="text-center px-4 py-3">Status</th>
-                    <th className="text-right px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
-                  {filtered.map((inv) => {
-                    const figs     = invoiceFigures(inv);
-                    const isDraft  = figs.status === "DRAFT";
-                    const balance  = figs.balance;
-                    const style = STATUS_STYLES[figs.status] || STATUS_STYLES.DRAFT;
-                    return (
-                      <tr 
-                        key={inv.id} 
-                        className={clsx(
-                          "transition-colors",
-                          isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-orange-50/20 dark:hover:bg-white/[0.02]"
-                        )}
-                        onClick={() => {
-                          if (isDraft) loadDraft(inv);
-                        }}
-                      >
-                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
-                          {formatDate(inv.createdAt)}
-                        </td>
-                        <td className="px-4 py-3 font-mono font-bold text-orange-600 dark:text-orange-400 text-xs whitespace-nowrap">
-                          {inv.order?.invoiceNum
-                            ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
-                            : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col items-start gap-1 max-w-[200px] sm:max-w-[260px]">
-                            <span className="font-semibold text-gray-900 dark:text-white text-xs sm:text-sm truncate w-full" title={getPartyDisplayName(inv.order, inv)}>
-                              {getPartyDisplayName(inv.order, inv)}
-                            </span>
-                            {!isDraft && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10">
-                                {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : (inv.order?.franchiseId ? "FRANCHISE" : "CUSTOMER"))}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">
-                          Sale
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
-                          {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold font-mono text-gray-900 dark:text-white text-xs sm:text-sm whitespace-nowrap">
-                          ₹{(inv.finalAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                        <td className="px-4 py-3 text-right font-bold font-mono text-xs sm:text-sm whitespace-nowrap">
-                          {balance > 0 ? (
-                            <span className="text-rose-600 dark:text-rose-400">₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                          ) : (
-                            <span className="text-gray-400 dark:text-slate-500">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center whitespace-nowrap">
-                          <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border", style.color, style.bg, style.border)}>
-                            {style.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1 sm:gap-1.5">
+  // Share every existing action and its permissions between cards and table rows.
+  const invoiceById = new Map(filtered.map(invoice => [invoice.id, invoice]));
+  const renderInvoiceActions = (inv: any) => {
+    const figs = invoiceFigures(inv);
+    const isDraft = figs.status === "DRAFT";
+    const balance = figs.balance;
+    return (<div className="flex flex-wrap items-center justify-end gap-1">
                             {/* Quick Action: View */}
                             <button
                               onClick={(e) => { e.stopPropagation(); setViewInvoice(inv); }}
@@ -3510,7 +3163,249 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                                 </div>
                               )}
                             </div>
+                          </div>);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100 w-full min-w-0">
+
+      {/* ── Page Header Toolbar ── */}
+      <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs w-full min-w-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 text-[#f58220] rounded-xl shrink-0">
+            <Receipt className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+              Sale Invoices
+            </h1>
+            <p className="text-xs text-gray-500 dark:text-slate-400 font-medium truncate">
+              Create, track, and manage GST sale invoices
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center justify-center gap-1.5 border border-gray-200 dark:border-white/10 bg-white dark:bg-card text-gray-700 dark:text-slate-200 text-xs sm:text-sm font-semibold px-3.5 py-2.5 rounded-xl shadow-2xs hover:bg-gray-50 dark:hover:bg-white/5 transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
+            title="Excel Report"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>Excel Report</span>
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center justify-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all whitespace-nowrap active:scale-95 shrink-0 cursor-pointer"
+          >
+            <Plus className="h-4 w-4 shrink-0" /> <span>New Invoice</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-4 sm:space-y-5 w-full min-w-0">
+
+        {/* ── Summary Strip ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 w-full min-w-0">
+          {[
+            { label: "Total Sales",   value: `₹${totalAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,     color: "text-gray-700 dark:text-slate-200",    dot: "bg-gray-400" },
+            { label: "Received",      value: `₹${receivedAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,  color: "text-emerald-600 dark:text-emerald-400", dot: "bg-emerald-500" },
+            { label: "Balance Due",   value: `₹${balanceAmt.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,   color: "text-rose-600 dark:text-rose-400",    dot: "bg-rose-500" },
+          ].map(s => (
+            <div key={s.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-3.5 sm:p-4 flex items-center gap-2.5 sm:gap-3 min-w-0 shadow-2xs">
+              <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", s.dot)} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] sm:text-xs text-gray-500 dark:text-slate-400 font-medium truncate">{s.label}</p>
+                <p className={clsx("text-base sm:text-xl font-bold truncate", s.color)}>{s.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Filters Row ── */}
+        <div className="flex flex-wrap items-center gap-3 w-full min-w-0">
+          <div className="relative flex-1 min-w-[200px] sm:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search invoice or customer..."
+              className="w-full pl-9 pr-8 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs sm:text-sm outline-none focus:border-[#f58220] bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+            />
+            {search && (
+              <X
+                size={14}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                onClick={() => setSearch("")}
+              />
+            )}
+          </div>
+
+          <InvoiceViewSwitcher view={listView} onChange={value => { setListView(value); setOpenActionMenu(null); setActionMenuRect(null); }} />
+
+          <div className="flex w-full items-center gap-2 flex-wrap justify-between min-w-0">
+            <div className="flex items-center border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto max-w-full custom-scrollbar p-0.5 bg-white dark:bg-card shrink-0">
+              {STATUS_FILTERS.map(({ value: s, label }) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={clsx(
+                    "px-3 py-1.5 sm:py-2 text-xs font-medium transition-colors rounded-lg whitespace-nowrap shrink-0",
+                    statusFilter === s ? "bg-[#f58220] text-white shadow-2xs" : "text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-white/5"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2 border border-gray-200 dark:border-white/10 rounded-xl px-2.5 sm:px-3 py-1.5 sm:py-2 bg-white dark:bg-card text-xs sm:text-sm text-gray-700 dark:text-slate-200 relative shrink-0">
+              <div className="flex items-center gap-1 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowFromCal(v => !v)}>
+                <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
+                <span className="font-medium">{fmt(dateFrom)}</span>
+              </div>
+              {showFromCal && (
+                <div className="absolute top-full left-0 mt-1.5 z-50" ref={fromCalRef}>
+                  <MiniCalendar value={dateFrom} onChange={setDateFrom} onClose={() => setShowFromCal(false)} />
+                </div>
+              )}
+              <span className="text-gray-300 dark:text-slate-600 px-0.5">to</span>
+              <div className="flex items-center gap-1 cursor-pointer hover:text-gray-900 dark:hover:text-white" onClick={() => setShowToCal(v => !v)}>
+                <span className="font-medium">{fmt(dateTo)}</span>
+                <Calendar className="h-3.5 w-3.5 text-gray-400 dark:text-slate-500 shrink-0" />
+              </div>
+              {showToCal && (
+                <div className="absolute top-full right-0 mt-1.5 z-50" ref={toCalRef}>
+                  <MiniCalendar value={dateTo} onChange={setDateTo} onClose={() => setShowToCal(false)} />
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={fetchData}
+              className="p-2 sm:p-2.5 text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10 transition-colors cursor-pointer shrink-0"
+              title="Refresh"
+              aria-label="Refresh Invoices"
+            >
+              <RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Empty State ── */}
+        {loading ? (
+          <div className="py-20 flex flex-col items-center justify-center gap-2">
+            <RefreshCw className="h-8 w-8 animate-spin text-[#f58220] opacity-70" />
+            <p className="text-xs text-gray-500 dark:text-slate-400">Loading invoices...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white dark:bg-card border border-gray-200 dark:border-white/5 rounded-xl p-8 sm:p-12 flex flex-col items-center justify-center text-center space-y-4 shadow-2xs w-full min-w-0">
+            <div className="w-14 h-14 sm:w-16 sm:h-16 bg-orange-50 dark:bg-orange-500/10 rounded-2xl flex items-center justify-center">
+              <Receipt className="h-7 w-7 sm:h-8 sm:w-8 text-[#f58220]" />
+            </div>
+            <div className="max-w-md">
+              <p className="text-gray-900 dark:text-white font-bold text-base sm:text-lg">No Invoices Found</p>
+              <p className="text-gray-500 dark:text-slate-400 text-xs sm:text-sm mt-1">
+                {search || statusFilter !== "ALL"
+                  ? "No sale invoices match your search or filter criteria."
+                  : "Create an invoice to start billing your customers."}
+              </p>
+            </div>
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-1.5 bg-[#f58220] hover:bg-[#e8740e] text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
+            >
+              <Plus className="h-4 w-4" /> Create Invoice
+            </button>
+          </div>
+        ) : listView === "card" ? (
+          <InvoiceCards items={filtered.map(inv => {
+            const figures = invoiceFigures(inv);
+            const status = STATUS_STYLES[figures.status] || STATUS_STYLES.DRAFT;
+            return { id: inv.id, number: inv.order?.invoiceNum ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt) : inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale",
+              date: formatDate(inv.createdAt), partyName: getPartyDisplayName(inv.order, inv), partyType: inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : inv.order?.franchiseId ? "FRANCHISE" : "CUSTOMER"),
+              paymentType: inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash", total: figures.total, balance: figures.balance, status: status.label, statusClassName: clsx(status.color, status.bg, status.border) };
+          })} onOpen={id => { const inv = invoiceById.get(id); if (inv) { if (inv.status === "DRAFT") loadDraft(inv); else setViewInvoice(inv); } }} renderActions={id => renderInvoiceActions(invoiceById.get(id))} />
+        ) : (
+          /* ── Table ── */
+          <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden shadow-2xs w-full min-w-0">
+            <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
+              <table className="w-full table-fixed text-xs min-w-[960px]">
+                <colgroup>
+                  {[9, 12, 18, 10, 8, 9, 9, 9, 16].map((width, index) => <col key={index} style={{ width: width + '%' }} />)}
+                </colgroup>
+                <thead>
+                  <tr className="bg-gray-50/75 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-[10px] font-semibold border-b border-gray-200 dark:border-white/5 uppercase tracking-wide">
+                    <th className="text-left px-2.5 py-3">Date</th>
+                    <th className="text-left px-2.5 py-3">Invoice No</th>
+                    <th className="text-left px-2.5 py-3">Party Name</th>
+                    <th className="text-left px-2.5 py-3">Transaction</th>
+                    <th className="text-left px-2.5 py-3">Payment Type</th>
+                    <th className="text-right px-2.5 py-3">Amount</th>
+                    <th className="text-right px-2.5 py-3">Balance</th>
+                    <th className="text-center px-2.5 py-3">Status</th>
+                    <th className="sticky right-0 z-20 bg-gray-50 px-2.5 py-3 text-right dark:bg-card">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-white/5">
+                  {filtered.map((inv) => {
+                    const figs     = invoiceFigures(inv);
+                    const isDraft  = figs.status === "DRAFT";
+                    const balance  = figs.balance;
+                    const style = STATUS_STYLES[figs.status] || STATUS_STYLES.DRAFT;
+                    return (
+                      <tr
+                        key={inv.id}
+                        className={clsx(
+                          "transition-colors",
+                          isDraft ? "hover:bg-orange-50/50 dark:hover:bg-orange-500/10 cursor-pointer bg-orange-50/30 dark:bg-orange-500/5" : "hover:bg-orange-50/20 dark:hover:bg-white/[0.02]"
+                        )}
+                        onClick={() => {
+                          if (isDraft) loadDraft(inv);
+                        }}
+                      >
+                        <td className="px-2.5 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                          {formatDate(inv.createdAt)}
+                        </td>
+                        <td className="px-2.5 py-3 font-mono font-bold text-orange-600 dark:text-orange-400 text-xs break-all">
+                          {inv.order?.invoiceNum
+                            ? formatERPNumber("INV", inv.order.invoiceNum, inv.createdAt)
+                            : (inv.status === "DRAFT" ? "Not yet numbered" : "Lite Sale")}
+                        </td>
+                        <td className="px-2.5 py-3">
+                          <div className="flex flex-col items-start gap-1 min-w-0 w-full">
+                            <span className="font-semibold text-gray-900 dark:text-white text-xs line-clamp-2 break-words w-full" title={getPartyDisplayName(inv.order, inv)}>
+                              {getPartyDisplayName(inv.order, inv)}
+                            </span>
+                            {!isDraft && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-slate-300 border border-gray-200 dark:border-white/10">
+                                {inv.order?.partyType || (inv.order?.customerId ? "CUSTOMER" : (inv.order?.franchiseId ? "FRANCHISE" : "CUSTOMER"))}
+                              </span>
+                            )}
                           </div>
+                        </td>
+                        <td className="px-2.5 py-3 text-xs font-medium text-gray-700 dark:text-slate-300 whitespace-nowrap">
+                          Sale
+                        </td>
+                        <td className="px-2.5 py-3 text-xs text-gray-600 dark:text-slate-400 whitespace-nowrap">
+                          {inv.order?.paymentType === "CREDIT" ? "Credit" : "Cash"}
+                        </td>
+                        <td className="px-2.5 py-3 text-right font-bold font-mono text-gray-900 dark:text-white text-xs break-words">
+                          ₹{(inv.finalAmount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="px-2.5 py-3 text-right font-bold font-mono text-xs break-words">
+                          {balance > 0 ? (
+                            <span className="text-rose-600 dark:text-rose-400">₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          ) : (
+                            <span className="text-gray-400 dark:text-slate-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-2.5 py-3 text-center">
+                          <span className={clsx("inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border max-w-full", style.color, style.bg, style.border)}>
+                            {style.label}
+                          </span>
+                        </td>
+                        <td className={clsx("sticky right-0 bg-white px-2.5 py-3 text-right shadow-[-4px_0_8px_-6px_rgba(0,0,0,0.2)] dark:bg-card", openActionMenu === inv.id ? "z-30" : "z-10")}>
+                          {renderInvoiceActions(inv)}
                         </td>
                       </tr>
                     );

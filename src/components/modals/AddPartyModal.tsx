@@ -681,9 +681,32 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     rows={3}
                     placeholder="Address..."
                     value={form.billingAddress}
-                    onChange={(e) => setForm({...form, billingAddress: e.target.value})}
+                    onChange={(e) => {
+                      const billingAddress = e.target.value;
+                      setForm((prev) => ({
+                        ...prev,
+                        billingAddress,
+                        ...(prev.shippingAddressEnabled ? { shippingAddress: billingAddress } : {}),
+                      }));
+                    }}
                     className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none h-[88px]"
                   />
+                  <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={form.shippingAddressEnabled}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setForm((prev) => ({
+                          ...prev,
+                          shippingAddressEnabled: checked,
+                          ...(checked ? { shippingAddress: prev.billingAddress } : {}),
+                        }));
+                      }}
+                      className="h-4 w-4 rounded border-gray-300 text-orange-500 accent-[#f58220] focus:ring-orange-400"
+                    />
+                    Same as billing address
+                  </label>
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
@@ -693,7 +716,11 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     rows={3}
                     placeholder="Shipping Address..."
                     value={form.shippingAddress}
-                    onChange={(e) => setForm({...form, shippingAddress: e.target.value})}
+                    onChange={(e) => setForm({
+                      ...form,
+                      shippingAddress: e.target.value,
+                      shippingAddressEnabled: false,
+                    })}
                     className="w-full border border-gray-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-white/5 placeholder-gray-400 dark:placeholder-slate-500 transition-colors resize-none h-[88px]"
                   />
                 </div>

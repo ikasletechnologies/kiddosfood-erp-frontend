@@ -3,6 +3,7 @@ import api from './base';
 // --- Products & Recipes ---
 export const productsApi = {
   getAll: (params: any = {}) => api.get('/api/products', { params }),
+  getBulkNames: () => api.get('/api/products/bulk-names'),
   create: (data: any) => api.post('/api/products', data),
 };
 
@@ -33,6 +34,7 @@ export const recipesApi = {
   getFormulations: (id: string) => api.get(`/api/recipes/${id}/formulations`),
   saveFormulation: (id: string, data: { yieldQty: number; yieldUnit: string; notes?: string; items: { inventoryItemId: string; quantity: number; unit: string }[] }) =>
     api.post(`/api/recipes/${id}/formulations`, data),
+  linkProducts: (id: string, productIds: string[]) => api.post(`/api/recipes/${id}/products`, { productIds }),
 };
 
 // --- Word recipe import (review, then confirm one recipe at a time) ---
@@ -49,8 +51,8 @@ export const recipeImportsApi = {
 
 // --- Raw Materials ---
 export const rawMaterialsApi = {
-  getAll: (includeInactive = false, franchiseId?: string, excludeCategory?: string) =>
-    api.get('/api/raw-materials', { params: { includeInactive, franchiseId, excludeCategory } }),
+  getAll: (includeInactive = false, franchiseId?: string, excludeCategory?: string, category?: string) =>
+    api.get('/api/raw-materials', { params: { includeInactive, franchiseId, excludeCategory, category } }),
   getById: (id: string) => api.get(`/api/raw-materials/${id}`),
   getLots: (id: string) => api.get(`/api/raw-materials/${id}/lots`),
   create: (data: any) => api.post('/api/raw-materials', data),
@@ -149,6 +151,7 @@ export const productionApi = {
   // expectedPackagedQty is the batch's packagedQty as last seen on screen — a
   // repeated/stale submission is rejected instead of packing twice.
   packageAndConfirm: (id: string, data: {
+    bulkLotId?: string;
     expectedPackagedQty: number;
     rows: Array<{
       packetSize: string;

@@ -610,7 +610,7 @@ export default function RecipeMasterTab() {
                   </div>
 
                   {/* Recent Imports column */}
-                  <div className="w-full md:w-[245px] md:shrink-0 border-t md:border-t-0 md:border-l border-gray-100 dark:border-white/5 pt-2.5 md:pt-0 md:pl-4">
+                  <div className="hidden" aria-hidden="true">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Recent Imports</p>
                     {importsLoading ? (
                       <span className="inline-flex items-center gap-1.5 text-[11px] text-gray-400"><RefreshCw size={11} className="animate-spin" /> Loading...</span>
@@ -772,7 +772,7 @@ export default function RecipeMasterTab() {
       )}
 
       <Modal
-        isOpen={!!importHistoryRecipe}
+        isOpen={false}
         onClose={() => setImportHistoryRecipe(null)}
         title={`Import History${importHistoryRecipe?.name ? ` — ${importHistoryRecipe.name}` : ""}`}
         size="lg"

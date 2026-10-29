@@ -86,8 +86,9 @@ export const lotPricingApi = {
   getProduct: (id: string) => api.get(`/api/sales/set-price/products/${id}`),
   setProductPrices: (id: string, data: {
     customerPrice?: number | null; dealerPrice?: number | null; franchisePrice?: number | null;
-    taxInclusive: boolean; reason?: string; acknowledgeBelowCost?: boolean;
-    expected?: { customerPrice: number | null; dealerPrice: number | null; franchisePrice: number | null };
+    upcountryFranchisePrice?: number | null; mrp?: number | null; whiteLabelCost?: number | null;
+    taxInclusive: boolean; taxPercent?: 5 | 12 | 18 | 28; reason?: string; acknowledgeBelowCost?: boolean;
+    expected?: Partial<Record<"customerPrice" | "dealerPrice" | "franchisePrice" | "upcountryFranchisePrice" | "mrp" | "whiteLabelCost", number | null>>;
   }) => api.put(`/api/sales/set-price/products/${id}/prices`, data),
   // Eligible lots of one product for a sale. scope "HQ" = Estimate / Sales
   // Order / Proforma (HQ stock); otherwise the seller branch (POS / invoice).

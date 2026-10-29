@@ -31,6 +31,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     expectedDeliveryDate, setExpectedDeliveryDate,
     warehouseId, setWarehouseId,
     purchaseType, setPurchaseType,
+    isBulkPurchase, setIsBulkPurchase,
     paymentTerms, setPaymentTerms,
     poStatus,
     discountAmount, setDiscountAmount,
@@ -114,7 +115,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           quantity: item.quantity,
           unit: item.unit,
           price: item.price,
-          gstRate: item.gstRate
+          gstRate: item.gstRate,
+          isBulk: Boolean(item.isBulk ?? isBulkPurchase),
+          productId: item.productId,
         }))
       };
       if (editId) {
@@ -186,7 +189,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             quantity: item.quantity || 0,
             unit: item.unit,
             price: item.price || 0,
-            gstRate: item.gstRate
+            gstRate: item.gstRate,
+            isBulk: Boolean(item.isBulk ?? isBulkPurchase),
+            productId: item.productId,
           }))
       };
 
@@ -262,8 +267,23 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase type</label>
               <select value={purchaseType} onChange={(e) => setPurchaseType(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100">
-                <option value="ALL">All</option><option value="RAW_MATERIAL">Raw Material</option><option value="PACKAGING">Packaging</option><option value="EQUIPMENT">Equipment</option><option value="CONSUMABLES">Consumables</option><option value="SERVICES">Services</option><option value="OTHERS">Others</option>
+                <option value="RAW_MATERIAL">Raw Material</option>
+                <option value="FINISHED_GOODS">Finished Goods</option>
+                <option value="OTHERS">Others</option>
               </select>
+              {purchaseType === "FINISHED_GOODS" && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={isBulkPurchase}
+                      onChange={(e) => setIsBulkPurchase(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#f58220] focus:ring-[#f58220]"
+                    />
+                    <span>Purchase in Bulk (Unpacked)</span>
+                  </label>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase date</label>

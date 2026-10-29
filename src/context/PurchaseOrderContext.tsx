@@ -11,6 +11,8 @@ export interface LineItem {
   unit: string;
   price: number;
   gstRate: number;
+  isBulk?: boolean;
+  productId?: string;
 }
 
 export interface Vendor {
@@ -63,6 +65,8 @@ interface PurchaseOrderContextType {
   setWarehouseId: (id: string) => void;
   purchaseType: string;
   setPurchaseType: (type: string) => void;
+  isBulkPurchase: boolean;
+  setIsBulkPurchase: (isBulk: boolean) => void;
   paymentTerms: string;
   setPaymentTerms: (terms: string) => void;
   poStatus: string;
@@ -112,6 +116,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [purchaseType, setPurchaseType] = useState("RAW_MATERIAL");
+  const [isBulkPurchase, setIsBulkPurchase] = useState(false);
   const [paymentTerms, setPaymentTerms] = useState("");
   const [poStatus, setPoStatus] = useState("DRAFT");
   const [discountAmount, setDiscountAmount] = useState(0);
@@ -573,6 +578,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       setWarehouseId,
       purchaseType,
       setPurchaseType,
+      isBulkPurchase,
+      setIsBulkPurchase,
       paymentTerms,
       setPaymentTerms,
       poStatus,

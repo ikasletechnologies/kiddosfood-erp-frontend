@@ -145,7 +145,7 @@ export default function FranchiseStockPage() {
 
         const availableStock = inv ? Number(inv.currentStock || 0) : Number(p.currentStock || 0);
         const unit = formatUnit(inv?.unit || p.unit);
-        const minimumStock = inv?.minimumStock ?? 10;
+        const minimumStock = inv?.lowStockThreshold ?? 5;
         const packSize = formatPackSize(p.packSize || p.size, skuNorm);
 
         // In-transit stock heading to this branch (orders with status DISPATCHED)
@@ -258,7 +258,7 @@ export default function FranchiseStockPage() {
             reservedStock: 0,
             inTransitStock,
             pendingDemand: 0,
-            minimumStock: it.minimumStock ?? 10,
+            minimumStock: it.lowStockThreshold ?? 5,
             rawProduct: null,
             inventoryItem: it,
           };
@@ -340,7 +340,7 @@ export default function FranchiseStockPage() {
 
       let matchStock = true;
       if (stockFilter === "IN_STOCK") {
-        matchStock = p.availableStock > 0;
+        matchStock = p.availableStock > p.minimumStock;
       } else if (stockFilter === "OUT_OF_STOCK") {
         matchStock = p.availableStock <= 0;
       } else if (stockFilter === "LOW_STOCK") {
@@ -367,7 +367,8 @@ export default function FranchiseStockPage() {
   }, [batches, expiryFilter, searchTerm]);
 
   // ── Dashboard Metrics Stats ──────────────────────────────────────────
-  const inStockSkus = unifiedProducts.filter((p) => p.availableStock > 0).length;
+  const availableSkuCount = unifiedProducts.filter((p) => p.availableStock > 0).length;
+  const inStockSkus = unifiedProducts.filter((p) => p.availableStock > p.minimumStock).length;
   const lowOrOutSkus = unifiedProducts.filter((p) => p.availableStock <= p.minimumStock).length;
   const deliveredOrdersCount = branchOrders.filter((o) => o.status === "DELIVERED").length;
   const pendingOrdersCount = branchOrders.filter((o) => o.status === "PENDING" || o.status === "APPROVED").length;
@@ -513,7 +514,7 @@ export default function FranchiseStockPage() {
         <InventoryMetricCard
           label="Available Stock"
           value={stats.availableStockNode}
-          subtext={`${stats.inStockSkus} SKUs ready to sell`}
+          subtext={`${availableSkuCount} SKUs ready to sell`}
           icon={Layers}
           colorTheme="emerald"
         />

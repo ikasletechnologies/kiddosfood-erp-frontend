@@ -8,7 +8,8 @@ import {
   Receipt, Plus, ClipboardList, CheckCircle2, AlertCircle, ShoppingCart
 } from "lucide-react";
 import { clsx } from "clsx";
-import { dashboardApi } from "@/lib/api";
+import { dashboardApi, franchiseApi } from "@/lib/api";
+import FranchisePhoto from "@/components/franchise/FranchisePhoto";
 import { useAuth } from "@/context/AuthContext";
 import { useSearchParams } from "next/navigation";
 
@@ -23,6 +24,13 @@ export default function FranchiseDashboardPage() {
 
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [profile,setProfile] = useState<any>(null);
+  const profileId=user?.role === "SUPER_ADMIN" ? monitorId : user?.franchiseId;
+  useEffect(()=>{
+    let stale=false;setProfile(null);
+    if(profileId) franchiseApi.getById(profileId).then(response=>{if(!stale)setProfile(response.data);}).catch(()=>{});
+    return ()=>{stale=true;};
+  },[profileId]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -57,6 +65,7 @@ export default function FranchiseDashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-4 py-4 px-4 pb-16 animate-in fade-in duration-300">
+      <div className="flex items-center gap-3"><FranchisePhoto photo={profile?.photo} name={profile?.name || "Franchise"} className="h-14 w-16" /><div className="min-w-0"><h1 className="break-words text-lg font-bold">{profile?.name || "Franchise Dashboard"}</h1>{profile?.location && <p className="text-xs text-slate-500">{profile.location}</p>}</div></div>
       
       {/* ── Top Action Toolbar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200 dark:border-white/10">
@@ -117,7 +126,7 @@ export default function FranchiseDashboardPage() {
             <div>
               <p className="text-xs font-bold text-amber-900 dark:text-amber-300">Inventory Alert Queue</p>
               <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
-                {summary?.stats?.lowStockCount} items require immediate replenishment or are near expiration.
+                {summary?.stats?.lowStockCount} product SKUs are at or below their stock threshold.
               </p>
             </div>
           </div>

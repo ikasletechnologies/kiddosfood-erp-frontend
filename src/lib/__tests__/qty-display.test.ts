@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { autoQty, convertQty, defaultDisplayUnit, formatQty, maxMultiplierFor, procurementQty, roundForDisplay, roundRequirement } from "../qty-display";
+import { autoQty, convertQty, defaultDisplayUnit, entryUnitsFor, formatQty, maxMultiplierFor, procurementQty, roundForDisplay, roundRequirement } from "../qty-display";
 
 describe("ingredient quantity display", () => {
+  it("offers only compatible recipe-entry units", () => {
+    expect(entryUnitsFor("KG").map((u) => u.toUpperCase())).toEqual(["G", "KG"]);
+    expect(entryUnitsFor("L").map((u) => u.toUpperCase())).toEqual(["ML", "L"]);
+    expect(entryUnitsFor("PCS")).toEqual(["PCS"]);
+    expect(convertQty(1, "L", "KG")).toBeNull();
+    expect(convertQty(1, "PCS", "KG")).toBeNull();
+  });
   it.each([
     [0.08877, "89 g"],
     [0.02427, "25 g"],

@@ -56,7 +56,7 @@ export const franchiseWarehouseApi = {
 
 // --- Franchise Supply Orders (FO-YYYY-XXXX: HQ → Franchise execution) ---
 export const franchiseOrdersApi = {
-  getAll: (params?: { franchiseId?: string; status?: string; sourceRequestId?: string }) =>
+  getAll: (params?: { franchiseId?: string; status?: string; sourceRequestId?: string; search?: string }) =>
     api.get('/api/franchise-orders', { params }),
   getById: (id: string) => api.get(`/api/franchise-orders/${id}`),
   create: (data: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2, Loader2, Search, FileText, Truck, Package, AlertTriangle, CheckCircle2, Info, Home, ChevronRight, Save, FileCheck2, Building2 } from "lucide-react";
 import { clsx } from "clsx";
 import { ewayBillApi } from "@/lib/api";
@@ -36,7 +36,7 @@ const toFormItems = (items: any[] = []): FormItem[] =>
     productDesc: i.productDesc || "",
     hsnCode: i.hsnCode || "",
     quantity: Number(i.quantity) || 0,
-    qtyUnit: i.qtyUnit || "NOS",
+    qtyUnit: i.qtyUnit ?? "",
     taxableAmount: Number(i.taxableAmount) || 0,
     gstRate: Number(i.igstRate) || (Number(i.cgstRate) || 0) + (Number(i.sgstRate) || 0),
     cessRate: Number(i.cessRate) || 0,
@@ -55,7 +55,7 @@ function emptyForm(consignor: any) {
     toGstin: "URP", toTradeName: "", toAddr1: "", toAddr2: "", toPlace: "", toPincode: "", toStateCode: "", actToStateCode: "",
     otherValue: 0,
     transMode: "1", transDistance: 0, vehicleType: "R", vehicleNo: "", transporterId: "", transporterName: "", transDocNo: "", transDocDate: "",
-    notes: "",
+    notes: "", gstInterState: undefined as boolean | undefined,
   };
 }
 
@@ -68,84 +68,111 @@ function fromRecord(r: any): FormState {
     supplyType: r.supplyType || "O", subSupplyType: s(r.subSupplyType) || "1", subSupplyDesc: s(r.subSupplyDesc),
     docType: r.docType || "INV", docNo: s(r.docNo), docDate: dateInput(r.docDate), transactionType: s(r.transactionType) || "1",
     fromGstin: s(r.fromGstin), fromTradeName: s(r.fromTradeName), fromAddr1: s(r.fromAddr1), fromAddr2: s(r.fromAddr2),
-    fromPlace: s(r.fromPlace), fromPincode: s(r.fromPincode), fromStateCode: s(r.fromStateCode), actFromStateCode: s(r.actFromStateCode || r.fromStateCode),
+    fromPlace: s(r.fromPlace), fromPincode: s(r.fromPincode), fromStateCode: s(r.fromStateCode), actFromStateCode: s(r.sourceType === "SALE_INVOICE" ? r.actFromStateCode : r.actFromStateCode || r.fromStateCode),
     toGstin: s(r.toGstin) || "URP", toTradeName: s(r.toTradeName), toAddr1: s(r.toAddr1), toAddr2: s(r.toAddr2),
-    toPlace: s(r.toPlace), toPincode: s(r.toPincode), toStateCode: s(r.toStateCode), actToStateCode: s(r.actToStateCode || r.toStateCode),
+    toPlace: s(r.toPlace), toPincode: s(r.toPincode), toStateCode: s(r.toStateCode), actToStateCode: s(r.sourceType === "SALE_INVOICE" ? r.actToStateCode : r.actToStateCode || r.toStateCode),
     otherValue: Number(r.otherValue) || 0,
     transMode: s(r.transMode), transDistance: Number(r.transDistance) || 0, vehicleType: r.vehicleType || "R",
     vehicleNo: s(r.vehicleNo), transporterId: s(r.transporterId), transporterName: s(r.transporterName),
     transDocNo: s(r.transDocNo), transDocDate: dateInput(r.transDocDate), notes: s(r.notes),
+    gstInterState: r.sourceType === "SALE_INVOICE" ? r.gstInterState ?? (r.igstValue != null ? r.igstValue > 0 : undefined) : undefined,
   };
 }
 
 interface Props {
   masters: Masters;
   editing?: any | null;
+  initialInvoiceId?: string;
+  onExisting?: (id:string)=>void;
   onCancel: () => void;
   onSaved: (row: any) => void;
 }
 
-export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Props) {
+export default function EWayBillForm({ masters, editing, initialInvoiceId, onExisting, onCancel, onSaved }: Props) {
   const { showToast } = useToast();
-  const [form, setForm] = useState<FormState>(() => (editing ? fromRecord(editing) : emptyForm(masters.consignor)));
+  const [form, setForm] = useState<FormState>(() => (editing ? fromRecord(editing) : {...emptyForm(masters.consignor),sourceType:"SALE_INVOICE"}));
   const [items, setItems] = useState<FormItem[]>(() => (editing ? toFormItems(editing.items) : [blankItem()]));
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [activeStep,setActiveStep] = useState(0);
 
   // Source picker (create only)
-  const [sourceTab, setSourceTab] = useState<string>(editing ? editing.sourceType : "DELIVERY_CHALLAN");
+  const [sourceTab, setSourceTab] = useState<string>(editing ? editing.sourceType : "SALE_INVOICE");
   const [sources, setSources] = useState<any[]>([]);
   const [sourceSearch, setSourceSearch] = useState("");
   const [loadingSources, setLoadingSources] = useState(false);
   const [prefilling, setPrefilling] = useState<string | null>(null);
+  const prefillVersion = useRef(0);
 
+  const [warnings,setWarnings] = useState<string[]>([]);
+  const [sourceSummary,setSourceSummary] = useState<any>(null);
+  const [notice,setNotice] = useState('');
+  const savedId = useRef<string | null>(editing?.id || null);
+  const serialise = (f:FormState, list:FormItem[]) => JSON.stringify({form:f,items:list.map(({key,...item})=>item)});
+  const baseline = useRef(serialise(form,items));
+  const latestDraft = useRef(serialise(form,items));
+  latestDraft.current = serialise(form,items);
+  const dirty = serialise(form,items) !== baseline.current;
+  const canDiscard = () => !dirty || window.confirm('Discard unsaved E-Way Bill changes and change source?');
+  const cancelDraft = () => { if(canDiscard()) onCancel(); };
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
 
   useEffect(() => {
     if (editing || sourceTab === "MANUAL") return;
+    let stale=false;
     const t = setTimeout(async () => {
       setLoadingSources(true);
       try {
         const res = await ewayBillApi.getSources(sourceTab, sourceSearch || undefined);
-        setSources(res.data || []);
+        if(!stale) setSources(res.data || []);
       } catch (e) {
         showToast(apiError(e, "Failed to load documents"), "error");
       } finally {
-        setLoadingSources(false);
+        if(!stale) setLoadingSources(false);
       }
     }, 250);
-    return () => clearTimeout(t);
+    return () => {stale=true;clearTimeout(t);};
   }, [sourceTab, sourceSearch, editing]);
 
-  const pickSource = async (doc: any) => {
+  const pickSource = async (doc: any, type=sourceTab, initial=false) => {
+    if(!initial && !canDiscard()) return;
+    const startingDraft=latestDraft.current;
+    const version=++prefillVersion.current;
     setPrefilling(doc.id);
     try {
-      const res = await ewayBillApi.prefill(sourceTab, doc.id);
+      const res = await ewayBillApi.prefill(type, doc.id);
+      if(version !== prefillVersion.current) return;
+      if(latestDraft.current !== startingDraft && !window.confirm('Replace the changes made while loading with the selected document?')) return;
       const p = res.data;
-      setForm(fromRecord(p));
-      setItems(p.items?.length ? toFormItems(p.items) : [blankItem()]);
+      const nextForm=fromRecord(p), nextItems=p.items?.length ? toFormItems(p.items) : [blankItem()];
+      baseline.current=serialise(nextForm,nextItems); savedId.current=null;
+      setForm(nextForm);setItems(nextItems);setSourceTab(type);
+      setWarnings(p.warnings || []);setSourceSummary(p.sourceSummary || null);setNotice('');
       setErrors([]);
-      showToast(`Loaded ${SOURCE_LABELS[sourceTab]} ${doc.docNo}`, "success");
+      showToast(`Loaded ${SOURCE_LABELS[type]} ${p.docNo}`, "success");
     } catch (e) {
       showToast(apiError(e, "Could not load document"), "error");
     } finally {
-      setPrefilling(null);
+      if(version === prefillVersion.current) setPrefilling(null);
     }
   };
 
-  const startManual = () => {
-    setSourceTab("MANUAL");
-    setForm(emptyForm(masters.consignor));
-    setItems([blankItem()]);
-    setErrors([]);
+  const changeSource = (type:string) => {
+    if(type===sourceTab || !canDiscard()) return;
+    prefillVersion.current++;setPrefilling(null);
+    const next={...emptyForm(masters.consignor),sourceType:type}; const list=[blankItem()];
+    baseline.current=serialise(next,list);savedId.current=null;
+    setSourceTab(type);setSourceSearch('');setSources([]);setForm(next);setItems(list);setErrors([]);setWarnings([]);setSourceSummary(null);setNotice('');
   };
+  const initialLoaded=useRef(false);
+  useEffect(()=>{if(initialInvoiceId && !editing && !initialLoaded.current){initialLoaded.current=true;void pickSource({id:initialInvoiceId},'SALE_INVOICE',true);}},[initialInvoiceId,editing]);
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const allowedSubTypes = masters.supplyDocMatrix[form.supplyType] || {};
   const allowedDocs = allowedSubTypes[form.subSupplyType] || [];
   const actFrom = Number(form.actFromStateCode || form.fromStateCode);
   const actTo = Number(form.actToStateCode || form.toStateCode);
-  const interState = !!actFrom && !!actTo && actFrom !== actTo;
+  const interState = form.sourceType === "SALE_INVOICE" && form.gstInterState !== undefined ? form.gstInterState : !!actFrom && !!actTo && actFrom !== actTo;
 
   const totals = useMemo(() => {
     let taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
@@ -197,9 +224,9 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
     sourceId: form.sourceType === "MANUAL" ? null : form.sourceId,
     transactionType: Number(form.transactionType),
     fromStateCode: Number(form.fromStateCode) || null,
-    actFromStateCode: Number(form.actFromStateCode || form.fromStateCode) || null,
+    actFromStateCode: Number(form.sourceType === "SALE_INVOICE" ? form.actFromStateCode : form.actFromStateCode || form.fromStateCode) || null,
     toStateCode: Number(form.toStateCode) || null,
-    actToStateCode: Number(form.actToStateCode || form.toStateCode) || null,
+    actToStateCode: Number(form.sourceType === "SALE_INVOICE" ? form.actToStateCode : form.actToStateCode || form.toStateCode) || null,
     transMode: form.transMode || null,
     transDistance: Number(form.transDistance) || 0,
     transDocDate: form.transDocDate || null,
@@ -211,12 +238,19 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
     })),
   });
 
-  const save = async () => {
+  const save = async (validateOnly=false) => {
     setSaving(true);
     setErrors([]);
     try {
       const payload = buildPayload();
-      const res = editing ? await ewayBillApi.update(editing.id, payload) : await ewayBillApi.create(payload);
+      const res = savedId.current ? await ewayBillApi.update(savedId.current,payload) : await ewayBillApi.create(payload);
+      savedId.current=res.data.id;baseline.current=serialise(form,items);
+      if(validateOnly) {
+        const check=await ewayBillApi.validate(res.data.id);
+        setErrors(check.data.errors || []);setWarnings(check.data.warnings || []);setNotice(check.data.message || '');
+        if(check.data.valid && check.data.generationAvailable) {const generated=await ewayBillApi.submit(res.data.id);onSaved(generated.data);}
+        return;
+      }
       showToast(editing ? "E-Way Bill updated" : `Draft ${res.data.refNumber} saved`, "success");
       onSaved(res.data);
     } catch (e: any) {
@@ -238,28 +272,28 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
         <div className="mx-auto flex max-w-[1480px] flex-col gap-4">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
             <div>
-              <button onClick={onCancel} className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400">
+              <button onClick={cancelDraft} className="mb-2 flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-blue-600 dark:text-slate-400">
                 <Home className="h-3.5 w-3.5" /><ChevronRight className="h-3 w-3" /> Logistics <ChevronRight className="h-3 w-3" /> E-Way Bill <ChevronRight className="h-3 w-3" /> <span className="text-slate-700 dark:text-slate-200">Generate New</span>
               </button>
               <h1 className="text-2xl font-extrabold tracking-tight text-[#142b4b] dark:text-white sm:text-3xl">{editing ? `Edit ${editing.refNumber}` : "Generate E-Way Bill"}</h1>
               <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Enter document, party, item and transport details</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <button onClick={save} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">
+              <button onClick={() => save()} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] shadow-sm hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {editing ? "Save Changes" : "Save Draft"}
               </button>
-              <button type="button" disabled title="API integration will be enabled after credentials are configured" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
+              <button type="button" disabled={saving} onClick={() => save(true)} title="Validate the draft; official generation requires an authorised integration" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-70">
                 <FileCheck2 className="h-4 w-4" /> Generate E-Way Bill
               </button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-y-3 md:grid-cols-4">
             {["Document Details", "Parties & Items", "Transportation", "Review"].map((label, index) => (
-              <div key={label} className="flex items-center">
-                <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold", index === 0 ? "bg-[#0787d9] text-white" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300")}>{index + 1}</span>
-                <span className={clsx("ml-3 whitespace-nowrap text-sm font-semibold", index === 0 ? "text-[#075dcc]" : "text-slate-600 dark:text-slate-300")}>{label}</span>
+              <button type="button" key={label} onClick={()=>{setActiveStep(index);document.getElementById(["ewb-document","ewb-parties","ewb-transport","ewb-review"][index])?.scrollIntoView({behavior:"smooth",block:"start"});}} className="flex items-center text-left">
+                <span className={clsx("flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold", index === activeStep ? "bg-[#0787d9] text-white" : "bg-slate-200 text-slate-600 dark:bg-white/10 dark:text-slate-300")}>{index + 1}</span>
+                <span className={clsx("ml-2 text-xs sm:ml-3 sm:text-sm font-semibold", index === activeStep ? "text-[#075dcc]" : "text-slate-600 dark:text-slate-300")}>{label}</span>
                 {index < 3 && <span className="mx-4 hidden h-px flex-1 bg-slate-300 sm:block dark:bg-white/10" />}
-              </div>
+              </button>
             ))}
           </div>
           {hasSourceLoaded && <span className="w-fit rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">From {SOURCE_LABELS[form.sourceType]} · {form.docNo}</span>}
@@ -278,16 +312,20 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
             </div>
           )}
 
+          {notice && <p role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{notice}</p>}
+          {warnings.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800"><ul className="list-disc pl-4 space-y-1">{warnings.map((warning,index)=><li key={index}>{warning}</li>)}</ul></div>}
+          {sourceSummary && <div className={S.formCard}><p className="font-semibold text-sm">Invoice {form.docNo} · {formatCurrency(sourceSummary.invoiceAmount)}</p><div className="mt-2 grid gap-2 sm:grid-cols-2 text-xs"><p>Billing: {sourceSummary.billingAddress || 'Not available'}</p><p>Shipping: {sourceSummary.shippingAddress || 'Not available'}</p><p>Recipient contact: {sourceSummary.phone || 'Not available'} {sourceSummary.email}</p><p>Supplier contact: {sourceSummary.supplierPhone || 'Not available'} {sourceSummary.supplierEmail}</p></div>{sourceSummary.movementSources?.map((doc:any)=><button type="button" key={doc.id} className="mt-2 mr-3 text-xs text-orange-600 underline" onClick={()=>pickSource(doc,'DELIVERY_CHALLAN')}>Use {doc.docNo} ({doc.status})</button>)}</div>}
+
           {/* ── Source picker ─────────────────────────────────────────── */}
           {!editing && (
             <div className={S.formCard}>
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <span className="text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Create from</span>
                 <div className={S.segWrap}>
-                  {["DELIVERY_CHALLAN", "MANUAL"].map((t) => (
+                  {["SALE_INVOICE", "DELIVERY_CHALLAN", "MANUAL"].map((t) => (
                     <button
                       key={t}
-                      onClick={() => (t === "MANUAL" ? startManual() : (setSourceTab(t), setSourceSearch("")))}
+                      onClick={() => changeSource(t)}
                       className={clsx(
                         S.seg,
                         sourceTab === t ? S.segOn : S.segOff
@@ -319,17 +357,17 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
                       <p className="py-8 text-center text-xs text-gray-400 dark:text-slate-500">No {SOURCE_LABELS[sourceTab].toLowerCase()}s found</p>
                     ) : (
                       sources.map((d) => {
-                        const selected = form.sourceId === d.id;
+                        const selected = form.sourceId === d.id && form.sourceType === sourceTab;
                         const below = d.amount < masters.threshold;
                         return (
                           <button
                             key={d.id}
-                            disabled={!!d.existingEwb || prefilling === d.id}
-                            onClick={() => pickSource(d)}
+                            disabled={prefilling === d.id}
+                            onClick={() => d.existingEwb ? (canDiscard() && onExisting?.(d.existingEwb.id)) : pickSource(d)}
                             className={clsx(
                               "w-full flex items-center justify-between gap-3 px-3 py-2.5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left transition-colors",
                               selected ? "bg-orange-50 dark:bg-orange-500/10" : "hover:bg-gray-50 dark:hover:bg-white/5",
-                              d.existingEwb && "opacity-60 cursor-not-allowed"
+                              d.existingEwb && "bg-slate-50"
                             )}
                           >
                             <div className="min-w-0">
@@ -337,15 +375,15 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
                                 {d.docNo}
                                 {selected && <CheckCircle2 className="h-3.5 w-3.5 text-[#f58220]" />}
                               </div>
-                              <div className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{d.partyName} · {formatDate(d.date)}</div>
+                              <div className="text-[11px] text-gray-500 dark:text-slate-400 break-words">{d.partyName} {d.partyType ? `(${d.partyType})` : ""} · {formatDate(d.date)}</div>
                             </div>
                             <div className="text-right shrink-0">
                               <div className="text-xs sm:text-sm font-bold font-mono text-gray-900 dark:text-white">{formatCurrency(d.amount)}</div>
                               {d.existingEwb ? (
-                                <div className="text-[11px] text-emerald-600 dark:text-emerald-400">EWB {d.existingEwb.ewbNumber || d.existingEwb.refNumber}</div>
+                                <div className="text-[11px] text-emerald-600 dark:text-emerald-400">{d.existingEwb.status} · {d.existingEwb.ewbNumber || d.existingEwb.refNumber} · Open</div>
                               ) : below ? (
                                 <div className="text-[11px] text-gray-400 dark:text-slate-500">Below ₹{masters.threshold.toLocaleString("en-IN")} · optional</div>
-                              ) : null}
+                              ) : <div className="text-[11px] text-slate-500">No E-Way Bill</div>}
                               {prefilling === d.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#f58220] ml-auto" />}
                             </div>
                           </button>
@@ -375,13 +413,14 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
               <Field label="Transaction Type" required>
                 <select className={S.select} value={form.transactionType} onChange={(e) => set({ transactionType: e.target.value })}>{Object.entries(TRANSACTION_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
               </Field>
+              {form.sourceType === "SALE_INVOICE" && <Field label="GST as charged on invoice" required><select className={S.select} value={form.gstInterState ? "igst" : "local"} onChange={e=>set({gstInterState:e.target.value === "igst"})}><option value="local">CGST + SGST</option><option value="igst">IGST</option></select></Field>}
               <Field label="Reason for Movement (if applicable)" className="sm:col-span-2 xl:col-span-6">
                 <input className={S.input} maxLength={20} value={form.subSupplyDesc} onChange={(e) => set({ subSupplyDesc: e.target.value })} placeholder="e.g. Sale, Job Work, Stock Transfer, Exhibition, Others" />
               </Field>
             </div>
           </Section>
           {/* ── Parties ───────────────────────────────────────────────── */}
-          <div className="grid md:grid-cols-2 gap-4">
+          <div id="ewb-parties" className="grid md:grid-cols-2 gap-4 scroll-mt-6">
             <PartyCard title="Supplier / Dispatch From (Consignor)" prefix="from" form={form} set={set} changeGstin={changeGstin} />
             <PartyCard title="Recipient / Ship To (Consignee)" prefix="to" form={form} set={set} changeGstin={changeGstin} />
           </div>
@@ -430,7 +469,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
                         </td>
                         <td className={S.itemsTd}>
                           <select className={clsx(S.itemsInput, "cursor-pointer")} value={i.qtyUnit} onChange={(e) => updateItem(i.key, { qtyUnit: e.target.value })}>
-                            {(UQC_OPTIONS.includes(i.qtyUnit) ? UQC_OPTIONS : [i.qtyUnit, ...UQC_OPTIONS]).map((u) => <option key={u} value={u}>{u}</option>)}
+                            {(UQC_OPTIONS.includes(i.qtyUnit) ? UQC_OPTIONS : [i.qtyUnit, ...UQC_OPTIONS]).map((u) => <option key={u} value={u}>{u || "Select unit"}</option>)}
                           </select>
                         </td>
                         <td className={S.itemsTd}>
@@ -543,6 +582,7 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
             </div>
           </Section>
 
+          <div id="ewb-review" className="scroll-mt-6"><Section title="Review"><p className="text-sm">{form.docType} {form.docNo} · {formatCurrency(totals.total)} · {items.length} items</p><p className="text-xs mt-2">{form.fromTradeName} → {form.toTradeName} · {form.vehicleNo || form.transDocNo || "Transport details incomplete"}</p><p className="text-xs mt-2">Saving or validating this document does not dispatch inventory.</p></Section></div>
           <Section title="Notes (internal)">
             <textarea className={clsx(S.input, "min-h-[64px]")} value={form.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Not sent to the portal" />
           </Section>
@@ -552,10 +592,10 @@ export default function EWayBillForm({ masters, editing, onCancel, onSaved }: Pr
       <div className="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur dark:border-white/5 dark:bg-card/95 sm:px-6">
         <div className="mx-auto flex max-w-[1480px] flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <p className="flex flex-1 items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300"><Info className="h-4 w-4 shrink-0" /> E-Way Bill number is issued only after successful validation on the authorised GST E-Way Bill system.</p>
-          <div className="flex items-center justify-end gap-3">
-            <button onClick={onCancel} className="h-10 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 dark:border-white/10 dark:bg-card dark:text-white">Cancel</button>
-            <button onClick={save} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {editing ? "Save Changes" : "Save Draft"}</button>
-            <button type="button" disabled title="API integration will be enabled after credentials are configured" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"><FileCheck2 className="h-4 w-4" /> Validate & Generate</button>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button onClick={cancelDraft} className="h-10 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 dark:border-white/10 dark:bg-card dark:text-white">Cancel</button>
+            <button onClick={() => save()} disabled={saving} className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-semibold text-[#142b4b] hover:bg-slate-50 disabled:opacity-60 dark:border-white/10 dark:bg-card dark:text-white">{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {editing ? "Save Changes" : "Save Draft"}</button>
+            <button type="button" disabled={saving} onClick={() => save(true)} title="Validate the draft; official generation requires an authorised integration" className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#075dcc] px-5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-70"><FileCheck2 className="h-4 w-4" /> Validate & Generate</button>
           </div>
         </div>
       </div>
@@ -568,7 +608,7 @@ function Section({ icon: Icon, title, right, children, flush }: { icon?: any; ti
   const recipient = title.startsWith("Recipient");
   const supplier = title.startsWith("Supplier");
   return (
-    <div className={clsx(S.card, "overflow-hidden")}>
+    <div id={title.startsWith("Document") ? "ewb-document" : title.startsWith("Transportation") ? "ewb-transport" : undefined} className={clsx(S.card, "overflow-hidden scroll-mt-6")}>
       <div className={clsx(S.cardHead, supplier && "bg-blue-50/80 dark:bg-blue-500/10", recipient && "bg-emerald-50/80 dark:bg-emerald-500/10")}>
         <span className={clsx(S.cardHeadTitle, supplier && "text-blue-700 dark:text-blue-300", recipient && "text-emerald-700 dark:text-emerald-300")}>
           {Icon && <Icon className={clsx("h-3.5 w-3.5", recipient ? "text-emerald-600" : "text-blue-600")} />} {title}

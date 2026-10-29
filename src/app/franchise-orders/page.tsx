@@ -253,6 +253,7 @@ export default function FranchiseOrdersPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [orderSearch, setOrderSearch] = useState("");
   const [invoiceModalData, setInvoiceModalData] = useState<{ order: any; vendor: any } | null>(null);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -280,8 +281,8 @@ export default function FranchiseOrdersPage() {
         api.get("/api/products?stockSource=HQ"),
       ]);
       const rawOrders: any[] = ordersRes.data ?? [];
-      const scopedOrders = isFranchiseAdmin && user?.franchiseId
-        ? rawOrders.filter((o: any) => o.franchiseId === user.franchiseId || o.franchise?.id === user.franchiseId)
+      const scopedOrders = isFranchiseAdmin
+        ? rawOrders.filter((o: any) => !!user?.franchiseId && o.franchiseId === user.franchiseId)
         : rawOrders;
 
       setOrders(scopedOrders);
@@ -750,7 +751,12 @@ export default function FranchiseOrdersPage() {
     }
   };
 
-  const filtered = statusFilter === "ALL" ? orders : orders.filter(o => o.status === statusFilter);
+  const searchTerm = orderSearch.trim().toLocaleLowerCase();
+  const filtered = orders.filter(order =>
+    (statusFilter === "ALL" || order.status === statusFilter) &&
+    (!searchTerm || [order.orderNumber, order.franchise?.name, order.franchise?.location]
+      .some(value => String(value || "").toLocaleLowerCase().includes(searchTerm)))
+  );
 
   const statsMap = {
     PENDING:      orders.filter(o => o.status === "PENDING").length,
@@ -811,6 +817,12 @@ export default function FranchiseOrdersPage() {
       </div>
 
       {/* Status Filter */}
+      <div className="relative w-full sm:max-w-md print:hidden">
+        <Search size={16} aria-hidden="true" className="absolute left-3 top-3 text-slate-400" />
+        <input aria-label="Search franchise orders" placeholder="Search franchise, order number or location..."
+          value={orderSearch} onChange={event => setOrderSearch(event.target.value)}
+          className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+      </div>
       <div className="flex gap-2 overflow-x-auto custom-scrollbar pb-2 print:hidden max-w-full">
         {["ALL", "PENDING", "APPROVED", "IN_PRODUCTION", "DISPATCHED", "DELIVERED", "CANCELLED"].map(s => (
           <button
@@ -859,7 +871,7 @@ export default function FranchiseOrdersPage() {
                 
                 {/* Order Header */}
                 <div className="p-4 border-b border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-bold text-lg text-slate-900 dark:text-white leading-tight uppercase">
                         {order.orderNumber}
@@ -905,8 +917,11 @@ export default function FranchiseOrdersPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                      {order.franchise?.name} · Ordered: {formatDate(order.createdAt)}
+                    <p className="text-sm font-bold text-slate-900 dark:text-white break-words">
+                      Franchise: {order.franchise?.name?.trim() || "Franchise unavailable"}
+                    </p>
+                    <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 break-words">
+                      Location: {order.franchise?.location?.trim() || "Not provided"} · Ordered: {formatDate(order.createdAt)}
                     </p>
                   </div>
                   

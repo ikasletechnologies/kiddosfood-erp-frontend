@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
+import FranchisePhoto from "@/components/franchise/FranchisePhoto";
+import FranchiseDocuments from "@/components/franchise/FranchiseDocuments";
+import FranchisePhotoUpload, { photoPayload } from "@/components/franchise/FranchisePhotoUpload";
 import { SlideOver } from "@/components/ui/SlideOver";
 import {
   Building2,
@@ -13,6 +16,7 @@ import {
   MapPin,
   User,
   Phone,
+  FileText,
   Edit2,
   Trash2,
   RefreshCw,
@@ -97,6 +101,8 @@ export default function FranchisePage() {
   // Edit mode: Aadhaar is never sent back in full, so the input starts empty
   // (= keep the saved value) and this flag requests its removal.
   const [clearAadhaar, setClearAadhaar] = useState(false);
+  const [photoFile,setPhotoFile] = useState<File | null>(null);
+  const [removePhoto,setRemovePhoto] = useState(false);
 
   useEffect(() => {
     if (!loading && currentUser && currentUser.role === "FRANCHISE_ADMIN") {
@@ -104,7 +110,7 @@ export default function FranchisePage() {
     }
   }, [currentUser, loading, router]);
 
-  const [activeTab, setActiveTab] = useState<"info" | "users">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "users" | "documents">("info");
   const [selectedFranchiseUsers, setSelectedFranchiseUsers] = useState<any[]>([]);
   const [notification, setNotification] = useState<{
     type: "error" | "success" | "info";
@@ -181,6 +187,7 @@ export default function FranchisePage() {
   }, [fetchFranchises]);
 
   const openCreate = () => {
+    setPhotoFile(null);setRemovePhoto(false);
     setEditing(null);
     setForm(EMPTY_FORM);
     setServerErrors({});
@@ -208,7 +215,8 @@ export default function FranchisePage() {
     }
   }, []);
 
-  const openEdit = async (f: any) => {
+  const openEdit = async (f: any, tab: "info" | "documents" = "info") => {
+    setPhotoFile(null);setRemovePhoto(false);
     setEditing(f);
     setForm({
       name: f.name,
@@ -223,7 +231,7 @@ export default function FranchisePage() {
     });
     setServerErrors({});
     setClearAadhaar(false);
-    setActiveTab("info");
+    setActiveTab(tab);
     setShowForm(true);
     setShowAddUser(false);
     fetchUsers(f.id);
@@ -250,9 +258,7 @@ export default function FranchisePage() {
     contactNum: serverErrors.contactNum,
   };
   const isFranchiseFormValid =
-    !!form.name &&
-    !!form.location &&
-    isValidContactNum(form.contactNum) &&
+    (!form.contactNum || isValidContactNum(form.contactNum)) &&
     !validateAadhaar(form.aadhaarNumber) &&
     !validatePan(form.panNumber) &&
     (!!editing || (!validateEmail(form.adminUser.email) && !validatePassword(form.adminUser.password)));
@@ -260,8 +266,7 @@ export default function FranchisePage() {
     setServerErrors((e) => ({ ...e, [key]: undefined }));
 
   const handleSave = async () => {
-    if (!form.name || !form.location) return;
-    if (!isValidContactNum(form.contactNum)) {
+    if (form.contactNum && !isValidContactNum(form.contactNum)) {
       setNotification({
         type: "error",
         title: "Invalid Contact Number",
@@ -275,10 +280,12 @@ export default function FranchisePage() {
     const panNumber = form.panNumber.trim().toUpperCase();
     const aadhaarNumber = form.aadhaarNumber.replace(/\s/g, "");
     try {
+      const photo=photoFile ? await photoPayload(photoFile) : removePhoto ? null : undefined;
       if (editing) {
         const { adminUser, aadhaarNumber: _a, ...updateData } = form;
         await franchiseApi.update(editing.id, {
           ...updateData,
+          ...(photo!==undefined ? {photo} : {}),
           panNumber,
           // Empty = keep the saved Aadhaar; null = remove it.
           aadhaarNumber: clearAadhaar ? null : aadhaarNumber || undefined,
@@ -288,6 +295,7 @@ export default function FranchisePage() {
         // into an address; the backend re-validates it and checks duplicates.
         await franchiseApi.create({
           ...form,
+          ...(photo!==undefined ? {photo} : {}),
           panNumber,
           aadhaarNumber,
           adminUser: { ...form.adminUser, email: form.adminUser.email.trim() },
@@ -305,7 +313,7 @@ export default function FranchisePage() {
       setNotification({
         type: "error",
         title: "Save Failed",
-        message: e.response?.data?.error || "Failed to save franchise",
+        message: e.response?.data?.error || e.message || "Failed to save franchise",
       });
     } finally {
       setSaving(false);
@@ -571,15 +579,16 @@ export default function FranchisePage() {
                 key={f.id}
                 className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow"
               >
+                <FranchisePhoto photo={f.photo} name={f.name || "Franchise"} className="h-36 w-full rounded-none border-b border-slate-100 dark:border-slate-700" />
                 {/* Card Header */}
                 <div className="p-5 border-b border-slate-100 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/30 flex justify-between items-start">
                   <div>
                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1 leading-tight">
-                      {f.name}
+                      {f.name || "Unnamed Branch"}
                     </h3>
                     <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-semibold">
                       <MapPin size={12} className="text-orange-500" />
-                      {f.location}
+                      {f.location || "Location not provided"}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -641,7 +650,7 @@ export default function FranchisePage() {
                 </div>
 
                 {/* Card Footer */}
-                <div className="p-4 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30">
+                <div className="p-4 border-t border-slate-100 dark:border-slate-700/60 space-y-3 bg-slate-50/50 dark:bg-slate-900/30">
                   <span
                     className={clsx(
                       "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider",
@@ -653,10 +662,11 @@ export default function FranchisePage() {
                     <span className={clsx("w-1.5 h-1.5 rounded-full shrink-0", conf.dot)} />
                     {conf.label}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap gap-2">
+                    {currentUser?.role === "SUPER_ADMIN" && <button type="button" onClick={() => openEdit(f, "documents")} className="flex min-w-0 flex-1 basis-36 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-orange-200 bg-white px-2 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-50 dark:bg-slate-900"><FileText size={14} aria-hidden="true" className="shrink-0"/>Update Documents</button>}
                     <button
                       onClick={() => handleVerifyAndRedirect(f)}
-                      className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold text-orange-600 bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-950/50 rounded transition-colors uppercase tracking-wider"
+                      className="flex min-w-0 flex-1 basis-36 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-orange-200 bg-orange-50 px-2 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 dark:bg-orange-950/30"
                     >
                       <Eye size={12} />
                       Dashboard
@@ -711,10 +721,11 @@ export default function FranchisePage() {
                   >
                     Administrators
                   </button>
+                  {currentUser?.role === "SUPER_ADMIN" && <button type="button" onClick={() => setActiveTab("documents")} className={clsx("flex-1 py-2.5 rounded-lg text-sm font-bold transition-all", activeTab === "documents" ? "bg-white dark:bg-slate-700 text-orange-600 shadow-sm" : "text-slate-500")}>Documents</button>}
                 </div>
               )}
 
-              {activeTab === "info" ? (
+              {activeTab === "documents" && editing ? <FranchiseDocuments key={editing.id} franchiseId={editing.id} franchiseName={editing.name} manage={currentUser?.role === "SUPER_ADMIN"} /> : activeTab === "info" ? (
                 <div className="space-y-5">
                   <div>
                     <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
@@ -727,6 +738,7 @@ export default function FranchisePage() {
                       placeholder="e.g. Coimbatore Main"
                     />
                   </div>
+                  <FranchisePhotoUpload file={photoFile} photo={editing?.photo} removed={removePhoto} disabled={saving} error={serverErrors.photo} onChange={file=>{setPhotoFile(file);setRemovePhoto(file===null);clearServerError("photo");}} />
                   <div>
                     <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">
                       Location
@@ -1126,7 +1138,7 @@ export default function FranchisePage() {
               )}
             </div>
 
-            <div className="mt-8 pt-5 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
+            {activeTab !== "documents" && <div className="mt-8 pt-5 border-t border-slate-200 dark:border-slate-800 flex gap-3 justify-end">
               <button
                 onClick={() => {
                   if (showAddUser) {
@@ -1158,7 +1170,7 @@ export default function FranchisePage() {
                     : "Create Admin"
                   : "Save Franchise"}
               </button>
-            </div>
+            </div>}
           </div>
         )}
       </SlideOver>

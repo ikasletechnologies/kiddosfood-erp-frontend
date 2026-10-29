@@ -31,6 +31,7 @@ export const QC_NOT_REQUIRED = "QC_NOT_REQUIRED";
 export const PACKAGEABLE_QC_STATUSES = ["APPROVED", "PARTIALLY_APPROVED", QC_NOT_REQUIRED];
 
 type BatchLike = {
+  availableBulkQty?: number;
   qcStatus?: string | null;
   packagingStatus?: string | null;
   quantity?: number | null;
@@ -43,6 +44,15 @@ type BatchLike = {
   packagings?: Array<{ status: string; totalWeight: number }>;
 };
 
+// Same business-day expiry cutoff as the backend (IST: unusable on the expiry date).
+function bulkExpired(value?: string | null): boolean {
+  if (!value) return false;
+  const offset = 330 * 60_000;
+  const local = new Date(Date.now() + offset);
+  const tomorrow = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 1) - offset;
+  return new Date(value).getTime() < tomorrow;
+}
+
 /**
  * Why a batch can't be packed right now, or null if it can. With production
  * QC off, a completed batch still at PENDING (finished before QC was switched
@@ -50,6 +60,7 @@ type BatchLike = {
  * Packaging transaction. Mirrors ProductionService.autoReleaseBlocker.
  */
 export function packagingBlocker(b: BatchLike): string | null {
+  if (b.expiryStatus === "EXPIRED" || bulkExpired(b.expiryDate)) return "Expired";
   const qc = b.qcStatus || "PENDING";
   if (b.packagingStatus === "PACKAGED") return "Fully packed";
   if (b.recall && (b.recall.status === "IN_PROGRESS" || b.recall.status === "COMPLETED")) return "Under recall";
@@ -70,7 +81,7 @@ export function packableQty(b: BatchLike): number {
   const pending = (b.packagings || [])
     .filter((p) => p.status === "AWAITING_CONFIRMATION")
     .reduce((s, p) => s + (p.totalWeight || 0), 0);
-  return Math.max(0, released - (b.packagedQty ?? 0) - pending);
+  return Math.max(0, Math.min(released - (b.packagedQty ?? 0) - pending, b.availableBulkQty ?? Infinity));
 }
 
 /**

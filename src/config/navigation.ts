@@ -615,12 +615,6 @@ export const franchiseMenuSections: MenuSection[] = [
     title: "WAREHOUSE",
     items: [
       {
-        icon: Warehouse,
-        label: "Manage Warehouses",
-        href: "/warehouse/manage",
-        roles: FRANCHISE_ONLY,
-      },
-      {
         icon: Building2,
         label: "Warehouse",
         href: "/warehouse",

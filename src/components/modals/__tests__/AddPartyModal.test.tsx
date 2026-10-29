@@ -46,4 +46,17 @@ describe("AddPartyModal vendor step validation", () => {
     expect(toastError).not.toHaveBeenCalled();
     expect(await screen.findByText("Credit & Balance")).toBeInTheDocument();
   });
+
+  it("copies the billing address to shipping when selected and keeps it in sync", () => {
+    render(<AddPartyModal isOpen onClose={vi.fn()} onSave={vi.fn()} partyType="vendor" />);
+    const billingAddress = screen.getByPlaceholderText("Address...");
+    const shippingAddress = screen.getByPlaceholderText("Shipping Address...");
+
+    fireEvent.change(billingAddress, { target: { value: "12 Market Road" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Same as billing address" }));
+    expect(shippingAddress).toHaveValue("12 Market Road");
+
+    fireEvent.change(billingAddress, { target: { value: "14 Market Road" } });
+    expect(shippingAddress).toHaveValue("14 Market Road");
+  });
 });

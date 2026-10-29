@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { X, Plus, Trash2, Search, Package, IndianRupee, Zap, Info, AlertTriangle, CheckCircle2, ChevronDown } from "lucide-react";
 import { usePurchaseOrder } from "@/context/PurchaseOrderContext";
-import { rawMaterialsApi } from "@/lib/api";
+import { rawMaterialsApi, productsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -19,7 +19,8 @@ import { convertMeasurement, ValidUnit } from "@businessgroupikasle/erp-units";
 // material's own base unit (item.unit) — these only affect how the operator
 // enters/reads the quantity; the stored value, price-per-base-unit, and the
 // line total math are untouched by which entry unit is currently selected.
-function getUnitOptions(baseUnit: string): string[] {
+function getUnitOptions(baseUnit: string, isBulk?: boolean): string[] {
+  if (isBulk) return ["KG", "G", "L", "ML", "PCS"];
   const u = (baseUnit || "").trim().toUpperCase();
   if (u === "KG" || u === "G" || u === "MG") return ["KG", "G", "MG"];
   if (u === "L" || u === "ML") return ["L", "ML"];
@@ -42,7 +43,7 @@ function roundForDisplay(n: number): number {
 }
 
 export default function LineItemsTable() {
-  const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, setSelectedVendor, autoFilledIds, setAutoFilledIds } = usePurchaseOrder();
+  const { items, addItem, removeItem, updateItem, getVendorPrice, selectedVendor, setSelectedVendor, autoFilledIds, setAutoFilledIds, purchaseType, isBulkPurchase } = usePurchaseOrder();
   const searchParams = useSearchParams();
   const prefillHandledRef = useRef(false);
   const [activeSearchId, setActiveSearchId] = useState<string | null>(null);
@@ -90,13 +91,29 @@ export default function LineItemsTable() {
 
   const [materialRefreshKey, setMaterialRefreshKey] = useState(0);
 
-  // Fetch materials (including filter) – refresh when key changes
+  // Fetch materials based on purchaseType and isBulkPurchase
   useEffect(() => {
     const fetchMaterials = async () => {
       setLoadingMaterials(true);
       try {
-        const response = await rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD');
-        setMaterials(response.data || []);
+        if (purchaseType === "RAW_MATERIAL") {
+          const response = await rawMaterialsApi.getAll(false, undefined, undefined, 'RAW_MATERIAL');
+          setMaterials(response.data || []);
+        } else if (purchaseType === "FINISHED_GOODS" || purchaseType === "FINISHED_GOOD") {
+          if (isBulkPurchase) {
+            const response = await productsApi.getBulkNames();
+            setMaterials(response.data || []);
+          } else {
+            const response = await rawMaterialsApi.getAll(false, undefined, undefined, 'FINISHED_GOOD');
+            setMaterials(response.data || []);
+          }
+        } else if (purchaseType === "ALL") {
+          const response = await rawMaterialsApi.getAll(false, undefined, undefined);
+          setMaterials(response.data || []);
+        } else {
+          const response = await rawMaterialsApi.getAll(false, undefined, 'FINISHED_GOOD');
+          setMaterials(response.data || []);
+        }
       } catch (error) {
         console.error('Failed to fetch materials', error);
       } finally {
@@ -104,7 +121,7 @@ export default function LineItemsTable() {
       }
     };
     fetchMaterials();
-  }, [materialRefreshKey]);
+  }, [materialRefreshKey, purchaseType, isBulkPurchase]);
 
   // In Add Material Drawer success, trigger refresh and auto-select
   const handleAddMaterialSuccess = (createdMaterial?: any) => {
@@ -413,11 +430,13 @@ export default function LineItemsTable() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         updateItem(item.id, {
-                                          materialId: m.id,
+                                          materialId: m.inventoryItemId || m.id,
                                           name: m.name,
-                                          unit: m.unit || "KG",
+                                          unit: m.unit || (isBulkPurchase ? "KG" : "PC"),
                                           price: displayPrice,
-                                          gstRate: m.gstRate || 0
+                                          gstRate: m.gstRate || 0,
+                                          isBulk: Boolean(m.isBulk || isBulkPurchase),
+                                          productId: m.productId || m.id,
                                         });
                                         setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
                                         if (vendorPrice !== null) {
@@ -515,7 +534,7 @@ export default function LineItemsTable() {
                   <td className="px-2 py-3.5 align-middle text-center">
                     {(() => {
                       const baseUnit = item.unit || "KG";
-                      const options = getUnitOptions(baseUnit);
+                      const options = getUnitOptions(baseUnit, isBulkPurchase);
                       return (
                         <select
                           className="w-full py-1.5 px-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg outline-none text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider text-center border border-transparent focus:border-orange-400 transition-all cursor-pointer appearance-none disabled:cursor-not-allowed"
@@ -618,7 +637,7 @@ export default function LineItemsTable() {
             ? item.name
             : (material?.name || item.name || "");
           const baseUnit = item.unit || "KG";
-          const options = getUnitOptions(baseUnit);
+          const options = getUnitOptions(baseUnit, isBulkPurchase);
 
           return (
             <div key={item.id} className="bg-slate-50/50 dark:bg-slate-950/30 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 space-y-3">
@@ -751,11 +770,13 @@ export default function LineItemsTable() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   updateItem(item.id, {
-                                    materialId: m.id,
+                                    materialId: m.inventoryItemId || m.id,
                                     name: m.name,
-                                    unit: m.unit || "KG",
+                                    unit: m.unit || (isBulkPurchase ? "KG" : "PC"),
                                     price: displayPrice,
-                                    gstRate: m.gstRate || 0
+                                    gstRate: m.gstRate || 0,
+                                    isBulk: Boolean(m.isBulk || isBulkPurchase),
+                                    productId: m.productId || m.id,
                                   });
                                   setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
                                   if (vendorPrice !== null) {

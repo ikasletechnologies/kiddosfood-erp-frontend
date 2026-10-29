@@ -15,7 +15,7 @@ import { S, Masters, STATUS_BADGE, STATUS_LABEL, SOURCE_LABELS, timeLeft, apiErr
 // exported as the portal's bulk-upload JSON, then the issued number is
 // recorded back here (see EWayBillService on the backend).
 
-type View = { name: "list" } | { name: "form"; editing?: any } | { name: "detail"; row: any };
+type View = { name: "list" } | { name: "form"; editing?: any; sourceInvoiceId?: string } | { name: "detail"; row: any };
 
 const TABS = [
   { key: "ALL", label: "All" },
@@ -89,6 +89,14 @@ export default function EWayBillPage() {
     }
   };
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invoiceId = params.get("invoiceId");
+    const ewbId = params.get("ewbId");
+    if (ewbId) void openDetail(ewbId, params.get("print") === "1");
+    else if (invoiceId) setView({ name: "form", sourceInvoiceId: invoiceId });
+  }, []);
+
   const drafts = rows.filter((r) => r.status === "DRAFT");
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allDraftsSelected = drafts.length > 0 && drafts.every((d) => selected.has(d.id));
@@ -120,6 +128,8 @@ export default function EWayBillPage() {
       <EWayBillForm
         masters={masters}
         editing={view.editing}
+        initialInvoiceId={view.sourceInvoiceId}
+        onExisting={openDetail}
         onCancel={() => (view.editing ? setView({ name: "detail", row: view.editing }) : setView({ name: "list" }))}
         onSaved={(row) => setView({ name: "detail", row })}
       />

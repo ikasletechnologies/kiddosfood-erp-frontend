@@ -6,18 +6,20 @@ import Link from "next/link";
 import {
   ArrowRight, Printer, AlertCircle, AlertTriangle, CheckCircle2,
   RefreshCw, ChefHat, Database, Plus, Warehouse, X, ShoppingCart,
-  ClipboardList, ExternalLink, Search, ChevronDown, Check, Info, Zap, Layers
+  ClipboardList, Search, ChevronDown, Check, Info, Zap, Layers
 } from "lucide-react";
-import { recipesApi, inventoryApi, franchiseApi, productionApi, franchiseOrdersApi } from "@/lib/api";
+import { recipesApi, productsApi, inventoryApi, franchiseApi, productionApi, franchiseOrdersApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { RECIPE_UNITS } from "@/lib/recipe-units";
 import { convertUnit, convertMeasurement } from "@/lib/unitConversion";
 import clsx from "clsx";
 import ReferenceFormulationPanel, { Formulation, isUsableFormulation } from "@/components/modules/production/ReferenceFormulationPanel";
 import IngredientLotPanel from "@/components/modules/production/IngredientLotPanel";
+import FirstTimeFormulationModal from "@/components/modules/production/FirstTimeFormulationModal";
 import { estimateManufacturing, isPackaging } from "@/lib/recipe-expenses";
 import { Rounding, autoQty, formatQty, maxMultiplierFor, procurementQty, roundRequirement } from "@/lib/qty-display";
 import { AllocationDraft, MaterialLots, allocationCost, allocationError, fifoDraft, toPayload } from "@/lib/lot-allocation";
+import { buildBulkProductGroups, BulkProductGroup, ProductionProduct } from "@/lib/production-product-groups";
 
 const WAREHOUSE_STORAGE_KEY = "kf.productionPlanning.warehouseId";
 const EPSILON = 0.000001;
@@ -89,6 +91,7 @@ interface Recipe {
   additionalExpenses?: any[];
   activeFormulation?: Formulation | null;
   productionCount?: number;
+  productLinks?: Array<{ productId: string; product?: { id: string; name: string; sku?: string | null } }>;
 }
 
 // The saved formulation must cover exactly the recipe's current ingredients.
@@ -181,7 +184,10 @@ function ProductionPlanningContent() {
   const targetUnitParam = searchParams.get("targetUnit") || searchParams.get("unit");
 
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [products, setProducts] = useState<ProductionProduct[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
   const [selectedRecipeId, setSelectedRecipeId] = useState<string>("");
+  const [showFirstTimeSetup, setShowFirstTimeSetup] = useState(false);
   const [warehouses, setWarehouses] = useState<any[]>([]);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   // The production target as typed. Empty by default: the operator enters it
@@ -271,11 +277,13 @@ function ProductionPlanningContent() {
       });
 
       if (matched) {
+        setSelectedProductId(orderItem.productId);
         setSelectedRecipeId(matched.id);
         setTargetYield(orderItem.quantity);
         setTargetUnit(orderItem.unit || matched.yieldUnit || "KG");
         setMissingRecipeForProduct(null);
       } else {
+        setSelectedProductId(orderItem.productId);
         setSelectedRecipeId("");
         setTargetYield(orderItem.quantity || 1);
         setTargetUnit(orderItem.unit || "KG");
@@ -293,14 +301,17 @@ function ProductionPlanningContent() {
     async function initData() {
       setLoading(true);
       try {
-        const [rRes, wRes, fRes] = await Promise.all([
+        const [rRes, pRes, wRes, fRes] = await Promise.all([
           recipesApi.getAll(),
+          productsApi.getAll({ stockSource: "GLOBAL", includeAll: true }),
           inventoryApi.getWarehouses(),
           franchiseApi.getAll(),
         ]);
 
         const recipeList: Recipe[] = rRes.data || [];
         setRecipes(recipeList);
+        const productList = (pRes.data || []).filter((p: ProductionProduct) => p.isActive !== false && p.productType === "FINISHED_GOOD");
+        setProducts(productList);
 
         const whList = wRes.data || [];
         setWarehouses(whList);
@@ -371,6 +382,7 @@ function ProductionPlanningContent() {
           });
 
           if (matched) {
+            setSelectedProductId(targetProductIdParam || matched.productId || matched.product?.id || "");
             setSelectedRecipeId(matched.id);
             setTargetYield(targetYieldParam ? Number(targetYieldParam) : null);
             setTargetUnit(targetUnitParam || matched.yieldUnit || "KG");
@@ -378,6 +390,7 @@ function ProductionPlanningContent() {
           } else {
             // Explicitly requested product/recipe has no formulation configured
             setSelectedRecipeId("");
+            setSelectedProductId(targetProductIdParam || "");
             const requestedLabel = productNameParam || targetProductIdParam || recipeCodeParam || recipeIdParam || "Selected Product";
             setTargetYield(targetYieldParam ? Number(targetYieldParam) : 1);
             setTargetUnit(targetUnitParam || "KG");
@@ -390,15 +403,10 @@ function ProductionPlanningContent() {
         } 
         // 3. Standard direct manual planning flow (no route params)
         else {
-          if (recipeList.length > 0) {
-            setSelectedRecipeId(recipeList[0].id);
-            setTargetYield(null);
-            setTargetUnit(recipeList[0].yieldUnit || "KG");
-            setMissingRecipeForProduct(null);
-          } else {
-            setSelectedRecipeId("");
-            setMissingRecipeForProduct(null);
-          }
+          setSelectedRecipeId("");
+          setSelectedProductId("");
+          setTargetYield(null);
+          setMissingRecipeForProduct(null);
         }
       } catch (e) {
         console.error(e);
@@ -435,6 +443,21 @@ function ProductionPlanningContent() {
       setTargetUnit(found.yieldUnit || "KG");
       setMissingRecipeForProduct(null);
     }
+  };
+
+  const recipeForProduct = useCallback((productId: string, list = recipes) => list.find((r) =>
+    r.productId === productId || r.product?.id === productId || r.productLinks?.some((link) => link.productId === productId)
+  ), [recipes]);
+
+  const handleProductChange = (group: BulkProductGroup) => {
+    const product = group.anchorProduct;
+    const linked = group.recipe as Recipe | null;
+    setSelectedProductId(product.id);
+    setSelectedRecipeId(linked?.id || "");
+    setTargetYield(null);
+    setTargetUnit(linked?.activeFormulation?.yieldUnit || linked?.yieldUnit || "KG");
+    setMissingRecipeForProduct(!linked ? { name: group.name, quantity: 0, productId: product.id } : null);
+    setFormulationDraft(null);
   };
 
   const handleSwitchOrderItem = (idx: number) => {
@@ -592,6 +615,25 @@ function ProductionPlanningContent() {
     );
   }, [recipes, recipeQuery]);
 
+  const bulkGroups = useMemo(() => buildBulkProductGroups(products, recipes), [products, recipes]);
+  const selectedGroup = bulkGroups.find((group) => group.products.some((p) => p.id === selectedProductId)) || null;
+  const selectedProduct = selectedGroup?.anchorProduct || null;
+  const recipeStatus = (group: BulkProductGroup) => {
+    const linked = group.recipe as Recipe | null;
+    if (!linked) return "Recipe Required";
+    if (group.conflict) return "Incomplete Formulation";
+    return isUsableFormulation(linked.activeFormulation) && sameIngredientSet(linked, linked.activeFormulation)
+      ? "Recipe Configured" : "Incomplete Formulation";
+  };
+  const filteredProducts = useMemo(() => {
+    const q = recipeQuery.trim().toLowerCase();
+    if (!q) return bulkGroups;
+    return bulkGroups.filter((group) =>
+      group.name.toLowerCase().includes(q) || group.aliases.some((alias) => alias.toLowerCase().includes(q)) ||
+      recipeStatus(group).toLowerCase().includes(q)
+    );
+  }, [bulkGroups, recipeQuery]);
+
   useEffect(() => {
     if (!pickerOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -607,17 +649,23 @@ function ProductionPlanningContent() {
     setRecipeQuery("");
   };
 
+  const pickProduct = (group: BulkProductGroup) => {
+    handleProductChange(group);
+    setPickerOpen(false);
+    setRecipeQuery("");
+  };
+
   const handlePickerKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlightIdx((i) => Math.min(i + 1, filteredRecipes.length - 1));
+      setHighlightIdx((i) => Math.min(i + 1, filteredProducts.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setHighlightIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const r = filteredRecipes[highlightIdx];
-      if (r) pickRecipe(r.id);
+      const group = filteredProducts[highlightIdx];
+      if (group) pickProduct(group);
     } else if (e.key === "Escape") {
       setPickerOpen(false);
     }
@@ -1064,10 +1112,10 @@ function ProductionPlanningContent() {
                 pickerOpen ? "border-[#f58220]" : "border-gray-200 dark:border-white/10 hover:border-orange-300"
               )}
             >
-              {recipe ? (
+              {selectedProduct ? (
                 <span className="min-w-0">
-                  <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{recipe.name}</span>
-                  <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{recipeSubLabel(recipe)}</span>
+                  <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{selectedGroup?.name || selectedProduct.name}</span>
+                  <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{selectedGroup?.products.length || 1} packaged variant{(selectedGroup?.products.length || 1) === 1 ? "" : "s"} · {selectedGroup ? recipeStatus(selectedGroup) : "Recipe Required"}</span>
                 </span>
               ) : (
                 <span className="text-xs font-semibold text-gray-400">Search or choose a recipe…</span>
@@ -1094,27 +1142,28 @@ function ProductionPlanningContent() {
                   </div>
                 </div>
                 <ul className="max-h-64 overflow-y-auto custom-scrollbar py-1">
-                  {filteredRecipes.length === 0 ? (
+                  {filteredProducts.length === 0 ? (
                     <li className="px-3 py-4 text-center text-xs text-gray-400 font-semibold">
                       No recipes match &ldquo;{recipeQuery}&rdquo;
                     </li>
                   ) : (
-                    filteredRecipes.map((r, idx) => (
-                      <li key={r.id}>
+                    filteredProducts.map((group, idx) => (
+                      <li key={group.id}>
                         <button
                           type="button"
                           onMouseEnter={() => setHighlightIdx(idx)}
-                          onClick={() => pickRecipe(r.id)}
+                          onClick={() => pickProduct(group)}
                           className={clsx(
                             "w-full flex items-center justify-between gap-2 px-3 py-2 text-left cursor-pointer",
                             idx === highlightIdx ? "bg-orange-50 dark:bg-orange-500/10" : ""
                           )}
                         >
                           <span className="min-w-0">
-                            <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{r.name}</span>
-                            <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{recipeSubLabel(r)}</span>
+                            <span className="block text-xs font-bold text-gray-900 dark:text-white truncate">{group.name}</span>
+                            <span className="block text-[10px] font-semibold text-gray-400 dark:text-slate-500 truncate">{group.products.length} variant{group.products.length === 1 ? "" : "s"} · {group.aliases.join(" · ")}</span>
                           </span>
-                          {r.id === selectedRecipeId && <Check size={14} className="text-[#f58220] shrink-0" />}
+                          <span className={clsx("shrink-0 text-[10px] font-bold", recipeStatus(group) === "Recipe Configured" ? "text-emerald-600" : recipeStatus(group) === "Recipe Required" ? "text-amber-600" : "text-rose-600")}>{recipeStatus(group)}</span>
+                          {group.products.some((p) => p.id === selectedProductId) && <Check size={14} className="text-[#f58220] shrink-0" />}
                         </button>
                       </li>
                     ))
@@ -1252,12 +1301,13 @@ function ProductionPlanningContent() {
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-            <Link
-              href={`/production/recipes`}
+            <button
+              type="button"
+              onClick={() => setShowFirstTimeSetup(true)}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
             >
-              <Plus size={14} /> Configure Recipe in Recipe Master <ExternalLink size={12} />
-            </Link>
+              <Plus size={14} /> Create Recipe Formulation
+            </button>
           </div>
         </div>
       )}
@@ -1303,7 +1353,7 @@ function ProductionPlanningContent() {
                   <p className="text-xs font-medium text-rose-700/80 dark:text-rose-300/70 mt-0.5">
                     {maxPossibleYield > 0 ? (
                       <>With current stock at {selectedWarehouse?.name || "this warehouse"} you can make up to <strong>{fmtQty(maxPossibleYield)} {effectiveTargetUnit}</strong>. Buy the missing items, reduce the quantity, or switch warehouse.</>
-                    ) : (
+      ) : (
                       <>{selectedWarehouse?.name || "This warehouse"} has none of at least one ingredient. Buy the missing items or switch to another warehouse.</>
                     )}
                   </p>
@@ -1633,16 +1683,16 @@ function ProductionPlanningContent() {
             <ChefHat size={28} />
           </div>
           <p className="text-sm font-bold text-gray-800 dark:text-white">
-            {recipes.length === 0 ? "No recipes yet" : "Pick a recipe to get started"}
+            {products.length === 0 ? "No eligible finished goods" : "Pick a finished good to get started"}
           </p>
           <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 max-w-sm">
-            {recipes.length === 0
-              ? "Create your first recipe in Recipe Master, then come back here to plan production."
+            {products.length === 0
+              ? "Add an active Finished Good in Product Master, then return here to configure its formulation."
               : "Choose what you want to make in step 1 — we'll calculate the ingredients and check stock automatically."}
           </p>
-          {recipes.length === 0 ? (
+          {products.length === 0 ? (
             <Link href="/production/recipes" className="mt-4 px-4 py-2 rounded-xl bg-[#f58220] text-white text-xs font-bold flex items-center gap-1.5">
-              <Plus size={14} /> Create Recipe
+              <Plus size={14} /> Open Recipe Master
             </Link>
           ) : (
             <button
@@ -1650,7 +1700,7 @@ function ProductionPlanningContent() {
               onClick={() => setPickerOpen(true)}
               className="mt-4 px-4 py-2 rounded-xl bg-[#f58220] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             >
-              <Search size={14} /> Choose Recipe
+              <Search size={14} /> Choose Finished Good
             </button>
           )}
         </div>
@@ -1712,6 +1762,23 @@ function ProductionPlanningContent() {
           </div>
         </div>
       )}
+
+      <FirstTimeFormulationModal
+        product={selectedProduct}
+        variantProductIds={selectedGroup?.products.map((p) => p.id) || []}
+        isOpen={showFirstTimeSetup}
+        onClose={() => setShowFirstTimeSetup(false)}
+        onSaved={(saved) => {
+          setRecipes((current) => [...current.filter((r) => r.id !== saved.id), saved]);
+          setSelectedRecipeId(saved.id);
+          setSelectedProductId(saved.productId || selectedProductId);
+          setMissingRecipeForProduct(null);
+          setTargetYield(null);
+          setTargetUnit(saved.activeFormulation?.yieldUnit || saved.yieldUnit || "KG");
+          setShowFirstTimeSetup(false);
+          toast.success("Recipe formulation configured");
+        }}
+      />
 
     </div>
   );

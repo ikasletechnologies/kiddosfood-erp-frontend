@@ -12,7 +12,7 @@ import { FranchiseWarehouseGuard } from "@/components/modules/franchise/Franchis
 const PUBLIC_PATHS = ["/login"];
 const SETUP_PATH = "/setup";
 
-import ERPAssistant from '@/components/assistant/ERPAssistant';
+import ChatLauncher from '@/components/chat/ChatLauncher';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading, setupStatus, setupStatusLoading } = useAuth();
@@ -108,7 +108,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </main>
         </div>
       </div>
-        <ERPAssistant />
+        <ChatLauncher />
     </SidebarProvider>
   );
 }

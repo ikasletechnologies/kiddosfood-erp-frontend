@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { allocationProfit, applyLotSelection, catalogPrice, currentLotQuantities, fifoSuggestion, partyPrice, priceCheck, splitRowIntoLots, summarizeAllocations, toAllocation, SaleLot } from "../lot-pricing";
+import { allocationProfit, applyLotSelection, catalogPrice, currentLotQuantities, fifoSuggestion, partyPrice, priceCheck, productPricingStatus, PRODUCT_FULLY_PRICED, PRODUCT_PRICING_PENDING, splitRowIntoLots, summarizeAllocations, toAllocation, SaleLot } from "../lot-pricing";
 
 const lot = (id: string, availableQty: number, selectable = true): SaleLot => ({
   id, lotNumber: `L-${id}`, batchNumber: `B-${id}`, productId: "p", productName: "APPAM 500g", sku: "FG-APM-500G", unit: "packet",
@@ -9,6 +9,33 @@ const lot = (id: string, availableQty: number, selectable = true): SaleLot => ({
 });
 
 describe("lot-pricing", () => {
+  it("requires each independent channel price and isolates pack-size variants", () => {
+    expect(productPricingStatus({})).toBe(PRODUCT_PRICING_PENDING);
+    expect(productPricingStatus({ customerPrice: 100, dealerPrice: 80 })).toBe(PRODUCT_PRICING_PENDING);
+    expect(productPricingStatus({ customerPrice: 100, dealerPrice: 80, franchisePrice: 70 })).toBe(PRODUCT_FULLY_PRICED);
+    for (const invalid of [0, -1, NaN, Infinity, null]) {
+      expect(productPricingStatus({ customerPrice: 100, dealerPrice: 80, franchisePrice: invalid })).toBe(PRODUCT_PRICING_PENDING);
+    }
+    expect(productPricingStatus({ customerPrice: null, dealerPrice: null, franchisePrice: null })).toBe(PRODUCT_PRICING_PENDING);
+  });
+
+  it("reuses SKU prices for production and purchase costs without mutating historical allocations", () => {
+    const prices = { customerPrice: 100, dealerPrice: 80, franchisePrice: 70 };
+    const historical = toAllocation(lot("old", 1), 1, 95);
+    for (const cost of [10, 20, 65, 110, 90]) {
+      const receipt = { ...lot(`cost-${cost}`, 5), unitCost: cost };
+      expect(productPricingStatus(prices)).toBe(PRODUCT_FULLY_PRICED);
+      for (const channel of ["CUSTOMER", "DEALER", "FRANCHISE"] as const) {
+        const price = partyPrice(prices, channel)!;
+        const allocation = toAllocation(receipt, 1, price);
+        expect(allocationProfit(allocation).unitProfit).toBe(price - cost);
+        expect(allocation.unitCost).toBe(cost);
+      }
+    }
+    expect(priceCheck(105, true, 5, 110)).toMatchObject({ priceExclTax: 100, unitProfit: -10, belowCost: true });
+    expect(prices).toEqual({ customerPrice: 100, dealerPrice: 80, franchisePrice: 70 });
+    expect(historical.price).toBe(95);
+  });
   it("totals lot allocations exactly; average is display only", () => {
     const s = summarizeAllocations([
       { quantity: 5, price: 100, unitCost: 80 },

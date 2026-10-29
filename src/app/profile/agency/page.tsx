@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import api from "@/lib/api";
+import FranchiseDocuments from "@/components/franchise/FranchiseDocuments";
 import { toast } from "react-hot-toast";
 
 type TabType = "PERSONAL" | "BRANCH" | "FINANCIALS" | "SECURITY";
@@ -378,6 +379,8 @@ export default function AgencyProfilePage() {
             </div>
           </div>
         )}
+
+        {activeTab === "BRANCH" && user?.franchiseId && <div className="mt-8"><FranchiseDocuments key={user.franchiseId} franchiseId={user.franchiseId} /></div>}
 
         {/* Render Tab 3: Financials & Wallet */}
         {activeTab === "FINANCIALS" && (

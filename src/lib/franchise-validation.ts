@@ -8,7 +8,7 @@ export const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 72;
 
-export type FranchiseFieldErrors = Partial<Record<"aadhaarNumber" | "panNumber" | "email" | "password" | "contactNum", string>>;
+export type FranchiseFieldErrors = Partial<Record<"aadhaarNumber" | "panNumber" | "email" | "password" | "contactNum" | "photo", string>>;
 
 export function validateEmail(raw: string): string | undefined {
   const email = raw.trim();

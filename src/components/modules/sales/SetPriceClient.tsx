@@ -15,11 +15,13 @@ import { clsx } from "clsx";
 import { Modal } from "@/components/ui/Modal";
 import { franchiseApi, lotPricingApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import { formatINR, priceCheck, PRICE_TIERS, PRODUCT_FULLY_PRICED, PRODUCT_PRICING_PENDING } from "@/lib/lot-pricing";
+import { formatINR, priceCheck, productPricingStatus, mrpWarning, PricingField, SKU_PRICE_FIELDS, PRICE_TIERS, PRODUCT_FULLY_PRICED, PRODUCT_PRICING_PENDING } from "@/lib/lot-pricing";
 import FinishedGoodsLotsPanel from "@/components/modules/inventory/FinishedGoodsLotsPanel";
 
 const INPUT = "w-full border border-gray-300 dark:border-white/10 rounded-xl px-3 py-2 text-xs sm:text-sm text-gray-700 dark:text-white outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] placeholder-gray-400 dark:placeholder:text-slate-500";
 const LABEL = "block text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1";
+const GST_RATES = [5, 12, 18, 28] as const;
+type GstRate = (typeof GST_RATES)[number];
 
 const formatDate = (d?: string | null) =>
   d ? new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -41,6 +43,9 @@ type ProductRow = {
   customerPrice: number | null;
   dealerPrice: number | null;
   franchisePrice: number | null;
+  upcountryFranchisePrice: number | null;
+  mrp: number | null;
+  whiteLabelCost: number | null;
   tiers: Tier[];
   pricingStatus: string;
   missingTiers: string[];
@@ -85,7 +90,11 @@ export default function SetPriceClient() {
         location: filters.location || undefined,
         inStock: filters.inStock || undefined,
       });
-      setData(res.data);
+      setData({ ...res.data, products: res.data.products.map((p: ProductRow) => ({
+        ...p,
+        pricingStatus: productPricingStatus(p),
+        missingTiers: PRICE_TIERS.filter(({ key }) => !(Number.isFinite(Number(p[key])) && Number(p[key]) > 0)).map(({ label }) => label),
+      })) });
     } catch (e) {
       showToast(apiError(e, "Failed to load products"), "error");
     } finally {
@@ -317,6 +326,7 @@ export default function SetPriceClient() {
                       {open && (
                         <tr>
                           <td colSpan={cols} className="p-0">
+                            <AdditionalPrices product={p} />
                             <FinishedGoodsLotsPanel sku={p.sku} unit={p.unit} prices={p} />
                           </td>
                         </tr>
@@ -343,38 +353,47 @@ export default function SetPriceClient() {
   );
 }
 
-function SetPricesModal({ product, showCost, onClose, onSaved }: { product: ProductRow; showCost: boolean; onClose: () => void; onSaved: () => void }) {
+export function SetPricesModal({ product, showCost, onClose, onSaved }: { product: ProductRow; showCost: boolean; onClose: () => void; onSaved: () => void }) {
   const { showToast } = useToast();
-  const editing = PRICE_TIERS.some((t) => product[t.key] != null);
-  const [values, setValues] = useState<Record<TierKey, string>>({
+  const editing = SKU_PRICE_FIELDS.some((t) => product[t.key] != null);
+  const [values, setValues] = useState<Record<PricingField, string>>({
     customerPrice: product.customerPrice != null ? String(product.customerPrice) : "",
     dealerPrice: product.dealerPrice != null ? String(product.dealerPrice) : "",
     franchisePrice: product.franchisePrice != null ? String(product.franchisePrice) : "",
+    upcountryFranchisePrice: product.upcountryFranchisePrice != null ? String(product.upcountryFranchisePrice) : "",
+    mrp: product.mrp != null ? String(product.mrp) : "",
+    whiteLabelCost: product.whiteLabelCost != null ? String(product.whiteLabelCost) : "",
   });
   const [taxInclusive, setTaxInclusive] = useState(false);
+  const [taxPercent, setTaxPercent] = useState<GstRate>(
+    GST_RATES.includes(product.taxPercent as GstRate) ? product.taxPercent as GstRate : 5,
+  );
   const [reason, setReason] = useState("");
   const [ackBelowCost, setAckBelowCost] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const cost = showCost ? product.latestCost ?? null : null;
-  const checks = PRICE_TIERS.map((t) => {
+  const checks = SKU_PRICE_FIELDS.map((t) => {
     const raw = values[t.key].trim();
     const n = Number(raw);
-    const valid = raw !== "" && Number.isFinite(n) && n > 0;
-    return { ...t, raw, n, valid, invalid: raw !== "" && !valid, check: valid ? priceCheck(n, taxInclusive, product.taxPercent, cost) : null };
+    const valid = raw !== "" && Number.isFinite(n) && n > 0 && n <= 10_000_000 && Math.abs(Math.round(n * 100) / 100 - n) < 1e-9;
+    return { ...t, raw, n, valid, invalid: raw !== "" && !valid, check: valid ? priceCheck(n, t.key === "mrp" || taxInclusive, taxPercent, t.selling ? cost : null) : null };
   });
-  const filled = checks.filter((c) => c.valid);
   const invalid = checks.some((c) => c.invalid);
   const below = checks.filter((c) => c.check?.belowCost);
-  const willBeComplete = filled.length === PRICE_TIERS.length;
-  const unchanged = !taxInclusive && checks.every((c) => {
+  const willBeComplete = PRICE_TIERS.every(t => checks.find(c => c.key === t.key)?.valid);
+  const customer = checks.find(c => c.key === "customerPrice");
+  const mrp = checks.find(c => c.key === "mrp");
+  const retailWarning = mrpWarning(customer?.check?.priceExclTax, mrp?.valid ? mrp.n : null, taxPercent);
+  const unchanged = taxPercent === product.taxPercent && checks.every((c) => {
     const cur = product[c.key];
-    return c.valid ? cur != null && Math.abs(cur - c.n) < 0.001 : cur == null;
+    const stored = c.key === "mrp" ? c.n : c.check?.priceExclTax;
+    return c.valid ? cur != null && stored != null && Math.abs(cur - stored) < 0.001 : cur == null;
   });
 
-  // Converting excl./incl. keeps the same figures typed — say which basis applies.
+  // MRP stays inclusive; other commercial amounts follow the selected entry basis.
   const save = async () => {
-    if (invalid || !filled.length || unchanged) return;
+    if (invalid || unchanged) return;
     if (below.length && !ackBelowCost) return;
     setSaving(true);
     try {
@@ -382,10 +401,14 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
         customerPrice: checks[0].valid ? Math.round(checks[0].n * 100) / 100 : null,
         dealerPrice: checks[1].valid ? Math.round(checks[1].n * 100) / 100 : null,
         franchisePrice: checks[2].valid ? Math.round(checks[2].n * 100) / 100 : null,
+        upcountryFranchisePrice: checks[3].valid ? checks[3].n : null,
+        mrp: checks[4].valid ? checks[4].n : null,
+        whiteLabelCost: checks[5].valid ? checks[5].n : null,
         taxInclusive,
+        taxPercent,
         reason: reason.trim() || undefined,
         acknowledgeBelowCost: ackBelowCost || undefined,
-        expected: { customerPrice: product.customerPrice, dealerPrice: product.dealerPrice, franchisePrice: product.franchisePrice },
+        expected: Object.fromEntries(SKU_PRICE_FIELDS.map(({ key }) => [key, product[key] ?? null])),
       });
       showToast(`${product.name}: prices saved${willBeComplete ? "" : " (still awaiting the remaining price)"}`, "success");
       onSaved();
@@ -411,7 +434,7 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
             <button
               type="button"
               onClick={save}
-              disabled={saving || invalid || !filled.length || unchanged || (below.length > 0 && !ackBelowCost)}
+              disabled={saving || invalid || unchanged || (below.length > 0 && !ackBelowCost)}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {saving && <Loader2 size={13} className="animate-spin" />} Save prices
@@ -427,7 +450,27 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
           <Detail label="Pack size" value={product.packSize || "—"} />
           <Detail label="In stock" value={`${formatQty(product.availableQty)} ${product.unit}`} />
           {showCost && <Detail label="Latest production cost" value={formatINR(cost)} hint={product.latestLotNumber ? `lot ${product.latestLotNumber}` : undefined} />}
-          <Detail label="GST" value={`${product.taxPercent}%`} />
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">GST</p>
+            <div className="flex flex-wrap gap-1" role="group" aria-label="GST rate">
+              {GST_RATES.map((rate) => (
+                <button
+                  key={rate}
+                  type="button"
+                  onClick={() => setTaxPercent(rate)}
+                  aria-pressed={taxPercent === rate}
+                  className={clsx(
+                    "min-w-[38px] rounded-lg border px-2 py-1 text-[11px] font-bold transition-colors",
+                    taxPercent === rate
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-gray-200 bg-white text-gray-600 hover:border-orange-300 hover:text-orange-600 dark:border-white/10 dark:bg-[#13151f] dark:text-slate-300",
+                  )}
+                >
+                  {rate}%
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -437,7 +480,16 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
               <button
                 key={String(incl)}
                 type="button"
-                onClick={() => setTaxInclusive(incl)}
+                onClick={() => {
+                  if (incl === taxInclusive) return;
+                  setValues(current => Object.fromEntries(SKU_PRICE_FIELDS.map(({ key }) => {
+                    const raw = current[key];
+                    if (key === "mrp" || !raw || !(Number(raw) > 0)) return [key, raw];
+                    const converted = priceCheck(Number(raw), taxInclusive, taxPercent, null);
+                    return [key, String(incl ? converted.priceInclTax : converted.priceExclTax)];
+                  })) as Record<PricingField, string>);
+                  setTaxInclusive(incl);
+                }}
                 className={clsx("px-3 py-1 rounded-lg text-[11px] font-semibold", taxInclusive === incl ? "bg-white dark:bg-[#13151f] text-gray-900 dark:text-white shadow-sm" : "text-gray-500")}
               >
                 {incl ? "Including GST" : "Excluding GST"}
@@ -446,10 +498,10 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
           {checks.map((c) => (
             <div key={c.key} className={clsx("rounded-xl border p-3", c.check?.belowCost ? "border-rose-300 bg-rose-50/40 dark:bg-rose-500/5" : "border-gray-200 dark:border-white/10")}>
-              <label className={LABEL} htmlFor={`price-${c.key}`}>{c.label} price</label>
+              <label className={LABEL} htmlFor={`price-${c.key}`}>{c.label}{c.key === "mrp" || c.key === "whiteLabelCost" ? "" : " price"}</label>
               <div className="flex items-center rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-[#13151f] focus-within:border-orange-400">
                 <span className="pl-2.5 text-sm text-gray-400">₹</span>
                 <input
@@ -469,7 +521,8 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
                   <span className="font-semibold text-rose-600">Enter a price above ₹0</span>
                 ) : c.check ? (
                   <>
-                    <p>{taxInclusive ? `${formatINR(c.check.priceExclTax)} excl. GST` : `${formatINR(c.check.priceInclTax)} incl. GST`}</p>
+                    <p>{c.key === "mrp" ? "GST-inclusive retail ceiling" : taxInclusive ? `${formatINR(c.check.priceExclTax)} excl. GST` : `${formatINR(c.check.priceInclTax)} incl. GST`}</p>
+                    {c.key === "whiteLabelCost" && <p>Commercial amount; not production cost. Stored excl. GST.</p>}
                     {c.check.unitProfit != null && (
                       <p className={clsx("font-semibold", c.check.belowCost ? "text-rose-600" : "text-emerald-600")}>
                         {c.check.belowCost ? `Loss ${formatINR(Math.abs(c.check.unitProfit))}` : `Profit ${formatINR(c.check.unitProfit)}`} · {c.check.marginPct}%
@@ -477,12 +530,14 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
                     )}
                   </>
                 ) : product[c.key] == null ? (
-                  <span className="text-amber-600">Required for Priced status</span>
+                  <span className="text-amber-600">{PRICE_TIERS.some(t => t.key === c.key) ? "Required for Priced status" : "Optional"}</span>
                 ) : null}
               </div>
             </div>
           ))}
         </div>
+
+        {retailWarning && <p role="alert" className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-700">{retailWarning}</p>}
 
         {product.legacyLotPrice && !editing && (
           <p className="text-[11px] text-gray-500">
@@ -506,7 +561,7 @@ function SetPricesModal({ product, showCost, onClose, onSaved }: { product: Prod
           </div>
         )}
         <p className="text-[10px] text-gray-400">
-          Prices are stored excluding GST and apply to every lot of this product, now and in future production. Existing invoices and orders keep their prices.
+          MRP always includes GST. Other amounts are stored excluding GST and apply to every lot of this SKU. White Label Cost is a commercial amount, separate from actual lot cost. Existing invoices and orders keep their prices.
         </p>
       </div>
     </Modal>
@@ -551,6 +606,8 @@ function ViewProductModal({ id, onClose }: { id: string; onClose: () => void }) 
             ))}
           </div>
 
+          <AdditionalPrices product={p} />
+
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-1.5 flex items-center gap-1.5"><History size={12} /> Price history</p>
             {p.history.length === 0 ? (
@@ -561,7 +618,7 @@ function ViewProductModal({ id, onClose }: { id: string; onClose: () => void }) 
                   <thead className="bg-gray-50 dark:bg-white/[0.03] text-gray-500 font-semibold uppercase tracking-wider">
                     <tr>
                       <th className="px-3 py-2">When</th>
-                      {PRICE_TIERS.map((t) => <th key={t.key} className="px-3 py-2 text-right">{t.label}</th>)}
+                      {SKU_PRICE_FIELDS.map((t) => <th key={t.key} className="px-3 py-2 text-right">{t.label}</th>)}
                       <th className="px-3 py-2">By / reason</th>
                     </tr>
                   </thead>
@@ -569,7 +626,7 @@ function ViewProductModal({ id, onClose }: { id: string; onClose: () => void }) 
                     {p.history.map((h) => (
                       <tr key={h.id}>
                         <td className="px-3 py-2 whitespace-nowrap">{new Date(h.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
-                        {PRICE_TIERS.map((t) => {
+                        {SKU_PRICE_FIELDS.map((t) => {
                           const before = h.previous?.[t.key];
                           const after = h.prices?.[t.key];
                           const changed = (before ?? null) !== (after ?? null);
@@ -602,6 +659,22 @@ function ViewProductModal({ id, onClose }: { id: string; onClose: () => void }) 
         </div>
       )}
     </Modal>
+  );
+}
+
+function AdditionalPrices({ product }: { product: ProductRow }) {
+  const warning = mrpWarning(product.customerPrice, product.mrp, product.taxPercent);
+  const upcountry = product.upcountryFranchisePrice != null ? priceCheck(product.upcountryFranchisePrice, false, product.taxPercent, product.latestCost) : null;
+  return (
+    <div className="p-4 space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {SKU_PRICE_FIELDS.slice(3).map(({ key, label }) => (
+          <Detail key={key} label={label} value={formatINR(product[key])} hint={key === "mrp" ? "GST-inclusive retail ceiling" : key === "whiteLabelCost" ? "Commercial amount excl. GST; not lot cost" : "Excluding GST"} />
+        ))}
+      </div>
+      {upcountry?.warning && <p className="text-xs text-rose-600">Upcountry Franchise: {upcountry.warning}</p>}
+      {warning && <p role="alert" className="text-xs text-amber-700">{warning}</p>}
+    </div>
   );
 }
 

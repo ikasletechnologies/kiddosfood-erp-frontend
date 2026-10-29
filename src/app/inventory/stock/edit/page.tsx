@@ -1258,6 +1258,7 @@ function EditItemForm() {
                 {/* Row 3: Min Stock Qty & Item Location */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="relative mt-2">
+                    {category === 'FINISHED_GOOD' ? <p className="rounded-lg border border-orange-100 bg-orange-50 p-3 text-xs text-orange-700">Finished Goods use the global Low Stock Settings in Stock Hub.</p> : <>
                     <label className="absolute -top-2 left-3 bg-white dark:bg-[#12141a] px-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1 z-10 transition-all select-none">
                       Min Stock Qty {category === "FINISHED_GOOD" ? "(Units)" : `(${primaryUnit.toUpperCase()})`}
                       <span className="w-3.5 h-3.5 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center text-[8px] text-slate-400 cursor-pointer font-bold select-none hover:bg-slate-200">i</span>
@@ -1269,6 +1270,7 @@ function EditItemForm() {
                       onChange={e => setMinimumStock(e.target.value)}
                       className="w-full px-3.5 py-3 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg outline-none focus:border-rose-500 dark:focus:border-rose-500 text-slate-700 dark:text-slate-200 font-semibold transition-all placeholder:text-slate-300 dark:placeholder:text-slate-600"
                     />
+                    </>}
                   </div>
 
                   <div className="relative mt-2">

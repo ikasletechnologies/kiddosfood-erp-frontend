@@ -87,7 +87,7 @@ export default function EWayBillDetail({ masters, row, onBack, onEdit, onChanged
               <button onClick={() => open("delete")} className={S.btnDanger}><Trash2 className="h-4 w-4" /> Delete</button>
               <button onClick={onEdit} className={S.btnSecondary}><Pencil className="h-4 w-4" /> Edit</button>
               <button onClick={exportJson} className={S.btnSecondary}><Download className="h-4 w-4" /> Download JSON</button>
-              <button onClick={() => open("generate", { ewbDate: nowLocalInput() })} className={S.btnPrimary}><CheckCircle2 className="h-4 w-4" /> Record EWB No.</button>
+              {row.sourceType !== "SALE_INVOICE" && <button onClick={() => open("generate", { ewbDate: nowLocalInput() })} className={S.btnPrimary}><CheckCircle2 className="h-4 w-4" /> Record EWB No.</button>}
             </>
           )}
           {canCancel && <button onClick={() => open("cancel")} className={S.btnDanger}><XCircle className="h-4 w-4" /> Cancel EWB</button>}
@@ -110,11 +110,10 @@ export default function EWayBillDetail({ masters, row, onBack, onEdit, onChanged
           {/* Status banner */}
           {row.status === "DRAFT" && (
             <div className="print:hidden bg-orange-50/60 dark:bg-orange-500/5 border border-orange-200 dark:border-orange-500/20 rounded-xl px-4 py-3 text-sm text-orange-900 dark:text-orange-200">
-              <div className="font-semibold mb-1">Next step: generate on the e-way bill portal</div>
+              <div className="font-semibold mb-1">Draft only — no official E-Way Bill has been generated</div>
               <ol className="list-decimal pl-5 text-xs space-y-0.5 text-orange-800 dark:text-orange-300">
                 <li>Click <b>Download JSON</b> and upload it at <a className="underline inline-flex items-center gap-0.5" href="https://ewaybillgst.gov.in" target="_blank" rel="noreferrer">ewaybillgst.gov.in <ExternalLink className="h-3 w-3" /></a> → e-Waybill → Generate Bulk.</li>
-                <li>Copy the 12-digit E-Way Bill number the portal issues.</li>
-                <li>Click <b>Record EWB No.</b> and enter it here to activate tracking.</li>
+                {row.sourceType === "SALE_INVOICE" ? <li>Official response synchronisation requires an authorised NIC/GSP integration. This ERP record remains a draft.</li> : <><li>Copy the 12-digit E-Way Bill number the portal issues.</li><li>Click <b>Record EWB No.</b> and enter it here to activate tracking.</li></>}
               </ol>
             </div>
           )}

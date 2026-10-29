@@ -20,6 +20,8 @@ import { SKU_RE, newVariantProblem, parseSizeText, variantChoices } from "@/lib/
 import ProductionCostPanel, { ExpenseSource, RowCost } from "@/components/modules/production/ProductionCostPanel";
 
 interface Batch {
+  availableBulkQty?: number;
+  bulkLots?: Array<{ id: string; availableQty: number; warehouseId: string | null }>;
   id: string;
   batchCode: string;
   quantity: number;
@@ -33,6 +35,12 @@ interface Batch {
   recall?: { status: string } | null;
   packagings?: Array<{ id: string; status: string; totalWeight: number }>;
   product?: { id?: string | null; name: string; sku?: string | null } | null;
+  sourceType?: string | null;
+  unit?: string | null;
+  vendor?: { name?: string } | null;
+  procurementOrder?: { poNumber?: string } | null;
+  goodsReceipt?: { id?: string } | null;
+  warehouse?: { name?: string } | null;
   production?: {
     status?: string | null;
     quantity?: number | null;
@@ -148,6 +156,7 @@ function isPackable(b: Batch) {
 function PackagingContent() {
   const searchParams = useSearchParams();
   const preselectBatchId = searchParams.get("batchId");
+  const preselectBulkLotId = searchParams.get("bulkLotId");
   // Branch of the deep-linked batch (sent by Production on completion).
   const preselectFranchiseId = searchParams.get("franchiseId");
   // Deep link handled once, after that branch's batches have loaded.
@@ -244,11 +253,13 @@ function PackagingContent() {
   }, [batches, search]);
 
   const selected = batches.find((b) => b.id === selectedId) || null;
-  const batchUnit = selected?.production?.recipe?.yieldUnit || "KG";
+  const batchUnit = selected?.unit || selected?.production?.recipe?.yieldUnit || "KG";
   const presets = presetsFor(batchUnit);
   const customUnits = customUnitsFor(batchUnit);
   const baseName = selected ? baseNameOf(selected) : "";
-  const available = selected ? availableBulk(selected) : 0;
+  const selectedBulkLotId = selectedId === preselectBatchId ? preselectBulkLotId : null;
+  const selectedBulkLot = selected?.bulkLots?.find(l => l.id === selectedBulkLotId);
+  const available = selected ? Math.min(availableBulk(selected), selectedBulkLotId ? selectedBulkLot?.availableQty ?? 0 : Infinity) : 0;
   const alreadyPacked = selected ? (selected.packagedQty ?? 0) + pendingWeight(selected) : 0;
 
   // Finished product for a row's pack size. Only a variant linked to this
@@ -269,12 +280,14 @@ function PackagingContent() {
       }
       // Suggestions only — uniqueness is checked against the server before confirming.
       const taken = new Set(products.map((x: any) => (x.sku || "").toUpperCase()).filter(Boolean));
+      const isPurchasedBulk = selected.sourceType === "PURCHASE";
+      const autoPickId = linked.length === 1 ? linked[0].id : (isPurchasedBulk && nameMatches.length > 0 ? nameMatches[0].id : "");
       return {
         ...r,
         matchedFor: size,
-        productId: linked.length === 1 ? linked[0].id : "",
-        createNew: linked.length === 0,
-        nameMatchChoice: "",
+        productId: autoPickId,
+        createNew: !autoPickId,
+        nameMatchChoice: autoPickId && isPurchasedBulk ? "use" : "",
         newName: `${baseName} ${sizeLabel(size)}`,
         newSku: uniqueSku(generateSKU("FINISHED_GOOD", baseName, size.toUpperCase()), taken),
       };
@@ -307,7 +320,7 @@ function PackagingContent() {
 
   const startRows = useCallback(
     (b: Batch) => {
-      const unit = b.production?.recipe?.yieldUnit || "KG";
+      const unit = b.unit || b.production?.recipe?.yieldUnit || "KG";
       const ps = presetsFor(unit);
       const first = newRow(ps.includes("500g") ? "500g" : ps.includes("500ml") ? "500ml" : ps[0] || "custom", customUnitsFor(unit)[0]);
       setRows([first]);
@@ -414,6 +427,7 @@ function PackagingContent() {
     setSubmitting(true);
     try {
       const res = await productionApi.packageAndConfirm(selected.id, {
+        bulkLotId: selectedBulkLotId || undefined,
         expectedPackagedQty: selected.packagedQty || 0,
         rows: calc.lines.map(({ row, size }) => ({
           packetSize: size,
@@ -563,9 +577,21 @@ function PackagingContent() {
                           )}
                         >
                           <span className="min-w-0">
-                            <span className="block text-sm font-bold text-gray-900 dark:text-white truncate">{b.product?.name || b.production?.recipe?.name}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="block text-sm font-bold text-gray-900 dark:text-white truncate">{b.product?.name || b.production?.recipe?.name}</span>
+                              {b.sourceType === "PURCHASE" ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 shrink-0">
+                                  Purchased Bulk
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 shrink-0">
+                                  Manufactured
+                                </span>
+                              )}
+                            </div>
                             <span className="block text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
                               <span className="font-mono font-semibold text-[#f58220]">{b.batchCode}</span>
+                              {b.sourceType === "PURCHASE" && b.vendor?.name && <> · {b.vendor.name}</>}
                               {b.expiryDate && <> · Exp {format(new Date(b.expiryDate), "dd MMM yyyy")}</>}
                               {b.packagingStatus === "PARTIALLY_PACKED" && <> · Partly packed</>}
                             </span>
@@ -596,10 +622,24 @@ function PackagingContent() {
                 {/* Batch header */}
                 <div className="px-5 py-4 border-b border-gray-100 dark:border-white/5 flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">{selected.product?.name || selected.production?.recipe?.name}</h3>
-                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">
-                      <span className="font-mono font-semibold text-[#f58220]">{selected.batchCode}</span>
-                      {selected.expiryDate && <> · Expires {format(new Date(selected.expiryDate), "dd MMM yyyy")}</>}
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-gray-900 dark:text-white truncate">{selected.product?.name || selected.production?.recipe?.name}</h3>
+                      {selected.sourceType === "PURCHASE" ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300 border border-blue-200 dark:border-blue-500/20 shrink-0">
+                          Purchased Bulk
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20 shrink-0">
+                          Manufactured
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>Batch <span className="font-mono font-semibold text-[#f58220]">{selected.batchCode}</span></span>
+                      {selected.sourceType === "PURCHASE" && selected.vendor?.name && <span>· Supplier: <strong className="text-gray-700 dark:text-slate-200">{selected.vendor.name}</strong></span>}
+                      {selected.sourceType === "PURCHASE" && selected.procurementOrder?.poNumber && <span>· PO: <strong className="font-mono text-gray-700 dark:text-slate-200">{selected.procurementOrder.poNumber}</strong></span>}
+                      {selected.warehouse?.name && <span>· Warehouse: <strong className="text-gray-700 dark:text-slate-200">{selected.warehouse.name}</strong></span>}
+                      {selected.expiryDate && <span>· Expiry: {format(new Date(selected.expiryDate), "dd MMM yyyy")}</span>}
                     </p>
                   </div>
                   <button onClick={() => setSelectedId("")} className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-white/10" title="Close">
@@ -610,7 +650,7 @@ function PackagingContent() {
                 {/* Quantity strip */}
                 <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-gray-100 dark:divide-white/5 border-b border-gray-100 dark:border-white/5 text-center">
                   {[
-                    { label: "Planned Yield", value: plannedYieldOf(selected.production).qty, cls: "text-gray-500 dark:text-slate-400" },
+                    { label: selected.sourceType === "PURCHASE" ? "Purchased Qty" : "Planned Yield", value: selected.sourceType === "PURCHASE" ? (selected.approvedQty || selected.quantity || 0) : plannedYieldOf(selected.production).qty, cls: "text-gray-500 dark:text-slate-400" },
                     // Packaging always works from what was actually produced.
                     { label: "Actual Yield", value: selected.approvedQty || selected.quantity || 0, cls: "text-gray-800 dark:text-white" },
                     { label: "Already Packed", value: alreadyPacked, cls: "text-gray-800 dark:text-white" },

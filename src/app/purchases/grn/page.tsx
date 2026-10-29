@@ -119,7 +119,7 @@ const FALLBACK_COMPANY = {
 
 interface POItem {
   id: string;
-  inventoryItem: { id: string; name: string; unit: string; taxRate?: number; gstRate?: number };
+  inventoryItem: { id: string; name: string; unit: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
   quantity: number;
   price: number;
   gstRate?: number;
@@ -165,7 +165,7 @@ interface GRNItem {
   expDate?: string;
   lotNumber?: string;
   warehouseId?: string;
-  inventoryItem?: { name: string; unit: string; taxRate?: number; gstRate?: number };
+  inventoryItem?: { name: string; unit: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
 }
 
 function computeCommercialsFromPO(
@@ -260,13 +260,6 @@ export default function GRNPage() {
   const [showApproveConfirm, setShowApproveConfirm] = useState(false);
   const [companyProfile, setCompanyProfile] = useState<any>(null);
   const [previewGRN, setPreviewGRN] = useState(false);
-
-  const formatDisplayDate = (dateStr: string | undefined | null) => {
-    if (!dateStr) return "DD/MM/YYYY";
-    const parts = dateStr.split("-");
-    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    return dateStr;
-  };
 
   const formatDeliveryDate = (dateStr?: string) => {
     if (!dateStr) return "—";
@@ -501,6 +494,13 @@ export default function GRNPage() {
         const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
         const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
         const autoLotStr = baseLotStr ? formatLotPreview(baseLotStr, idx) : "[AUTO]";
+        const shelfLife = (item.inventoryItem as any)?.shelfLifeDays;
+        let defaultExp = "";
+        if (shelfLife && shelfLife > 0) {
+          const d = new Date();
+          d.setDate(d.getDate() + Number(shelfLife));
+          defaultExp = d.toISOString().split("T")[0];
+        }
         return {
           materialId: item.inventoryItem.id,
           quantity: item.quantity,
@@ -515,7 +515,7 @@ export default function GRNPage() {
           priceOverrideReason: "",
           vendorBatchNo: "",
           mfgDate: "",
-          expDate: "",
+          expDate: defaultExp,
           lotNumber: autoLotStr,
           warehouseId: po.warehouseId || defaultWarehouseId || "",
           inventoryItem: item.inventoryItem,
@@ -576,6 +576,22 @@ export default function GRNPage() {
     });
   };
 
+  const handleAutoExp = (idx: number, months?: number) => {
+    const item = grnItems[idx];
+    const shelfLife = (item?.inventoryItem as any)?.shelfLifeDays;
+    const d = new Date();
+    if (typeof months === "number") {
+      d.setMonth(d.getMonth() + months);
+    } else if (shelfLife && Number(shelfLife) > 0) {
+      d.setDate(d.getDate() + Number(shelfLife));
+    } else {
+      // Default to 12 months (1 year)
+      d.setFullYear(d.getFullYear() + 1);
+    }
+    const isoDate = d.toISOString().split("T")[0];
+    updateItemStr(idx, "expDate", isoDate);
+  };
+
   const handleAutoBatch = async (idx: number) => {
     setGeneratingLotIdx(idx);
     try {
@@ -586,6 +602,10 @@ export default function GRNPage() {
       updateItemStr(idx, "lotNumber", "[AUTO]");
     } finally {
       setGeneratingLotIdx(null);
+    }
+
+    if (!grnItems[idx]?.expDate) {
+      handleAutoExp(idx);
     }
   };
 
@@ -1229,26 +1249,72 @@ export default function GRNPage() {
                                 />
                               </div>
 
-                              <div className="flex items-center gap-1.5">
-                                <div className={clsx(
-                                  "relative flex items-center gap-1.5 border px-2.5 py-1 rounded-lg overflow-hidden group hover:border-[#f58220] transition-colors w-full max-w-[270px]",
-                                  isExpMissing
-                                    ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10"
-                                    : "border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5"
-                                )}>
-                                  <span className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-tight whitespace-nowrap">Exp Date:</span>
-                                  <span className="text-xs text-gray-800 dark:text-slate-200 pointer-events-none min-w-[75px] flex items-center justify-between flex-1">
-                                    {formatDisplayDate(item.expDate)}
-                                    <CalendarIcon size={12} className="text-gray-400 dark:text-slate-500 ml-1" />
-                                  </span>
+                              <div className="flex items-center gap-1.5 w-full">
+                                <button
+                                  type="button"
+                                  title="Auto-calculate Expiry Date (1 Year or Product Shelf Life)"
+                                  onClick={() => handleAutoExp(idx)}
+                                  className={clsx(
+                                    "px-2 py-1 rounded text-[11px] font-semibold transition-colors shrink-0 cursor-pointer border flex items-center gap-1",
+                                    item.expDate
+                                      ? "bg-orange-500 text-white border-orange-600 shadow-sm"
+                                      : "bg-orange-50 dark:bg-orange-500/10 hover:bg-orange-100 dark:hover:bg-orange-500/20 text-[#f58220] border-orange-200 dark:border-orange-500/20"
+                                  )}
+                                >
+                                  <CalendarIcon size={11} className="shrink-0" />
+                                  <span>Auto Exp</span>
+                                </button>
+                                <div className="relative flex-1 min-w-[170px]">
                                   <input
+                                    id={`grn-exp-date-${idx}`}
                                     type="date"
-                                    title="Expiry (End) Date"
+                                    title="Click to select Expiry Date"
                                     value={item.expDate || ""}
                                     onChange={e => updateItemStr(idx, "expDate", e.target.value)}
-                                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                                    onClick={e => {
+                                      try {
+                                        if (typeof e.currentTarget.showPicker === "function") {
+                                          e.currentTarget.showPicker();
+                                        }
+                                      } catch {}
+                                    }}
+                                    className={clsx(
+                                      "w-full px-2.5 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs font-mono outline-none focus:border-[#f58220] transition-colors cursor-pointer",
+                                      isExpMissing
+                                        ? "border-rose-400 dark:border-rose-500/60 bg-rose-50/20 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300"
+                                        : "border-gray-200 dark:border-white/10 text-gray-800 dark:text-white"
+                                    )}
                                   />
                                 </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-gray-400 dark:text-slate-500 font-medium">Quick:</span>
+                                {[
+                                  { label: "+6M", months: 6 },
+                                  { label: "+1Y", months: 12 },
+                                  { label: "+2Y", months: 24 },
+                                ].map(p => (
+                                  <button
+                                    key={p.label}
+                                    type="button"
+                                    onClick={() => handleAutoExp(idx, p.months)}
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-orange-50 dark:bg-white/5 dark:hover:bg-orange-500/20 text-gray-600 dark:text-slate-300 hover:text-[#f58220] border border-gray-200/60 dark:border-white/5 hover:border-orange-300 transition-colors cursor-pointer"
+                                    title={`Set Expiry to ${p.label} from today`}
+                                  >
+                                    {p.label}
+                                  </button>
+                                ))}
+                                {item.expDate && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateItemStr(idx, "expDate", "")}
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-rose-50 dark:bg-white/5 dark:hover:bg-rose-500/20 text-gray-400 hover:text-rose-500 border border-gray-200/60 dark:border-white/5 transition-colors cursor-pointer"
+                                    title="Clear Expiry Date"
+                                  >
+                                    Clear
+                                  </button>
+                                )}
                               </div>
 
                               {isExpMissing && (

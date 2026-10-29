@@ -12,8 +12,9 @@ import { AlertTriangle, Layers, Loader2, PackageOpen, Wand2 } from "lucide-react
 import { clsx } from "clsx";
 import { Modal } from "@/components/ui/Modal";
 import { lotPricingApi } from "@/lib/api";
+import api from "@/lib/api/base";
 import {
-  allocationProfit, fifoSuggestion, formatINR, summarizeAllocations, toAllocation,
+  allocationProfit, fifoSuggestion, invoiceLotPool, formatINR, summarizeAllocations, toAllocation,
   LotAllocation, SaleLot,
 } from "@/lib/lot-pricing";
 
@@ -22,6 +23,12 @@ const formatDate = (d?: string | null) =>
 const formatQty = (n: number) => (Number(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 3 });
 
 export interface LotSelectorProps {
+  manualClaims?: Record<string, number>;
+  priorQuantity?: number;
+  invoiceMode?: boolean;
+  sku?: string;
+  unit?: string;
+  warehouseId?: string;
   open: boolean;
   onClose: () => void;
   productId: string;
@@ -48,16 +55,18 @@ export default function LotSelector(props: LotSelectorProps) {
   const [lots, setLots] = useState<SaleLot[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [qty, setQty] = useState<Record<string, string>>({});
+  const [pendingConfirmed, setPendingConfirmed] = useState(false);
 
   useEffect(() => {
     if (!open || !productId) return;
     let cancelled = false;
     setLots(null);
     setError(null);
-    lotPricingApi.saleLotOptions({ productId, ...(scope ? { scope } : { franchiseId: franchiseId || undefined }) })
+    setPendingConfirmed(false);
+    (props.invoiceMode ? api.get('/api/sales/invoices/lot-suggestions', { params: { productId, quantity: quantity || 0, unit: props.unit, franchiseId, warehouseId: props.warehouseId } }) : lotPricingApi.saleLotOptions({ productId, ...(scope ? { scope } : { franchiseId: franchiseId || undefined }) }))
       .then((res) => {
         if (cancelled) return;
-        const list: SaleLot[] = res.data?.lots ?? [];
+        const list: SaleLot[] = props.invoiceMode ? invoiceLotPool(res.data?.lots ?? [], props.manualClaims).filter(l => l.selectable && l.availableQty > 0) : res.data?.lots ?? [];
         setLots(list);
         props.onLoaded?.(list);
         // Re-opened: keep the current split. First open with exactly one
@@ -74,7 +83,7 @@ export default function LotSelector(props: LotSelectorProps) {
       .catch((e) => { if (!cancelled) setError(e?.response?.data?.error || "Could not load lots for this product."); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, productId, scope, franchiseId]);
+  }, [open, productId, scope, franchiseId, props.warehouseId, props.invoiceMode ? props.unit : undefined, props.invoiceMode ? quantity : undefined]);
 
   const selectable = useMemo(() => (lots || []).filter((l) => l.selectable), [lots]);
 
@@ -83,8 +92,9 @@ export default function LotSelector(props: LotSelectorProps) {
     .filter((a) => a.quantity > 0), [selectable, qty, price]);
   const summary = useMemo(() => summarizeAllocations(allocations), [allocations]);
   const errors = selectable
-    .filter((l) => (Number(qty[l.id]) || 0) > l.availableQty + 1e-9 || (Number(qty[l.id]) || 0) < 0)
+    .filter((l) => !Number.isFinite(Number(qty[l.id] || 0)) || (Number(qty[l.id]) || 0) > l.availableQty + 1e-9 || (Number(qty[l.id]) || 0) < 0)
     .map((l) => `Lot ${l.lotNumber}: only ${formatQty(l.availableQty)} available.`);
+  if (props.invoiceMode && summary.totalQuantity > (quantity || 0) + 0.0001) errors.push("Selected quantity exceeds the required quantity.");
   const warnings = showCost ? allocations.map((a) => allocationProfit(a).warning).filter(Boolean) as string[] : [];
 
   const fill = () => {
@@ -93,9 +103,32 @@ export default function LotSelector(props: LotSelectorProps) {
   };
 
   const apply = () => {
-    if (errors.length || !allocations.length) return;
+    if (errors.length || (!props.invoiceMode && !allocations.length)) return;
+    if (props.invoiceMode && selectable.length > 1 && summary.totalQuantity < (quantity || 0) - 0.0001 && !pendingConfirmed) return;
     onApply(allocations);
   };
+
+  if (props.invoiceMode) {
+    const remaining = Math.max(0, (quantity || 0) - summary.totalQuantity);
+    const needsConfirmation = selectable.length > 1 && remaining > 0.0001;
+    return <Modal isOpen={open} onClose={onClose} size="lg" title={`SELECT STOCK LOTS – ${productName}`} footer={
+      <div className="flex flex-wrap justify-between gap-2 w-full">
+        <button type="button" onClick={() => { setQty({}); setPendingConfirmed(false); }} className="px-3 py-2 text-xs font-semibold">Clear Selection</button>
+        <div className="flex gap-2"><button type="button" onClick={onClose} className="px-3 py-2 text-xs">Cancel</button>
+          <button type="button" onClick={apply} disabled={!lots || !!error || errors.length > 0 || (needsConfirmation && !pendingConfirmed)} className="rounded-lg bg-orange-500 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Apply Lots</button></div>
+      </div>}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 text-xs">
+        <p>Requested: {formatQty(quantity || 0)} {props.unit}</p><p>Available: {formatQty(selectable.reduce((sum, l) => sum + l.availableQty, 0))} {props.unit}</p>
+        <p>Selected: {formatQty(summary.totalQuantity)} {props.unit}</p><p>Remaining: {formatQty(remaining)} {props.unit}</p>
+      </div>
+      {error ? <p role="alert" className="text-rose-600">{error}</p> : !lots ? <p>Loading lots...</p> : !selectable.length ? <p>No available lots. Quantity remains pending fulfilment.</p> :
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-white/10"><table className="w-full text-xs"><thead><tr className="text-left bg-slate-50 dark:bg-white/5"><th className="p-2">Lot Number</th><th className="p-2">Expiry</th><th className="p-2 text-right">Available</th><th className="p-2 text-right">Select Qty</th></tr></thead><tbody>
+          {selectable.map(lot => <tr key={lot.id} className="border-t border-slate-100 dark:border-white/10"><td className="p-2 break-all font-mono">{lot.lotNumber}<p className="font-sans text-[10px] text-slate-400">{lot.warehouse?.name || lot.location}</p></td><td className="p-2">{formatDate(lot.expiryDate)}</td><td className="p-2 text-right">{formatQty(lot.availableQty)} {props.unit}</td><td className="p-2 text-right"><input type="number" min={0} max={Math.min(lot.availableQty, quantity || 0)} step="any" inputMode="decimal" aria-label={`Quantity from lot ${lot.lotNumber}`} value={qty[lot.id] ?? "0"} onChange={e => { setQty(previous => ({ ...previous, [lot.id]: e.target.value })); setPendingConfirmed(false); }} className="w-20 max-w-full rounded-md border border-slate-200 bg-transparent p-2 text-right focus:ring-2 focus:ring-orange-400" /></td></tr>)}
+        </tbody></table></div>}
+      {errors.map(message => <p key={message} role="alert" className="mt-2 text-xs text-rose-600">{message}</p>)}
+      {needsConfirmation && <label className="mt-3 flex items-start gap-2 text-xs text-amber-700"><input type="checkbox" checked={pendingConfirmed} onChange={e => setPendingConfirmed(e.target.checked)} />Keep {formatQty(remaining)} {props.unit} unallocated and pending fulfilment.</label>}
+    </Modal>;
+  }
 
   return (
     <Modal
@@ -108,9 +141,10 @@ export default function LotSelector(props: LotSelectorProps) {
           <div className="flex gap-2">
             {selectable.length > 0 && (quantity || 0) > 0 && (
               <button type="button" onClick={fill} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10">
-                <Wand2 size={13} /> Fill {formatQty(quantity || 0)} oldest first
+                <Wand2 size={13} /> {`Fill ${formatQty(quantity || 0)} oldest first`}
               </button>
             )}
+            {props.invoiceMode && <button type="button" onClick={() => setQty({})} className="px-3 py-2 text-xs font-semibold">Clear Selection</button>}
             {onUseStandard && (
               <button type="button" onClick={onUseStandard} className="px-3 py-2 rounded-lg text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-200">
                 Bill without lot
@@ -122,15 +156,16 @@ export default function LotSelector(props: LotSelectorProps) {
             <button
               type="button"
               onClick={apply}
-              disabled={!allocations.length || errors.length > 0}
+              disabled={(!props.invoiceMode && !allocations.length) || errors.length > 0 || !lots || !!error}
               className="px-4 py-2 rounded-lg text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Apply {allocations.length > 1 ? `${allocations.length} lots` : "lot"}
+              {props.invoiceMode ? "Apply Selection" : `Apply ${allocations.length > 1 ? `${allocations.length} lots` : "lot"}`}
             </button>
           </div>
         </div>
       }
     >
+      {props.invoiceMode && <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-xl bg-slate-50 p-3 text-xs dark:bg-white/5"><p className="col-span-2 sm:col-span-4 font-semibold">{productName} {props.sku ? `· ${props.sku}` : ""}</p><p>Required: {formatQty(quantity || 0)} {props.unit}</p><p>Available: {formatQty(selectable.reduce((s, l) => s + l.availableQty, 0))} {props.unit}</p><p>Selected: {formatQty(summary.totalQuantity)} {props.unit}</p><p>Remaining: {formatQty(Math.max(0, (quantity || 0) - summary.totalQuantity))} {props.unit}</p></div>}
       {error ? (
         <p className="text-sm font-semibold text-rose-600">{error}</p>
       ) : !lots ? (
@@ -140,7 +175,7 @@ export default function LotSelector(props: LotSelectorProps) {
       ) : lots.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-xs text-slate-400">
           <PackageOpen size={22} />
-          No sellable lots in stock for this product. Lots are created when packaging is confirmed.
+          {props.invoiceMode ? "No available lots. This quantity can remain pending fulfilment." : "No sellable lots in stock for this product. Lots are created when packaging is confirmed."}
         </div>
       ) : (
         <div className="space-y-3">

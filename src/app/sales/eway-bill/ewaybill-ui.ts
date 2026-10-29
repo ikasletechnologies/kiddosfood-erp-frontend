@@ -105,6 +105,7 @@ export const STATUS_LABEL: Record<string, string> = {
 };
 
 export interface Masters {
+  generationAvailable?: boolean;
   subSupplyTypes: Record<string, string>;
   supplyDocMatrix: Record<string, Record<string, string[]>>;
   docTypes: Record<string, string>;

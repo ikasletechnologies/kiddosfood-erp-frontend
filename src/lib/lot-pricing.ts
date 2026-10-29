@@ -17,6 +17,27 @@ export const PRICE_TIERS: Array<{ key: "customerPrice" | "dealerPrice" | "franch
   { key: "franchisePrice", label: "Franchise", party: "FRANCHISE" },
 ];
 
+export type PricingField = "customerPrice" | "dealerPrice" | "franchisePrice" | "upcountryFranchisePrice" | "mrp" | "whiteLabelCost";
+export const SKU_PRICE_FIELDS: Array<{ key: PricingField; label: string; selling: boolean }> = [
+  ...PRICE_TIERS.map(({ key, label }) => ({ key, label, selling: true })),
+  { key: "upcountryFranchisePrice", label: "Upcountry Franchise", selling: true },
+  { key: "mrp", label: "MRP (including GST)", selling: false },
+  { key: "whiteLabelCost", label: "White Label Cost", selling: false },
+];
+
+export function mrpWarning(customerPriceExclTax: number | null | undefined, mrp: number | null | undefined, taxPercent: number): string | null {
+  if (!(Number(customerPriceExclTax) > 0) || !(Number(mrp) > 0)) return null;
+  return Math.round(Number(customerPriceExclTax) * (1 + taxPercent / 100) * 100) > Math.round(Number(mrp) * 100)
+    ? "Warning: Customer price including GST exceeds MRP."
+    : null;
+}
+
+/** Only explicit SKU channel prices count as configured; lot status and cost do not. */
+export function productPricingStatus(prices: { customerPrice?: number | null; dealerPrice?: number | null; franchisePrice?: number | null }) {
+  return PRICE_TIERS.every(({ key }) => Number.isFinite(Number(prices[key])) && Number(prices[key]) > 0)
+    ? PRODUCT_FULLY_PRICED : PRODUCT_PRICING_PENDING;
+}
+
 /**
  * The selling price for a party type: that tier's own price when set (> 0);
  * otherwise the master base price, matching the server's resolver; otherwise
@@ -174,6 +195,28 @@ export function fifoSuggestion(lots: SaleLot[], quantity: number): Record<string
     if (take > 0) { out[lot.id] = take; remaining -= take; }
   }
   return out;
+}
+
+/** Non-binding FEFO suggestion; receipt/packaging date is the FIFO tie-breaker. */
+export function fefoSuggestion(lots: SaleLot[], quantity: number): Record<string, number> {
+  const expiry = (lot: SaleLot) => lot.expiryDate ? new Date(lot.expiryDate).getTime() : Infinity;
+  const receipt = (lot: SaleLot) => new Date(lot.packagingDate || lot.productionDate || 0).getTime();
+  const ordered = [...lots].sort((a, b) => (expiry(a) === expiry(b) ? 0 : expiry(a) < expiry(b) ? -1 : 1) || receipt(a) - receipt(b) || a.id.localeCompare(b.id));
+  let remaining = Math.max(0, quantity);
+  const result: Record<string, number> = {};
+  for (const lot of ordered) {
+    if (!lot.selectable || remaining <= 0) continue;
+    const take = Math.min(remaining, lot.availableQty);
+    if (take > 0) { result[lot.id] = take; remaining = Math.max(0, Math.round((remaining - take) * 10000) / 10000); }
+  }
+  return result;
+}
+
+/** Share a non-binding lot pool across repeated SKU rows without suggesting the same units twice. */
+export function invoiceLotPool(lots: SaleLot[], manualClaims: Record<string, number> = {}, priorQuantity = 0): SaleLot[] {
+  const available = lots.map(lot => ({ ...lot, availableQty: Math.max(0, lot.availableQty - (manualClaims[lot.id] || 0)) }));
+  const preceding = fefoSuggestion(available, priorQuantity);
+  return available.map(lot => ({ ...lot, availableQty: Math.max(0, lot.availableQty - (preceding[lot.id] || 0)) }));
 }
 
 export function toAllocation(lot: SaleLot, quantity: number, price: number): LotAllocation {

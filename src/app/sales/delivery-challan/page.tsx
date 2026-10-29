@@ -18,6 +18,7 @@ import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { LotChip } from "@/components/sales/LotSelector";
+import InvoiceLotAllocation from "@/components/sales/InvoiceLotAllocation";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -631,7 +632,7 @@ export default function DeliveryChallanPage() {
           id: Math.random().toString(36).slice(2),
           productId: it.productId,
           itemSearch: it.productName || "",
-          qty: it.remainingQty,
+          qty: it.availableQty > 0 ? Math.min(it.remainingQty, it.availableQty) : it.remainingQty,
           unit: it.unit || "NONE",
           rate: it.rate,
           discountPct: Number(it.discountPct) || 0,
@@ -641,7 +642,7 @@ export default function DeliveryChallanPage() {
           batchNumber: it.batchNumber || "",
           lotId: it.inventoryBatchId || null,
           lotNumber: it.lotNumber || null,
-          remarks: it.dispatchedQty > 0 ? `${it.dispatchedQty} of ${it.invoiceQty} already dispatched` : "",
+          remarks: `${it.remainingQty} ${it.unit || ""} outstanding on invoice${it.availableQty < it.remainingQty ? ` · ${Math.max(0, it.remainingQty - it.availableQty)} pending stock` : ""}`,
         };
       }));
     }).catch((err: any) => {
@@ -1769,6 +1770,11 @@ export default function DeliveryChallanPage() {
                             className="w-full text-[11px] text-gray-400 dark:text-slate-500 outline-none bg-transparent mt-1 focus:text-gray-700 dark:focus:text-slate-200"
                           />
                           {it.lotId && <LotChip lotNumber={it.lotNumber} />}
+                          {sourceInvoiceIdState && it.productId && <InvoiceLotAllocation productId={it.productId} productName={it.itemSearch} quantity={it.qty} unit={it.unit} price={it.rate} selectedLotId={it.lotId || undefined} franchiseId={sourceFranchiseId || undefined} onManualApply={allocations => setItems(previous => {
+                            const base = previous[idx];
+                            const replacement = allocations.length ? allocations.map((a, n) => ({ ...base, id: n ? Math.random().toString(36).slice(2) : base.id, qty: a.quantity, lotId: a.lotId, lotNumber: a.lotNumber, batchNumber: a.batchNumber })) : [{ ...base, lotId: null, lotNumber: null, batchNumber: "" }];
+                            return [...previous.slice(0, idx), ...replacement, ...previous.slice(idx + 1)];
+                          })} />}
                         </td>
 
 

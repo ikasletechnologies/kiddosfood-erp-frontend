@@ -6,6 +6,7 @@ import { clsx } from "clsx";
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Loader2, RotateCw, SendHorizontal, WifiOff } from "lucide-react";
 import { chatApi, ChatMessage, CHAT_MAX_LENGTH } from "@/lib/api";
 import { useChat } from "@/context/ChatContext";
+import { FRANCHISE_QUICK_QUESTIONS } from "@/lib/chat-quick-questions";
 
 type UiMessage = ChatMessage & { status?: "pending" | "failed"; error?: string };
 
@@ -71,6 +72,7 @@ export default function ChatThread({ conversationId, title, subtitle, avatarLabe
   useEffect(() => {
     let cancelled = false;
     setMessages([]);
+    setDraft("");
     setHasMore(false);
     setPeerLastReadAt(null);
     setLoadError(null);
@@ -325,6 +327,20 @@ export default function ChatThread({ conversationId, title, subtitle, avatarLabe
 
       {/* Composer */}
       <div className="border-t border-slate-200/70 dark:border-white/5 px-3 sm:px-4 py-3 shrink-0">
+        {role === "FRANCHISE_ADMIN" && (
+          <div role="group" aria-label="Quick Questions" className="mb-3 space-y-1.5">
+            <p className="text-xs font-semibold text-slate-500">Quick Questions</p>
+            <div className="flex flex-wrap gap-2">
+              {FRANCHISE_QUICK_QUESTIONS.map(question => (
+                <button key={question.id} type="button"
+                  onClick={() => { setDraft(question.message); inputRef.current?.focus(); }}
+                  className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-300">
+                  {question.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-end gap-2">
           <textarea
             ref={inputRef}
