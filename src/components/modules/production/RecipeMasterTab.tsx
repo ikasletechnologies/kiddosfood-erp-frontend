@@ -29,13 +29,14 @@ import { DEFAULT_CATEGORIES, DEFAULT_RECIPE_EXPENSES, ExpenseCategory, RecipeExp
 import { toast } from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { formatDate, formatDateTime } from "@/lib/utils";
+import { MANUAL_YIELD_UNITS, MANUAL_INGREDIENT_UNITS, referenceOf, validateReference } from '@/lib/manual-recipe';
 import { exportRecipeToPdf } from "@/lib/recipe-export";
 
-// Recipe Master only records WHICH raw materials a recipe uses. How much of
-// each (and the yield it makes) is the reference formulation, maintained in
-// Production Planning.
+// Manual recipes use the existing versioned reference formulation.
 interface RecipeItem {
   inventoryItemId: string;
+  quantity: string;
+  unit: string;
 }
 
 type RecipeImportLink = {
@@ -76,6 +77,8 @@ const emptyForm = {
   shelfLifeDays: null as number | null,
   instructions: "",
   estimatedDurationMinutes: null as number | null,
+  yieldQty: "",
+  yieldUnit: "KG",
   items: [] as RecipeItem[],
 };
 
@@ -267,7 +270,7 @@ export default function RecipeMasterTab() {
       shelfLifeDays: products.find((p: any) => p.id === recipe.productId)?.shelfLifeDays ?? null,
       instructions: recipe.instructions ?? "",
       estimatedDurationMinutes: recipe.estimatedDurationMinutes ?? null,
-      items: ingredientIdsOf(recipe).map((inventoryItemId) => ({ inventoryItemId })),
+      ...referenceOf(recipe),
     });
     setExpenseDrafts(draftsFrom(recipe.additionalExpenses, expenseCategories));
     setEditingId(recipe.id);
@@ -288,6 +291,8 @@ export default function RecipeMasterTab() {
       setError("Each ingredient can only be added once.");
       return;
     }
+    const referenceError = validateReference(form, materials);
+    if (referenceError) { setError(referenceError); return; }
     const expenseCheck = expensesPayloadFrom(expenseDrafts);
     if (expenseCheck.error) { setError(expenseCheck.error); return; }
     setSaving(true);
@@ -302,6 +307,7 @@ export default function RecipeMasterTab() {
         instructions: form.instructions || undefined,
         estimatedDurationMinutes: form.estimatedDurationMinutes,
         ingredientIds: ids,
+        formulation: { yieldQty: Number(form.yieldQty), yieldUnit: form.yieldUnit, items: form.items.map(i => ({ inventoryItemId: i.inventoryItemId, quantity: Number(i.quantity), unit: i.unit })) },
         additionalExpenses: expenseCheck.payload,
       });
       // Shelf life lives on the linked Product master (batch expiry is
@@ -379,7 +385,7 @@ export default function RecipeMasterTab() {
       if (materialRowIdx !== null && lastRes) {
         setForm(f => {
           const newItems = [...f.items];
-          newItems[materialRowIdx].inventoryItemId = lastRes.data.id;
+          newItems[materialRowIdx] = { ...newItems[materialRowIdx], inventoryItemId: lastRes.data.id, unit: String(lastRes.data.unit || "KG").toUpperCase() };
           return { ...f, items: newItems };
         });
       }
@@ -425,7 +431,7 @@ export default function RecipeMasterTab() {
   const addItem = () => {
     setForm(f => ({
       ...f,
-      items: [...f.items, { inventoryItemId: "" }],
+      items: [...f.items, { inventoryItemId: "", quantity: "", unit: "KG" }],
     }));
     setTimeout(() => {
       const el = document.getElementById('ingredients-container');
@@ -935,11 +941,24 @@ export default function RecipeMasterTab() {
             />
           </div>
 
+          <div className="space-y-1.5">
+            <p className="text-xs font-semibold text-gray-700 dark:text-slate-300">Reference Output Yield *</p>
+            <div className="flex gap-3">
+              <label className="flex-1 text-xs text-gray-500 dark:text-slate-400">Expected Output Quantity
+                <input aria-label="Expected Output Quantity" type="number" min="0" step="any" value={form.yieldQty} onChange={e => setForm(f => ({...f,yieldQty:e.target.value}))} className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-3 rounded-lg text-xs text-gray-800 dark:text-white" />
+              </label>
+              <label className="w-24 text-xs text-gray-500 dark:text-slate-400">Output Unit
+                <select aria-label="Output Unit" value={form.yieldUnit} onChange={e => setForm(f => ({...f,yieldUnit:e.target.value}))} className="w-full h-9 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded-lg text-xs text-gray-800 dark:text-white">{MANUAL_YIELD_UNITS.map(unit => <option key={unit}>{unit}</option>)}</select>
+              </label>
+            </div>
+            <p className="text-[10px] text-gray-400 dark:text-slate-500">Expected output from the ingredients below. Actual batch output is recorded during manufacturing.</p>
+          </div>
+
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-semibold text-gray-700 dark:text-slate-300">
                 Ingredients *
-                <span className="block text-[10px] font-normal text-gray-400 dark:text-slate-500">Select materials only — quantities are set as the reference formulation in Production Planning.</span>
+                <span className="block text-[10px] font-normal text-gray-400 dark:text-slate-500">Enter the ingredient quantities needed for the reference output above.</span>
               </label>
               <button
                 onClick={addItem}
@@ -1020,7 +1039,7 @@ export default function RecipeMasterTab() {
                                   key={m.id}
                                   onClick={e => {
                                     e.stopPropagation();
-                                    updateItem(idx, { inventoryItemId: m.id });
+                                    updateItem(idx, { inventoryItemId: m.id, unit: MANUAL_INGREDIENT_UNITS.includes(String(m.unit).toUpperCase()) ? String(m.unit).toUpperCase() : "KG" });
                                     setOpenMaterialIdx(null);
                                   }}
                                   className={clsx(
@@ -1049,7 +1068,13 @@ export default function RecipeMasterTab() {
                     )}
                   </div>
 
-                  <button
+                  <label className="w-28 space-y-1 text-xs text-gray-500 dark:text-slate-400">Reference Quantity
+                    <input aria-label={'Reference quantity '+(idx+1)} type="number" min="0" step="any" value={item.quantity} onChange={e => updateItem(idx,{quantity:e.target.value})} className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs text-gray-800 dark:text-white" />
+                  </label>
+                  <label className="w-20 space-y-1 text-xs text-gray-500 dark:text-slate-400">Unit
+                    <select aria-label={'Ingredient unit '+(idx+1)} value={item.unit} onChange={e => updateItem(idx,{unit:e.target.value})} className="w-full h-8 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 px-2 rounded text-xs text-gray-800 dark:text-white">{MANUAL_INGREDIENT_UNITS.map(unit => <option key={unit}>{unit}</option>)}</select>
+                  </label>
+                  <button aria-label={'Remove ingredient '+(idx+1)}
                     onClick={() => removeItem(idx)}
                     className="p-2 mb-[1px] text-gray-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-white/10 rounded transition-colors shrink-0"
                   >

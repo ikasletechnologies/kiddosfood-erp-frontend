@@ -13,6 +13,7 @@ import {
   expensesPayloadFrom,
 } from "@/lib/recipe-expenses";
 import { entryUnitsFor } from "@/lib/qty-display";
+import { MANUAL_INGREDIENT_UNITS, MANUAL_YIELD_UNITS, validateReference } from "@/lib/manual-recipe";
 
 type Product = { id: string; name: string; sku?: string | null; packSize?: { quantity?: number; unit?: string } | null };
 type Row = { inventoryItemId: string; quantity: string; unit: string };
@@ -100,6 +101,8 @@ export default function FirstTimeFormulationModal({
     if (!Number.isFinite(y) || y <= 0) return setError("Reference yield must be greater than zero.");
     if (!rows.length || rows.some((r) => !r.inventoryItemId || !Number.isFinite(Number(r.quantity)) || Number(r.quantity) <= 0)) return setError("Select every ingredient and enter a quantity greater than zero.");
     if (new Set(rows.map((r) => r.inventoryItemId)).size !== rows.length) return setError("Each ingredient can only be added once.");
+    const referenceError = validateReference({yieldQty,yieldUnit,items:rows},materials);
+    if (referenceError) return setError(referenceError);
     const expenseCheck = expensesPayloadFrom(expenses);
     if (expenseCheck.error) return setError(expenseCheck.error);
     setSaving(true); setError("");
@@ -161,15 +164,15 @@ export default function FirstTimeFormulationModal({
         </div>
         <label className="space-y-1 text-xs font-semibold">Reference Yield
           <span className="mt-1 flex gap-2"><input type="number" min="0" step="any" value={yieldQty} onChange={(e) => setYieldQty(e.target.value)} placeholder="Quantity" className="h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 dark:border-white/10 dark:bg-[#13151f]" />
-          <select value={yieldUnit} onChange={(e) => setYieldUnit(e.target.value)} className="h-9 rounded-lg border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-[#13151f]">{["KG","G","PCS","L","ML"].map((u) => <option key={u}>{u}</option>)}</select></span>
+          <select value={yieldUnit} onChange={(e) => setYieldUnit(e.target.value)} className="h-9 rounded-lg border border-gray-200 bg-white px-2 dark:border-white/10 dark:bg-[#13151f]">{MANUAL_YIELD_UNITS.map((u) => <option key={u}>{u}</option>)}</select></span>
         </label>
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between"><p className="text-xs font-bold">Ingredients</p><button type="button" onClick={() => setRows((r) => [...r, { inventoryItemId: "", quantity: "", unit: "" }])} className="flex items-center gap-1 text-xs font-bold text-[#f58220]"><Plus size={13}/> Add Ingredient</button></div>
-        {rows.map((row, index) => { const material = materialById.get(row.inventoryItemId) as any; const units = material ? allowedIngredientUnits(String(material.unit || "").toUpperCase()) : []; return <div key={index} className="grid grid-cols-[minmax(0,1fr)_100px_74px_30px] gap-2">
+        {rows.map((row, index) => { const material = materialById.get(row.inventoryItemId) as any; return <div key={index} className="grid grid-cols-[minmax(0,1fr)_100px_74px_30px] gap-2">
           <select value={row.inventoryItemId} onChange={(e) => chooseMaterial(index, e.target.value)} className="h-9 min-w-0 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-[#13151f]"><option value="">Select raw material</option>{materials.map((m) => { const duplicate = materialNameCounts[String(m.name || "").trim().toLocaleLowerCase("en-IN")] > 1; return <option key={m.id} value={m.id}>{m.name}{duplicate ? ` · ${m.sku || m.id.slice(-6)}` : ""}</option>; })}</select>
           <input type="number" min="0" step="any" value={row.quantity} onChange={(e) => updateRow(index, { quantity: e.target.value })} placeholder="Qty" className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-xs dark:border-white/10 dark:bg-[#13151f]" />
-          <select value={row.unit} onChange={(e) => updateRow(index, { unit: e.target.value })} disabled={!material} className="h-9 rounded-lg border border-gray-200 bg-white px-1 text-xs dark:border-white/10 dark:bg-[#13151f]">{(units.length ? units : [row.unit]).filter(Boolean).map((u) => <option key={u}>{u}</option>)}</select>
+          <select value={row.unit} onChange={(e) => updateRow(index, { unit: e.target.value })} disabled={!material} className="h-9 rounded-lg border border-gray-200 bg-white px-1 text-xs dark:border-white/10 dark:bg-[#13151f]">{MANUAL_INGREDIENT_UNITS.map((u) => <option key={u}>{u}</option>)}</select>
           <button type="button" aria-label="Remove ingredient" onClick={() => setRows((r) => r.filter((_, i) => i !== index))} disabled={rows.length === 1} className="text-gray-400 disabled:opacity-30"><Trash2 size={15}/></button>
         </div>; })}
       </div>
