@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Loader2, ArrowLeft, ArrowRight } from "lucide-react";
 import { clsx } from "clsx";
 import { toast } from "react-hot-toast";
@@ -59,6 +59,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
   const [form, setForm] = useState(getEmptyForm(partyType));
   const [saving, setSaving] = useState(false);
   const [fetchingGst, setFetchingGst] = useState(false);
+  const gstRequest = useRef(0);
   const [fetchingPincode, setFetchingPincode] = useState(false);
   const [vendorStep, setVendorStep] = useState<1 | 2>(1);
 
@@ -188,21 +189,26 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
       return;
     }
 
+    const requestId = ++gstRequest.current;
     setFetchingGst(true);
     try {
       const { data } = await gstApi.verify(cleanGst);
+      if (requestId !== gstRequest.current) return;
       if (data.success) {
-        setForm((prev) => ({
+        const location = data.pinCode ? await lookupPincode(String(data.pinCode)) : null;
+        if (requestId !== gstRequest.current) return;
+        setForm((prev) => (prev.gstNumber !== cleanGst ? prev : ({
           ...prev,
           name: data.legalName || prev.name,
           billingAddress: data.address || prev.billingAddress,
           // Shipping address is always typed by the user — the GSTIN lookup fills billing only.
           shippingAddress: prev.shippingAddress,
           state: matchState(data.state) || stateFromGstin(cleanGst) || prev.state,
-          city: data.city || prev.city,
-          pincode: data.pinCode || prev.pincode,
+          district: data.district || location?.district || prev.district,
+          city: data.city || location?.city || prev.city,
+          pincode: String(data.pinCode || prev.pincode),
           gstType: "Registered Business"
-        }));
+        })));
         if (data.legalName) {
           toast.success(`Successfully auto-filled details for "${data.legalName}"`);
         }
@@ -210,26 +216,21 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
         setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
       }
     } catch (err: any) {
+      if (requestId !== gstRequest.current) return;
       console.warn("GST auto-fill unavailable; continuing with manual entry.", err);
       // Provider outages must not block vendor creation. The State can still be
       // inferred reliably from the first two digits of a valid GSTIN.
       setForm((prev) => ({ ...prev, state: prev.state || stateFromGstin(cleanGst), gstType: "Registered Business" }));
 
-      const status = err?.response?.status;
-      const providerMessage = String(err?.response?.data?.error || err?.message || "").toLowerCase();
-      const providerUnavailable = status === 401 || status === 403 || status >= 500
-        || providerMessage.includes("authentication")
-        || providerMessage.includes("provider");
-
-      if (!providerUnavailable) {
-        toast.error("GST details could not be auto-filled. Please enter them manually.");
-      }
+      toast.error(err?.response?.data?.error || "GST details could not be auto-filled. Please enter them manually.");
     } finally {
-      setFetchingGst(false);
+      if (requestId === gstRequest.current) setFetchingGst(false);
     }
   };
 
   useEffect(() => {
+    gstRequest.current += 1;
+    setFetchingGst(false);
     if (isOpen) {
       setVendorStep(1);
       if (initialData) {
@@ -634,6 +635,8 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                     maxLength={15}
                     onChange={(e) => {
                       const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                      gstRequest.current += 1;
+                      setFetchingGst(false);
                       setForm({...form, gstNumber: val});
                       if (val.length === 15) {
                         fetchGstDetails(val);

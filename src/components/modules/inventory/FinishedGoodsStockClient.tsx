@@ -287,6 +287,11 @@ export default function FinishedGoodsStockClient() {
   // Inventory Item Master editor).
   const importFileRef = useRef<HTMLInputElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [importActionTarget, setImportActionTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setImportActionTarget(document.getElementById("finished-goods-import-action"));
+  }, []);
+
   const [isImportMinimized, setIsImportMinimized] = useState(false);
   const [importRows, setImportRows] = useState<Array<{ category: string; name: string; size: string; unit: string; gstPercent: string; sellingPrice: string; error?: string }>>([]);
   const [importing, setImporting] = useState(false);
@@ -294,6 +299,17 @@ export default function FinishedGoodsStockClient() {
   const [importResult, setImportResult] = useState<{ success: number; duplicates: number; invalid: number } | null>(null);
   const [importDuplicates, setImportDuplicates] = useState<Array<{ name: string; sku: string; reason: string }>>([]);
   const [importInvalid, setImportInvalid] = useState<Array<{ name: string; reason: string }>>([]);
+
+  const bulkImportButton = (
+    <button
+              onClick={() => setShowImportModal(true)}
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              <Upload size={14} className="shrink-0" />
+              <span className="hidden sm:inline">Bulk Import (Excel)</span>
+              <span className="sm:hidden">Import</span>
+            </button>
+  );
 
   const IMPORT_TEMPLATE_HEADERS = ["Category", "Name", "Size", "Unit", "GST %", "Selling Price"];
 
@@ -892,14 +908,7 @@ export default function FinishedGoodsStockClient() {
 
             {/* Bulk Import */}
             <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFileSelect} />
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-orange-500 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <Upload size={14} className="shrink-0" />
-              <span className="hidden sm:inline">Bulk Import (Excel)</span>
-              <span className="sm:hidden">Import</span>
-            </button>
+            {importActionTarget ? createPortal(bulkImportButton, importActionTarget) : bulkImportButton}
 
             {/* Refresh Button */}
             <button

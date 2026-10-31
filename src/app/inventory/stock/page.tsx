@@ -86,6 +86,7 @@ function StockInventoryContent() {
           </div>
           
           {activeTab === "FINISHED" && <LowStockSettingsButton />}
+          {activeTab === "FINISHED" && <div id="finished-goods-import-action" className="flex items-stretch" />}
           <Link
             href="/inventory/stock/add"
             className="flex items-center justify-center gap-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-2.5 sm:py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:opacity-90 transition-all active:scale-95 shadow-sm whitespace-nowrap text-center"

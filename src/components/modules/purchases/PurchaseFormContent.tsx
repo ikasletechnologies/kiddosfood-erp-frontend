@@ -40,7 +40,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     vendorNotes, setVendorNotes,
     setSelectedVendor,
     isValid, errors, isSubmitting, setIsSubmitting,
-    selectedVendor, items, totals, notes,
+    selectedVendor, items, updateItem, totals, notes,
     contextMessage, setContextMessage
   } = usePurchaseOrder();
 
@@ -65,6 +65,16 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   const handleCancel = () => {
     if (!editId) localStorage.removeItem('draftPurchaseOrder');
     router.push("/purchases/orders");
+  };
+
+  const clearUnavailableSelection = (error: any, submittedItems = items) => {
+    const message = String(error?.response?.data?.error || "");
+    const match = message.match(/^Item (\d+) is no longer available in inventory\./);
+    const item = match ? submittedItems[Number(match[1]) - 1] : undefined;
+    if (item) {
+      // Keep quantities and prices; only the rejected selection needs replacing.
+      updateItem(item.id, { materialId: "", productId: undefined, name: "" });
+    }
   };
 
   const handleCreatePO = async () => {
@@ -140,6 +150,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       router.push("/purchases/orders");
     } catch (error: any) {
       console.error("Failed to Create Purchase Order", error);
+      clearUnavailableSelection(error);
       toast.error(error.response?.data?.error || "Failed to create Purchase Order. Please check your inputs.");
     } finally {
       setIsSubmitting(false);
@@ -202,6 +213,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       router.push("/purchases/orders");
     } catch (error: any) {
       console.error("Failed to save draft", error);
+      clearUnavailableSelection(error, items.filter(item => item.materialId));
       const msg = error?.response?.data?.error || error?.message || "Failed to save draft. Please check your inputs.";
       toast.error(msg);
     } finally {
