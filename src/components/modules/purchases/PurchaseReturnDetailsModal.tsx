@@ -1,3 +1,4 @@
+import { purchaseReturnTotals } from "@/lib/purchase-return-totals";
 import { useState } from "react";
 import { X } from "lucide-react";
 import { clsx } from "clsx";
@@ -118,9 +119,11 @@ export default function PurchaseReturnDetailsModal({ data, onClose, onUpdateStat
                   ))}
                 </tbody>
               </table>
+              <div className="px-4 pt-3 flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Return Goods Value</span><span>₹{purchaseReturnTotals(data).goods.toLocaleString("en-IN")}</span></div>
+              <div className="px-4 py-2 flex justify-between text-xs text-gray-500 dark:text-slate-400"><span>Return GST</span><span>₹{purchaseReturnTotals(data).gst.toLocaleString("en-IN")}</span></div>
               <div className="bg-gray-50 dark:bg-white/5 p-4 border-t border-gray-100 dark:border-white/10 flex justify-between items-center">
-                <span className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-slate-400">Total Refund Value</span>
-                <span className="text-xl font-black text-gray-900 dark:text-white">₹{data.refundAmount?.toLocaleString()}</span>
+                <span className="text-[11px] font-black uppercase tracking-widest text-gray-500 dark:text-slate-400">Total Return Credit</span>
+                <span className="text-xl font-black text-gray-900 dark:text-white">₹{purchaseReturnTotals(data).credit.toLocaleString("en-IN")}</span>
               </div>
             </div>
           </div>

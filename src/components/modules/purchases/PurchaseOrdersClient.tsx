@@ -1,4 +1,5 @@
 "use client";
+import { canReceivePO, poStatusLabel } from "@/lib/po-receipt";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
@@ -257,28 +258,7 @@ export default function PurchaseOrdersClient() {
     });
   };
 
-  const handleApprove = (id: string) => {
-    setConfirmConfig({
-      isOpen: true,
-      title: "Approve Purchase Order",
-      message: "Are you sure you want to approve this purchase order?",
-      confirmText: "Approve PO",
-      confirmStyle: "bg-[#f58220] hover:bg-[#e8740e] shadow-[#f58220]/20 text-white",
-      icon: CheckCircle2,
-      onConfirm: async () => {
-        closeConfirm();
-        try {
-          await api.patch(`/api/purchase-orders/${id}/approve`);
-          toast.success("Purchase order approved successfully.");
-          fetchAll();
-        } catch (e: any) {
-          toast.error(e?.response?.data?.error ?? "Failed to approve PO");
-        }
-      }
-    });
-  };
-
-  const historyStatuses = ["RECEIVED", "CLOSED", "CANCELLED", "REJECTED"];
+  const historyStatuses = ["RECEIVED", "INVOICED", "PAID", "CLOSED", "CANCELLED"];
   const filtered = orders.filter((o) => {
     const term = search.trim().toLowerCase();
     const matchesSearch = !term
@@ -287,7 +267,7 @@ export default function PurchaseOrdersClient() {
       || o.id?.toLowerCase().includes(term);
     const isHistory = historyStatuses.includes(o.status);
     const matchesView = poView === "HISTORY" ? isHistory : !isHistory;
-    const matchesStatus = filterStatus === "ALL" || o.status === filterStatus;
+    const matchesStatus = filterStatus === "ALL" || o.status === filterStatus || (filterStatus === "APPROVED" && o.status === "PENDING_APPROVAL");
     return matchesSearch && matchesView && matchesStatus;
   });
   const historyCount = orders.filter((order) => historyStatuses.includes(order.status)).length;
@@ -425,7 +405,7 @@ export default function PurchaseOrdersClient() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 w-full min-w-0">
           {[
             { label: "Total Spend", value: formatCurrency(totalSpend), color: "text-gray-700 dark:text-slate-200", dot: "bg-gray-400" },
-            { label: "Pending GRNs", value: String(orders.filter(o => o.status === 'APPROVED' || o.status === 'SENT').length), color: "text-[#f58220]", dot: "bg-[#f58220]" },
+            { label: "Pending GRNs", value: String(orders.filter(canReceivePO).length), color: "text-[#f58220]", dot: "bg-[#f58220]" },
             { label: "All Invoices", value: String(orders.filter(o => o.invoiceStatus === 'PENDING').length), color: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
           ].map((card) => (
             <div key={card.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
@@ -458,7 +438,7 @@ export default function PurchaseOrdersClient() {
           </div>
 
           <div className="flex items-center self-end sm:ml-auto border border-gray-200 dark:border-white/10 rounded-xl overflow-x-auto custom-scrollbar bg-white dark:bg-card max-w-full">
-            {(poView === "HISTORY" ? ["ALL", "RECEIVED", "CLOSED", "CANCELLED", "REJECTED"] : ["ALL", "DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "PARTIALLY_RECEIVED"]).map(s => (
+            {(poView === "HISTORY" ? ["ALL", "RECEIVED", "INVOICED", "PAID", "CLOSED", "CANCELLED"] : ["ALL", "DRAFT", "APPROVED", "ORDERED", "SENT", "PARTIALLY_RECEIVED"]).map(s => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -467,7 +447,7 @@ export default function PurchaseOrdersClient() {
                   filterStatus === s ? "bg-[#f58220] text-white" : "text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-white/5"
                 )}
               >
-                {s === "ALL" ? "All" : s.split("_").map((word) => word.charAt(0) + word.slice(1).toLowerCase()).join(" ")}
+                {s === "ALL" ? "All" : poStatusLabel(s)}
               </button>
             ))}
           </div>
@@ -540,7 +520,7 @@ export default function PurchaseOrdersClient() {
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <span className={clsx("inline-block px-2 py-0.5 rounded text-[11px] font-semibold border", style)}>
-                          {po.status.replace(/_/g, ' ')}
+                          {poStatusLabel(po.status)}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -586,23 +566,14 @@ export default function PurchaseOrdersClient() {
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
-                          {po.status === 'PENDING_APPROVAL' && (
-                            <button
-                              type="button"
-                              onClick={() => handleApprove(po.id)}
-                              className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors mr-1"
-                            >
-                              Approve
-                            </button>
-                          )}
-
-                          {(po.status === 'APPROVED' || po.status === 'SENT' || po.status === 'PARTIALLY_RECEIVED') && (
+                          {po.status === 'DRAFT' && <a href={`/purchases/edit/${po.id}`} className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 rounded text-xs font-bold mr-1">Edit / Complete PO</a>}
+                          {canReceivePO(po) && (
                             <button
                               type="button"
                               onClick={() => window.location.href = `/purchases/grn?poId=${po.id}`}
                               className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors mr-1"
                             >
-                              Receive Goods
+                              {po.status === "PARTIALLY_RECEIVED" ? "Receive Remaining Goods" : "Receive Goods"}
                             </button>
                           )}
 
@@ -852,7 +823,7 @@ export default function PurchaseOrdersClient() {
                             viewingDetailsPO.status === 'PENDING_APPROVAL' ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400" :
                               "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300"
                         )}>
-                          {viewingDetailsPO.status?.replace(/_/g, ' ')}
+                          {poStatusLabel(viewingDetailsPO.status)}
                         </span>
                       </div>
                     </div>
@@ -1325,15 +1296,15 @@ export default function PurchaseOrdersClient() {
                 Download PDF
               </button>
 
-              {viewingDetailsPO.status === 'PENDING_APPROVAL' && (
+              {canReceivePO(viewingDetailsPO) && (
                 <button
                   onClick={() => {
-                    handleApprove(viewingDetailsPO.id);
+                    window.location.href = `/purchases/grn?poId=${viewingDetailsPO.id}`;
                     setViewingDetailsPO(null);
                   }}
                   className="px-5 py-2 text-sm font-semibold text-white bg-[#f58220] rounded-lg hover:bg-[#e8740e] shadow-sm transition-colors"
                 >
-                  Approve Order
+                  {viewingDetailsPO.status === "PARTIALLY_RECEIVED" ? "Receive Remaining Goods" : "Receive Goods"}
                 </button>
               )}
             </div>

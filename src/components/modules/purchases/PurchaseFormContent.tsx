@@ -1,4 +1,5 @@
 "use client";
+import { purchaseBusinessDate, purchaseFormDateError } from "@/lib/purchase-dates";
 
 import DocumentHeader from "@/components/documents/DocumentHeader";
 import BillingSection from "@/components/documents/BillingSection";
@@ -28,7 +29,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     invoiceNo, setInvoiceNo,
     purchaseDate, setPurchaseDate,
     dueDate, setDueDate,
-    expectedDeliveryDate, setExpectedDeliveryDate,
+    expectedDeliveryDate, setExpectedDeliveryDate, originalExpectedDeliveryDate,
     warehouseId, setWarehouseId,
     purchaseType, setPurchaseType,
     isBulkPurchase, setIsBulkPurchase,
@@ -76,10 +77,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("This vendor is blocked and cannot be used for Purchase Orders.");
       return;
     }
-    if (!expectedDeliveryDate) {
-      toast.error("Expected Delivery date is mandatory.");
-      return;
-    }
+    const dateError = purchaseFormDateError(purchaseDate,expectedDeliveryDate,{editId,originalExpectedDeliveryDate,poStatus});
+    if (dateError) { toast.error(dateError); return; }
     const parsedDiscount = Number(discountAmount);
     if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
       toast.error("Discount must be a valid non-negative number.");
@@ -97,6 +96,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
     setIsSubmitting(true);
     try {
       const payload = {
+        status: "APPROVED",
         vendorId: selectedVendor!.id,
         advancePaid: totals.appliedAdvance,
         notes: notes || internalNotes || undefined,
@@ -107,7 +107,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
         paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
-        expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
+        purchaseDate,
+        expectedDeliveryDate,
         discountAmount: discountAmount || 0,
         freightCost: freightCost || 0,
         items: items.map(item => ({
@@ -155,6 +156,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       toast.error("This vendor is blocked and cannot be used for Purchase Orders.");
       return;
     }
+    const dateError = purchaseFormDateError(purchaseDate,expectedDeliveryDate,{editId,originalExpectedDeliveryDate,poStatus});
+    if (dateError) { toast.error(dateError); return; }
     const parsedDiscount = Number(discountAmount);
     if (!Number.isFinite(parsedDiscount) || parsedDiscount < 0) {
       toast.error("Discount must be a valid non-negative number.");
@@ -178,7 +181,8 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
         franchiseId: (warehouses.find(w => w.id === warehouseId) as any)?.franchiseId || undefined,
         paymentTerms: paymentTerms || undefined,
         purchaseType: purchaseType,
-        expectedDeliveryDate: expectedDeliveryDate ? new Date(expectedDeliveryDate).toISOString() : undefined,
+        purchaseDate,
+        expectedDeliveryDate,
         discountAmount: discountAmount || 0,
         freightCost: freightCost || 0,
         status: "DRAFT",
@@ -195,7 +199,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
           }))
       };
 
-      const { data: created } = await purchaseOrdersApi.create(payload);
+      const { data: created } = editId ? await purchaseOrdersApi.update(editId, payload) : await purchaseOrdersApi.create(payload);
       if (created?.poNumber) setPoNumber(created.poNumber);
       localStorage.removeItem('draftPurchaseOrder');
       toast.success("Draft Purchase Order saved successfully!");
@@ -267,8 +271,13 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase type</label>
               <select value={purchaseType} onChange={(e) => setPurchaseType(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100">
+                <option value="ALL">All</option>
                 <option value="RAW_MATERIAL">Raw Material</option>
                 <option value="FINISHED_GOODS">Finished Goods</option>
+                <option value="PACKAGING">Packaging</option>
+                <option value="EQUIPMENT">Equipment</option>
+                <option value="CONSUMABLES">Consumables</option>
+                <option value="SERVICES">Services</option>
                 <option value="OTHERS">Others</option>
               </select>
               {purchaseType === "FINISHED_GOODS" && (
@@ -287,11 +296,12 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Purchase date</label>
-              <input type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
+              <input type="date" aria-label="Purchase Date" value={purchaseDate} readOnly aria-readonly="true" className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Expected delivery <span className="text-rose-500">*</span></label>
-              <input type="date" value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
+              <input type="date" aria-label="Expected Delivery" required min={purchaseDate > purchaseBusinessDate() ? purchaseDate : purchaseBusinessDate()} value={expectedDeliveryDate} onChange={(e) => setExpectedDeliveryDate(e.target.value)} className="w-full h-10 border border-slate-200 dark:border-slate-700 rounded-lg px-3 text-xs font-semibold text-slate-800 dark:text-white bg-slate-50 dark:bg-slate-950 outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />
+              {expectedDeliveryDate && purchaseFormDateError(purchaseDate,expectedDeliveryDate,{editId,originalExpectedDeliveryDate,poStatus}) && <p role="alert" className="text-xs text-rose-600 mt-1">{purchaseFormDateError(purchaseDate,expectedDeliveryDate,{editId,originalExpectedDeliveryDate,poStatus})}</p>}
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Payment terms</label>

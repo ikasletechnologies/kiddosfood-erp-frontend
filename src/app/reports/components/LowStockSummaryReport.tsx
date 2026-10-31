@@ -7,19 +7,17 @@ import { X,
 } from "lucide-react";
 import { inventoryApi } from "@/lib/api/inventory.api";
 
-interface LowStockRow {
-  itemName: string;
-  minimumStock: number;
-  stockQty: number;
-  stockValue: number;
-}
+import { lowStockReportRows, lowStockReportCsv, lowStockReportCounts, type LowStockRow } from '@/lib/low-stock-report';
+import { useLowStockReportRefresh } from '@/lib/use-low-stock-report-refresh';
 
 export default function LowStockSummaryReport() {
   const [reportData, setReportData] = useState<LowStockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
 
+  const revision = useLowStockReportRefresh();
   useEffect(() => {
+    let cancelled=false;
     async function fetchData() {
       try {
         setLoading(true);
@@ -28,29 +26,18 @@ export default function LowStockSummaryReport() {
         const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
         
-        const formatted = rows
-          .map((r: any) => {
-            const minStock = Number(r.minimumStock ?? r.minStock ?? 0);
-            const stockQty = Number(r.stockQty ?? r.currentStock ?? 0);
-            return {
-              itemName: r.itemName || r.name || "—",
-              minimumStock: minStock,
-              stockQty,
-              stockValue: Number(r.stockValue ?? (stockQty > 0 ? stockQty * (r.costPrice || 0) : 0)),
-            };
-          })
-          .filter((r: any) => r.minimumStock > 0 && r.stockQty < r.minimumStock);
-
-        setReportData(formatted);
+        const formatted = lowStockReportRows(rows);
+        if(!cancelled)setReportData(formatted);
       } catch (err) {
         console.error(err);
-        setReportData([]);
+        if(!cancelled)setReportData([]);
       } finally {
-        setLoading(false);
+        if(!cancelled)setLoading(false);
       }
     }
     fetchData();
-  }, []);
+    return ()=>{cancelled=true};
+  }, [revision]);
 
   const filtered = reportData.filter(row =>
     row.itemName.toLowerCase().includes(searchTerm.toLowerCase())
@@ -59,11 +46,7 @@ export default function LowStockSummaryReport() {
   const totalValue = filtered.reduce((sum, r) => sum + r.stockValue, 0);
 
   const downloadCsv = () => {
-    const headers = ["Item Name", "Minimum Stock Qty", "Stock Qty", "Stock Value"];
-    const csv = [
-      headers.join(","),
-      ...filtered.map((r) => [r.itemName, r.minimumStock, r.stockQty, r.stockValue.toFixed(2)].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")),
-    ].join("\n");
+    const csv = lowStockReportCsv(filtered);
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
     link.download = `Low_Stock_Summary_${new Date().toISOString().split("T")[0]}.csv`;
@@ -74,25 +57,6 @@ export default function LowStockSummaryReport() {
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const handleExportCSV = () => {
-    const headers = ["Item Name", "Minimum Stock Qty", "Stock Qty", "Stock Value"];
-    const rows = filtered.map(r => [
-      r.itemName,
-      r.minimumStock,
-      r.stockQty,
-      r.stockValue.toFixed(2)
-    ]);
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Low_Stock_Summary_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (
@@ -152,8 +116,8 @@ export default function LowStockSummaryReport() {
             <PackageMinusIcon size={24} />
           </div>
           <div>
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Items Below Minimum</span>
-            <span className="text-2xl font-black text-rose-600 tracking-tight">{filtered.length}</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Items Requiring Replenishment</span>
+            <span className="text-2xl font-black text-rose-600 tracking-tight">{filtered.length}</span><span className="block text-xs text-slate-500">{lowStockReportCounts(filtered).lowStock} Low Stock · {lowStockReportCounts(filtered).outOfStock} Out of Stock</span>
           </div>
         </div>
 
@@ -188,9 +152,9 @@ export default function LowStockSummaryReport() {
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-800/40 border-b border-slate-100 dark:border-slate-800">
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Item Name</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Minimum Stock Qty</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Category</th><th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Unit</th><th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Minimum Stock</th>
                   <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Qty</th>
-                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Value</th>
+                  <th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Shortfall</th><th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Status</th><th className="px-6 py-3 text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Stock Value</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,14 +165,14 @@ export default function LowStockSummaryReport() {
                       className="border-b border-slate-100 dark:border-slate-800/80 hover:bg-slate-50/40 dark:hover:bg-slate-800/10 transition-colors"
                     >
                       <td className="px-6 py-4 text-xs font-bold text-slate-800 dark:text-slate-200">{row.itemName}</td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">{row.minimumStock}</td>
+                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.category}</td><td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.unit}</td><td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">{row.minimumStock}</td>
                       <td className="px-6 py-4 text-xs font-black text-rose-500 text-right">{row.stockQty}</td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {row.stockValue.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400 text-right">{row.shortfall}</td><td className="px-6 py-4 text-xs font-semibold text-slate-600 dark:text-slate-400">{row.status}</td><td className="px-6 py-4 text-xs font-semibold text-slate-800 dark:text-white text-right">₹ {row.stockValue.toFixed(2)}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-6 py-16 text-center">
+                    <td colSpan={8} className="px-6 py-16 text-center">
                       <div className="flex flex-col items-center gap-2 text-slate-400">
                         <PackageMinusIcon size={24} className="opacity-40" />
                         <span className="text-xs font-bold">No items are currently below minimum stock levels.</span>
