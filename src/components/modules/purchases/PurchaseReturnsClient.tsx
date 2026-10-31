@@ -1,4 +1,5 @@
 "use client";
+import { purchaseReturnTotals } from "@/lib/purchase-return-totals";
 
 import { useState, useEffect } from "react";
 import {
@@ -281,7 +282,7 @@ export default function PurchaseReturnsClient() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-gray-800 dark:text-white">
-                        ₹ {(r.refundAmount || 0).toLocaleString("en-IN")}
+                        ₹ {purchaseReturnTotals(r).credit.toLocaleString("en-IN")}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 dark:text-slate-400">
                         {formatDate(view === "HISTORY" ? (r.updatedAt || r.createdAt) : r.createdAt)}

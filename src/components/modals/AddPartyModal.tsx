@@ -594,6 +594,7 @@ export default function AddPartyModal({ isOpen, onClose, onSave, initialData, ti
                       <option value="" disabled className="dark:bg-[#13151f] text-gray-400">Select Category</option>
                       <option value="ALL" className="dark:bg-[#13151f]">All</option>
                       <option value="RAW_MATERIAL" className="dark:bg-[#13151f]">Raw Material</option>
+                      <option value="FINISHED_GOODS" className="dark:bg-[#13151f]">Finished Goods</option>
                       <option value="PACKAGING" className="dark:bg-[#13151f]">Packaging</option>
                       <option value="EQUIPMENT" className="dark:bg-[#13151f]">Equipment</option>
                       <option value="CONSUMABLES" className="dark:bg-[#13151f]">Consumables</option>

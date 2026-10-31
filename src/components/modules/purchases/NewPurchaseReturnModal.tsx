@@ -333,7 +333,7 @@ export default function NewPurchaseReturnModal({ vendors, onClose, onSuccess }: 
           <div className="flex justify-end w-full min-w-0">
             <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 p-4 w-full lg:w-72 shrink-0 space-y-2.5 shadow-sm">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 dark:text-slate-300 font-medium">Refund Value</span>
+                <span className="text-gray-600 dark:text-slate-300 font-medium">Return Goods Value</span>
                 <span className="font-semibold text-gray-900 dark:text-white">₹ {refundTotal.toFixed(2)}</span>
               </div>
             </div>

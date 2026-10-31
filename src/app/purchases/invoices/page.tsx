@@ -384,7 +384,7 @@ export default function PurchaseBillsPage() {
                   // no rate exists at all (`??`, not `||`).
                   const matId = item.materialId || item.inventoryItemId || (item.inventoryItem ? item.inventoryItem.id : null);
                   const poItem = poItems.find((pi: any) => (pi.inventoryItemId === matId || pi.id === matId));
-                  const rawRate = poItem?.gstRate ?? item.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0;
+                  const rawRate = poItem?.gstRate ?? item.gstRate ?? 0;
                   const rate = Number(rawRate) || 0;
                   return {
                      id: Math.random().toString(36).slice(2),
@@ -458,7 +458,7 @@ export default function PurchaseBillsPage() {
           const poItems = po.poItems || (typeof po.items === 'string' ? JSON.parse(po.items) : po.items) || [];
           if (poItems.length > 0) {
             const newItems = poItems.map((item: any) => {
-              const rate = Number(item.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0) || 0;
+              const rate = Number(item.gstRate ?? 0) || 0;
               return {
                 id: Math.random().toString(36).slice(2),
                 name: item.itemName || item.inventoryItem?.name || "Material",
@@ -618,7 +618,7 @@ export default function PurchaseBillsPage() {
           itemName: gi.inventoryItem?.name || "Item",
           quantity: Number(gi.acceptedQty) || 0,
           price: Number(gi.price) || 0,
-          gstRate: Number(poItemByMaterial.get(gi.materialId)?.gstRate ?? gi.inventoryItem?.gstRate ?? 0),
+          gstRate: Number(poItemByMaterial.get(gi.materialId)?.gstRate ?? 0),
           hsnCode: gi.inventoryItem?.hsnCode || undefined,
         }));
       if (mapped.length) return mapped;

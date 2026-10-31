@@ -56,7 +56,8 @@ import CentralItemWiseProfitLossReport from "./components/ItemWiseProfitLossRepo
 import CentralItemCategoryWiseProfitLossReport from "./components/ItemCategoryWiseProfitLossReport";
 import CentralBankStatementReport from "./components/BankStatementReport";
 import CentralDiscountReport from "./components/DiscountReport";
-import CentralLowStockSummaryReport from "./components/LowStockSummaryReport";
+import { lowStockReportRows, lowStockReportCounts } from '@/lib/low-stock-report';
+import { useLowStockReportRefresh } from '@/lib/use-low-stock-report-refresh';
 import CentralStockDetailReport from "./components/StockDetailReport";
 import CentralItemDetailReport from "./components/ItemDetailReport";
 import CentralSalePurchaseByCategoryReport from "./components/SalePurchaseByCategoryReport";
@@ -799,7 +800,7 @@ const REPORT_METADATA: Record<string, ReportMeta> = {
       { key: "category", label: "Category" },
       { key: "unit", label: "Unit" },
       { key: "currentStock", label: "Current Stock" },
-      { key: "minStock", label: "Min Stock" },
+      { key: "minStock", label: "Minimum Stock" },
       { key: "shortfall", label: "Shortfall" },
       { key: "status", label: "Status" },
     ],
@@ -1580,48 +1581,9 @@ function transformStockSummary(data: any): ReportData {
 }
 
 function transformLowStock(data: any): ReportData {
-  const rows = toArr(data?.alerts || data?.rows || data?.data || data);
-  const lowStockRows = rows
-    .map((r: any) => {
-      const currentStock = Number(r.currentStock ?? r.stockQty ?? r.quantity ?? r.stock ?? 0);
-      const minStock = Number(
-        r.minimumStock ??
-        r.minStock ??
-        r.minQuantity ??
-        r.reorderPoint ??
-        r.threshold ??
-        r.item?.minimumStock ??
-        r.item?.minStock ??
-        0
-      );
-      const shortfall = Math.max(0, minStock - currentStock);
-      const rawStatus = String(r.status || "").toUpperCase();
-      const status = shortfall > 0
-        ? (rawStatus === "OUT_OF_STOCK" || currentStock <= 0 ? "LOW" : (r.status || "LOW"))
-        : "SAFE";
-      const rawCat = r.effectiveCategory || r.productCategory || r.item?.category || r.category;
-      const category = formatCategory(rawCat);
-
-      return {
-        itemName: r.item?.name || r.name || r.itemName || "—",
-        category,
-        unit: r.unit || r.item?.unit || "—",
-        currentStock: String(currentStock),
-        minStock: String(minStock),
-        shortfall: String(shortfall),
-        status,
-        _rawCurrentStock: currentStock,
-        _rawMinStock: minStock,
-        _rawShortfall: shortfall,
-      };
-    })
-    .filter((r: any) => r._rawMinStock > 0 && r._rawShortfall > 0);
-
-  return {
-    kpiValue: `${lowStockRows.length} Items`,
-    kpiSubText: lowStockRows.length > 0 ? "Requires reorder" : "Stock healthy",
-    rows: lowStockRows,
-  };
+  const rows=lowStockReportRows(data).map(r=>({itemName:r.itemName,category:r.category,unit:r.unit,currentStock:String(r.stockQty),minStock:String(r.minimumStock),shortfall:String(r.shortfall),status:r.status}));
+  const counts=lowStockReportCounts(rows);
+  return {kpiValue:counts.total+' Items',kpiSubText:counts.lowStock+' Low Stock · '+counts.outOfStock+' Out of Stock',rows};
 }
 
 function transformStockDetail(data: any): ReportData {
@@ -2399,7 +2361,7 @@ async function fetchReport(
       case "Item Category Wise Profit And Loss":
         return transformGeneric((await reportsApi.getItemCategoryProfitLoss(params)).data, meta);
       case "Low Stock Summary":
-        return transformLowStock((await inventoryApi.getAlerts(params?.franchiseId ? { franchiseId: params.franchiseId } : undefined)).data);
+        return transformLowStock((await inventoryApi.getAlerts({ franchiseId: params?.franchiseId, asOfDate: params?.endDate })).data);
       case "Stock Detail":
         return transformStockDetail((await inventoryApi.getMovements(params)).data);
       case "Item Detail":
@@ -2670,6 +2632,7 @@ function ReportsContent() {
   }, [activeParent, selectedFinancialCategory]);
 
   const [currentPage, setCurrentPage] = useState(1);
+  const lowStockRevision = useLowStockReportRefresh(activeChild?.id === 'Low Stock Summary');
 
   // Reset page on tab or filter change
   useEffect(() => {
@@ -2725,7 +2688,7 @@ function ReportsContent() {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage, selectedPartyId, selectedPartyType]);
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage, selectedPartyId, selectedPartyType, lowStockRevision]);
 
   // (The Party Statement party list is loaded by PartyStatementReport itself.)
 
@@ -3329,7 +3292,7 @@ function ReportsContent() {
                   {currentMeta.kpiLabel}
                 </div>
                 <div className="text-xl font-bold text-gray-900 dark:text-white mt-0.5 truncate print:text-base print:text-black">
-                  {loading ? "..." : reportData?.kpiValue || "0"}
+                  {loading ? "..." : activeChild?.id === 'Low Stock Summary' ? filteredRows.length + ' Items' : reportData?.kpiValue || "0"}
                 </div>
               </div>
             </div>
@@ -3341,7 +3304,7 @@ function ReportsContent() {
                   Summary Details
                 </div>
                 <div className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5 truncate print:text-xs print:text-black">
-                  {loading ? "Calculating..." : reportData?.kpiSubText || "All records captured"}
+                  {loading ? 'Calculating...' : activeChild?.id === 'Low Stock Summary' ? lowStockReportCounts(filteredRows as any).lowStock + ' Low Stock · ' + lowStockReportCounts(filteredRows as any).outOfStock + ' Out of Stock' : reportData?.kpiSubText || 'All records captured'}
                 </div>
               </div>
             </div>
@@ -3593,7 +3556,7 @@ function ReportsContent() {
                                         ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/20"
                                         : String(row[col.key]).toUpperCase().includes("PROGRESS") || String(row[col.key]).toUpperCase() === "PARTIAL"
                                           ? "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20"
-                                          : String(row[col.key]).toUpperCase().includes("REJECT") || String(row[col.key]).toUpperCase() === "CANCELLED"
+                                          : String(row[col.key]).toUpperCase().includes("REJECT") || String(row[col.key]).toUpperCase() === "CANCELLED" || String(row[col.key]) === "Out of Stock"
                                             ? "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-500/20"
                                             : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20"
                                     )}

@@ -1,4 +1,5 @@
 "use client";
+import { canReceivePO } from "@/lib/po-receipt";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -394,7 +395,7 @@ export default function GRNPage() {
       const r = await purchaseOrdersApi.getAll();
       const orders = r.data.orders || r.data || [];
       const statusCandidates = orders.filter(
-        (p: PO) => p.status === "PENDING" || p.status === "APPROVED" || p.status === "SENT" || p.status === "PARTIALLY_RECEIVED"
+        (p: PO) => canReceivePO(p)
       );
       // Status can be stale for older GRNs. Keep a PO in the receipt queue only
       // while the backend reports at least one genuinely receivable unit.
@@ -490,7 +491,7 @@ export default function GRNPage() {
 
     setGrnItems(
       (po.poItems || []).map((item, idx) => {
-        const gstRate = item.gstRate ?? (item.inventoryItem as any)?.taxRate ?? (item.inventoryItem as any)?.gstRate ?? 0;
+        const gstRate = item.gstRate ?? 0;
         const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
         const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
         const autoLotStr = baseLotStr ? formatLotPreview(baseLotStr, idx) : "[AUTO]";
@@ -1036,7 +1037,7 @@ export default function GRNPage() {
                           <p className="text-sm font-semibold text-gray-800 dark:text-white">No Purchase Orders Found</p>
                           <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
                             {pos.length === 0
-                              ? "There are no approved purchase orders ready for receiving."
+                              ? "There are no purchase orders ready for receiving."
                               : "No purchase orders match your filter criteria."}
                           </p>
                           {(poSearch || warehouseFilter !== "ALL" || statusFilter !== "ALL") && (
@@ -2074,7 +2075,7 @@ export default function GRNPage() {
                   const po = viewingGRNDetails.procurementOrder;
                   const items = (viewingGRNDetails.items || []).map((item: any) => {
                     const poItem = po?.poItems?.find((pi: any) => pi.inventoryItemId === item.materialId || pi.id === item.materialId);
-                    const gstRate = item.gstRate ?? poItem?.gstRate ?? item.inventoryItem?.taxRate ?? item.inventoryItem?.gstRate ?? 0;
+                    const gstRate = poItem?.gstRate ?? item.gstRate ?? 0;
                     return {
                       materialId: item.materialId,
                       acceptedQty: item.acceptedQty ?? item.quantity,

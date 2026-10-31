@@ -1,4 +1,5 @@
 "use client";
+import { purchaseBusinessDate, purchaseFormDateError } from "@/lib/purchase-dates";
 
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from "react";
 import { roundMoney } from "@/lib/utils";
@@ -59,6 +60,7 @@ interface PurchaseOrderContextType {
   setPurchaseDate: (date: string) => void;
   dueDate: string;
   setDueDate: (date: string) => void;
+  originalExpectedDeliveryDate: string;
   expectedDeliveryDate: string;
   setExpectedDeliveryDate: (date: string) => void;
   warehouseId: string;
@@ -111,9 +113,10 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   const [poNumber, setPoNumber] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [quotationNo, setQuotationNo] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState("");
+  const [purchaseDate, setPurchaseDate] = useState(() => purchaseBusinessDate());
   const [dueDate, setDueDate] = useState("");
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
+  const [originalExpectedDeliveryDate, setOriginalExpectedDeliveryDate] = useState("");
   const [warehouseId, setWarehouseId] = useState("");
   const [purchaseType, setPurchaseType] = useState("RAW_MATERIAL");
   const [isBulkPurchase, setIsBulkPurchase] = useState(false);
@@ -148,16 +151,18 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
               unit: item.inventoryItem?.unit || "KG",
               price: item.price,
               // `??` — a saved 0% line must reopen as 0%, not the 5% default.
-              gstRate: item.gstRate ?? 5
+              gstRate: item.gstRate ?? 0
             })));
           }
           if (po.purchaseType) setPurchaseType(po.purchaseType);
+          if (po.createdAt) setPurchaseDate(purchaseBusinessDate(new Date(po.createdAt)));
+          if (po.status) setPoStatus(po.status);
           if (po.warehouseId) {
             setWarehouseId(po.warehouseId);
           } else if (po.franchise?.primaryWarehouseId) {
             setWarehouseId(po.franchise.primaryWarehouseId);
           }
-          if (po.expectedDeliveryDate) setExpectedDeliveryDate(po.expectedDeliveryDate.split('T')[0]);
+          if (po.expectedDeliveryDate) { const day = purchaseBusinessDate(new Date(po.expectedDeliveryDate)); setExpectedDeliveryDate(day); setOriginalExpectedDeliveryDate(day); }
           if (po.paymentTerms) setPaymentTerms(po.paymentTerms);
           if (po.internalNotes) setInternalNotes(po.internalNotes);
           else if (po.notes) setInternalNotes(po.notes);
@@ -233,7 +238,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
             if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
             if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
-            if (parsed.purchaseDate) setPurchaseDate(parsed.purchaseDate);
+            // New POs always use today in the business timezone, including restored drafts.
+            setPurchaseDate(purchaseBusinessDate());
             if (parsed.dueDate) setDueDate(parsed.dueDate);
             if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
             if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
@@ -384,12 +390,19 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
   // Initialize defaults only when a restored draft/edit has not supplied dates.
   useEffect(() => {
     const today = new Date();
-    setPurchaseDate((current) => current || today.toISOString().split('T')[0]);
+    if (!editId) setPurchaseDate(purchaseBusinessDate(today));
 
     const due = new Date();
     due.setDate(due.getDate() + 15);
     setDueDate((current) => current || due.toISOString().split('T')[0]);
-  }, []);
+  }, [editId]);
+
+  useEffect(() => {
+    if (editId) return;
+    const refresh = () => setPurchaseDate(purchaseBusinessDate());
+    refresh(); const timer = window.setInterval(refresh, 60000); window.addEventListener('focus',refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus',refresh); };
+  },[editId]);
 
   // Save draft to localStorage whenever fields change (only when creating new PO)
   useEffect(() => {
@@ -520,7 +533,8 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     } else if (selectedVendor.status && selectedVendor.status !== 'ACTIVE') {
       errs.push("This vendor is blocked and cannot be used for Purchase Orders.");
     }
-    if (!expectedDeliveryDate) errs.push("Expected delivery date is mandatory");
+    const dateError = purchaseFormDateError(purchaseDate, expectedDeliveryDate, {editId,originalExpectedDeliveryDate,poStatus});
+    if (dateError) errs.push(dateError);
     if (items.length === 0 || (items.length === 1 && !items[0].materialId && items[0].quantity === 0)) {
         errs.push("Please add at least one item");
     }
@@ -540,7 +554,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     }
 
     return errs;
-  }, [selectedVendor, expectedDeliveryDate, items, discountAmount, freightCost, totals.subtotal]);
+  }, [selectedVendor, purchaseDate, expectedDeliveryDate, originalExpectedDeliveryDate, poStatus, editId, items, discountAmount, freightCost, totals.subtotal]);
 
   const isValid = errors.length === 0;
 
@@ -572,6 +586,7 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
       setPurchaseDate,
       dueDate,
       setDueDate,
+      originalExpectedDeliveryDate,
       expectedDeliveryDate,
       setExpectedDeliveryDate,
       warehouseId,

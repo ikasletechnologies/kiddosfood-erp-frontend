@@ -1,6 +1,6 @@
 import { convertMeasurement, ValidUnit } from '@businessgroupikasle/erp-units';
-export const MANUAL_YIELD_UNITS = ['KG','G','L','ML','PCS','BOX'];
-export const MANUAL_INGREDIENT_UNITS = ['KG','G','L','ML','PCS'];
+export const MANUAL_YIELD_UNITS = ['KG', 'G', 'L', 'ML', 'PCS', 'BOX'];
+export const MANUAL_INGREDIENT_UNITS = ['KG', 'G', 'L', 'ML', 'PCS', 'BOX'];
 export interface ManualIngredient { inventoryItemId: string; quantity: string; unit: string }
 export function referenceOf(recipe: any) {
   const active = recipe.activeFormulation;
@@ -15,19 +15,19 @@ export function referenceOf(recipe: any) {
     }),
   };
 }
-export function validateReference(form: {yieldQty: string; yieldUnit: string; items: ManualIngredient[]}, materials: any[]) {
+export function validateReference(form: { yieldQty: string; yieldUnit: string; items: ManualIngredient[] }, materials: any[]) {
   if (!Number.isFinite(Number(form.yieldQty)) || Number(form.yieldQty) <= 0) return 'Expected output quantity must be greater than zero.';
   if (!MANUAL_YIELD_UNITS.includes(form.yieldUnit)) return 'Select a supported reference output unit.';
   if (!form.items.length) return 'Add at least one ingredient.';
-  if (new Set(form.items.map(i=>i.inventoryItemId)).size !== form.items.length) return 'Each ingredient can only be added once.';
-  for (let index=0; index<form.items.length; index++) {
-    const item=form.items[index];
-    const material=materials.find(m=>m.id===item.inventoryItemId);
-    if (!material) return 'Select a raw material for ingredient '+(index+1)+'.';
-    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity)<=0) return 'Enter a positive reference quantity for '+material.name+'.';
+  if (new Set(form.items.map(i => i.inventoryItemId)).size !== form.items.length) return 'Each ingredient can only be added once.';
+  for (let index = 0; index < form.items.length; index++) {
+    const item = form.items[index];
+    const material = materials.find(m => m.id === item.inventoryItemId);
+    if (!material) return 'Select a raw material for ingredient ' + (index + 1) + '.';
+    if (!Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0) return 'Enter a positive reference quantity for ' + material.name + '.';
     if (!MANUAL_INGREDIENT_UNITS.includes(item.unit)) return 'Select a supported ingredient measurement unit.';
-    try { convertMeasurement('1',item.unit as ValidUnit,String(material.unit).toUpperCase() as ValidUnit); }
-    catch { return material.name+' is stocked in '+material.unit+'; choose a compatible measurement unit.'; }
+    try { convertMeasurement('1', item.unit as ValidUnit, String(material.unit).toUpperCase() as ValidUnit); }
+    catch { return material.name + ' is stocked in ' + material.unit + '; choose a compatible measurement unit.'; }
   }
   return null;
 }

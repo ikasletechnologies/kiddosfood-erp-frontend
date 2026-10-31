@@ -8,8 +8,7 @@ import { Modal } from '@/components/ui/Modal';
 import { finishedGoodsStockStatus } from '@/lib/finished-goods-stock';
 
 const endpoint = '/api/settings/finished-goods-low-stock';
-const changed = 'erp:finished-goods-low-stock-changed';
-const storageKey = 'erp:finished-goods-low-stock-updated';
+import { FINISHED_GOODS_SETTING_CHANGED as changed, FINISHED_GOODS_SETTING_STORAGE_KEY as storageKey } from '@/lib/stock-settings-events';
 type Setting = { threshold: number | null; error: string; refresh: () => Promise<void>; save: (value: number) => Promise<void> };
 const Context = createContext<Setting | null>(null);
 const message = (e: any) => e.response?.data?.message || e.response?.data?.error || 'Could not load the global low-stock setting. Please retry.';

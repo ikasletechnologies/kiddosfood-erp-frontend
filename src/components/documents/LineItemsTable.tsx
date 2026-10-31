@@ -156,7 +156,7 @@ export default function LineItemsTable() {
         if (i.materialId && (!i.name || i.name === "Material" || i.name === "Unknown Material")) {
           const m = materials.find(mat => mat.id === i.materialId);
           if (m?.name) {
-            updateItem(i.id, { name: m.name, unit: i.unit || m.unit || "KG", gstRate: i.gstRate || m.gstRate || 0 });
+            updateItem(i.id, { name: m.name, unit: i.unit || m.unit || "KG", gstRate: i.gstRate ?? m.gstRate ?? 0 });
           }
         }
       });
@@ -592,6 +592,7 @@ export default function LineItemsTable() {
                       value={item.gstRate}
                       onChange={(e) => updateItem(item.id, { gstRate: parseFloat(e.target.value) || 0 })}
                     >
+                      {Number.isFinite(item.gstRate) && ![0,5,12,18,28].includes(item.gstRate) && <option value={item.gstRate}>{item.gstRate}%</option>}
                       <option value="0">0%</option>
                       <option value="5">5%</option>
                       <option value="12">12%</option>
@@ -900,7 +901,8 @@ export default function LineItemsTable() {
                     value={item.gstRate}
                     onChange={(e) => updateItem(item.id, { gstRate: parseFloat(e.target.value) || 0 })}
                   >
-                    <option value="0">0%</option>
+                    {Number.isFinite(item.gstRate) && ![0,5,12,18,28].includes(item.gstRate) && <option value={item.gstRate}>{item.gstRate}%</option>}
+                      <option value="0">0%</option>
                     <option value="5">5%</option>
                     <option value="12">12%</option>
                     <option value="18">18%</option>

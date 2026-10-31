@@ -83,7 +83,7 @@ export const inventoryApi = {
   adjustment: (data: { itemId: string, newQuantity: number, unit?: string, note?: string }) =>
     api.post('/api/inventory/adjustment', data),
   getMovements: (params?: any) => api.get('/api/inventory/movements', { params }),
-  getAlerts: (params?: { franchiseId?: string; warehouseId?: string }) => api.get('/api/inventory/alerts', { params }),
+  getAlerts: (params?: { franchiseId?: string; warehouseId?: string; category?: string; asOfDate?: string }) => api.get('/api/inventory/alerts', { params }),
   // Role-aware: SUPER_ADMIN gets every warehouse (each item tagged with
   // franchiseId/franchiseName if it's some franchise's primary warehouse,
   // both null otherwise); FRANCHISE_ADMIN gets only their own franchise's

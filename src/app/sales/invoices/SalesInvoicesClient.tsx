@@ -2,6 +2,7 @@
 import { InvoiceCards, InvoiceViewSwitcher, useInvoiceListView } from "@/components/sales/InvoiceListViews";
 import InvoiceLotAllocation from "@/components/sales/InvoiceLotAllocation";
 import InvoiceEWayBills from "@/components/sales/InvoiceEWayBills";
+import InvoiceInventoryStatus from "@/components/sales/InvoiceInventoryStatus";
 
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
@@ -1800,6 +1801,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
             </div>
           </div>
 
+          {invoice.id && figs.status !== "DRAFT" && figs.status !== "CANCELLED" && <InvoiceInventoryStatus invoiceId={invoice.id} orderId={order.id || invoice.orderId} onPosted={async () => { const response = await api.get(`/api/sales/invoices/${invoice.id}`); setViewInvoice(response.data); }} />}
           {/* Products Sold Table */}
           {invoice.id && figs.status !== "DRAFT" && <InvoiceEWayBills invoiceId={invoice.id} cancelled={figs.status === "CANCELLED"} />}
           <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0 shadow-2xs">
