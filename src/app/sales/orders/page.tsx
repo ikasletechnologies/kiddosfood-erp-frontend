@@ -20,6 +20,8 @@ import { canViewCost, useProfitEstimate } from "@/lib/profit-estimate";
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
 import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
 import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation, partyPrice, PartyType } from "@/lib/lot-pricing";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeBy, dedupeById, matchesSearch, NO_MATCH_TEXT } from "@/lib/search";
 
 // No hardcoded state here — the seller's GST registration state must come
 // from the real HQ franchise (see SettingsService.getCompanyProfile),
@@ -247,7 +249,6 @@ export default function SalesOrdersPage() {
   const [partyType, setPartyType] = useState<PartyType>("CUSTOMER");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
   const [orderNo, setOrderNo] = useState<string>("1");
   const [orderDate, setOrderDate] = useState(() => new Date().toISOString().split("T")[0]);
@@ -308,7 +309,6 @@ export default function SalesOrdersPage() {
   // Dropdown floating close triggers
   const [openItemDrop, setOpenItemDrop] = useState<string | null>(null);
   const [itemDropRect, setItemDropRect] = useState<{ top: number; left: number; width: number } | null>(null);
-  const customerDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!openItemDrop) return;
@@ -518,16 +518,6 @@ export default function SalesOrdersPage() {
     loadEstimateForConversion();
   }, []);
 
-  // Click outside logic
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node)) {
-        setShowCustomerDrop(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
 
   // ── Auto Computations ────────────────────────────────────────────────────────
 
@@ -599,7 +589,6 @@ export default function SalesOrdersPage() {
     setSelectedCustomer(c);
     setCustomerSearch(c.name);
     setCustomerPhone(c.phone || "");
-    setShowCustomerDrop(false);
     if (nextType !== partyType) {
       setPartyType(nextType);
       repriceForParty(nextType);
@@ -1060,8 +1049,8 @@ export default function SalesOrdersPage() {
   // unsaved local drafts (_local) need the date check here, by local day.
   const matchesDateAndSearch = (o: any) => {
     const matchSearch = !search ||
-      o.orderNo?.toLowerCase().includes(search.toLowerCase()) ||
-      o.customerName?.toLowerCase().includes(search.toLowerCase());
+      o.orderNo?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      o.customerName?.toLowerCase().includes(search.trim().toLowerCase());
     if (!matchSearch) return false;
     if (!o._local || dateFilter === "ALL") return true;
 
@@ -1109,10 +1098,10 @@ export default function SalesOrdersPage() {
 
   const lockFromQuotation = !!sourceQuotationId;
 
-  const filteredCustomers = allParties.filter((c: any) =>
-    !customerSearch ||
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.phone?.includes(customerSearch)
+  // While a party is selected its own name is in the box: list everyone then.
+  const partyQuery = selectedCustomer && customerSearch === selectedCustomer.name ? "" : customerSearch;
+  const filteredCustomers = dedupeBy(allParties, (c: any) => `${c._type || "CUSTOMER"}-${c.id}`).filter((c: any) =>
+    matchesSearch(partyQuery, c.name, c.phone, c.customerCode, c.code, c.gstNumber)
   );
 
   // Cards are the status breakdown of exactly the records the list draws
@@ -1181,8 +1170,8 @@ export default function SalesOrdersPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 w-full min-w-0">
               {/* Left: Party + Phone */}
               <div className="space-y-3 sm:space-y-4 min-w-0">
-                <div className="relative" ref={customerDropRef}>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
+                <div>
+                  <label htmlFor="so-party-search" className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
                     <span>Party / Customer <span className="text-rose-500">*</span></span>
                     {selectedCustomer && (
                       <span className="px-1.5 py-0.5 rounded bg-orange-50 dark:bg-orange-500/10 text-[10px] font-bold text-orange-700 dark:text-orange-400">
@@ -1190,63 +1179,39 @@ export default function SalesOrdersPage() {
                       </span>
                     )}
                   </label>
-                  <div
-                    className={clsx(
-                      "flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
-                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
-                    )}
-                    onClick={() => { if (!lockFromQuotation) setShowCustomerDrop(v => !v); }}
-                  >
-                    <input
-                      className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 min-w-0"
-                      placeholder="Select or search party"
-                      value={customerSearch}
-                      disabled={lockFromQuotation}
-                      onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                      onClick={e => { e.stopPropagation(); if (!lockFromQuotation) setShowCustomerDrop(true); }}
-                    />
-                    {customerSearch && (
-                      <X 
-                        size={14} 
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCustomerSearch("");
-                          setSelectedCustomer(null);
-                        }} 
-                      />
-                    )}
-                    <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                  </div>
-                  {showCustomerDrop && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2.5rem)] sm:w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-lg overflow-hidden">
-                      <div className="max-h-52 overflow-y-auto custom-scrollbar">
-                        {filteredCustomers.length === 0 ? (
-                          <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">No parties found</div>
-                        ) : (
-                          filteredCustomers.map((c: any) => (
-                            <button
-                              key={`${c._type}-${c.id}`}
-                              type="button"
-                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left cursor-pointer"
-                              onClick={() => selectCustomer(c)}
-                            >
-                              <div className="min-w-0 pr-2">
-                                <div className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.name}</div>
-                                <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
-                              </div>
-                              <span className={clsx(
-                                "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold",
-                                c._type === "DEALER" ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
-                                  : c._type === "FRANCHISE" ? "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
-                                  : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-slate-300"
-                              )}>{PARTY_LABEL[c._type as PartyType] || "Customer"}</span>
-                            </button>
-                          ))
-                        )}
+                  <SearchAutocomplete<any>
+                    id="so-party-search"
+                    label="Party / Customer"
+                    placeholder="Select or search party (name, phone, code)"
+                    minChars={0}
+                    disabled={lockFromQuotation}
+                    value={customerSearch}
+                    onInputChange={text => {
+                      setCustomerSearch(text);
+                      // A typed name that differs from the selected party is a new
+                      // (walk-in) name: drop the old party id so it isn't saved.
+                      if (selectedCustomer && text !== selectedCustomer.name) setSelectedCustomer(null);
+                    }}
+                    onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); }}
+                    options={filteredCustomers}
+                    getOptionKey={(c: any) => `${c._type || "CUSTOMER"}-${c.id}`}
+                    inputClassName="border-gray-300 text-sm"
+                    onSelect={selectCustomer}
+                    renderOption={(c: any) => (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 pr-2">
+                          <div className="text-sm font-semibold text-gray-800 dark:text-white truncate">{c.name}</div>
+                          <div className="text-xs text-gray-400 dark:text-slate-500 truncate">{[c.customerCode || c.code, c.phone].filter(Boolean).join(" · ") || "—"}</div>
+                        </div>
+                        <span className={clsx(
+                          "shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold",
+                          c._type === "DEALER" ? "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300"
+                            : c._type === "FRANCHISE" ? "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300"
+                            : "bg-gray-100 text-gray-600 dark:bg-white/10 dark:text-slate-300"
+                        )}>{PARTY_LABEL[c._type as PartyType] || "Customer"}</span>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone Number</label>
@@ -1346,10 +1311,12 @@ export default function SalesOrdersPage() {
                     <tr className="hover:bg-gray-50/50 dark:hover:bg-white/[0.02]" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
                       <td className="px-4 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                       <td className="px-4 py-2.5" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                        <input
+                        <input aria-label="Search item"
                           value={it.itemSearch}
                           onChange={e => {
                             updateItem(idx, "itemSearch", e.target.value);
+                            // Typed text no longer names the selected product: drop its id.
+                            if (it.productId) updateItem(idx, "productId", "");
                             setOpenItemDrop(it.id);
                             const rect = e.target.getBoundingClientRect();
                             setItemDropRect({ top: rect.bottom, left: rect.left, width: Math.max(320, rect.width) });
@@ -1366,7 +1333,7 @@ export default function SalesOrdersPage() {
                           <X 
                             size={14} 
                             className="absolute right-6 top-4 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                            onClick={() => { updateItem(idx, "itemSearch", ""); setOpenItemDrop(""); }} 
+                            onClick={() => { updateItem(idx, "itemSearch", ""); updateItem(idx, "productId", ""); setOpenItemDrop(""); }} 
                           />
                         )}
                         {isItemDropOpen && (
@@ -1391,10 +1358,10 @@ export default function SalesOrdersPage() {
                                   }
                             }
                           >
-                            {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
-                              <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">No items found</div>
+                            {dedupeById(products).filter(p => matchesSearch(it.itemSearch, p.name, p.sku, p.barcode)).length === 0 ? (
+                              <div role="status" className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">{NO_MATCH_TEXT}</div>
                             ) : (
-                              products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).map(p => (
+                              dedupeById(products).filter(p => matchesSearch(it.itemSearch, p.name, p.sku, p.barcode)).map(p => (
                                 <button
                                   key={p.id}
                                   type="button"
@@ -1541,9 +1508,9 @@ export default function SalesOrdersPage() {
                         Product / Item <span className="text-rose-500">*</span>
                       </label>
                       <div className="relative">
-                        <input
+                        <input aria-label="Search product"
                           value={it.itemSearch}
-                          onChange={e => { updateItem(idx, "itemSearch", e.target.value); setOpenItemDrop(it.id); }}
+                          onChange={e => { updateItem(idx, "itemSearch", e.target.value); if (it.productId) updateItem(idx, "productId", ""); setOpenItemDrop(it.id); }}
                           onFocus={() => setOpenItemDrop(it.id)}
                           placeholder="Search product..."
                           className="w-full px-3 py-2 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-bold outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 pr-7"
@@ -1552,16 +1519,16 @@ export default function SalesOrdersPage() {
                           <X 
                             size={14} 
                             className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                            onClick={() => { updateItem(idx, "itemSearch", ""); setOpenItemDrop(""); }} 
+                            onClick={() => { updateItem(idx, "itemSearch", ""); updateItem(idx, "productId", ""); setOpenItemDrop(""); }} 
                           />
                         )}
                       </div>
                       {isItemDropOpen && (
                         <div className="absolute left-0 right-0 top-full mt-1 z-50 w-full max-w-[calc(100vw-3rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto custom-scrollbar">
-                          {products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).length === 0 ? (
-                            <div className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">No items found</div>
+                          {dedupeById(products).filter(p => matchesSearch(it.itemSearch, p.name, p.sku, p.barcode)).length === 0 ? (
+                            <div role="status" className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500">{NO_MATCH_TEXT}</div>
                           ) : (
-                            products.filter(p => p.name.toLowerCase().includes(it.itemSearch.toLowerCase())).map(p => (
+                            dedupeById(products).filter(p => matchesSearch(it.itemSearch, p.name, p.sku, p.barcode)).map(p => (
                               <button
                                 key={p.id}
                                 type="button"
@@ -1957,7 +1924,7 @@ export default function SalesOrdersPage() {
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
             <div className="relative flex-1 min-w-[180px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
+              <input aria-label="Search order or party"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search order or party..."

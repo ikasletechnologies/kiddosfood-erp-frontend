@@ -114,7 +114,10 @@ export default function PurchaseOrdersClient() {
     confirmText: string;
     confirmStyle?: string;
     icon?: any;
-    onConfirm: () => void;
+    // When set, the modal shows a mandatory reason field (min 3 chars) and
+    // passes the trimmed reason to onConfirm.
+    requireReason?: boolean;
+    onConfirm: (reason?: string) => void;
   }>({
     isOpen: false,
     title: "",
@@ -125,7 +128,8 @@ export default function PurchaseOrdersClient() {
     onConfirm: () => { }
   });
 
-  const closeConfirm = () => setConfirmConfig({ ...confirmConfig, isOpen: false });
+  const [confirmReason, setConfirmReason] = useState("");
+  const closeConfirm = () => { setConfirmConfig({ ...confirmConfig, isOpen: false }); setConfirmReason(""); };
 
   useEffect(() => {
     if (showPaymentModal || viewingDetailsPO || showSettings) {
@@ -241,14 +245,19 @@ export default function PurchaseOrdersClient() {
     setConfirmConfig({
       isOpen: true,
       title: "Cancel Purchase Order",
-      message: "Are you sure you want to cancel this purchase order? This action cannot be undone.",
+      message: "Cancel this purchase order? Only orders with no approved goods receipt or bill can be cancelled. Any advance paid stays with the vendor as credit. This cannot be undone.",
       confirmText: "Yes, Cancel PO",
       confirmStyle: "bg-rose-600 hover:bg-rose-700 shadow-rose-600/20 text-white",
       icon: XCircle,
-      onConfirm: async () => {
+      requireReason: true,
+      onConfirm: async (reason?: string) => {
+        if (!reason || reason.length < 3) {
+          toast.error("Please enter a cancellation reason.");
+          return;
+        }
         closeConfirm();
         try {
-          await purchaseOrdersApi.cancel(id);
+          await purchaseOrdersApi.cancel(id, reason);
           toast.success("Purchase order cancelled successfully.");
           fetchAll();
         } catch (e: any) {
@@ -257,6 +266,35 @@ export default function PurchaseOrdersClient() {
       }
     });
   };
+
+  const handleShortClose = (id: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Short Close Purchase Order",
+      message: "Close this purchase order without the undelivered balance? Received goods and their bills stay as they are; no further goods can be received against it. Unused advance returns to vendor credit.",
+      confirmText: "Yes, Short Close",
+      confirmStyle: "bg-rose-600 hover:bg-rose-700 shadow-rose-600/20 text-white",
+      icon: XCircle,
+      requireReason: true,
+      onConfirm: async (reason?: string) => {
+        if (!reason || reason.length < 3) {
+          toast.error("Please enter a reason.");
+          return;
+        }
+        closeConfirm();
+        try {
+          await purchaseOrdersApi.shortClose(id, reason);
+          toast.success("Purchase order short-closed.");
+          fetchAll();
+        } catch (e: any) {
+          toast.error(e?.response?.data?.error ?? "Failed to short-close PO");
+        }
+      }
+    });
+  };
+
+  // Mirrors the server rules (PO_CANCELLABLE_STATUSES / short-close).
+  const CANCELLABLE_PO_STATUSES = ["DRAFT", "PENDING_APPROVAL", "APPROVED", "ORDERED", "SENT"];
 
   const historyStatuses = ["RECEIVED", "INVOICED", "PAID", "CLOSED", "CANCELLED"];
   const filtered = orders.filter((o) => {
@@ -422,7 +460,7 @@ export default function PurchaseOrdersClient() {
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full min-w-0">
           <div className="relative w-full sm:w-[360px] lg:w-[420px] shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search orders"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search orders..."
@@ -574,6 +612,24 @@ export default function PurchaseOrdersClient() {
                               className="px-2.5 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-900/40 rounded text-xs font-bold hover:bg-orange-100 dark:hover:bg-orange-900/50 transition-colors mr-1"
                             >
                               {po.status === "PARTIALLY_RECEIVED" ? "Receive Remaining Goods" : "Receive Goods"}
+                            </button>
+                          )}
+                          {po.status === "PARTIALLY_RECEIVED" && (
+                            <button
+                              type="button"
+                              onClick={() => handleShortClose(po.id)}
+                              className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 rounded text-xs font-bold hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors mr-1"
+                            >
+                              Short Close
+                            </button>
+                          )}
+                          {CANCELLABLE_PO_STATUSES.includes(po.status) && (
+                            <button
+                              type="button"
+                              onClick={() => handleCancel(po.id)}
+                              className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 rounded text-xs font-bold hover:bg-rose-100 dark:hover:bg-rose-900/50 transition-colors mr-1"
+                            >
+                              Cancel
                             </button>
                           )}
 
@@ -1329,14 +1385,26 @@ export default function PurchaseOrdersClient() {
           <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
             {confirmConfig.message}
           </p>
+          {confirmConfig.requireReason && (
+            <textarea
+              value={confirmReason}
+              onChange={(e) => setConfirmReason(e.target.value)}
+              placeholder="Reason (required)"
+              aria-label="Reason"
+              rows={3}
+              maxLength={500}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm text-slate-700 dark:text-slate-200"
+            />
+          )}
         </div>
         <div className="flex gap-3 mt-8">
           <button onClick={closeConfirm} className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl transition-colors">
             Cancel
           </button>
           <button
-            onClick={confirmConfig.onConfirm}
-            className={clsx("flex-[2] py-4 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all", confirmConfig.confirmStyle)}
+            onClick={() => confirmConfig.onConfirm(confirmReason.trim())}
+            disabled={!!confirmConfig.requireReason && confirmReason.trim().length < 3}
+            className={clsx("flex-[2] py-4 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed", confirmConfig.confirmStyle)}
           >
             {confirmConfig.confirmText}
           </button>

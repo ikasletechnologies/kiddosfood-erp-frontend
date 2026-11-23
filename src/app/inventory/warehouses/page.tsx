@@ -71,8 +71,8 @@ export default function WarehousesPage() {
   };
 
   const filteredWarehouses = warehouses.filter(w =>
-    w.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    w.location?.toLowerCase().includes(searchQuery.toLowerCase())
+    w.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    w.location?.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   return (
@@ -109,7 +109,7 @@ export default function WarehousesPage() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 w-full min-w-0">
           <div className="flex-1 relative w-full min-w-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input 
+            <input aria-label="Search by name or location" 
               type="text"
               placeholder="Search by name or location..."
               className="w-full bg-white dark:bg-slate-900/40 border border-slate-200 dark:border-white/5 rounded-xl py-2.5 sm:py-3 pl-10 pr-4 text-xs font-bold outline-none focus:ring-2 ring-orange-500/20 transition-all text-slate-900 dark:text-white"

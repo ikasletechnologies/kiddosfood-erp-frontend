@@ -34,7 +34,7 @@ export default function ProductsPage() {
   };
 
   const filtered = products.filter((p) =>
-    !search || p.name?.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase())
+    !search || p.name?.toLowerCase().includes(search.trim().toLowerCase()) || p.category?.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const activeCount = products.filter((p) => p.isActive).length;

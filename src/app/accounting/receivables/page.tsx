@@ -732,7 +732,7 @@ export default function ReceivablesPage() {
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search invoice, customer, phone"
               type="text"
               placeholder="Search invoice, customer, phone..."
               value={searchQuery}

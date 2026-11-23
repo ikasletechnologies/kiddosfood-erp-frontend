@@ -156,7 +156,7 @@ export default function BranchLedgerPage() {
   }, [activeFranchiseId, fetchLedger]);
 
   const filteredFranchises = franchises.filter((f) =>
-    f.name.toLowerCase().includes(search.toLowerCase())
+    f.name.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const activeFranchise = franchises.find((f) => f.id === activeFranchiseId);
@@ -182,7 +182,7 @@ export default function BranchLedgerPage() {
           </div>
           <div className="relative group">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
-            <input
+            <input aria-label="Search branches"
               type="text"
               placeholder="Search branches..."
               value={search}

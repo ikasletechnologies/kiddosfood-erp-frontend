@@ -283,7 +283,7 @@ export default function GSTR1Page() {
           {/* 1. Search Bar */}
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search invoice no, party name, GSTIN, place of supply"
               type="text"
               placeholder="Search invoice no, party name, GSTIN, place of supply…"
               value={search}

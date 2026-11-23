@@ -1,5 +1,5 @@
 "use client";
-import { canReceivePO } from "@/lib/po-receipt";
+import { canReceivePO, poQtyTotals } from "@/lib/po-receipt";
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -23,12 +23,15 @@ import { X,
   Scan as ScanIcon,
   RefreshCw
 } from "lucide-react";
-import { purchaseOrdersApi, grnApi, purchaseReturnsApi, vendorsApi, inventoryApi, settingsApi } from "@/lib/api";
+import { purchaseOrdersApi, grnApi, vendorsApi, inventoryApi, settingsApi } from "@/lib/api";
 import { clsx } from "clsx";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { useAuth } from "@/context/AuthContext";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { useLatestRequest } from "@/lib/hooks/useSearch";
+import { formatQty, matchesSearch } from "@/lib/search";
 
 // ── MiniCalendar ──────────────────────────────────────────────────────────────
 const MONTH_NAMES = ["January","February","March","April","May","June",
@@ -120,8 +123,11 @@ const FALLBACK_COMPANY = {
 
 interface POItem {
   id: string;
-  inventoryItem: { id: string; name: string; unit: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
+  inventoryItem: { id: string; name: string; unit: string; sku?: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
   quantity: number;
+  // Maintained server-side on every GRN post / return / short-close.
+  receivedQty?: number;
+  pendingQty?: number;
   price: number;
   gstRate?: number;
   hsnCode?: string;
@@ -145,18 +151,26 @@ interface PO {
   warehouseId?: string;
 }
 
+const RECEIVE_QTY_ERROR = "Received quantity cannot exceed pending quantity.";
+const ALL_RECEIVED_MESSAGE = "All quantities for this Purchase Order have been received.";
+
+function poStatusText(status: string) {
+  return status === "PARTIALLY_RECEIVED" ? "Partially received" : "Not received";
+}
+
 interface GRNItem {
+  poItemId?: string;      // PO line this GRN line receives against
   materialId: string;
   quantity: number;       // ordered
-  // Authoritative remaining-receivable quantity (ordered minus cumulative
-  // received from COMPLETED GRNs) — from GRNService.getRemainingQuantities.
-  // Falls back to `quantity` if the lookup fails, so the field is always
-  // present once selectPO resolves; the backend re-validates regardless.
+  // Pending (still receivable) quantity for this PO line, from
+  // GET /api/purchase-orders/:poId/summary. The undelivered balance of a
+  // partial delivery stays here; it is never sent to Purchase Returns.
   remaining?: number;
   previouslyReceived?: number;
-  receivedQty: number;
-  acceptedQty: number;
-  rejectedQty: number;
+  receivedQty: number;    // "Receive Now": delivered in this GRN (<= remaining)
+  acceptedQty: number;    // good units of receivedQty
+  rejectedQty: number;    // damaged units of receivedQty (QC) -> Purchase Return
+  qtyError?: string;
   price: number;           // actual received unit price (editable)
   poPrice: number;         // PO unit price — reference only, never edited
   gstRate?: number;
@@ -166,7 +180,7 @@ interface GRNItem {
   expDate?: string;
   lotNumber?: string;
   warehouseId?: string;
-  inventoryItem?: { name: string; unit: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
+  inventoryItem?: { name: string; unit: string; sku?: string; taxRate?: number; gstRate?: number; shelfLifeDays?: number };
 }
 
 function computeCommercialsFromPO(
@@ -233,6 +247,8 @@ export default function GRNPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
+  // Server PO receipt summary: totals, per-line pending, previous GRNs, canReceive.
+  const [poSummary, setPOSummary] = useState<any>(null);
   const [grnItems, setGrnItems] = useState<GRNItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [approvedId, setApprovedId] = useState<string | null>(null);
@@ -311,10 +327,6 @@ export default function GRNPage() {
       .catch(() => { /* fall back to FALLBACK_COMPANY */ });
   }, []);
 
-  const handleSaveDraft = () => {
-    toast.success("GRN Draft saved successfully (reference kept local).");
-  };
-
   const handleSubmitForReview = () => {
     toast.success("GRN submitted to review queue.");
   };
@@ -388,8 +400,19 @@ export default function GRNPage() {
   const [viewingGRNDetails, setViewingGRNDetails] = useState<any>(null);
   const [generatingLotIdx, setGeneratingLotIdx] = useState<number | null>(null);
 
+  // Stale-response guards: a slower earlier PO list / PO summary response
+  // must never overwrite a newer one (e.g. clicking PO A then PO B).
+  const beginPOListRequest = useLatestRequest();
+  const beginPOSelectRequest = useLatestRequest();
+  const urlPOHandled = useRef(false);
+  // Step-2 "find product in this PO" search text.
+  const [lineSearch, setLineSearch] = useState("");
+  const [highlightLineId, setHighlightLineId] = useState<string | null>(null);
+  const receiveInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
   // Fetch Pending POs
   const loadPOs = useCallback(async () => {
+    const req = beginPOListRequest();
     setLoading(true);
     try {
       const r = await purchaseOrdersApi.getAll();
@@ -397,9 +420,13 @@ export default function GRNPage() {
       const statusCandidates = orders.filter(
         (p: PO) => canReceivePO(p)
       );
-      // Status can be stale for older GRNs. Keep a PO in the receipt queue only
-      // while the backend reports at least one genuinely receivable unit.
+      // Keep a PO in the receipt queue only while it has a genuinely
+      // receivable unit. Lines carry the server-maintained pendingQty, so no
+      // per-PO request is needed; only POs without it fall back to the
+      // remaining-quantity API.
       const remainingChecks = await Promise.all(statusCandidates.map(async (po: PO) => {
+        const { pending } = poQtyTotals(po);
+        if (pending !== null) return pending > 0.0001 ? po : null;
         try {
           const remainingResponse = await grnApi.getRemainingQuantities(po.id);
           const hasRemaining = (remainingResponse.data || []).some((item: any) => Number(item.remaining) > 0.0001);
@@ -408,22 +435,27 @@ export default function GRNPage() {
           return po; // Preserve access if the advisory lookup is temporarily unavailable.
         }
       }));
+      if (!req.isLatest()) return;
       const pending = remainingChecks.filter((po): po is PO => po !== null);
       setPOs(pending);
 
-      // Auto-select if PO ID provided in URL
+      // Auto-select if PO ID provided in URL — once only. loadPOs() also runs
+      // after every GRN post; re-selecting here would duplicate the summary
+      // request and race the post handler's own refresh.
       const urlParams = new URLSearchParams(window.location.search);
       const poId = urlParams.get('poId');
-      if (poId) {
+      if (poId && !urlPOHandled.current) {
+        urlPOHandled.current = true;
         const po = pending.find((p: PO) => p.id === poId);
         if (po) selectPO(po);
       }
     } catch (err) {
       console.error("Failed to load POs:", err);
     } finally {
-      setLoading(false);
+      if (req.isLatest()) setLoading(false);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beginPOListRequest]);
 
   // Fetch GRN History
   const loadHistory = useCallback(async () => {
@@ -462,24 +494,35 @@ export default function GRNPage() {
   }, [view, loadPOs, loadHistory]);
 
   const selectPO = async (po: PO) => {
+    // Only the latest selection may populate the screen: if the user picks
+    // PO A then PO B, A's slower summary must not show up under B.
+    const req = beginPOSelectRequest();
     setSelectedPO(po);
+    setLineSearch("");
+    setHighlightLineId(null);
 
-    // Authoritative remaining-receivable quantity per line (ordered minus
-    // cumulative received from COMPLETED GRNs) — a partially-received PO
-    // must default/cap to what's actually still outstanding, not the full
-    // original ordered quantity again. Falls back to the raw ordered
-    // quantity if the lookup fails; the backend still rejects any
-    // over-receipt on submit regardless of what the UI shows.
-    let remainingByMaterial = new Map<string, { remaining: number; previouslyReceived: number }>();
+    // Authoritative per-line ordered / already received / pending from the
+    // PO summary. Only this PO's lines are shown; lines with nothing pending
+    // are shown read-only. If the lookup fails nothing is receivable (the
+    // server would reject anything over the real pending quantity anyway).
+    let summary: any = null;
     try {
-      const res = await grnApi.getRemainingQuantities(po.id);
-      (res.data || []).forEach((r: any) => {
-        if (r.materialId) remainingByMaterial.set(r.materialId, { remaining: r.remaining, previouslyReceived: r.previouslyReceived });
-      });
+      const res = await grnApi.getPOSummary(po.id);
+      summary = res.data;
     } catch (e) {
-      console.error("Failed to load remaining receivable quantities:", e);
-      toast.error("Could not load remaining receivable quantity for this PO — showing full ordered quantity, but the server will still block over-receiving.");
+      if (!req.isLatest()) return;
+      console.error("Failed to load PO receipt summary:", e);
+      toast.error("Could not load the pending quantities for this Purchase Order. Please retry.");
+      return;
     }
+    if (!req.isLatest()) return;
+    if (summary?.poId && summary.poId !== po.id) {
+      // Never show lines of a different PO.
+      toast.error("Purchase Order summary mismatch. Please reselect the Purchase Order.");
+      return;
+    }
+    setPOSummary(summary);
+    const lineById = new Map<string, any>((summary?.lines || []).map((l: any) => [l.poItemId, l]));
 
     let baseLotStr = "";
     try {
@@ -488,12 +531,14 @@ export default function GRNPage() {
     } catch (e) {
       console.error(e);
     }
+    if (!req.isLatest()) return;
 
     setGrnItems(
-      (po.poItems || []).map((item, idx) => {
+      // Only this PO's own lines (matched by PO line id), one row per line.
+      (po.poItems || []).filter((item, i, all) => all.findIndex(x => x.id === item.id) === i).map((item, idx) => {
         const gstRate = item.gstRate ?? 0;
-        const remainingInfo = remainingByMaterial.get(item.inventoryItem.id);
-        const remaining = remainingInfo ? remainingInfo.remaining : item.quantity;
+        const line = lineById.get(item.id);
+        const remaining = summary?.canReceive && line ? Number(line.pendingQty) || 0 : 0;
         const autoLotStr = baseLotStr ? formatLotPreview(baseLotStr, idx) : "[AUTO]";
         const shelfLife = (item.inventoryItem as any)?.shelfLifeDays;
         let defaultExp = "";
@@ -503,10 +548,11 @@ export default function GRNPage() {
           defaultExp = d.toISOString().split("T")[0];
         }
         return {
+          poItemId: item.id,
           materialId: item.inventoryItem.id,
           quantity: item.quantity,
           remaining,
-          previouslyReceived: remainingInfo?.previouslyReceived ?? 0,
+          previouslyReceived: Number(line?.receivedQty) || 0,
           receivedQty: remaining,
           acceptedQty: remaining,
           rejectedQty: 0,
@@ -530,15 +576,26 @@ export default function GRNPage() {
     setGrnItems(prev => {
       const next = [...prev];
       const currentItem = { ...next[idx] };
-      const parsedVal = Math.max(0, val);
+      const parsedVal = Number.isFinite(val) ? Math.max(0, val) : 0;
+      const pending = currentItem.remaining ?? 0;
 
-      if (field === "acceptedQty") {
-        // The operator enters the usable quantity. The balance of this PO
-        // receipt is damaged/rejected and is sent to Purchase Returns.
-        const receiptQty = currentItem.remaining ?? currentItem.quantity;
-        currentItem.receivedQty = receiptQty;
-        currentItem.acceptedQty = Math.min(receiptQty, parsedVal);
-        currentItem.rejectedQty = Math.max(0, receiptQty - currentItem.acceptedQty);
+      if (field === "receivedQty") {
+        // "Receive Now": what the vendor actually delivered in this GRN.
+        // Capped at the pending quantity; the rest stays pending on the PO.
+        if (parsedVal > pending + 0.0001) {
+          currentItem.qtyError = RECEIVE_QTY_ERROR;
+          toast.error(RECEIVE_QTY_ERROR, { id: `grn-qty-${idx}` });
+        } else {
+          currentItem.qtyError = undefined;
+        }
+        currentItem.receivedQty = Math.min(pending, parsedVal);
+        currentItem.rejectedQty = Math.min(currentItem.rejectedQty, currentItem.receivedQty);
+        currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
+      } else if (field === "acceptedQty") {
+        // Good units out of what was delivered. Only the damaged part of the
+        // delivery goes to Purchase Returns; undelivered balance stays pending.
+        currentItem.acceptedQty = Math.min(currentItem.receivedQty, parsedVal);
+        currentItem.rejectedQty = Math.max(0, currentItem.receivedQty - currentItem.acceptedQty);
       } else if (field === "rejectedQty") {
         currentItem.rejectedQty = Math.min(currentItem.receivedQty, parsedVal);
         currentItem.acceptedQty = Math.max(0, currentItem.receivedQty - currentItem.rejectedQty);
@@ -613,14 +670,29 @@ export default function GRNPage() {
   const handleCreateAndApprove = async (rejectionReason?: string, confirmed?: boolean) => {
     if (!selectedPO) return;
 
+    if (poSummary && !poSummary.canReceive) {
+      toast.error(poSummary.message || ALL_RECEIVED_MESSAGE);
+      return;
+    }
+    if (grnItems.some(item => (item.receivedQty || 0) > (item.remaining ?? 0) + 0.0001)) {
+      toast.error(RECEIVE_QTY_ERROR);
+      return;
+    }
+
     // If defaultWarehouseId is set, auto-assign to any items missing warehouseId
-    let itemsToSubmit = grnItems;
+    let allItems = grnItems;
     if (defaultWarehouseId) {
-      itemsToSubmit = grnItems.map(item => ({
+      allItems = grnItems.map(item => ({
         ...item,
         warehouseId: item.warehouseId || defaultWarehouseId
       }));
-      setGrnItems(itemsToSubmit);
+      setGrnItems(allItems);
+    }
+    // Only lines being received now go on the GRN.
+    const itemsToSubmit = allItems.filter(item => (item.receivedQty || 0) > 0);
+    if (itemsToSubmit.length === 0) {
+      toast.error("Enter a Receive Now quantity for at least one item.");
+      return;
     }
 
     // Verify that a warehouse is selected for all items
@@ -649,7 +721,7 @@ export default function GRNPage() {
     // Validate Batch Number and EXP Date for all items with acceptedQty > 0
     for (let i = 0; i < itemsToSubmit.length; i++) {
       const item = itemsToSubmit[i];
-      const itemName = item.inventoryItem?.name || selectedPO.poItems[i]?.inventoryItem?.name || `Item #${i + 1}`;
+      const itemName = item.inventoryItem?.name || `Item #${i + 1}`;
       if (item.acceptedQty > 0) {
         if (!item.expDate || isNaN(new Date(item.expDate).getTime())) {
           toast.error(`Please select a valid Expiry (EXP) Date for "${itemName}".`);
@@ -668,39 +740,40 @@ export default function GRNPage() {
 
     setSubmitting(true);
     try {
-      // 1. Create and Approve GRN (Impacts Inventory)
-      const res = await grnApi.createFromPO(selectedPO.id, { items: itemsToSubmit });
-      const grnId = res.data.id;
-      // A fully rejected receipt is finalized as REJECTED server-side (reason
-      // required, no stock or vendor bill posted).
-      await grnApi.approve(grnId, rejectionReason ? { rejectionReason } : undefined);
+      // Create + post in ONE server transaction against this PO only: if
+      // anything fails, no GRN, PO change, stock or bill is left behind.
+      // A fully rejected receipt is finalized as REJECTED (reason required,
+      // no stock or vendor bill posted).
+      const res = await grnApi.receiveAgainstPO(selectedPO.id, {
+        vendorId: selectedPO.vendorId || selectedPO.vendor?.id,
+        rejectionReason: rejectionReason || undefined,
+        items: itemsToSubmit.map(item => ({
+          poItemId: item.poItemId!,
+          productId: item.materialId,
+          receivedQty: item.receivedQty,
+          rejectedQty: item.rejectedQty,
+          price: item.price,
+          priceOverrideReason: item.priceOverrideReason,
+          vendorBatchNo: item.vendorBatchNo,
+          mfgDate: item.mfgDate,
+          expDate: item.expDate,
+          lotNumber: item.lotNumber,
+          warehouseId: item.warehouseId,
+        })),
+      });
+      const grnId = res.data.grn.id;
       setApprovedId(grnId);
+      // Refresh the PO summary (received / pending / previous GRNs) and the
+      // receivable PO list from the server.
+      setPOSummary(res.data.summary);
+      // Stock changed: let any open stock views (e.g. Raw Material Stock) reload.
+      window.dispatchEvent(new CustomEvent("erp:refresh-inventory"));
+      loadPOs();
 
-      // 2. Handle Rejections (Auto-create Purchase Return & Credit Adjustment)
+      // 2. Rejected quantities: the server creates the Purchase Return
+      // document itself during approval, from this GRN's own rejected
+      // quantities and prices (one per GRN). The client no longer submits it.
       const rejectedItems = itemsToSubmit.filter(item => item.rejectedQty > 0);
-      if (rejectedItems.length > 0) {
-        const vendorId = selectedPO.vendorId || selectedPO.vendor?.id;
-
-        if (vendorId) {
-          // Create Purchase Return document
-          await purchaseReturnsApi.create({
-            procurementOrderId: selectedPO.id,
-            vendorId,
-            reason: rejectionReason ? `GRN FULL REJECTION: ${rejectionReason}` : "PENDING_RETURN_REASON",
-            returnSource: "GRN_REJECTION",
-            status: "PENDING",
-            items: rejectedItems.map(item => ({
-              itemName: item.inventoryItem?.name || "Unknown Material",
-              quantity: item.rejectedQty,
-              unit: item.inventoryItem?.unit || "unit",
-              rate: item.price
-            }))
-          });
-
-          // Purchase Return document is created for vendor tracking
-          // Liability is automatically calculated on accepted goods only in the backend
-        }
-      }
 
       toast.success(rejectionReason
         ? "Shipment fully rejected. GRN recorded as Fully Rejected — no stock added."
@@ -711,26 +784,33 @@ export default function GRNPage() {
       setShowApproveConfirm(false);
       setRejectReason("");
 
-      setTimeout(() => {
-        setView("HISTORY");
-        setStep(1);
-        setSelectedPO(null);
-        setApprovedId(null);
-      }, 2000);
+      // Re-open the same PO from fresh server state: updated already-received /
+      // pending quantities, the new GRN under Previous GRNs, and the
+      // "all received" state once nothing is pending.
+      await selectPO(selectedPO);
+      setApprovedId(null);
     } catch (e: any) {
       console.error(e);
       toast.error(e.response?.data?.error || "Failed to create or approve GRN. Please verify quantities.");
+      // Pending quantities may have changed (e.g. another user received the
+      // same PO meanwhile): reload them so the screen shows the real balance.
+      if (selectedPO) {
+        grnApi.getPOSummary(selectedPO.id).then(r => setPOSummary(r.data)).catch(() => {});
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
   const filteredPOs = pos.filter(p => {
-    const term = poSearch.trim().toLowerCase();
-    const matchSearch =
-      !term ||
-      p.vendor.name.toLowerCase().includes(term) ||
-      (p.poNumber || "").toLowerCase().includes(term);
+    // Trimmed, case-insensitive: PO number, vendor name / code, status.
+    const matchSearch = matchesSearch(
+      poSearch,
+      p.poNumber,
+      p.vendor?.name,
+      (p.vendor as any)?.vendorCode,
+      poStatusText(p.status),
+    );
 
     const matchWarehouse =
       warehouseFilter === "ALL" ||
@@ -897,7 +977,7 @@ export default function GRNPage() {
             </div>
 
             <div className="bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_180px_170px] gap-3 items-end shadow-sm">
-              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Search</label><div className="relative"><SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search GRN, PO or vendor" className="w-full h-10 pl-9 pr-9 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />{historySearch && <button type="button" onClick={() => setHistorySearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X size={14} /></button>}</div></div>
+              <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Search</label><div className="relative"><SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input aria-label="Search GRN, PO or vendor" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search GRN, PO or vendor" className="w-full h-10 pl-9 pr-9 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100" />{historySearch && <button type="button" onClick={() => setHistorySearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"><X size={14} /></button>}</div></div>
               <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Date range</label><div className="grid grid-cols-2 gap-1"><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="min-w-0 h-10 px-2 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-[10px] outline-none focus:border-[#f58220]" /><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="min-w-0 h-10 px-2 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-[10px] outline-none focus:border-[#f58220]" /></div></div>
               <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Warehouse</label><select value={historyWarehouseFilter} onChange={(e) => setHistoryWarehouseFilter(e.target.value)} className="w-full h-10 px-3 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]"><option value="ALL">All warehouses</option>{warehouses.map((warehouse) => <option key={warehouse.id} value={warehouse.id}>{warehouse.name}</option>)}</select></div>
               <div><label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">Status</label><select value={historyStatusFilter} onChange={(e) => setHistoryStatusFilter(e.target.value)} className="w-full h-10 px-3 border border-slate-200 dark:border-white/10 rounded-lg bg-white dark:bg-[#13151f] text-xs outline-none focus:border-[#f58220]"><option value="ALL">All statuses</option><option value="PENDING">Pending approval</option><option value="APPROVED">Approved</option><option value="REJECTED">Fully rejected</option></select></div>
@@ -906,7 +986,7 @@ export default function GRNPage() {
             <section className="bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 flex items-center justify-between border-b border-slate-200 dark:border-white/10"><h2 className="text-sm font-bold text-slate-900 dark:text-white">GRN History</h2><div className="flex items-center gap-3"><span className="text-[10px] text-slate-400">{filteredHistory.length} receipts</span><button type="button" onClick={exportHistory} disabled={filteredHistory.length === 0} className="px-3 py-1.5 border border-slate-200 dark:border-white/10 rounded-md text-[10px] font-semibold text-slate-600 dark:text-slate-300 hover:border-[#f58220] hover:text-[#f58220] disabled:opacity-40">Export</button><button type="button" onClick={loadHistory} className="p-1.5 text-slate-400 hover:text-[#f58220]" title="Refresh"><RefreshCw className={clsx("h-4 w-4", loading && "animate-spin")} /></button></div></div>
               <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-xs"><thead><tr className="bg-slate-50 dark:bg-white/[0.03] text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-white/10"><th className="px-4 py-2.5 text-left">GRN No.</th><th className="px-4 py-2.5 text-left">Receipt date</th><th className="px-4 py-2.5 text-left">PO No.</th><th className="px-4 py-2.5 text-left">Vendor</th><th className="px-4 py-2.5 text-left">Warehouse</th><th className="px-4 py-2.5 text-left">Status</th><th className="px-4 py-2.5 text-right">Action</th></tr></thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">{loading ? <tr><td colSpan={7} className="py-14 text-center"><Loader2Icon className="mx-auto h-5 w-5 animate-spin text-[#f58220]" /></td></tr> : filteredHistory.length === 0 ? <tr><td colSpan={7} className="py-14 text-center text-slate-500">No GRN history matches the current filters.</td></tr> : filteredHistory.map((grn) => { const warehouseName = grn.warehouse?.name || grn.procurementOrder?.warehouse?.name || grn.items?.[0]?.warehouse?.name || "—"; const isPending = grn.status === "PENDING" || grn.status === "DRAFT"; const isRejected = grn.status === "REJECTED"; return <tr key={grn.id} className={clsx("hover:bg-slate-50 dark:hover:bg-white/[0.02]", isPending && "bg-orange-50/40 dark:bg-orange-500/[0.03]")}><td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">{formatERPNumber("GRN", grn.id, grn.createdAt)}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(grn.receivedAt || grn.createdAt)}</td><td className="px-4 py-3 text-slate-700 dark:text-slate-300">{grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : "—"}</td><td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{grn.procurementOrder?.vendor?.name || "—"}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{warehouseName}</td><td className="px-4 py-3"><span className={clsx("inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium", isRejected ? "bg-rose-100 text-rose-700" : isPending ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{isRejected ? "Fully rejected" : isPending ? "Pending approval" : "Approved"}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setViewingGRNDetails(grn)} className="text-[11px] font-semibold text-blue-600 hover:underline">View details</button></td></tr>; })}</tbody>
+                <tbody className="divide-y divide-slate-100 dark:divide-white/5">{loading ? <tr><td colSpan={7} className="py-14 text-center"><Loader2Icon className="mx-auto h-5 w-5 animate-spin text-[#f58220]" /></td></tr> : filteredHistory.length === 0 ? <tr><td colSpan={7} className="py-14 text-center text-slate-500">No GRN history matches the current filters.</td></tr> : filteredHistory.map((grn) => { const warehouseName = grn.warehouse?.name || grn.procurementOrder?.warehouse?.name || grn.items?.[0]?.warehouse?.name || "—"; const isPending = grn.status === "PENDING" || grn.status === "DRAFT"; const isRejected = grn.status === "REJECTED"; return <tr key={grn.id} className={clsx("hover:bg-slate-50 dark:hover:bg-white/[0.02]", isPending && "bg-orange-50/40 dark:bg-orange-500/[0.03]")}><td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">{grn.grnNumber || formatERPNumber("GRN", grn.id, grn.createdAt)}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{formatDate(grn.receivedAt || grn.createdAt)}</td><td className="px-4 py-3 text-slate-700 dark:text-slate-300">{grn.procurementOrder ? formatERPNumber("PO", grn.procurementOrder.poNumber || grn.procurementOrder.id, grn.procurementOrder.createdAt) : "—"}</td><td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{grn.procurementOrder?.vendor?.name || "—"}</td><td className="px-4 py-3 text-slate-600 dark:text-slate-400">{warehouseName}</td><td className="px-4 py-3"><span className={clsx("inline-flex rounded-full px-2.5 py-1 text-[10px] font-medium", isRejected ? "bg-rose-100 text-rose-700" : isPending ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700")}>{isRejected ? "Fully rejected" : isPending ? "Pending approval" : "Approved"}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => setViewingGRNDetails(grn)} className="text-[11px] font-semibold text-blue-600 hover:underline">View details</button></td></tr>; })}</tbody>
               </table></div>
             </section>
           </div>        ) : step === 1 ? (
@@ -914,25 +994,42 @@ export default function GRNPage() {
           <div className="space-y-5">
             {/* ── Filters Bar (Matching Screenshot) ── */}
             <div className="flex flex-col md:flex-row md:items-end gap-3 md:gap-4 w-full">
-              {/* Search Box */}
-              <div className="flex-1 min-w-[260px]">
-                <div className="relative">
-                  <SearchIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search vendor or PO number..."
-                    value={poSearch}
-                    onChange={e => setPoSearch(e.target.value)}
-                    className="w-full pl-10 pr-9 py-2.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl text-sm outline-none focus:border-[#f58220] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 shadow-2xs transition-colors"
-                  />
-                  {poSearch && (
-                    <X
-                      size={14}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                      onClick={() => setPoSearch("")}
-                    />
-                  )}
-                </div>
+              {/* Search Box: PO autocomplete (also filters the table below) */}
+              <div className="flex-1 min-w-0 md:min-w-[260px]">
+                <SearchAutocomplete<PO>
+                  id="grn-po-search"
+                  label="Search Purchase Order"
+                  placeholder="Search PO number, vendor or status..."
+                  value={poSearch}
+                  onInputChange={setPoSearch}
+                  onClear={() => setPoSearch("")}
+                  options={filteredPOs.slice(0, 50)}
+                  loading={loading}
+                  getOptionKey={po => po.id}
+                  inputClassName="py-2.5 rounded-xl shadow-2xs"
+                  onSelect={po => selectPO(po)}
+                  renderOption={po => {
+                    const { ordered, pending } = poQtyTotals(po);
+                    const unit = po.poItems?.[0]?.inventoryItem?.unit || "";
+                    return (
+                      <div className="flex items-start justify-between gap-3 min-w-0">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{po.poNumber || "PO-PENDING"}</p>
+                          <p className="text-[11px] text-gray-500 dark:text-slate-400 truncate">{po.vendor?.name || "—"}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className={clsx(
+                            "inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                            po.status === "PARTIALLY_RECEIVED" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" : "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
+                          )}>{poStatusText(po.status)}</span>
+                          <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-0.5 whitespace-nowrap">
+                            Ordered {formatQty(ordered)} · Pending <span className="font-semibold text-amber-600 dark:text-amber-400">{pending === null ? "—" : formatQty(pending)}</span>{po.poItems?.length === 1 && unit ? ` ${unit}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
               </div>
 
               {/* Warehouse Dropdown */}
@@ -1008,7 +1105,7 @@ export default function GRNPage() {
               </div>
 
               <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-                <table className="w-full text-sm min-w-[860px]">
+                <table className="w-full text-sm min-w-[1000px]">
                   <thead>
                     <tr className="bg-gray-50/70 dark:bg-white/[0.02] text-gray-400 dark:text-slate-500 text-xs font-semibold border-b border-gray-100 dark:border-white/5">
                       <th className="px-5 py-3.5 text-left font-medium w-12">#</th>
@@ -1017,6 +1114,8 @@ export default function GRNPage() {
                       <th className="px-5 py-3.5 text-left font-medium">Warehouse</th>
                       <th className="px-5 py-3.5 text-left font-medium">Expected delivery</th>
                       <th className="px-5 py-3.5 text-center font-medium">Items</th>
+                      <th className="px-5 py-3.5 text-right font-medium">Ordered qty</th>
+                      <th className="px-5 py-3.5 text-right font-medium">Pending qty</th>
                       <th className="px-5 py-3.5 text-left font-medium">Status</th>
                       <th className="px-5 py-3.5 text-right font-medium">Action</th>
                     </tr>
@@ -1024,13 +1123,13 @@ export default function GRNPage() {
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {loading ? (
                       <tr>
-                        <td colSpan={8} className="py-16 text-center">
+                        <td colSpan={10} className="py-16 text-center">
                           <Loader2Icon className="mx-auto text-[#f58220] animate-spin h-6 w-6" />
                         </td>
                       </tr>
                     ) : filteredPOs.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-16 text-center text-gray-500 dark:text-slate-400">
+                        <td colSpan={10} className="py-16 text-center text-gray-500 dark:text-slate-400">
                           <div className="w-12 h-12 bg-orange-50 dark:bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-3 text-[#f58220]">
                             <PackageIcon className="h-6 w-6" />
                           </div>
@@ -1066,6 +1165,7 @@ export default function GRNPage() {
                           (po as any).expectedDeliveryDate || (po as any).deliveryDate || (po as any).expectedDate || po.createdAt
                         );
                         const itemsCount = po.poItems?.length || 0;
+                        const qty = poQtyTotals(po);
 
                         return (
                           <tr
@@ -1094,6 +1194,12 @@ export default function GRNPage() {
                             </td>
                             <td className="px-5 py-4 text-xs font-semibold text-center text-gray-700 dark:text-slate-300">
                               {itemsCount}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-semibold text-right text-gray-700 dark:text-slate-300 tabular-nums">
+                              {formatQty(qty.ordered)}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-bold text-right text-amber-600 dark:text-amber-400 tabular-nums">
+                              {qty.pending === null ? "—" : formatQty(qty.pending)}
                             </td>
                             <td className="px-5 py-4">
                               {isPartial ? (
@@ -1132,10 +1238,10 @@ export default function GRNPage() {
             {/* ── Summary KPI Strip (Top) ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full min-w-0">
               {[
-                { label: "Ordered Quantity", value: grnItems.reduce((s, i) => s + i.quantity, 0), color: "text-gray-800 dark:text-slate-200", dot: "bg-gray-400" },
-                { label: "Received Quantity", value: grnItems.reduce((s, i) => s + i.receivedQty, 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
-                { label: "Rejected Quantity", value: grnItems.reduce((s, i) => s + i.rejectedQty, 0), color: "text-red-600 dark:text-red-400", dot: "bg-red-500" },
-                { label: "Accepted Quantity", value: grnItems.reduce((s, i) => s + i.acceptedQty, 0), color: "text-green-600 dark:text-green-400", dot: "bg-green-500" },
+                { label: "Total Ordered", value: poSummary?.totals?.orderedQty ?? grnItems.reduce((s, i) => s + i.quantity, 0), color: "text-gray-800 dark:text-slate-200", dot: "bg-gray-400" },
+                { label: "Total Received", value: poSummary?.totals?.receivedQty ?? grnItems.reduce((s, i) => s + (i.previouslyReceived || 0), 0), color: "text-green-600 dark:text-green-400", dot: "bg-green-500" },
+                { label: "Total Pending", value: poSummary?.totals?.pendingQty ?? grnItems.reduce((s, i) => s + (i.remaining || 0), 0), color: "text-amber-600 dark:text-amber-400", dot: "bg-amber-500" },
+                { label: "Receiving Now", value: grnItems.reduce((s, i) => s + (Number(i.receivedQty) || 0), 0), color: "text-[#f58220]", dot: "bg-[#f58220]" },
               ].map(stat => (
                 <div key={stat.label} className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 px-4 py-3 flex items-center gap-3 shadow-sm min-w-0">
                   <div className={clsx("w-2.5 h-2.5 rounded-full shrink-0", stat.dot)} />
@@ -1187,26 +1293,128 @@ export default function GRNPage() {
               </div>
             </div>
 
+            {poSummary && !poSummary.canReceive && (
+              <div className="flex items-center gap-2 rounded-xl border border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-700 dark:text-green-400">
+                <CheckCircle2Icon size={16} className="shrink-0" />
+                {poSummary.message || ALL_RECEIVED_MESSAGE}
+              </div>
+            )}
+
+            {/* Previous GRNs for this PO */}
+            <div className="bg-white dark:bg-card rounded-xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
+              <div className="px-4 py-2.5 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-700 dark:text-slate-300 uppercase tracking-wider">Previous GRNs for this PO</span>
+                <span className="text-[11px] text-gray-400 dark:text-slate-500">{poSummary?.grns?.length || 0} receipt(s)</span>
+              </div>
+              {(poSummary?.grns?.length || 0) === 0 ? (
+                <p className="px-4 py-3 text-xs text-gray-400 dark:text-slate-500 italic">No goods received against this Purchase Order yet.</p>
+              ) : (
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-xs min-w-[520px]">
+                    <thead>
+                      <tr className="text-[10px] uppercase text-gray-500 dark:text-slate-400 bg-gray-50 dark:bg-white/[0.02]">
+                        <th className="text-left px-4 py-2 font-semibold">GRN No.</th>
+                        <th className="text-left px-4 py-2 font-semibold">Received On</th>
+                        <th className="text-left px-4 py-2 font-semibold">Status</th>
+                        <th className="text-right px-4 py-2 font-semibold">Received</th>
+                        <th className="text-right px-4 py-2 font-semibold">Accepted</th>
+                        <th className="text-right px-4 py-2 font-semibold">Rejected</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-white/5 text-gray-700 dark:text-slate-300">
+                      {poSummary.grns.map((g: any) => (
+                        <tr key={g.id}>
+                          <td className="px-4 py-2 font-mono font-semibold text-gray-800 dark:text-white">{g.grnNumber || formatERPNumber("GRN", g.id, g.createdAt)}</td>
+                          <td className="px-4 py-2">{formatDate(g.receivedAt || g.createdAt)}</td>
+                          <td className="px-4 py-2">
+                            <span className={clsx("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              g.displayStatus === "POSTED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                                : g.displayStatus === "DRAFT" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"
+                                : "bg-gray-100 text-gray-600 dark:bg-white/5 dark:text-slate-400")}>
+                              {g.displayStatus === "POSTED" ? "Posted" : g.displayStatus === "DRAFT" ? "Draft" : g.displayStatus === "REJECTED" ? "Fully rejected" : "Cancelled"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono">{g.totalReceivedQty}</td>
+                          <td className="px-4 py-2 text-right font-mono">{g.totalAcceptedQty}</td>
+                          <td className="px-4 py-2 text-right font-mono">{g.totalRejectedQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Find a product of THIS PO only (pending > 0 selectable) */}
+            {grnItems.length > 1 && (
+              <div className="w-full sm:max-w-md">
+                <SearchAutocomplete<GRNItem>
+                  id="grn-line-search"
+                  label="Find product in this Purchase Order"
+                  showLabel
+                  placeholder="Product name or SKU..."
+                  minChars={0}
+                  value={lineSearch}
+                  onInputChange={setLineSearch}
+                  onClear={() => setLineSearch("")}
+                  options={grnItems.filter(i => matchesSearch(lineSearch, i.inventoryItem?.name, i.inventoryItem?.sku))}
+                  getOptionKey={i => i.poItemId || i.materialId}
+                  isOptionDisabled={i => (i.remaining ?? 0) <= 0}
+                  onSelect={i => {
+                    setLineSearch("");
+                    if (!i.poItemId) return;
+                    setHighlightLineId(i.poItemId);
+                    const el = receiveInputRefs.current[i.poItemId];
+                    el?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+                    el?.focus();
+                    el?.select();
+                  }}
+                  renderOption={i => {
+                    const closed = (i.remaining ?? 0) <= 0;
+                    return (
+                      <div className="flex items-start justify-between gap-3 min-w-0">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-900 dark:text-white truncate">{i.inventoryItem?.name}</p>
+                          <p className="text-[10px] font-mono text-gray-400">{i.inventoryItem?.sku || "No SKU"} · {i.inventoryItem?.unit}</p>
+                        </div>
+                        <div className="text-[10px] text-right text-gray-500 dark:text-slate-400 shrink-0 leading-4">
+                          <div>Ordered {formatQty(i.quantity)} · Received {formatQty(i.previouslyReceived)}</div>
+                          <div className={closed ? "text-gray-400" : "font-semibold text-amber-600 dark:text-amber-400"}>
+                            {closed ? "Fully received" : `Pending ${formatQty(i.remaining)}`}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+              </div>
+            )}
+
             {/* Materials Table */}
             <div className="bg-white dark:bg-card rounded-2xl border border-gray-200 dark:border-white/5 overflow-hidden w-full min-w-0">
               <div className="overflow-x-auto custom-scrollbar w-full max-w-full">
-                <table className="w-full text-sm min-w-[850px]">
+                <table className="w-full text-sm min-w-[1100px]">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-white/[0.02] text-gray-500 dark:text-slate-400 text-xs font-medium border-b border-gray-200 dark:border-white/5 uppercase">
-                      <th className="px-4 py-3 text-left">Material</th>
+                      <th className="px-4 py-3 text-left">Product</th>
                       <th className="px-4 py-3 text-left">Traceability</th>
                       <th className="px-4 py-3 text-left">Warehouse</th>
                       <th className="px-4 py-3 text-left">Pricing</th>
-                      <th className="px-4 py-3 text-center">Ordered</th>
+                      <th className="px-4 py-3 text-center">Ordered Qty</th>
+                      <th className="px-4 py-3 text-center">Already Received</th>
+                      <th className="px-4 py-3 text-center">Pending Qty</th>
+                      <th className="px-4 py-3 text-center">Receive Now</th>
                       <th className="px-4 py-3 text-center">Accepted / Good</th>
                       <th className="px-4 py-3 text-center">Damaged / Return</th>
-                      <th className="px-4 py-3 text-center">Total Receipt</th>
                       <th className="px-4 py-3 text-center"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-white/5">
                     {grnItems.map((item, idx) => {
-                      const originalItem = selectedPO?.poItems[idx];
+                      // This row's own PO line (carried on the GRN item, matched by poItemId — never by array position).
+                      const originalItem = { inventoryItem: item.inventoryItem };
+                      // Only lines with something still pending can be received.
+                      const isLineClosed = (item.remaining ?? 0) <= 0;
                       const variance = item.price - item.poPrice;
                       const isOverridden = Math.abs(variance) > 0.001;
                       const actualLineAmount = item.acceptedQty * item.price;
@@ -1215,10 +1423,10 @@ export default function GRNPage() {
                       const isExpMissing = item.acceptedQty > 0 && (!item.expDate || isNaN(new Date(item.expDate).getTime()));
 
                       return (
-                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors">
+                        <tr key={item.poItemId || idx} className={clsx("hover:bg-gray-50 dark:hover:bg-white/[0.02] transition-colors", isLineClosed && "opacity-50", highlightLineId === item.poItemId && "bg-orange-50 dark:bg-orange-500/10")}>
                           <td className="px-4 py-3">
-                            <div className="font-semibold text-gray-800 dark:text-white text-xs">{originalItem?.inventoryItem.name}</div>
-                            <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">Unit: {originalItem?.inventoryItem.unit}</div>
+                            <div className="font-semibold text-gray-800 dark:text-white text-xs">{originalItem.inventoryItem?.name}</div>
+                            <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">Unit: {originalItem.inventoryItem?.unit}</div>
                           </td>
                           <td className="px-4 py-3">
                             <div className="space-y-1.5 min-w-[280px]">
@@ -1421,21 +1629,43 @@ export default function GRNPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className="font-mono text-xs font-bold text-gray-600 dark:text-slate-300">{item.quantity}</span>
-                            {(item.previouslyReceived ?? 0) > 0 && (
-                              <div className="mt-1 space-y-0.5">
-                                <div className="text-[10px] text-gray-400 dark:text-slate-500">Received so far: {item.previouslyReceived}</div>
-                                <div className="text-[10px] font-semibold text-[#f58220]">Remaining: {item.remaining}</div>
-                              </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="font-mono text-xs font-bold text-green-600 dark:text-green-400">{item.previouslyReceived ?? 0}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={clsx("font-mono text-xs font-bold", isLineClosed ? "text-gray-400 dark:text-slate-500" : "text-amber-600 dark:text-amber-400")}>{item.remaining ?? 0}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              ref={el => { if (item.poItemId) receiveInputRefs.current[item.poItemId] = el; }}
+                              type="number"
+                              min={0}
+                              max={item.remaining ?? 0}
+                              value={item.receivedQty}
+                              aria-label={`Receive now quantity for ${originalItem?.inventoryItem?.name || "item"}`}
+                              aria-invalid={!!item.qtyError || undefined}
+                              disabled={isLineClosed || submitting}
+                              title={isLineClosed ? "Nothing pending on this line" : `Up to ${item.remaining} pending`}
+                              onChange={e => updateItem(idx, "receivedQty", Number(e.target.value))}
+                              className={clsx(
+                                "w-20 px-2 py-1 bg-white dark:bg-[#13151f] border rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white disabled:cursor-not-allowed disabled:bg-gray-50 dark:disabled:bg-white/5",
+                                item.qtyError ? "border-rose-400 dark:border-rose-500/60" : "border-gray-200 dark:border-white/10"
+                              )}
+                            />
+                            {item.qtyError && (
+                              <div className="mt-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400 max-w-[120px] mx-auto leading-tight">{item.qtyError}</div>
                             )}
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"
                               min={0}
-                              max={item.remaining ?? item.quantity}
+                              max={item.receivedQty}
                               value={item.acceptedQty}
+                              disabled={isLineClosed || submitting}
                               onChange={e => updateItem(idx, "acceptedQty", Number(e.target.value))}
-                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
+                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white disabled:cursor-not-allowed"
                             />
                           </td>
                           <td className="px-4 py-3">
@@ -1444,17 +1674,17 @@ export default function GRNPage() {
                               min={0}
                               max={item.receivedQty}
                               value={item.rejectedQty}
+                              disabled={isLineClosed || submitting}
                               onChange={e => updateItem(idx, "rejectedQty", Number(e.target.value))}
-                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white"
+                              className="w-16 px-2 py-1 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg text-xs font-semibold text-center outline-none focus:border-[#f58220] text-gray-800 dark:text-white disabled:cursor-not-allowed"
                             />
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <span className="font-mono text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-md">
-                              {item.receivedQty}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            {item.receivedQty > 0 ? (
+                            {isLineClosed ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-500 dark:text-slate-400 bg-gray-100 dark:bg-white/5 px-2 py-0.5 rounded-full">
+                                <CheckCircle2Icon size={10} /> Fully received
+                              </span>
+                            ) : item.receivedQty > 0 ? (
                               item.rejectedQty === 0 ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 rounded-full">
                                   <CheckCircle2Icon size={10} /> Full
@@ -1625,7 +1855,9 @@ export default function GRNPage() {
               // Goods arrived but every unit was rejected: finalized through
               // the full-rejection confirmation instead of a dead button.
               const isFullRejection = grnItems.length > 0 && totalReceived > 0 && totalAccepted === 0;
-              const isApproveDisabled = submitting || grnItems.length === 0 || (totalAccepted === 0 && !isFullRejection) || hasIncompleteBatchInfo;
+              const nothingPending = !!poSummary && (!poSummary.canReceive || Number(poSummary.totals?.pendingQty || 0) <= 0);
+              const hasQtyError = grnItems.some(i => !!i.qtyError || (Number(i.receivedQty) || 0) > (i.remaining ?? 0) + 0.0001);
+              const isApproveDisabled = submitting || nothingPending || hasQtyError || grnItems.length === 0 || (totalAccepted === 0 && !isFullRejection) || hasIncompleteBatchInfo;
 
               return (
                 <div className="bg-white dark:bg-card px-6 py-4 rounded-lg border border-gray-200 dark:border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1633,6 +1865,11 @@ export default function GRNPage() {
                     <span>
                       <span className="font-semibold text-gray-800 dark:text-white">{grnItems.length}</span> material item(s) • Total Accepted: <span className="font-bold text-green-600 dark:text-green-400">{totalAccepted}</span> units
                     </span>
+                    {hasQtyError && (
+                      <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/40">
+                        {RECEIVE_QTY_ERROR}
+                      </span>
+                    )}
                     {hasIncompleteBatchInfo && totalAccepted > 0 && (
                       <span className="text-[11px] font-semibold text-rose-500 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-0.5 rounded border border-rose-200 dark:border-rose-900/40">
                         Batch No &amp; EXP date required
@@ -1647,6 +1884,11 @@ export default function GRNPage() {
                     >
                       Print GRN
                     </button>
+                    {nothingPending ? (
+                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-green-700 dark:text-green-400">
+                        <CheckCircle2Icon size={14} /> {poSummary?.message || ALL_RECEIVED_MESSAGE}
+                      </span>
+                    ) : (
                     <button
                       type="button"
                       onClick={() => (isFullRejection ? setShowRejectConfirm(true) : handleCreateAndApprove())}
@@ -1662,8 +1904,9 @@ export default function GRNPage() {
                       )}
                     >
                       {submitting ? <Loader2Icon size={14} className="animate-spin" /> : <ClipboardCheckIcon size={14} />}
-                      {isFullRejection ? "Finalize Rejection" : "Approve & Sync"}
+                      {isFullRejection ? "Finalize Rejection" : "Create & Post GRN"}
                     </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1925,8 +2168,9 @@ export default function GRNPage() {
                   />
                   <button
                     onClick={() => {
-                      const code = scanInput.trim().toUpperCase();
-                      const matched = pos.find(p => p.poNumber?.toUpperCase() === code || p.id === code);
+                      const raw = scanInput.trim();
+                      const code = raw.toUpperCase();
+                      const matched = pos.find(p => p.poNumber?.trim().toUpperCase() === code || p.id === raw);
                       if (matched) {
                         setIsScanProcessing(true);
                         setTimeout(() => {

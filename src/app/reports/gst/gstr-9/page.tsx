@@ -157,7 +157,7 @@ export default function GSTR9Page() {
           {/* 1. Search Bar */}
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search category description or supply item"
               type="text"
               placeholder="Search category description or supply item…"
               value={search}

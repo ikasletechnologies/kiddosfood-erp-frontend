@@ -17,6 +17,9 @@ import { clsx } from "clsx";
 import api from "@/lib/api/base";
 import { formatDate } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { useAsyncSearch } from "@/lib/hooks/useSearch";
+import { dedupeById } from "@/lib/search";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -120,8 +123,6 @@ export default function SalesReturnsPage() {
 
   // Invoice Search State
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
-  const [searchingInvoices, setSearchingInvoices] = useState(false);
-  const [invoiceSearchResults, setInvoiceSearchResults] = useState<any[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
 
   const [returnItems, setReturnItems] = useState<ReturnItem[]>([]);
@@ -367,24 +368,15 @@ export default function SalesReturnsPage() {
 
   // ─── Search Invoices Handler ───────────────────────────────────────────────
 
-  const handleInvoiceSearch = async (term: string) => {
-    setInvoiceSearchQuery(term);
-    if (!term.trim()) {
-      setInvoiceSearchResults([]);
-      return;
-    }
-    setSearchingInvoices(true);
-    try {
-      const res = await posApi.getOrders({ search: term.trim(), status: 'COMPLETED' });
-      const list = (res.data?.data || res.data || [])
-        .filter((o: any) => o.status !== 'CANCELLED' && o.partyType !== 'FRANCHISE');
-      setInvoiceSearchResults(list.slice(0, 10));
-    } catch (e) {
-      setInvoiceSearchResults([]);
-    } finally {
-      setSearchingInvoices(false);
-    }
-  };
+  // Debounced (300 ms), trimmed, stale-safe invoice search. The backend
+  // scopes orders to the user's franchise and hides franchise-party sales.
+  const fetchReturnableInvoices = useCallback(async (term: string) => {
+    const res = await posApi.getOrders({ search: term, status: 'COMPLETED' });
+    return dedupeById((res.data?.data || res.data || [])
+      .filter((o: any) => o.status !== 'CANCELLED' && o.partyType !== 'FRANCHISE'))
+      .slice(0, 10);
+  }, []);
+  const invoiceSearch = useAsyncSearch<any>({ query: invoiceSearchQuery, fetcher: fetchReturnableInvoices });
 
   // ─── Auto-load from Query Params ───────────────────────────────────────────
 
@@ -447,7 +439,6 @@ export default function SalesReturnsPage() {
     setReason("");
     setRefundMethod("Original Method");
     setInvoiceSearchQuery("");
-    setInvoiceSearchResults([]);
     if (searchParams.get('invoiceNum') || searchParams.get('orderId')) {
       router.replace('/sales/returns');
     }
@@ -574,7 +565,7 @@ export default function SalesReturnsPage() {
   // ─── Filters & Statistics ──────────────────────────────────────────────────
 
   const filteredReturns = returns.filter(r => {
-    const term = search.toLowerCase();
+    const term = search.trim().toLowerCase();
     const matchSearch = !search ||
       r.returnNumber.toLowerCase().includes(term) ||
       r.entityName.toLowerCase().includes(term) ||
@@ -725,66 +716,46 @@ export default function SalesReturnsPage() {
             </div>
 
             {/* Direct Invoice Search Bar */}
-            <div className="relative">
-              <label className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
+            <div>
+              <label htmlFor="return-invoice-search" className="block text-xs font-semibold text-gray-700 dark:text-slate-300 mb-1">
                 Search Invoice # or Customer / Dealer Name
               </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={invoiceSearchQuery}
-                  onChange={e => handleInvoiceSearch(e.target.value)}
-                  placeholder="e.g. INV-2026-00084 or Customer name..."
-                  className="w-full pl-9 pr-8 py-2.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-medium text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
-                />
-                {invoiceSearchQuery && (
-                  <button
-                    onClick={() => { setInvoiceSearchQuery(""); setInvoiceSearchResults([]); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-
-              {/* Search Suggestions Dropdown */}
-              {invoiceSearchResults.length > 0 && (
-                <div className="absolute z-20 left-0 right-0 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden max-h-60 overflow-y-auto">
-                  <div className="p-2 text-[10px] uppercase font-bold text-gray-400 dark:text-slate-500 bg-gray-50 dark:bg-white/[0.02]">
-                    Matching Invoices ({invoiceSearchResults.length})
-                  </div>
-                  {invoiceSearchResults.map((inv) => (
-                    <div
-                      key={inv.id}
-                      onClick={() => {
-                        applyOrderForReturn(inv);
-                        setInvoiceSearchResults([]);
-                        setInvoiceSearchQuery("");
-                      }}
-                      className="p-3 hover:bg-orange-50/50 dark:hover:bg-white/5 cursor-pointer border-b border-gray-100 dark:border-white/5 last:border-0 flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <div className="font-mono font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                          #{inv.invoiceNum}
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-slate-300">
-                            {inv.partyType || 'CUSTOMER'}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5">
-                          {inv.customerName || inv.customer?.name || 'Walk-in Customer'} • {formatDate(inv.createdAt)}
-                        </div>
+              <SearchAutocomplete<any>
+                id="return-invoice-search"
+                label="Search Invoice # or Customer / Dealer Name"
+                placeholder="e.g. INV-2026-00084 or Customer name..."
+                value={invoiceSearchQuery}
+                onInputChange={setInvoiceSearchQuery}
+                onClear={() => setInvoiceSearchQuery("")}
+                options={invoiceSearch.results}
+                loading={invoiceSearch.loading}
+                error={invoiceSearch.error}
+                getOptionKey={inv => inv.id}
+                inputClassName="bg-gray-50 rounded-xl py-2.5 text-xs font-medium"
+                // Applies the invoice by its database id / record, not its number text.
+                onSelect={inv => { applyOrderForReturn(inv); setInvoiceSearchQuery(""); }}
+                renderOption={inv => (
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <div className="min-w-0">
+                      <div className="font-mono font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        #{inv.invoiceNum}
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-slate-300">
+                          {inv.partyType || 'CUSTOMER'}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <div className="font-mono font-bold text-gray-900 dark:text-white">
-                          ₹{Number(inv.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </div>
-                        <span className="text-[10px] text-emerald-600 font-semibold">Select Invoice →</span>
+                      <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5 truncate">
+                        {inv.customerName || inv.customer?.name || 'Walk-in Customer'} • {formatDate(inv.createdAt)}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="text-right shrink-0">
+                      <div className="font-mono font-bold text-gray-900 dark:text-white">
+                        ₹{Number(inv.totalAmount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                      <span className="text-[10px] text-emerald-600 font-semibold">{inv.status || 'COMPLETED'}</span>
+                    </div>
+                  </div>
+                )}
+              />
             </div>
 
             {/* Quick Pick Recent Invoices */}
@@ -1150,7 +1121,7 @@ export default function SalesReturnsPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search return # or party"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search return # or party..."

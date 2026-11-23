@@ -218,7 +218,7 @@ export default function DayBookPage() {
     return entries.filter((row) => {
       // 1. Search filter across Name, Ref No, Type, Payment Mode, Particulars
       if (searchTerm.trim()) {
-        const query = searchTerm.toLowerCase();
+        const query = searchTerm.trim().toLowerCase();
         const matchName = (row.name || row.partyName || "").toLowerCase().includes(query);
         const matchRef = (row.refNo || row.paymentNumber || "").toLowerCase().includes(query);
         const matchType = (row.type || row.transactionType || "").toLowerCase().includes(query);
@@ -559,7 +559,7 @@ export default function DayBookPage() {
           {/* Search Box */}
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search Name, Ref No, Type"
               type="text"
               placeholder="Search Name, Ref No, Type..."
               value={searchTerm}

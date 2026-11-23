@@ -1504,7 +1504,7 @@ export default function FranchiseOrdersPage() {
                         {/* Search Input */}
                         <div className="relative">
                           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                          <input
+                          <input aria-label="Search by product name, SKU, pack size (e.g. 500G), or code"
                             type="text"
                             placeholder="Search by product name, SKU, pack size (e.g. 500G), or code..."
                             value={itemSearches[idx] || ""}

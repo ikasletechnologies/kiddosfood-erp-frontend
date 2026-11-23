@@ -21,6 +21,8 @@ import PurchaseReturnDetailsModal from "./PurchaseReturnDetailsModal";
 import NewPurchaseReturnModal from "./NewPurchaseReturnModal";
 import { useToast } from "@/context/ToastContext";
 import { formatDate } from "@/lib/utils";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
+import { matchesSearch } from "@/lib/search";
 
 const STATUS_STYLES: Record<string, { label: string; color: string; bg: string; border: string }> = {
   PENDING:   { label: "Pending",   color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-900/40" },
@@ -34,6 +36,9 @@ export default function PurchaseReturnsClient() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Debounced (300 ms) + trimmed term actually sent to the API.
+  const searchTerm = useSearchTerm(search);
+  const beginLoad = useLatestRequest();
   const [statusFilter, setStatusFilter] = useState("");
   const [view, setView] = useState<"RETURNS" | "HISTORY">("RETURNS");
   const [historyFrom, setHistoryFrom] = useState("");
@@ -46,12 +51,15 @@ export default function PurchaseReturnsClient() {
   const { showToast } = useToast();
 
   async function loadData() {
+    // Ignore responses of older requests (stale results must not win).
+    const req = beginLoad();
     setLoading(true);
     try {
       const [rRes, vRes] = await Promise.all([
-        api.get("/api/purchase/returns", { params: { search, status: statusFilter } }),
+        api.get("/api/purchase/returns", { params: { search: searchTerm || undefined, status: statusFilter } }),
         api.get("/api/vendors")
       ]);
+      if (!req.isLatest()) return;
       const rawReturns = rRes.data || [];
       const uniqueReturns = new Map<string, any>();
       for (const purchaseReturn of rawReturns) {
@@ -75,10 +83,10 @@ export default function PurchaseReturnsClient() {
       console.error(e);
       showToast("Failed to load purchase returns", "error");
     }
-    setLoading(false);
+    if (req.isLatest()) setLoading(false);
   }
 
-  useEffect(() => { loadData(); }, [search, statusFilter]);
+  useEffect(() => { loadData(); }, [searchTerm, statusFilter]);
 
   async function updateStatus(id: string, status: string, reason?: string) {
     try {
@@ -94,8 +102,7 @@ export default function PurchaseReturnsClient() {
   }
 
   const filteredReturns = returns.filter(r => {
-    const query = search.toLowerCase();
-    const matchSearch = !search || r.returnNumber?.toLowerCase().includes(query) || r.vendor?.name?.toLowerCase().includes(query) || r.procurementOrder?.poNumber?.toLowerCase().includes(query) || r.reason?.toLowerCase().includes(query);
+    const matchSearch = matchesSearch(search, r.returnNumber, r.vendor?.name, r.procurementOrder?.poNumber, r.reason);
     const matchStatus = !statusFilter || r.status === statusFilter;
     const matchView = view === "RETURNS" ? r.status === "PENDING" : r.status !== "PENDING";
     const createdDate = (r.updatedAt || r.createdAt) ? new Date(r.updatedAt || r.createdAt) : null;
@@ -171,7 +178,7 @@ export default function PurchaseReturnsClient() {
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3 w-full">
           <div className="relative w-full sm:w-[320px] sm:flex-none lg:w-[360px]">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search return # or vendor"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search return # or vendor..."

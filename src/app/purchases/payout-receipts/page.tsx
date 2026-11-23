@@ -11,6 +11,8 @@ import { vendorsApi, accountsApi, accountingApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { formatDate, shareText } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -88,7 +90,6 @@ export default function PaymentOutPage() {
   // form
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [vendorSearch, setVendorSearch] = useState("");
-  const [showVendorDrop, setShowVendorDrop] = useState(false);
   const [paymentMode, setPaymentMode] = useState("Cash");
   const [receiptNo] = useState("Auto");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -112,7 +113,6 @@ export default function PaymentOutPage() {
   const [showToCal, setShowToCal] = useState(false);
 
   const calRef = useRef<HTMLDivElement>(null);
-  const vendorDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
@@ -164,7 +164,6 @@ export default function PaymentOutPage() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (vendorDropRef.current && !vendorDropRef.current.contains(e.target as Node)) setShowVendorDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(e.target as Node)) setShowShareDrop(false);
       if (calRef.current && !calRef.current.contains(e.target as Node)) setShowCalendar(false);
       if (fromCalRef.current && !fromCalRef.current.contains(e.target as Node)) setShowFromCal(false);
@@ -174,8 +173,9 @@ export default function PaymentOutPage() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const filteredVendors = vendors.filter(v =>
-    !vendorSearch || v.name?.toLowerCase().includes(vendorSearch.toLowerCase())
+  const vendorQuery = selectedVendor && vendorSearch === selectedVendor.name ? "" : vendorSearch;
+  const filteredVendors = dedupeById(vendors).filter(v =>
+    matchesSearch(vendorQuery, v.name, v.vendorCode, v.phone, v.gstNumber)
   );
 
   const openCreate = () => {
@@ -221,8 +221,8 @@ export default function PaymentOutPage() {
 
   const filtered = payments.filter(p =>
     !search ||
-    p.vendorName?.toLowerCase().includes(search.toLowerCase()) ||
-    p.receiptNo?.toLowerCase().includes(search.toLowerCase())
+    p.vendorName?.toLowerCase().includes(search.trim().toLowerCase()) ||
+    p.receiptNo?.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const totalPaid   = filtered.reduce((s, p) => s + p.amount, 0);
@@ -253,49 +253,36 @@ export default function PaymentOutPage() {
               <div className="space-y-3 min-w-0">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vendor / Party *</label>
-                  <div className="relative" ref={vendorDropRef}>
-                    <div
-                      className={clsx("flex items-center gap-2 border rounded-lg px-3 py-2 cursor-pointer bg-white dark:bg-white/5 transition-colors",
-                        showVendorDrop ? "border-orange-400 ring-1 ring-orange-100 dark:ring-orange-950/40" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
-                      )}
-                      onClick={() => setShowVendorDrop(v => !v)}
-                    >
-                      <input
-                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                        placeholder="Search by vendor name..."
-                        value={vendorSearch}
-                        onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
-                        onClick={e => { e.stopPropagation(); setShowVendorDrop(true); }}
-                      />
-                      {(vendorSearch || selectedVendor) && (
-                        <X 
-                          size={14} 
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                          onClick={(e) => { e.stopPropagation(); setVendorSearch(""); setSelectedVendor(null); }} 
-                        />
-                      )}
-                      <ChevronDown size={13} className="text-gray-400 shrink-0" />
-                    </div>
-                    {showVendorDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                          {filteredVendors.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
-                          ) : filteredVendors.map(v => (
-                            <button key={v.id}
-                              className="w-full flex items-start px-3 py-2 hover:bg-orange-50/50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left"
-                              onClick={() => { setSelectedVendor(v); setVendorSearch(v.name); setShowVendorDrop(false); }}
-                            >
-                              <div>
-                                <div className="text-sm font-medium text-gray-800 dark:text-white">{v.name}</div>
-                                <div className="text-xs text-gray-400 dark:text-slate-500">{v.phone || "—"}</div>
-                              </div>
-                            </button>
-                          ))}
+                  <SearchAutocomplete<any>
+                    id="payout-vendor-search"
+                    label="Vendor / Party"
+                    placeholder="Search vendor name, code or phone..."
+                    minChars={0}
+                    value={vendorSearch}
+                    onInputChange={text => {
+                      setVendorSearch(text);
+                      // The payment is recorded against selectedVendor.id: editing the
+                      // name must un-select it so the wrong vendor can't be paid.
+                      if (selectedVendor && text !== selectedVendor.name) setSelectedVendor(null);
+                    }}
+                    onClear={() => { setVendorSearch(""); setSelectedVendor(null); }}
+                    options={filteredVendors}
+                    getOptionKey={v => v.id}
+                    inputClassName="border-gray-300 text-sm"
+                    onSelect={v => { setSelectedVendor(v); setVendorSearch(v.name); }}
+                    renderOption={v => {
+                      const due = Number(v.balanceDue ?? (v.balance > 0 ? v.balance : 0)) || 0;
+                      return (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-800 dark:text-white truncate">{v.name}</div>
+                            <div className="text-xs text-gray-400 dark:text-slate-500 truncate">{[v.vendorCode, v.phone].filter(Boolean).join(" · ") || "—"}</div>
+                          </div>
+                          {due > 0 && <div className="text-[11px] font-semibold text-rose-600 shrink-0">Due ₹{due.toLocaleString("en-IN")}</div>}
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      );
+                    }}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Payment Mode</label>
@@ -439,7 +426,7 @@ export default function PaymentOutPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by vendor or receipt..."
+            <input aria-label="Search by vendor or receipt" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by vendor or receipt..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />
             {search && (

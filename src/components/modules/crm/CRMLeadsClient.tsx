@@ -191,7 +191,7 @@ export default function CRMLeadsClient() {
                 CSV
               </button>
               <div className="relative group w-64">
-                <input
+                <input aria-label="Search Leads"
                   type="text"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}

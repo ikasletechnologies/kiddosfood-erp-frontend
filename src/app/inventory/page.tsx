@@ -189,7 +189,7 @@ export default function InventoryPage() {
   const filteredItems = useMemo(() => {
     return items.filter((item: any) => {
       const searchStr = `${item.name} ${item.sku} ${item.category}`.toLowerCase();
-      return searchStr.includes(searchTerm.toLowerCase());
+      return searchStr.includes(searchTerm.trim().toLowerCase());
     });
   }, [items, searchTerm]);
 

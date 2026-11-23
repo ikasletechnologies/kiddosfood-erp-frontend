@@ -133,8 +133,8 @@ export default function QCClient({ embedded = false }: { embedded?: boolean }) {
   const prodBatchName = (batch: any) => batch.product?.name || batch.production?.recipe?.name || 'Unknown';
 
   const searchedProdBatches = prodBatches.filter(batch =>
-    prodBatchName(batch).toLowerCase().includes(searchQuery.toLowerCase()) ||
-    batch.batchCode.toLowerCase().includes(searchQuery.toLowerCase())
+    prodBatchName(batch).toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    batch.batchCode.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
   const filteredProdBatches = searchedProdBatches.filter(batch => batch.qcStatus === 'PENDING');
   const filteredProdHistory = searchedProdBatches
@@ -161,7 +161,7 @@ export default function QCClient({ embedded = false }: { embedded?: boolean }) {
         <div className="space-y-4 w-full min-w-0">
           <div className="relative w-full sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search finished goods or batches"
               type="text"
               placeholder="Search finished goods or batches..."
               value={searchQuery}

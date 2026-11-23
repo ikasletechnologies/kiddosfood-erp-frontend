@@ -21,6 +21,8 @@ import { canViewCost, signedMoney, toneOf, useProfitEstimate } from "@/lib/profi
 import { LineProfit, LossWarning, ProfitSummaryPanel } from "@/components/sales/ProfitEstimate";
 import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
 import { catalogPrice, LotAllocation, SaleLot } from "@/lib/lot-pricing";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch, searchParam, SEARCH_DEBOUNCE_MS } from "@/lib/search";
 
 // ── Party types ────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,7 @@ export default function POSPage() {
   const [partyResults, setPartyResults]   = useState<any[]>([]);
   const [selectedParty, setSelectedParty] = useState<any>(null);
   const [showPartyDrop, setShowPartyDrop] = useState(false);
+  const [partyLoading, setPartyLoading] = useState(false);
   // Quick-add Customer/Dealer from the party search box
   const [showAddParty, setShowAddParty]   = useState(false);
   const [addPartySeed, setAddPartySeed]   = useState<any>(undefined);
@@ -448,11 +451,14 @@ export default function POSPage() {
   // Party list: everyone of the active type as soon as the box is opened,
   // narrowed as the cashier types (from the first letter). Inactive dealers
   // and the HQ franchise can't be billed, so they aren't offered.
+  const partyKey = searchParam(partySearch) ?? ""; // trimmed: trailing spaces don't refetch
   useEffect(() => {
     if (!showPartyDrop) return;
-    const q = partySearch.trim();
-    let cancelled = false;
+    const q = partyKey;
+    let cancelled = false; // a newer search / party type makes this response stale
+    if (q) setPartyLoading(true);
     const t = setTimeout(() => {
+      setPartyLoading(true);
       const params = q ? { search: q } : undefined;
       const req: Promise<any> =
         partyType === "CUSTOMER" ? (q ? customersApi.search(q) : api.get("/api/customers"))
@@ -463,12 +469,13 @@ export default function POSPage() {
         const data = res.data?.data || res.data || [];
         const list = (Array.isArray(data) ? data : [])
           .filter((p: any) => !(partyType === "DEALER" && p.status === "INACTIVE") && !(partyType === "FRANCHISE" && p.isHQ))
-          .filter((p: any) => !q || [p.name, p.phone, p.contactNum].some((v) => v && String(v).toLowerCase().includes(q.toLowerCase())));
-        setPartyResults(list.slice(0, 50));
-      }).catch(() => { if (!cancelled) setPartyResults([]); });
-    }, q ? 200 : 0);
+          .filter((p: any) => matchesSearch(q, p.name, p.phone, p.contactNum));
+        setPartyResults(dedupeById(list).slice(0, 50));
+      }).catch(() => { if (!cancelled) setPartyResults([]); })
+        .finally(() => { if (!cancelled) setPartyLoading(false); });
+    }, q ? SEARCH_DEBOUNCE_MS : 0);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [partySearch, partyType, showPartyDrop]);
+  }, [partyKey, partyType, showPartyDrop]);
 
   // Close party dropdown on outside click
   useEffect(() => {
@@ -857,11 +864,10 @@ export default function POSPage() {
   // ── Filtered products ──────────────────────────────────────────────────────
 
   // Matches by product name or SKU.
-  const filtered = products.filter(p => {
-    const q = search.toLowerCase().trim();
-    return (activeCategory === "All" || p.category === activeCategory) &&
-      (p.name.toLowerCase().includes(q) || (!!p.sku && p.sku.toLowerCase().includes(q)));
-  });
+  const filtered = products.filter(p =>
+    (activeCategory === "All" || p.category === activeCategory) &&
+    matchesSearch(search, p.name, p.sku)
+  );
 
   // ── Keyboard Shortcuts & Actions ──────────────────────────────────────────
   
@@ -1019,61 +1025,51 @@ export default function POSPage() {
         {/* Search bar */}
         <div className="bg-white dark:bg-card border-b border-gray-200 dark:border-white/5 px-4 py-3 shrink-0 w-full min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-              <input
-                ref={searchRef}
-                type="text"
-                placeholder="Search products (Space to focus)..."
+            <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
+              <SearchAutocomplete<any>
+                id="pos-product-search"
+                label="Search products"
+                placeholder="Search products by name or SKU (Space to focus)..."
+                inputRef={searchRef}
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
+                onInputChange={setSearch}
+                onClear={() => setSearch("")}
+                options={search.trim() ? filtered.slice(0, 50) : []}
+                getOptionKey={p => p.id}
+                inputClassName="bg-gray-50 rounded-xl py-2.5 focus:border-blue-500"
+                onSelect={p => {
+                  addToCart(p);
+                  setSearch("");
+                  searchRef.current?.focus();
+                }}
+                renderOption={p => (
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2 truncate">
+                        {p.name}
+                        {formatPackSize(p.packSize) && (
+                          <span className="text-xs font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span>{p.sku || "No SKU"}</span>
+                        {p.category && <span>· {p.category}</span>}
+                        {p.stock !== null && (
+                          <span className={clsx(
+                            "font-bold",
+                            p.stock === 0 ? "text-red-500" : p.stock <= 5 ? "text-amber-500" : "text-green-500"
+                          )}>
+                            · {p.stock === 0 ? "OUT OF STOCK" : `${p.stock} IN STOCK`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm font-black text-right shrink-0" style={{ color: BRAND_ORANGE }}>
+                      {posPriceLabel(p).label}
+                    </div>
+                  </div>
+                )}
               />
-              {search && (
-                <X 
-                  size={14} 
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors z-10" 
-                  onClick={() => setSearch("")} 
-                />
-              )}
-              {search && filtered.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto custom-scrollbar">
-                  {filtered.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        addToCart(p);
-                        setSearch("");
-                        searchRef.current?.focus();
-                      }}
-                      className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 flex items-center justify-between group transition-colors"
-                    >
-                      <div>
-                        <div className="text-sm font-bold text-gray-800 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex items-center gap-2">
-                          {p.name}
-                          {formatPackSize(p.packSize) && (
-                            <span className="text-xs font-bold text-gray-400 dark:text-slate-500">· {formatPackSize(p.packSize)}</span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-gray-500 dark:text-slate-400 mt-0.5 flex items-center gap-2">
-                          <span>{p.sku || "No SKU"}</span>
-                          {p.stock !== null && (
-                            <span className={clsx(
-                              "font-bold",
-                              p.stock === 0 ? "text-red-500" : p.stock <= 5 ? "text-amber-500" : "text-green-500"
-                            )}>
-                              · {p.stock === 0 ? "OUT OF STOCK" : `${p.stock} IN STOCK`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-sm font-black text-right" style={{ color: BRAND_ORANGE }}>
-                        {posPriceLabel(p).label}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
             <button
               onClick={() => { setShowScanner(true); setScannedProduct(null); }}
@@ -1237,60 +1233,51 @@ export default function POSPage() {
               </button>
             </div>
           ) : (
-            <div className="relative">
-              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-              <input
-                type="text"
-                placeholder={`Search ${activeTab.label}...`}
-                value={partySearch}
-                onChange={e => { setPartySearch(e.target.value); setShowPartyDrop(true); }}
-                onFocus={() => setShowPartyDrop(true)}
-                className="w-full bg-gray-50 dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
-              />
-            {partySearch && (
-              <X 
-                size={14} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors" 
-                onClick={() => setPartySearch("")} 
-              />
-            )}
-              {showPartyDrop && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-xl shadow-lg overflow-hidden">
-                  <button
-                    onClick={openAddParty}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 transition-colors"
-                  >
-                    <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
-                      <Plus size={12} />
-                    </span>
-                    Add {activeTab.label}
-                    {partySearch.trim() && <span className="font-normal text-gray-400 dark:text-slate-500 truncate">“{partySearch.trim()}”</span>}
-                  </button>
-                  {partyResults.length === 0 && (
-                    <div className="px-3 py-3 text-xs text-gray-400 dark:text-slate-500 text-center">
-                      No {activeTab.label.toLowerCase()} found
-                    </div>
-                  )}
-                  <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                  {partyResults.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => { setSelectedParty(p); setPartySearch(p.name); setShowPartyDrop(false); setPartyResults([]); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left transition-colors"
-                    >
-                      <div className="w-7 h-7 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-semibold text-xs text-gray-600 dark:text-slate-300 shrink-0">
-                        {p.name?.[0]?.toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{p.name}</p>
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500">{p.phone || p.contactNum || p.location || ""}</p>
-                      </div>
-                    </button>
-                  ))}
+            <SearchAutocomplete<any>
+              id="pos-party-search"
+              label={`Search ${activeTab.label}`}
+              placeholder={`Search ${activeTab.label} name or phone...`}
+              minChars={0}
+              value={partySearch}
+              onFocus={() => setShowPartyDrop(true)}
+              onInputChange={text => { setPartySearch(text); setShowPartyDrop(true); }}
+              onClear={() => { setPartySearch(""); setSelectedParty(null); }}
+              options={partyResults}
+              loading={partyLoading}
+              getOptionKey={p => p.id}
+              inputClassName="bg-gray-50 rounded-xl text-xs focus:border-blue-500"
+              // Stores the party record (database id), not just the typed name.
+              onSelect={p => { setSelectedParty(p); setPartySearch(p.name); setShowPartyDrop(false); setPartyResults([]); }}
+              renderOption={p => (
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 bg-gray-100 dark:bg-white/5 rounded-lg flex items-center justify-center font-semibold text-xs text-gray-600 dark:text-slate-300 shrink-0">
+                    {p.name?.[0]?.toUpperCase()}
                   </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-gray-800 dark:text-white truncate">{p.name}</p>
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 truncate">
+                      {[p.customerCode || p.dealerCode || p.code, p.phone || p.contactNum || p.location].filter(Boolean).join(" · ") || activeTab.label}
+                    </p>
+                  </div>
+                  {Number(p.balance ?? p.outstanding ?? 0) !== 0 && (
+                    <span className="text-[10px] font-semibold text-rose-600 shrink-0">₹{Number(p.balance ?? p.outstanding).toLocaleString("en-IN")}</span>
+                  )}
                 </div>
               )}
-            </div>
+              footer={close => (
+                <button
+                  type="button"
+                  onClick={() => { close(); openAddParty(); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                >
+                  <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center shrink-0">
+                    <Plus size={12} />
+                  </span>
+                  Add {activeTab.label}
+                  {partySearch.trim() && <span className="font-normal text-gray-400 dark:text-slate-500 truncate">“{partySearch.trim()}”</span>}
+                </button>
+              )}
+            />
           )}
         </div>
 
@@ -1814,7 +1801,7 @@ export default function POSPage() {
                 </label>
                 <div className="relative">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                  <input
+                  <input aria-label="Search by Invoice # (e.g. POS-2026-00001, SO-001) or Party Name"
                     type="text"
                     autoFocus
                     placeholder="Search by Invoice # (e.g. POS-2026-00001, SO-001) or Party Name..."

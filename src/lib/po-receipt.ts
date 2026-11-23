@@ -9,3 +9,16 @@ export function poStatusLabel(status: string) {
   if (status === "RECEIVED") return "Fully Received";
   return status.split("_").map(word => word.charAt(0) + word.slice(1).toLowerCase()).join(" ");
 }
+
+/**
+ * Ordered / pending totals of a PO from its own lines. `pendingQty` is the
+ * server-maintained balance (GRN post / return / short-close); `pending` is
+ * `null` when any line lacks it (older server) and the caller must ask the
+ * remaining-quantity API instead.
+ */
+export function poQtyTotals(po: { poItems?: Array<{ quantity?: number | null; pendingQty?: number | null }> | null }): { ordered: number; pending: number | null } {
+  const lines = po.poItems || [];
+  const ordered = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+  if (lines.length === 0 || lines.some(l => typeof l.pendingQty !== "number")) return { ordered, pending: null };
+  return { ordered, pending: lines.reduce((s, l) => s + Math.max(0, Number(l.pendingQty) || 0), 0) };
+}

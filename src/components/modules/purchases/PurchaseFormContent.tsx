@@ -7,7 +7,7 @@ import LineItemsTable from "@/components/documents/LineItemsTable";
 import DocumentSummary from "@/components/documents/DocumentSummary";
 import { ChevronDown, Calendar, Plus, Warehouse, CreditCard, Tag, FileText, CheckCircle2, Package, X, ArrowLeft } from "lucide-react";
 import { PurchaseOrderProvider, usePurchaseOrder } from "@/context/PurchaseOrderContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { clsx } from "clsx";
 
 import WarehouseFormSidebar from "@/components/modals/WarehouseFormSidebar";
@@ -50,6 +50,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   const [activeTab, setActiveTab] = useState<"items" | "notes">("items");
   const [showWarehouseModal, setShowWarehouseModal] = useState(false);
   const [warehouses, setWarehouses] = useState<{id: string, name: string}[]>([]);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     const fetchWarehouses = async () => {
@@ -79,6 +80,9 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
   };
 
   const handleCreatePO = async () => {
+    // Synchronous double-submit guard: `isSubmitting` state only takes effect
+    // after a re-render, so two very fast clicks could both get past it.
+    if (submittingRef.current) return;
     if (!selectedVendor) {
       toast.error("Please select a vendor.");
       return;
@@ -103,6 +107,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       return;
     }
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     try {
       const payload = {
@@ -154,6 +159,7 @@ export function NewPurchaseContent({ editId }: { editId?: string }) {
       clearUnavailableSelection(error);
       toast.error(error.response?.data?.error || "Failed to create Purchase Order. Please check your inputs.");
     } finally {
+      submittingRef.current = false;
       setIsSubmitting(false);
     }
   };

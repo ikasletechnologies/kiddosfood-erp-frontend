@@ -53,8 +53,8 @@ export default function ItemReportByParty() {
   }, [startDate, endDate]);
 
   const filtered = reportData.filter(row =>
-    row.partyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    row.itemName.toLowerCase().includes(searchTerm.toLowerCase())
+    row.partyName.toLowerCase().includes(searchTerm.trim().toLowerCase()) ||
+    row.itemName.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
 
   const totalSaleQty = filtered.reduce((sum, r) => sum + r.saleQuantity, 0);
@@ -119,7 +119,7 @@ export default function ItemReportByParty() {
           {/* Search */}
           <div className="relative flex-1 md:flex-initial">
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
+            <input aria-label="Search by party or item"
               type="text"
               placeholder="Search by party or item..."
               value={searchTerm}

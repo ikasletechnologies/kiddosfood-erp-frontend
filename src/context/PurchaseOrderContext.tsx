@@ -178,8 +178,6 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         });
       });
     } else {
-      let draftVendorId: string | null = null;
-
       const prefilled = sessionStorage.getItem('prefilledPoItems');
       if (prefilled) {
         try {
@@ -205,59 +203,11 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
         } catch (e) {
           console.error("Failed to parse prefilled PO items", e);
         }
-      } else {
-        const saved = localStorage.getItem('draftPurchaseOrder');
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            if (parsed.selectedVendor) {
-              setSelectedVendor(parsed.selectedVendor);
-              draftVendorId = parsed.selectedVendor.id || null;
-              if (draftVendorId) {
-                import('@/lib/api').then(({ vendorsApi }) => {
-                  vendorsApi.getById(draftVendorId!).then((res) => {
-                    if (res.data) {
-                      const latestV = res.data;
-                      setSelectedVendor((prev: any) => ({
-                        ...(prev || {}),
-                        ...latestV,
-                        id: latestV.id,
-                        name: latestV.name,
-                        status: latestV.status,
-                        phone: latestV.phone || latestV.mobile || latestV.contact,
-                        advanceBalance: latestV.advanceBalance || (latestV.balance < 0 ? Math.abs(latestV.balance) : 0),
-                        balanceDue: latestV.balanceDue || (latestV.balance > 0 ? latestV.balance : 0)
-                      }));
-                    }
-                  }).catch(err => {
-                    console.error("Failed to revalidate draft vendor status", err);
-                  });
-                });
-              }
-            }
-            if (parsed.items && parsed.items.length > 0) setItems(parsed.items);
-            if (parsed.purchaseType) setPurchaseType(parsed.purchaseType);
-            if (parsed.warehouseId) setWarehouseId(parsed.warehouseId);
-            // New POs always use today in the business timezone, including restored drafts.
-            setPurchaseDate(purchaseBusinessDate());
-            if (parsed.dueDate) setDueDate(parsed.dueDate);
-            if (parsed.expectedDeliveryDate) setExpectedDeliveryDate(parsed.expectedDeliveryDate);
-            if (parsed.paymentTerms) setPaymentTerms(parsed.paymentTerms);
-            if (parsed.invoiceNo) setInvoiceNo(parsed.invoiceNo);
-            if (parsed.quotationNo) setQuotationNo(parsed.quotationNo);
-            if (parsed.poStatus) setPoStatus(parsed.poStatus);
-            if (parsed.discountAmount !== undefined) setDiscountAmount(Number(parsed.discountAmount) || 0);
-            if (parsed.freightCost !== undefined) setFreightCost(Number(parsed.freightCost) || 0);
-            if (parsed.useAdvance !== undefined) setUseAdvance(Boolean(parsed.useAdvance));
-            if (parsed.notes !== undefined) setNotes(parsed.notes || "");
-            if (parsed.internalNotes !== undefined) setInternalNotes(parsed.internalNotes || "");
-            if (parsed.vendorNotes !== undefined) setVendorNotes(parsed.vendorNotes || "");
-            if (parsed.contextMessage !== undefined) setContextMessage(parsed.contextMessage || null);
-          } catch (e) {
-            console.error("Failed to parse draft PO", e);
-          }
-        }
       }
+      // No automatic draft restore: a new PO always opens empty. Unsaved
+      // edits live in React state only and are discarded on refresh, back or
+      // cancel. A draft exists only when the user clicks "Save As Draft"
+      // (a real DRAFT PO on the server).
 
       // Check if vendorId is in URL (e.g. redirected after creating vendor)
       if (typeof window !== "undefined") {
@@ -291,10 +241,10 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
             }).catch(err => console.error("Failed to auto-select vendor from URL", err));
           });
         } else {
-          prevVendorIdRef.current = draftVendorId;
+          prevVendorIdRef.current = null;
         }
       } else {
-        prevVendorIdRef.current = draftVendorId;
+        prevVendorIdRef.current = null;
       }
 
       setIsLoaded(true);
@@ -403,33 +353,6 @@ export function PurchaseOrderProvider({ children, editId }: { children: React.Re
     refresh(); const timer = window.setInterval(refresh, 60000); window.addEventListener('focus',refresh);
     return () => { window.clearInterval(timer); window.removeEventListener('focus',refresh); };
   },[editId]);
-
-  // Save draft to localStorage whenever fields change (only when creating new PO)
-  useEffect(() => {
-    if (!isLoaded || editId) return;
-    const draft = {
-      poNumber,
-      invoiceNo,
-      quotationNo,
-      selectedVendor,
-      items,
-      purchaseDate,
-      dueDate,
-      expectedDeliveryDate,
-      warehouseId,
-      purchaseType,
-      paymentTerms,
-      poStatus,
-      discountAmount,
-      freightCost,
-      useAdvance,
-      notes,
-      internalNotes,
-      vendorNotes,
-      contextMessage,
-    };
-    localStorage.setItem('draftPurchaseOrder', JSON.stringify(draft));
-  }, [poNumber, invoiceNo, quotationNo, selectedVendor, items, purchaseDate, dueDate, expectedDeliveryDate, warehouseId, purchaseType, paymentTerms, poStatus, discountAmount, freightCost, useAdvance, notes, internalNotes, vendorNotes, contextMessage, isLoaded, editId]);
 
   const addItem = () => {
     setItems(prev => [

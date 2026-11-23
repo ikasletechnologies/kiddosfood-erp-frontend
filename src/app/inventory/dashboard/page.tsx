@@ -79,8 +79,8 @@ export default function InventoryDashboardPage() {
   };
 
   const filtered = items.filter(item => {
-    const matchSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
-      item.sku.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = item.name.toLowerCase().includes(search.trim().toLowerCase()) ||
+      item.sku.toLowerCase().includes(search.trim().toLowerCase());
     const matchCat = filterCat === "ALL" || item.category === filterCat;
     const isLow = item.currentStock <= item.minimumStock;
     const matchStatus =
@@ -214,7 +214,7 @@ export default function InventoryDashboardPage() {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" size={14} />
-                <input
+                <input aria-label="Search items"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search items..."

@@ -370,7 +370,7 @@ export default function RawMaterialStockClient() {
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-slate-850 rounded-xl w-full sm:w-64">
               <Search size={14} className="text-slate-400 shrink-0" />
-              <input
+              <input aria-label="Search by name or SKU"
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}

@@ -10,6 +10,8 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "react-hot-toast";
 import AddMaterialDrawer from "@/components/modules/inventory/AddMaterialDrawer";
 import { formatCurrency, formatQuantity, roundMoney } from "@/lib/utils";
+import { dedupeBy, matchesSearch, NO_MATCH_TEXT, SEARCHING_TEXT } from "@/lib/search";
+import { useLatestRequest } from "@/lib/hooks/useSearch";
 
 import { convertMeasurement, ValidUnit } from "@businessgroupikasle/erp-units";
 
@@ -51,7 +53,7 @@ export default function LineItemsTable() {
   // quantity in" — defaults to the material's base unit (item.unit) and is
   // reset whenever a row's material changes.
   const [entryUnits, setEntryUnits] = useState<Record<string, string>>({});
-  const [materials, setMaterials] = useState<any[]>([]);
+  const [materials, setMaterialsState] = useState<any[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,10 @@ export default function LineItemsTable() {
   const [showAddMaterialDrawer, setShowAddMaterialDrawer] = useState(false);
   const [prefilledMaterialName, setPrefilledMaterialName] = useState("");
   const [targetDrawerItemId, setTargetDrawerItemId] = useState<string | null>(null);
+
+  // Keyboard-highlighted suggestion in the open material dropdown.
+  const [activeMatIndex, setActiveMatIndex] = useState(0);
+  const beginMaterialsRequest = useLatestRequest();
 
   // Reset search query when switching items
   useEffect(() => {
@@ -93,6 +99,13 @@ export default function LineItemsTable() {
 
   // Fetch materials based on purchaseType and isBulkPurchase
   useEffect(() => {
+    // Only the latest request may apply its list (switching purchase type
+    // quickly must not let an older, slower response overwrite the newer one).
+    const req = beginMaterialsRequest();
+    const setMaterials = (rows: any[]) => {
+      if (!req.isLatest()) return;
+      setMaterialsState(dedupeBy(Array.isArray(rows) ? rows : [], (m: any) => m?.inventoryItemId || m?.id));
+    };
     const fetchMaterials = async () => {
       setLoadingMaterials(true);
       try {
@@ -117,11 +130,11 @@ export default function LineItemsTable() {
       } catch (error) {
         console.error('Failed to fetch materials', error);
       } finally {
-        setLoadingMaterials(false);
+        if (req.isLatest()) setLoadingMaterials(false);
       }
     };
     fetchMaterials();
-  }, [materialRefreshKey, purchaseType, isBulkPurchase]);
+  }, [materialRefreshKey, purchaseType, isBulkPurchase, beginMaterialsRequest]);
 
   // In Add Material Drawer success, trigger refresh and auto-select
   const handleAddMaterialSuccess = (createdMaterial?: any) => {
@@ -207,15 +220,64 @@ export default function LineItemsTable() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, itemId: string) => {
+    // Open material dropdown: Arrow Up / Down move, Enter selects, Escape / Tab close.
+    if (activeSearchId === itemId) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveMatIndex(i => Math.min(i + 1, Math.max(0, filteredMaterials.length - 1)));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveMatIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const m = filteredMaterials[activeMatIndex];
+        if (m && !loadingMaterials) selectMaterial(itemId, m);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setActiveSearchId(null);
+        return;
+      }
+      if (e.key === "Tab") setActiveSearchId(null);
+      return; // Space etc. type normally (multi-word names must be searchable)
+    }
     if (e.key === "Enter" && !activeSearchId) {
       e.preventDefault();
       addItem();
     }
-    if (e.key === " " && (e.target as HTMLInputElement).placeholder.includes("Material")) {
+    if ((e.key === " " || e.key === "ArrowDown") && (e.target as HTMLInputElement).placeholder?.includes("Material")) {
       e.preventDefault();
       setActiveSearchId(itemId);
       setSearchQuery("");
     }
+  };
+
+  // Selecting a suggestion stores the material's database id (not its name).
+  const selectMaterial = (itemId: string, m: any) => {
+    const vendorPrice = getVendorPrice(m.id);
+    const displayPrice = vendorPrice !== null ? vendorPrice : (m.price || 0);
+    updateItem(itemId, {
+      materialId: m.inventoryItemId || m.id,
+      name: m.name,
+      unit: m.unit || (isBulkPurchase ? "KG" : "PC"),
+      price: displayPrice,
+      gstRate: m.gstRate || 0,
+      isBulk: Boolean(m.isBulk || isBulkPurchase),
+      productId: m.productId || m.id,
+    });
+    setEntryUnits(prev => ({ ...prev, [itemId]: m.unit || "KG" }));
+    if (vendorPrice !== null) {
+      setAutoFilledIds(prev => new Set(prev).add(itemId));
+    } else {
+      setAutoFilledIds(prev => { const s = new Set(prev); s.delete(itemId); return s; });
+    }
+    setActiveSearchId(null);
   };
 
   // When a vendor is selected, materials they've supplied before are shown
@@ -238,11 +300,11 @@ export default function LineItemsTable() {
 
   const filteredMaterials = materials
     .filter(m => {
-      // Exclude materials already added to OTHER rows
-      if (otherSelectedMaterialIds.has(m.id)) return false;
-
-      if (!searchQuery.trim()) return true;
-      return m.name.toLowerCase().includes(searchQuery.toLowerCase()) || m.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+      // Exclude materials already added to OTHER rows (rows store
+      // inventoryItemId || id, so check both) -> no duplicate product lines.
+      if (otherSelectedMaterialIds.has(m.id) || (m.inventoryItemId && otherSelectedMaterialIds.has(m.inventoryItemId))) return false;
+      // Trimmed, case-insensitive: name, SKU, HSN.
+      return matchesSearch(searchQuery, m.name, m.sku, m.hsnCode);
     })
     .sort((a, b) => {
       if (!vendorMaterialIds) return 0;
@@ -250,6 +312,15 @@ export default function LineItemsTable() {
       const bLinked = vendorMaterialIds.has(b.id) ? 0 : 1;
       return aLinked - bLinked;
     });
+
+  useEffect(() => { setActiveMatIndex(0); }, [searchQuery, activeSearchId]);
+  // Keep the keyboard-highlighted option visible (desktop "d" / mobile "m" lists).
+  useEffect(() => {
+    if (!activeSearchId) return;
+    for (const k of ["d", "m"]) {
+      document.getElementById(`mat-opt-${k}-${activeSearchId}-${activeMatIndex}`)?.scrollIntoView?.({ block: "nearest" });
+    }
+  }, [activeMatIndex, activeSearchId]);
 
   return (
     <div className="w-full min-w-0">
@@ -307,6 +378,13 @@ export default function LineItemsTable() {
                             <input
                               type="text"
                               placeholder="Search Material..."
+                              role="combobox"
+                              aria-label="Search material"
+                              aria-autocomplete="list"
+                              autoComplete="off"
+                              aria-expanded={activeSearchId === item.id}
+                              aria-controls={`mat-list-d-${item.id}`}
+                              aria-activedescendant={activeSearchId === item.id && filteredMaterials.length > 0 ? `mat-opt-d-${item.id}-${activeMatIndex}` : undefined}
                               className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
                               value={activeSearchId === item.id ? searchQuery : resolvedName}
                               readOnly={false}
@@ -416,37 +494,29 @@ export default function LineItemsTable() {
                             </div>
                           )}
 
-                          <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                          {filteredMaterials.length > 0 ? (
+                          <div id={`mat-list-d-${item.id}`} role="listbox" aria-label="Materials" className="max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                          {loadingMaterials ? (
+                              <div role="status" aria-live="polite" className="p-4 text-center text-xs text-slate-500">{SEARCHING_TEXT}</div>
+                          ) : filteredMaterials.length > 0 ? (
                               <>
-                                {filteredMaterials.map(m => {
+                                {filteredMaterials.map((m, mi) => {
                                   const vendorPrice = getVendorPrice(m.id);
                                   const displayPrice = vendorPrice !== null ? vendorPrice : (m.price || 0);
                                   const isLow = m.currentStock <= (m.minimumStock || 10);
 
                                   return (
                                     <div
-                                      key={m.id}
+                                      key={m.inventoryItemId || m.id}
+                                      id={`mat-opt-d-${item.id}-${mi}`}
+                                      role="option"
+                                      aria-selected={mi === activeMatIndex}
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onMouseEnter={() => setActiveMatIndex(mi)}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        updateItem(item.id, {
-                                          materialId: m.inventoryItemId || m.id,
-                                          name: m.name,
-                                          unit: m.unit || (isBulkPurchase ? "KG" : "PC"),
-                                          price: displayPrice,
-                                          gstRate: m.gstRate || 0,
-                                          isBulk: Boolean(m.isBulk || isBulkPurchase),
-                                          productId: m.productId || m.id,
-                                        });
-                                        setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
-                                        if (vendorPrice !== null) {
-                                          setAutoFilledIds(prev => new Set(prev).add(item.id));
-                                        } else {
-                                          setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
-                                        }
-                                        setActiveSearchId(null);
+                                        selectMaterial(item.id, m);
                                       }}
-                                      className="p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
+                                      className={clsx("p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center", mi === activeMatIndex && "bg-orange-50 dark:bg-slate-800")}
                                     >
                                        <div className="flex flex-col gap-0.5 min-w-0 pr-3">
                                           <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">{m.name}</span>
@@ -476,8 +546,8 @@ export default function LineItemsTable() {
                                 <div className="p-8 text-center space-y-3">
                                    <Package size={28} className="mx-auto text-slate-300" />
                                    <p className="text-xs text-slate-500 font-medium">
-                                      {searchQuery
-                                        ? `No materials found for "${searchQuery}"`
+                                      {searchQuery.trim()
+                                        ? NO_MATCH_TEXT
                                         : "No materials found in inventory"}
                                    </p>
                                    <button 
@@ -685,6 +755,13 @@ export default function LineItemsTable() {
                       <input
                         type="text"
                         placeholder="Search Material..."
+                        role="combobox"
+                        aria-label="Search material"
+                        aria-autocomplete="list"
+                        autoComplete="off"
+                        aria-expanded={activeSearchId === item.id}
+                        aria-controls={`mat-list-m-${item.id}`}
+                        aria-activedescendant={activeSearchId === item.id && filteredMaterials.length > 0 ? `mat-opt-m-${item.id}-${activeMatIndex}` : undefined}
                         className="w-full bg-transparent outline-none text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 placeholder:font-normal uppercase tracking-tight truncate pr-4"
                         value={activeSearchId === item.id ? searchQuery : resolvedName}
                         readOnly={false}
@@ -700,6 +777,7 @@ export default function LineItemsTable() {
                            setActiveSearchId(item.id);
                            setSearchQuery("");
                         }}
+                        onKeyDown={(e) => handleKeyDown(e, item.id)}
                       />
                       {(activeSearchId === item.id ? searchQuery : resolvedName) && (
                         <button
@@ -758,36 +836,28 @@ export default function LineItemsTable() {
                         </div>
                       )}
 
-                      <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredMaterials.length > 0 ? (
-                          filteredMaterials.map(m => {
+                      <div id={`mat-list-m-${item.id}`} role="listbox" aria-label="Materials" className="max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                        {loadingMaterials ? (
+                          <div role="status" aria-live="polite" className="p-4 text-center text-xs text-slate-500">{SEARCHING_TEXT}</div>
+                        ) : filteredMaterials.length > 0 ? (
+                          filteredMaterials.map((m, mi) => {
                             const vendorPrice = getVendorPrice(m.id);
                             const displayPrice = vendorPrice !== null ? vendorPrice : (m.price || 0);
                             const isLow = m.currentStock <= (m.minimumStock || 10);
 
                             return (
                               <div
-                                key={m.id}
+                                key={m.inventoryItemId || m.id}
+                                id={`mat-opt-m-${item.id}-${mi}`}
+                                role="option"
+                                aria-selected={mi === activeMatIndex}
+                                onMouseDown={(e) => e.preventDefault()}
+                                onMouseEnter={() => setActiveMatIndex(mi)}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  updateItem(item.id, {
-                                    materialId: m.inventoryItemId || m.id,
-                                    name: m.name,
-                                    unit: m.unit || (isBulkPurchase ? "KG" : "PC"),
-                                    price: displayPrice,
-                                    gstRate: m.gstRate || 0,
-                                    isBulk: Boolean(m.isBulk || isBulkPurchase),
-                                    productId: m.productId || m.id,
-                                  });
-                                  setEntryUnits(prev => ({ ...prev, [item.id]: m.unit || "KG" }));
-                                  if (vendorPrice !== null) {
-                                    setAutoFilledIds(prev => new Set(prev).add(item.id));
-                                  } else {
-                                    setAutoFilledIds(prev => { const s = new Set(prev); s.delete(item.id); return s; });
-                                  }
-                                  setActiveSearchId(null);
+                                  selectMaterial(item.id, m);
                                 }}
-                                className="p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
+                                className={clsx("p-3 hover:bg-orange-50 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center", mi === activeMatIndex && "bg-orange-50 dark:bg-slate-800")}
                               >
                                  <div className="flex flex-col gap-0.5 min-w-0 pr-2">
                                     <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">{m.name}</span>
@@ -805,8 +875,8 @@ export default function LineItemsTable() {
                           })
                         ) : (
                           <div className="p-4 text-center text-xs text-slate-500">
-                            {searchQuery
-                              ? `No materials matched "${searchQuery}"`
+                            {searchQuery.trim()
+                              ? NO_MATCH_TEXT
                               : "No materials found in inventory"}
                           </div>
                         )}

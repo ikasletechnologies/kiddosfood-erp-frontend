@@ -67,7 +67,7 @@ export default function ItemWiseProfitLossReport() {
   }, [startDate, endDate]);
 
   const filtered = reportData.filter(row =>
-    row.itemName.toLowerCase().includes(searchTerm.toLowerCase())
+    row.itemName.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
 
   const totalSale = filtered.reduce((sum, r) => sum + r.sale, 0);
@@ -165,7 +165,7 @@ export default function ItemWiseProfitLossReport() {
           {/* Search */}
           <div className="relative flex-1 md:flex-initial">
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
+            <input aria-label="Search items"
               type="text"
               placeholder="Search items..."
               value={searchTerm}

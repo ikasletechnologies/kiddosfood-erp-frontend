@@ -88,10 +88,10 @@ export default function TransitStockPage() {
 
   const filtered = rows.filter(r =>
     !search ||
-    r.challanNumber.toLowerCase().includes(search.toLowerCase()) ||
-    (r.partyName || "").toLowerCase().includes(search.toLowerCase()) ||
-    r.productName.toLowerCase().includes(search.toLowerCase()) ||
-    (r.batchNumber || "").toLowerCase().includes(search.toLowerCase())
+    r.challanNumber.toLowerCase().includes(search.trim().toLowerCase()) ||
+    (r.partyName || "").toLowerCase().includes(search.trim().toLowerCase()) ||
+    r.productName.toLowerCase().includes(search.trim().toLowerCase()) ||
+    (r.batchNumber || "").toLowerCase().includes(search.trim().toLowerCase())
   );
 
   // Every row here is already IN_TRANSIT by construction (getTransitStock
@@ -193,7 +193,7 @@ export default function TransitStockPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" size={16} />
-            <input
+            <input aria-label="Search by Challan, Party, Product or Batch"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by Challan, Party, Product or Batch..."

@@ -331,7 +331,7 @@ export default function FranchiseStockPage() {
   // Filtered Products for Catalog View
   const filteredProducts = useMemo(() => {
     return unifiedProducts.filter((p) => {
-      const q = searchTerm.toLowerCase();
+      const q = searchTerm.trim().toLowerCase();
       const matchSearch =
         !searchTerm ||
         p.name.toLowerCase().includes(q) ||
@@ -361,7 +361,7 @@ export default function FranchiseStockPage() {
       const status = b.expiryStatus ?? "VALID";
       const matchExpiry = expiryFilter === "ALL" || status === expiryFilter;
       const matchSearch =
-        !searchTerm || (b.product?.name ?? "").toLowerCase().includes(searchTerm.toLowerCase());
+        !searchTerm || (b.product?.name ?? "").toLowerCase().includes(searchTerm.trim().toLowerCase());
       return matchExpiry && matchSearch;
     });
   }, [batches, expiryFilter, searchTerm]);
@@ -582,7 +582,7 @@ export default function FranchiseStockPage() {
           {/* Search Bar */}
           <div className="relative flex items-center gap-2.5 px-3.5 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full sm:w-64 md:w-72 shadow-sm">
             <Search size={14} className="text-slate-400 shrink-0" />
-            <input
+            <input aria-label="Search product, SKU"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

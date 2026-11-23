@@ -333,8 +333,8 @@ export default function PackagingQueuePage() {
   };
 
   const filteredBatches = batches.filter(b =>
-    b.batchCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (b.product?.name || "").toLowerCase().includes(searchQuery.toLowerCase())
+    b.batchCode.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    (b.product?.name || "").toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const isSelectedBatchRecalled = selectedBatch?.recall?.status === 'IN_PROGRESS';
@@ -705,7 +705,7 @@ export default function PackagingQueuePage() {
 
                 <div className="relative w-full">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
+                  <input aria-label="Search batches or products"
                     type="text"
                     placeholder="Search batches or products..."
                     value={searchQuery}

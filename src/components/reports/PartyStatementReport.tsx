@@ -10,6 +10,8 @@ import * as XLSX from "xlsx";
 import { ChevronDown, Download, Eye, Loader2, Printer, RefreshCw, Search, X } from "lucide-react";
 import { clsx } from "clsx";
 import { reportsApi } from "@/lib/api";
+import { useLatestRequest } from "@/lib/hooks/useSearch";
+import { matchesSearch, NO_MATCH_TEXT, SEARCH_DEBOUNCE_MS } from "@/lib/search";
 
 type PartyType = "FRANCHISE" | "CUSTOMER" | "DEALER" | "VENDOR";
 type TypeFilter = "ALL" | PartyType;
@@ -73,8 +75,9 @@ export default function PartyStatementReport({ initialPartyId, initialPartyType 
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerRef = useRef<HTMLDivElement>(null);
   const [parties, setParties] = useState<PartyRow[]>([]);
+  const beginLoad = useLatestRequest();
 
-  useEffect(() => { const t = setTimeout(() => setSearch(searchInput.trim()), 350); return () => clearTimeout(t); }, [searchInput]);
+  useEffect(() => { const t = setTimeout(() => setSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS); return () => clearTimeout(t); }, [searchInput]);
   useEffect(() => {
     const onDown = (e: MouseEvent) => { if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) setPickerOpen(false); };
     document.addEventListener("mousedown", onDown);
@@ -85,27 +88,29 @@ export default function PartyStatementReport({ initialPartyId, initialPartyType 
 
   const load = useCallback(async () => {
     if (preset === "Custom" && !(customFrom && customTo)) return;
+    const req = beginLoad(); // only the newest request may update the report
     setLoading(true);
     setError(null);
     try {
       const res = await reportsApi.getPartyLedger({ partyType: typeFilter, partyId: partyId || undefined, from, to, search: search || undefined });
+      if (!req.isLatest()) return;
       setData(res.data);
       if (Array.isArray(res.data?.parties)) setParties(res.data.parties);
     } catch (e: any) {
+      if (!req.isLatest()) return;
       setError(e?.response?.data?.error || "Failed to load party statement");
       setData(null);
     } finally {
-      setLoading(false);
+      if (req.isLatest()) setLoading(false);
     }
-  }, [typeFilter, partyId, from, to, search, preset, customFrom, customTo]);
+  }, [typeFilter, partyId, from, to, search, preset, customFrom, customTo, beginLoad]);
 
   useEffect(() => { load(); }, [load]);
 
   const pickable = useMemo(() => {
-    const q = pickerQuery.trim().toLowerCase();
     return parties
       .filter((p) => typeFilter === "ALL" || p.partyType === typeFilter)
-      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.phone || "").includes(q));
+      .filter((p) => matchesSearch(pickerQuery, p.name, p.phone));
   }, [parties, typeFilter, pickerQuery]);
 
   const selectedParty = parties.find((p) => p.id === partyId && (typeFilter === "ALL" || p.partyType === typeFilter));
@@ -179,7 +184,7 @@ export default function PartyStatementReport({ initialPartyId, initialPartyType 
             {pickerOpen && (
               <div className="absolute z-30 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden">
                 <div className="p-2 border-b border-gray-100 dark:border-white/5">
-                  <input autoFocus value={pickerQuery} onChange={(e) => setPickerQuery(e.target.value)} placeholder="Search party name or phone…" className="w-full px-2.5 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 outline-none focus:border-orange-400" />
+                  <input autoFocus aria-label="Search party" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); setPickerOpen(false); } }} value={pickerQuery} onChange={(e) => setPickerQuery(e.target.value)} placeholder="Search party name or phone…" className="w-full px-2.5 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 outline-none focus:border-orange-400" />
                 </div>
                 <div className="max-h-64 overflow-y-auto custom-scrollbar">
                   <button type="button" onClick={() => { setPartyId(""); setPickerOpen(false); }} className={clsx("w-full text-left px-3 py-2 text-xs font-semibold hover:bg-orange-50 dark:hover:bg-white/5", !partyId && "text-[#f58220]")}>
@@ -191,7 +196,7 @@ export default function PartyStatementReport({ initialPartyId, initialPartyType 
                       <span className={clsx("shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded", TYPE_STYLE[p.partyType])}>{TYPE_LABEL[p.partyType]}</span>
                     </button>
                   ))}
-                  {pickable.length === 0 && <p className="px-3 py-3 text-xs text-gray-400">No parties found.</p>}
+                  {pickable.length === 0 && <p role="status" className="px-3 py-3 text-xs text-gray-400">{NO_MATCH_TEXT}</p>}
                 </div>
               </div>
             )}

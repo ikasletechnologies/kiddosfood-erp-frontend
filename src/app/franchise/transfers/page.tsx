@@ -175,9 +175,9 @@ export default function FranchiseTransfersPage() {
   // FILTER LOGIC
   const filtered = transfers.filter((t) => {
     const matchSearch = !search ||
-      t.fromBranch?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.toBranch?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.id?.toLowerCase().includes(search.toLowerCase());
+      t.fromBranch?.name?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      t.toBranch?.name?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      t.id?.toLowerCase().includes(search.trim().toLowerCase());
     const matchStatus = statusFilter === "ALL" || t.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -272,7 +272,7 @@ export default function FranchiseTransfersPage() {
                       <tr key={item.id} className="border-b border-gray-100 dark:border-white/5 hover:bg-orange-50/30 dark:hover:bg-orange-500/5 group">
                         <td className="px-3 py-2.5 text-center text-xs text-gray-400 dark:text-slate-500">{idx + 1}</td>
                         <td className="px-3 py-2" style={{ position: "relative", overflow: "visible" }}>
-                          <input
+                          <input aria-label="Search item to transfer"
                             className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
                             placeholder="Search item to transfer..."
                             value={item.itemSearch}
@@ -463,7 +463,7 @@ export default function FranchiseTransfersPage() {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
           <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search branch or transfer ID"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search branch or transfer ID..."

@@ -166,13 +166,13 @@ export default function ConfirmPackagingPage() {
   };
 
   const filteredTickets = tickets.filter((t) =>
-    t.batch?.batchCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.batch?.product?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+    t.batch?.batchCode?.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    t.batch?.product?.name?.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const filteredHistory = historyTickets.filter((t) =>
-    t.batch?.batchCode?.toLowerCase().includes(historyQuery.toLowerCase()) ||
-    t.batch?.product?.name?.toLowerCase().includes(historyQuery.toLowerCase())
+    t.batch?.batchCode?.toLowerCase().includes(historyQuery.trim().toLowerCase()) ||
+    t.batch?.product?.name?.toLowerCase().includes(historyQuery.trim().toLowerCase())
   );
 
   const total = goodQty + damagedQty + spoiledQty;
@@ -244,7 +244,7 @@ export default function ConfirmPackagingPage() {
 
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
+                  <input aria-label="Search packaging runs"
                     type="text"
                     placeholder="Search packaging runs..."
                     value={searchQuery}
@@ -328,7 +328,7 @@ export default function ConfirmPackagingPage() {
 
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
+                  <input aria-label="Search history"
                     type="text"
                     placeholder="Search history..."
                     value={historyQuery}

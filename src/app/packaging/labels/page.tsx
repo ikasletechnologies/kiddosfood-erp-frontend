@@ -101,8 +101,8 @@ export default function LabelsBarcodesPage() {
   };
 
   const filteredRecords = packagings.filter(p =>
-    p.barcode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.batch?.product?.name.toLowerCase().includes(searchQuery.toLowerCase())
+    p.barcode.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    p.batch?.product?.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-background text-gray-800 dark:text-slate-100">
@@ -136,7 +136,7 @@ export default function LabelsBarcodesPage() {
 
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
+                  <input aria-label="Search barcode or product"
                     type="text"
                     placeholder="Search barcode or product..."
                     value={searchQuery}

@@ -120,8 +120,8 @@ export default function CentralSaleOrdersReport({
   // Client-side filters
   const filteredOrders = orders.filter((order) => {
     // 1. Party / Name / Order number filter
-    const nameMatch = (order.customerName || "").toLowerCase().includes(partySearch.toLowerCase());
-    const numberMatch = (order.orderNumber || "").toLowerCase().includes(partySearch.toLowerCase());
+    const nameMatch = (order.customerName || "").toLowerCase().includes(partySearch.trim().toLowerCase());
+    const numberMatch = (order.orderNumber || "").toLowerCase().includes(partySearch.trim().toLowerCase());
     const matchesSearch = nameMatch || numberMatch;
 
     // 2. Status filter mapping

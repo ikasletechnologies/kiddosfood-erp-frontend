@@ -109,7 +109,7 @@ export default function RawMaterialConsumptionClient() {
 
   const filtered = items.filter((it) => {
     if (!search) return true;
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return (
       it.itemName?.toLowerCase().includes(q) ||
       it.sku?.toLowerCase().includes(q) ||
@@ -172,7 +172,7 @@ export default function RawMaterialConsumptionClient() {
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
         <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
+          <input aria-label="Search batch / material / reason"
             type="text"
             placeholder="Search batch / material / reason..."
             value={search}

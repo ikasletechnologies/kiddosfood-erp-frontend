@@ -150,7 +150,7 @@ export default function Sidebar() {
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#F58220] transition-colors"
                 size={14}
               />
-              <input
+              <input aria-label="Search modules"
                 type="text"
                 placeholder="Search modules..."
                 value={searchTerm}
@@ -180,7 +180,7 @@ export default function Sidebar() {
 
             const finalItems = filteredItems.filter((item) => {
               if (!searchTerm) return true;
-              const term = searchTerm.toLowerCase();
+              const term = searchTerm.trim().toLowerCase();
               if (section.title.toLowerCase().includes(term)) return true;
               if (item.label.toLowerCase().includes(term)) return true;
               if (item.children?.some((c) => c.label.toLowerCase().includes(term)))
@@ -382,7 +382,7 @@ export default function Sidebar() {
                           <div className="pl-5 mt-1 space-y-0.5 relative">
                             <div className="absolute left-4 top-0 bottom-2 w-px bg-slate-200/80 dark:bg-white/5" />
                             {item.groups.map((group) => {
-                              const term = searchTerm.toLowerCase();
+                              const term = searchTerm.trim().toLowerCase();
                               const groupMatches = !term || group.label.toLowerCase().includes(term);
                               const visibleChildren = groupMatches
                                 ? group.children
@@ -452,7 +452,7 @@ export default function Sidebar() {
                             <div className="absolute left-4 top-0 bottom-2 w-px bg-slate-200/80 dark:bg-white/5" />
                             {item.children?.map((child) => {
                               if (searchTerm) {
-                                const term = searchTerm.toLowerCase();
+                                const term = searchTerm.trim().toLowerCase();
                                 const matchesChild = child.label
                                   .toLowerCase()
                                   .includes(term);

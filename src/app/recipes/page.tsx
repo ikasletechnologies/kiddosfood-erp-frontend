@@ -14,6 +14,8 @@ import { useToast } from "@/context/ToastContext";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate } from "@/lib/utils";
 import { exportRecipeToPdf } from "@/lib/recipe-export";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 const formatCurrency = (n: number) => "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -130,7 +132,7 @@ export default function RecipesPage() {
   };
 
   const filtered = recipes.filter((r) =>
-    !search || r.name?.toLowerCase().includes(search.toLowerCase()) || r.product?.name?.toLowerCase().includes(search.toLowerCase())
+    !search || r.name?.toLowerCase().includes(search.trim().toLowerCase()) || r.product?.name?.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const uniqueCategories = categories.map(c => c.name);
@@ -427,7 +429,7 @@ export default function RecipesPage() {
           <div className="p-4 sm:p-6 border-b border-gray-50 dark:border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1 max-w-md">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
+              <input aria-label="Search by recipe name or product"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by recipe name or product..."
@@ -670,73 +672,50 @@ export default function RecipesPage() {
                     <div key={idx} className="flex items-end gap-3 bg-slate-50 dark:bg-white/5 p-4 rounded-2xl relative group">
                       <div className="flex-1 space-y-1.5 relative">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-tight">Material</label>
-                        <div className="relative">
-                          <div
-                            onClick={() => {
-                              setActiveSearchIdx(idx);
-                              setMaterialSearchQuery("");
-                            }}
-                            className="w-full h-10 bg-white dark:bg-slate-900 border-0 px-3 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-between text-slate-900 dark:text-white"
-                          >
-                            <span className={clsx(!item.inventoryItemId && "text-slate-400")}>
-                              {materials.find(m => m.id === item.inventoryItemId)?.name || "Search materials..."}
-                            </span>
-                            <Search size={14} className="text-slate-400" />
-                          </div>
-
-                          {activeSearchIdx === idx && (
-                            <>
-                              <div className="fixed inset-0 z-40" onClick={() => setActiveSearchIdx(null)} />
-                              <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white dark:bg-slate-900 border border-orange-500 rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
-                                <div className="p-3 border-b border-slate-100 dark:border-white/10 flex items-center gap-2 relative">
-                                  <Search size={14} className="text-orange-500" />
-                                  <input
-                                    autoFocus
-                                    value={materialSearchQuery}
-                                    onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                                    placeholder="Type to search..."
-                                    className="flex-1 bg-transparent border-none outline-none text-xs font-bold text-slate-900 dark:text-white"
-                                  />
-                                  {materialSearchQuery && (
-                                    <X 
-                                      size={14} 
-                                      className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" 
-                                      onClick={() => setMaterialSearchQuery("")} 
-                                    />
-                                  )}
-                                </div>
-                                <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-white/5">
-                                  {materials
-                                    .filter(m => m.name.toLowerCase().includes(materialSearchQuery.toLowerCase()))
-                                    .map(m => (
-                                      <div
-                                        key={m.id}
-                                        onClick={() => {
-                                          updateItem(idx, 'inventoryItemId', m.id);
-                                          setActiveSearchIdx(null);
-                                        }}
-                                        className="p-3 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-orange-500 hover:text-white cursor-pointer transition-colors flex items-center justify-between"
-                                      >
-                                        <span>{m.name}</span>
-                                        <span className="text-[10px] uppercase opacity-60">{m.unit || 'KG'}</span>
-                                      </div>
-                                    ))}
-                                  <div
-                                    onClick={() => {
-                                      setMaterialRowIdx(idx);
-                                      setMaterialList([{ id: "1", name: "", unit: "kg" }]);
-                                      setIsAddingMaterial(true);
-                                      setActiveSearchIdx(null);
-                                    }}
-                                    className="p-3 text-xs font-bold text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 cursor-pointer transition-colors flex items-center gap-2 border-t border-orange-100 dark:border-white/10"
-                                  >
-                                    <Plus size={14} /> Add New Material
-                                  </div>
-                                </div>
-                              </div>
-                            </>
+                        <SearchAutocomplete<any>
+                          id={`recipe-material-${idx}`}
+                          label="Material"
+                          placeholder="Search materials..."
+                          minChars={0}
+                          inputClassName="h-10 bg-white dark:bg-slate-900 border-0 text-xs font-bold"
+                          value={activeSearchIdx === idx ? materialSearchQuery : (materials.find(m => m.id === item.inventoryItemId)?.name || "")}
+                          onFocus={() => { setActiveSearchIdx(idx); setMaterialSearchQuery(""); }}
+                          onInputChange={text => { setActiveSearchIdx(idx); setMaterialSearchQuery(text); }}
+                          // Clear resets both the text and the selected material id.
+                          onClear={() => { updateItem(idx, 'inventoryItemId', ''); setMaterialSearchQuery(""); }}
+                          options={activeSearchIdx === idx
+                            ? dedupeById(materials).filter(m => matchesSearch(materialSearchQuery, m.name, m.sku))
+                            : []}
+                          getOptionKey={m => m.id}
+                          // The same material can't be added twice to one recipe.
+                          isOptionDisabled={m => formData.items.some((other, j) => j !== idx && other.inventoryItemId === m.id)}
+                          onSelect={m => {
+                            updateItem(idx, 'inventoryItemId', m.id);
+                            setActiveSearchIdx(null);
+                            setMaterialSearchQuery("");
+                          }}
+                          renderOption={(m, { disabled }) => (
+                            <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center justify-between gap-2">
+                              <span className="truncate">{m.name}{m.sku ? <span className="ml-1 font-mono font-normal text-slate-400">{m.sku}</span> : null}</span>
+                              <span className="text-[10px] uppercase opacity-60 shrink-0">{disabled ? "Already added" : (m.unit || 'KG')}</span>
+                            </div>
                           )}
-                        </div>
+                          footer={close => (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                close();
+                                setMaterialRowIdx(idx);
+                                setMaterialList([{ id: "1", name: "", unit: "kg" }]);
+                                setIsAddingMaterial(true);
+                                setActiveSearchIdx(null);
+                              }}
+                              className="w-full p-2.5 text-xs font-bold text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 flex items-center gap-2"
+                            >
+                              <Plus size={14} /> Add New Material
+                            </button>
+                          )}
+                        />
                       </div>
 
                       <div className="w-24 space-y-1.5">

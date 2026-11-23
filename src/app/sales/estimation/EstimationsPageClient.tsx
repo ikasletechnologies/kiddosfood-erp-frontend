@@ -22,6 +22,9 @@ import { loadUnicodeFont } from "@/lib/pdfFonts";
 import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
 import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
 import { canViewCost } from "@/lib/profit-estimate";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
+import { dedupeById, matchesSearch } from "@/lib/search";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -445,6 +448,10 @@ export default function EstimationsPageClient({
   const [estimations, setEstimations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Debounced (300 ms) + trimmed term for the API: one request per pause in
+  // typing instead of five list requests per keystroke.
+  const searchTerm = useSearchTerm(search);
+  const beginLoad = useLatestRequest();
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [customers, setCustomers] = useState<any[]>([]);
   const [dealers, setDealers] = useState<any[]>([]);
@@ -489,7 +496,6 @@ export default function EstimationsPageClient({
   // whatever GSTIN/state/address the selected master record has.
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [stateOfSupply, setStateOfSupply] = useState("");
@@ -549,7 +555,6 @@ export default function EstimationsPageClient({
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
 
-  const customerDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
   const priceDropRef = useRef<HTMLDivElement>(null);
   const exportDropRef = useRef<HTMLDivElement>(null);
@@ -558,6 +563,7 @@ export default function EstimationsPageClient({
   const apiUrl = documentType === "PROFORMA" ? "/api/sales/proforma-invoices" : "/api/sales/quotations";
 
   const fetchData = useCallback(async () => {
+    const req = beginLoad();
     setLoading(true);
     try {
       const params: Record<string, string | undefined> = {};
@@ -565,7 +571,7 @@ export default function EstimationsPageClient({
       if (dateTo) params.toDate = dateTo;
       // "OPEN" spans several stored statuses (SENT/OPEN/PENDING) — filtered client-side below.
       if (statusFilter && statusFilter !== "ALL" && statusFilter !== "OPEN") params.status = statusFilter;
-      if (search.trim()) params.search = search.trim();
+      if (searchTerm) params.search = searchTerm;
 
       const [eRes, cRes, pRes, dRes, fRes] = await Promise.allSettled([
         api.get(apiUrl, { params }).catch(() => ({ data: [] })),
@@ -577,6 +583,8 @@ export default function EstimationsPageClient({
       ]);
 
       let apiEstimations = eRes.status === "fulfilled" ? (eRes.value as any).data || [] : [];
+      // A newer request is in flight: don't let this older response overwrite it.
+      if (!req.isLatest()) return apiEstimations;
 
       // Drafts are already real Quotation rows (status: "DRAFT") saved through the
       // normal /api/sales/quotations endpoint below — no separate local draft store.
@@ -591,9 +599,9 @@ export default function EstimationsPageClient({
       if (fRes.status === "fulfilled") setFranchises((fRes.value as any).data || []);
       return apiEstimations;
     } finally {
-      setLoading(false);
+      if (req.isLatest()) setLoading(false);
     }
-  }, [apiUrl, dateFrom, dateTo, statusFilter, search]);
+  }, [apiUrl, dateFrom, dateTo, statusFilter, searchTerm, beginLoad]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -605,8 +613,6 @@ export default function EstimationsPageClient({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node))
-        setShowCustomerDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(e.target as Node))
         setShowShareDrop(false);
       if (priceDropRef.current && !priceDropRef.current.contains(e.target as Node))
@@ -821,7 +827,6 @@ export default function EstimationsPageClient({
     if (party.state) {
       setStateOfSupply(party.state);
     }
-    setShowCustomerDrop(false);
   };
 
   // Switching Party Type must never leave a Dealer/Franchise selection
@@ -846,7 +851,6 @@ export default function EstimationsPageClient({
     setCustomerSearch("");
     setCustomerPhone("");
     setStateOfSupply("");
-    setShowCustomerDrop(false);
   };
 
   // Channel prices default to 0 (unconfigured, not "genuinely free") on
@@ -1139,20 +1143,12 @@ export default function EstimationsPageClient({
     }
   };
 
+  // Back discards unsaved edits. It used to auto-save a DRAFT estimation
+  // (a real database record) whenever anything was entered; a draft is now
+  // created only by the explicit "Save Draft" button.
   const handleBack = () => {
-    // Only auto-save-as-draft for a record that's actually still a DRAFT
-    // (or brand new, loadedStatus === null) — never for one that was
-    // opened already SENT/CONVERTED/CANCELLED. That's a VIEW, and
-    // resaving it would either get rejected by the backend or silently
-    // regress its status back to DRAFT (see loadedStatus above).
-    const isEditableDraft = loadedStatus === null || loadedStatus === "DRAFT";
-    const hasData = selectedCustomer || items.some(i => i.productId || i.itemSearch.trim());
-    if (hasData && isEditableDraft) {
-      handleSave(true);
-    } else {
-      if (onCancel) onCancel();
-      else setView("list");
-    }
+    if (onCancel) onCancel();
+    else setView("list");
   };
 
   const handleOpenConversionForm = (est: any, type: "SALE" | "SALES_ORDER") => {
@@ -1322,10 +1318,7 @@ export default function EstimationsPageClient({
 
   const filtered = estimations.filter(est => {
     const partyName = est.customer?.name || est.customerName;
-    const matchSearch = !search.trim() ||
-      est.quotationNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
-      est.proformaNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
-      partyName?.toLowerCase().includes(search.trim().toLowerCase());
+    const matchSearch = matchesSearch(search, est.quotationNumber, est.proformaNumber, partyName);
 
     const cat = getEstimateCategory(est);
     const matchSelectedStatuses = selectedStatuses.length === 0 || selectedStatuses.includes(cat);
@@ -1382,12 +1375,10 @@ export default function EstimationsPageClient({
   const totalOpen = sumAmounts(filtered.filter(i => ["SENT", "OPEN", "PENDING"].includes(i.status)));
 
   const partySourceList = partyType === "DEALER" ? dealers : (partyType === "FRANCHISE" && !isFranchiseUser) ? franchises : customers;
-  const filteredCustomers = partySourceList.filter((c: any) =>
-    !customerSearch ||
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (c.contact && c.contact.includes(customerSearch)) ||
-    (c.phone && c.phone.includes(customerSearch)) ||
-    (c.contactNum && c.contactNum.includes(customerSearch))
+  // While a party is selected its own name is in the box: list all then.
+  const partyQuery = selectedCustomer && customerSearch === selectedCustomer.name ? "" : customerSearch;
+  const filteredCustomers = dedupeById(partySourceList).filter((c: any) =>
+    matchesSearch(partyQuery, c.name, c.customerCode, c.code, c.contact, c.phone, c.contactNum)
   );
 
   const handleExportExcel = () => {
@@ -1675,79 +1666,50 @@ export default function EstimationsPageClient({
                     ))}
                   </div>
                 </div>
-                <div className="relative" ref={customerDropRef}>
-                  <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
-                  <div
-                    className={clsx(
-                      "flex items-center gap-2 border rounded-xl px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
-                      showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
-                    )}
-                    onClick={() => setShowCustomerDrop(v => !v)}
-                  >
-                    <input
-                      className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                      placeholder="Select or search party"
-                      value={customerSearch}
-                      onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                      onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                    />
-                    {customerSearch && (
-                      <X
-                        size={14}
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCustomerSearch("");
-                          setSelectedCustomer(null);
-                          setCustomerPhone("");
-                        }}
-                      />
-                    )}
-                    <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                  </div>
-
-                  {showCustomerDrop && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] sm:w-[400px] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                      {partyType === "CUSTOMER" && (
-                        <button
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 font-medium"
-                          onClick={() => {
-                            const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
-                            setNewParty(prev => ({
-                              ...prev,
-                              name: isPhone ? "" : customerSearch.trim(),
-                              phone: isPhone ? customerSearch.trim() : "",
-                            }));
-                            setShowAddParty(true);
-                            setShowCustomerDrop(false);
-                          }}
-                        >
-                          <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
-                          Add New Party
-                        </button>
-                      )}
-                      <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                        {filteredCustomers.length === 0 ? (
-                          <div className="px-3 py-4 text-xs sm:text-sm text-gray-400 dark:text-slate-500 text-center">
-                            No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
-                          </div>
-                        ) : (
-                          filteredCustomers.map((c: any) => (
-                            <button
-                              key={c.id}
-                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                              onClick={() => selectCustomer(c)}
-                            >
-                              <div className="text-left">
-                                <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.contact || c.phone || c.contactNum || "—"}</div>
-                              </div>
-                            </button>
-                          ))
-                        )}
+                <div>
+                  <label htmlFor="est-party-search" className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Party *</label>
+                  <SearchAutocomplete<any>
+                    id="est-party-search"
+                    label="Party"
+                    placeholder="Select or search party (name / phone)"
+                    minChars={0}
+                    value={customerSearch}
+                    onInputChange={text => {
+                      setCustomerSearch(text);
+                      // Editing the name away from the selected party drops its id.
+                      if (selectedCustomer && text !== selectedCustomer.name) { setSelectedCustomer(null); setCustomerPhone(""); }
+                    }}
+                    onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); setCustomerPhone(""); }}
+                    options={filteredCustomers}
+                    getOptionKey={(c: any) => c.id}
+                    inputClassName="rounded-xl text-xs sm:text-sm border-gray-300"
+                    onSelect={selectCustomer}
+                    renderOption={(c: any) => (
+                      <div className="text-left min-w-0">
+                        <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white truncate">{c.name}</div>
+                        <div className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{[c.customerCode || c.code, c.contact || c.phone || c.contactNum].filter(Boolean).join(" · ") || "—"}</div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                    footer={partyType === "CUSTOMER" ? (close => (
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                        onClick={() => {
+                          const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
+                          setNewParty(prev => ({
+                            ...prev,
+                            name: isPhone ? "" : customerSearch.trim(),
+                            phone: isPhone ? customerSearch.trim() : "",
+                          }));
+                          close();
+                          setShowAddParty(true);
+                        }}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
+                        Add New Party
+                      </button>
+                    )) : undefined}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
@@ -1855,7 +1817,7 @@ export default function EstimationsPageClient({
                           </div>
                         </td>
                         <td className="px-4 py-2.5 align-top" style={{ position: "relative", zIndex: isItemDropOpen ? 100 : 1 }}>
-                          <input
+                          <input aria-label="Search item"
                             className="w-full px-3 py-1.5 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-orange-400 bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
                             placeholder="Search item..."
                             value={item.itemSearch}
@@ -1876,7 +1838,7 @@ export default function EstimationsPageClient({
                             <X
                               size={14}
                               className="absolute right-6 top-5 -translate-y-1/2 text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                              onClick={() => updateItem(idx, "itemSearch", "")}
+                              onClick={() => { updateItem(idx, "itemSearch", ""); updateItem(idx, "productId", ""); }}
                             />
                           )}
                           {isItemDropOpen && (
@@ -2359,39 +2321,34 @@ export default function EstimationsPageClient({
                   <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
                     Party / Customer *
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={customerSearch}
-                      onChange={e => {
-                        setCustomerSearch(e.target.value);
-                        setShowCustomerDrop(true);
-                      }}
-                      onFocus={() => setShowCustomerDrop(true)}
-                      placeholder="Select or enter customer name..."
-                      className="w-full px-3 py-2 bg-white dark:bg-[#13151f] border border-gray-300 dark:border-white/10 rounded-lg text-sm text-gray-800 dark:text-white outline-none focus:border-[#f58220]"
-                    />
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  </div>
-                  {showCustomerDrop && customers && customers.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#181b2a] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto">
-                      {customers.filter(c => c.name.toLowerCase().includes(customerSearch.toLowerCase())).map(c => (
-                        <div
-                          key={c.id}
-                          onClick={() => {
-                            setSelectedCustomer(c);
-                            setCustomerSearch(c.name);
-                            setCustomerPhone(c.contact || c.phone || "");
-                            setShowCustomerDrop(false);
-                          }}
-                          className="px-3 py-2 text-xs hover:bg-orange-50 dark:hover:bg-white/5 cursor-pointer text-gray-700 dark:text-slate-200 flex justify-between"
-                        >
-                          <span className="font-medium">{c.name}</span>
-                          <span className="text-gray-400">{c.contact || c.phone || ""}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <SearchAutocomplete<any>
+                    id="est-customer-search"
+                    label="Party / Customer"
+                    placeholder="Select or enter customer name..."
+                    minChars={0}
+                    hideIcon
+                    value={customerSearch}
+                    onInputChange={text => {
+                      setCustomerSearch(text);
+                      if (selectedCustomer && text !== selectedCustomer.name) setSelectedCustomer(null);
+                    }}
+                    onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); setCustomerPhone(""); }}
+                    options={dedupeById(customers || []).filter((c: any) =>
+                      matchesSearch(selectedCustomer && customerSearch === selectedCustomer.name ? "" : customerSearch, c.name, c.contact, c.phone))}
+                    getOptionKey={(c: any) => c.id}
+                    inputClassName="text-sm border-gray-300"
+                    onSelect={(c: any) => {
+                      setSelectedCustomer(c);
+                      setCustomerSearch(c.name);
+                      setCustomerPhone(c.contact || c.phone || "");
+                    }}
+                    renderOption={(c: any) => (
+                      <div className="text-xs text-gray-700 dark:text-slate-200 flex justify-between gap-2">
+                        <span className="font-medium truncate">{c.name}</span>
+                        <span className="text-gray-400 shrink-0">{c.contact || c.phone || ""}</span>
+                      </div>
+                    )}
+                  />
                   <div className="text-[10px] text-red-500 mt-0.5 font-medium">BAL: 0</div>
                 </div>
 

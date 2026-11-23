@@ -79,8 +79,8 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
   };
 
   const filteredPartners = partners.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.email?.toLowerCase().includes(searchQuery.toLowerCase())
+    p.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    p.email?.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   return (
@@ -98,7 +98,7 @@ export default function BusinessPartnersClient({ defaultType }: { defaultType?: 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="md:col-span-3 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
+          <input aria-label="Search partners"
             type="text"
             placeholder="Search partners..."
             value={searchQuery}

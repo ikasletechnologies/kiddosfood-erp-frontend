@@ -229,11 +229,11 @@ export default function VendorsClient() {
     return vendors.filter(v => {
       const matchSearch =
         !search.trim() ||
-        v.name?.toLowerCase().includes(search.toLowerCase()) ||
-        v.vendorCode?.toLowerCase().includes(search.toLowerCase()) ||
-        v.contact?.toLowerCase().includes(search.toLowerCase()) ||
-        v.phone?.toLowerCase().includes(search.toLowerCase()) ||
-        v.email?.toLowerCase().includes(search.toLowerCase());
+        v.name?.toLowerCase().includes(search.trim().toLowerCase()) ||
+        v.vendorCode?.toLowerCase().includes(search.trim().toLowerCase()) ||
+        v.contact?.toLowerCase().includes(search.trim().toLowerCase()) ||
+        v.phone?.toLowerCase().includes(search.trim().toLowerCase()) ||
+        v.email?.toLowerCase().includes(search.trim().toLowerCase());
 
       if (!matchSearch) return false;
 
@@ -896,7 +896,7 @@ export default function VendorsClient() {
           <div className="p-3 border-b border-gray-100 dark:border-white/5">
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <input aria-label="Search vendor name, code, contact"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search vendor name, code, contact..."
@@ -1378,7 +1378,7 @@ export default function VendorsClient() {
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <div className="relative flex-1 max-w-sm">
                         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
+                        <input aria-label="Search transactions, reference"
                           type="text"
                           placeholder="Search transactions, reference..."
                           value={ledgerSearchQuery}

@@ -11,6 +11,7 @@ import {
   S, GST_STATES, UQC_OPTIONS, TRANSACTION_TYPES, SOURCE_LABELS, Masters,
   round2, previewValidUntil, apiError,
 } from "./ewaybill-ui";
+import { searchParam } from "@/lib/search";
 
 interface FormItem {
   key: string;
@@ -100,6 +101,8 @@ export default function EWayBillForm({ masters, editing, initialInvoiceId, onExi
   const [sourceTab, setSourceTab] = useState<string>(editing ? editing.sourceType : "SALE_INVOICE");
   const [sources, setSources] = useState<any[]>([]);
   const [sourceSearch, setSourceSearch] = useState("");
+  // Trimmed key: trailing spaces / re-typing the same text don't refetch.
+  const sourceSearchKey = searchParam(sourceSearch) ?? "";
   const [loadingSources, setLoadingSources] = useState(false);
   const [prefilling, setPrefilling] = useState<string | null>(null);
   const prefillVersion = useRef(0);
@@ -123,7 +126,7 @@ export default function EWayBillForm({ masters, editing, initialInvoiceId, onExi
     const t = setTimeout(async () => {
       setLoadingSources(true);
       try {
-        const res = await ewayBillApi.getSources(sourceTab, sourceSearch || undefined);
+        const res = await ewayBillApi.getSources(sourceTab, sourceSearchKey || undefined);
         if(!stale) setSources(res.data || []);
       } catch (e) {
         showToast(apiError(e, "Failed to load documents"), "error");
@@ -132,7 +135,7 @@ export default function EWayBillForm({ masters, editing, initialInvoiceId, onExi
       }
     }, 250);
     return () => {stale=true;clearTimeout(t);};
-  }, [sourceTab, sourceSearch, editing]);
+  }, [sourceTab, sourceSearchKey, editing]);
 
   const pickSource = async (doc: any, type=sourceTab, initial=false) => {
     if(!initial && !canDiscard()) return;

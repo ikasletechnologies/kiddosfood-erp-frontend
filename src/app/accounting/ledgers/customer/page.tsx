@@ -43,7 +43,7 @@ export default function CustomerLedgerPage() {
   }, []);
 
   const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.name.toLowerCase().includes(searchTerm.trim().toLowerCase()) ||
     c.phone?.includes(searchTerm)
   );
 

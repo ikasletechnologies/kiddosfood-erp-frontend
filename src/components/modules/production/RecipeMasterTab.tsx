@@ -501,7 +501,7 @@ export default function RecipeMasterTab() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto shrink-0">
           <div className="relative flex-1 sm:w-64">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search name, category, ingredient"
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -853,7 +853,7 @@ export default function RecipeMasterTab() {
               >
                 <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 dark:border-white/5">
                   <Search size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                  <input
+                  <input aria-label="Search category"
                     autoFocus
                     type="text"
                     value={categorySearchQuery}
@@ -1007,7 +1007,7 @@ export default function RecipeMasterTab() {
                       >
                         <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-gray-100 dark:border-white/5">
                           <Search size={12} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                          <input
+                          <input aria-label="Search material"
                             autoFocus
                             type="text"
                             value={materialSearchQuery}

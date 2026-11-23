@@ -99,7 +99,7 @@ export default function RawMaterialLedgerClient() {
   // items, not any transaction whose note happens to mention "organic").
   const filteredEntries = ledgerEntries.filter((it) => {
     if (!search) return true;
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return (
       it.itemName?.toLowerCase().includes(q) ||
       it.sku?.toLowerCase().includes(q)
@@ -184,7 +184,7 @@ export default function RawMaterialLedgerClient() {
         </div>
         <div className="relative group w-full lg:w-80">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
-          <input
+          <input aria-label="Search item name or SKU"
             type="text"
             placeholder="Search item name or SKU..."
             value={search}

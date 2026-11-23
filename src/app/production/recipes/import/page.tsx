@@ -168,7 +168,7 @@ function RecipeImport() {
   const recipes = review?.recipes || [];
   const problemsOf = useCallback((r: ImportedRecipe) => (drafts[r.key] ? draftProblems(drafts[r.key], r) : []), [drafts]);
   const shown = useMemo(() => recipes.filter((r) => {
-    if (search && !`${r.title} ${r.category}`.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !`${r.title} ${r.category}`.toLowerCase().includes(search.trim().toLowerCase())) return false;
     const pending = r.status.state === "PENDING";
     if (filter === "Needs review") return pending && problemsOf(r).length > 0;
     if (filter === "Ready") return pending && problemsOf(r).length === 0;
@@ -320,7 +320,7 @@ function RecipeImport() {
                 <p className="text-[11px] font-semibold text-gray-500 truncate" title={review.session.fileName}><FileText size={12} className="inline mr-1" />{review.session.fileName}</p>
                 <div className="relative">
                   <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search recipes…" className={clsx(input, "w-full pl-7")} />
+                  <input aria-label="Search recipes" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search recipes…" className={clsx(input, "w-full pl-7")} />
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {FILTERS.map((f) => (
@@ -496,7 +496,7 @@ function RecipeReview({ recipe: r, draft: d, materials, products, busy, setDraft
   const matName = (id: string) => materials.find((m) => m.id === id)?.name || "";
   const suggestedIds = new Set(r.products.map((p) => p.id));
   const extraProducts = productSearch.trim().length >= 2
-    ? products.filter((p) => !suggestedIds.has(p.id) && `${p.name} ${p.sku}`.toLowerCase().includes(productSearch.toLowerCase())).slice(0, 8)
+    ? products.filter((p) => !suggestedIds.has(p.id) && `${p.name} ${p.sku}`.toLowerCase().includes(productSearch.trim().toLowerCase())).slice(0, 8)
     : [];
   const shownProducts = [
     ...r.products,
@@ -697,7 +697,7 @@ function RecipeReview({ recipe: r, draft: d, materials, products, busy, setDraft
           </div>
           <div className="relative max-w-xs">
             <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Search other finished goods…" className={clsx(input, "w-full pl-7")} />
+            <input aria-label="Search other finished goods" value={productSearch} onChange={(e) => setProductSearch(e.target.value)} placeholder="Search other finished goods…" className={clsx(input, "w-full pl-7")} />
             {extraProducts.length > 0 && (
               <div className="absolute z-10 mt-1 w-full bg-white dark:bg-card border border-gray-200 dark:border-white/10 rounded-lg shadow-lg">
                 {extraProducts.map((p) => (

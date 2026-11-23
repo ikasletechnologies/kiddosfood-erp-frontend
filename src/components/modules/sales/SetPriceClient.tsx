@@ -174,7 +174,7 @@ export default function SetPriceClient() {
           <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-b border-gray-100 dark:border-white/5">
             <div className="relative flex-1 min-w-[200px]">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input className={clsx(INPUT, "pl-9 pr-8")} placeholder="Search product or SKU" value={filters.search} onChange={(e) => set("search", e.target.value)} />
+              <input aria-label="Search product or SKU" className={clsx(INPUT, "pl-9 pr-8")} placeholder="Search product or SKU" value={filters.search} onChange={(e) => set("search", e.target.value)} />
               {filters.search && <X size={14} onClick={() => set("search", "")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer" />}
             </div>
             <button

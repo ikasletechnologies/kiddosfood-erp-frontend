@@ -423,9 +423,9 @@ export default function FranchisePage() {
   const filtered = franchises.filter(
     (f) =>
       !search ||
-      f.name?.toLowerCase().includes(search.toLowerCase()) ||
-      f.location?.toLowerCase().includes(search.toLowerCase()) ||
-      f.ownerName?.toLowerCase().includes(search.toLowerCase())
+      f.name?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      f.location?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      f.ownerName?.toLowerCase().includes(search.trim().toLowerCase())
   );
 
   if (!currentUser || currentUser.role === "FRANCHISE_ADMIN") {
@@ -453,7 +453,7 @@ export default function FranchisePage() {
               <div className="flex items-center px-2 text-slate-400">
                 <Search size={14} />
               </div>
-              <input
+              <input aria-label="Search franchises"
                 type="text"
                 placeholder="Search franchises..."
                 value={search}

@@ -64,6 +64,7 @@ import CentralSalePurchaseByCategoryReport from "./components/SalePurchaseByCate
 import CentralStockSummaryByCategoryReport from "./components/StockSummaryByCategoryReport";
 import CentralItemWiseDiscountReport from "./components/ItemWiseDiscountReport";
 import PartyStatementReport from "@/components/reports/PartyStatementReport";
+import { searchParam } from "@/lib/search";
 // GSTR-1/2/3B/9, HSN Summary and SAC now live as dedicated pages under
 // /reports/gst/* — see src/app/reports/gst/*/page.tsx.
 
@@ -2494,6 +2495,8 @@ function ReportsContent() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [selectedFinancialCategory, setSelectedFinancialCategory] = useState<string>("All");
   const [tableSearchTerm, setTableSearchTerm] = useState("");
+  // Trimmed key for server requests: trailing spaces / identical text don't refetch.
+  const tableSearchKey = searchParam(tableSearchTerm) ?? "";
 
   const [dateFilter, setDateFilter] = useState("This Month");
   const [customStartDate, setCustomStartDate] = useState("");
@@ -2637,7 +2640,7 @@ function ReportsContent() {
   // Reset page on tab or filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedChildId, dateFilter, customStartDate, customEndDate, tableSearchTerm]);
+  }, [selectedChildId, dateFilter, customStartDate, customEndDate, tableSearchKey]);
 
   // Fetch report data when active child or date changes
   useEffect(() => {
@@ -2668,7 +2671,7 @@ function ReportsContent() {
       fetchReport(activeChild.id, {
         startDate: from,
         endDate: to,
-        search: tableSearchTerm.trim() || undefined,
+        search: tableSearchKey || undefined,
         page: currentPage,
         limit: 50,
         ...(activeChild.id === "Party Statement" ? { partyId: selectedPartyId, partyType: selectedPartyType } : {}),
@@ -2688,7 +2691,7 @@ function ReportsContent() {
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchTerm, currentPage, selectedPartyId, selectedPartyType, lowStockRevision]);
+  }, [mounted, activeChild, dateFilter, customStartDate, customEndDate, tableSearchKey, currentPage, selectedPartyId, selectedPartyType, lowStockRevision]);
 
   // (The Party Statement party list is loaded by PartyStatementReport itself.)
 
@@ -2720,7 +2723,7 @@ function ReportsContent() {
   // Filter table rows
   const filteredRows = (reportData?.rows ?? []).filter((row) =>
     Object.values(row).some((val) =>
-      String(val).toLowerCase().includes(tableSearchTerm.toLowerCase())
+      String(val).toLowerCase().includes(tableSearchTerm.trim().toLowerCase())
     )
   );
 
@@ -2802,7 +2805,7 @@ function ReportsContent() {
       });
       const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
         Object.values(row).some((val) =>
-          String(val).toLowerCase().includes(tableSearchTerm.toLowerCase())
+          String(val).toLowerCase().includes(tableSearchTerm.trim().toLowerCase())
         )
       );
       if (rowsToExport.length === 0) {
@@ -2893,7 +2896,7 @@ function ReportsContent() {
       });
       const rowsToExport = (fullData?.rows ?? []).filter((row: any) =>
         Object.values(row).some((val) =>
-          String(val).toLowerCase().includes(tableSearchTerm.toLowerCase())
+          String(val).toLowerCase().includes(tableSearchTerm.trim().toLowerCase())
         )
       );
       if (rowsToExport.length === 0) {
@@ -3347,7 +3350,7 @@ function ReportsContent() {
             {partyPickerOpen && (
               <div className="absolute z-20 mt-1.5 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-lg shadow-xl overflow-hidden">
                 <div className="p-2 border-b border-gray-100 dark:border-white/5">
-                  <input
+                  <input aria-label="Search customers, dealers, vendors"
                     autoFocus
                     type="text"
                     placeholder="Search customers, dealers, vendors…"
@@ -3388,7 +3391,7 @@ function ReportsContent() {
           {/* Search */}
           <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search in table"
               type="text"
               placeholder="Search in table..."
               value={tableSearchTerm}

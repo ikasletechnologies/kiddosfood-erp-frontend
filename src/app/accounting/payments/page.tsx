@@ -137,7 +137,7 @@ export default function PaymentsPage() {
     if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
     if (moduleFilter !== "ALL" && p.sourceModule !== moduleFilter) return false;
     if (methodFilter !== "ALL" && p.method !== methodFilter) return false;
-    if (search && !p.entity?.toLowerCase().includes(search.toLowerCase()) && !p.paymentNumber?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !p.entity?.toLowerCase().includes(search.trim().toLowerCase()) && !p.paymentNumber?.toLowerCase().includes(search.trim().toLowerCase())) return false;
     return true;
   });
 
@@ -327,7 +327,7 @@ export default function PaymentsPage() {
 
           <div className="relative group w-full md:w-auto md:min-w-[320px] lg:min-w-[400px]">
             <Search size={16} className="absolute left-4 sm:left-6 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-500 group-focus-within:text-orange-500 transition-colors" />
-            <input 
+            <input aria-label="Search payment # or entity" 
               type="text" 
               placeholder="Search payment # or entity..." 
               value={search} 

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { clsx } from "clsx";
-import { Loader2, Search, Store } from "lucide-react";
+import { Loader2, Search, Store, X } from "lucide-react";
 import { chatApi, ChatInboxItem } from "@/lib/api";
 import { useChat } from "@/context/ChatContext";
+import { useLatestRequest } from "@/lib/hooks/useSearch";
+import { dedupeBy, NO_MATCH_TEXT, SEARCH_DEBOUNCE_MS, SEARCHING_TEXT } from "@/lib/search";
 
 interface ChatInboxProps {
   selectedFranchiseId: string | null;
@@ -34,21 +36,28 @@ export default function ChatInbox({ selectedFranchiseId, onSelect }: ChatInboxPr
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searching, setSearching] = useState(false);
 
+  const beginLoad = useLatestRequest();
   const load = useCallback(async (term: string) => {
+    // Only the newest request may update the list: a slow response for "a"
+    // must not overwrite the results for "ab".
+    const req = beginLoad();
+    setSearching(true);
     try {
       const { data } = await chatApi.getInbox(term || undefined);
-      setItems(data.items);
+      if (!req.isLatest()) return;
+      setItems(dedupeBy(data.items || [], (i: ChatInboxItem) => i.franchiseId));
       setError(null);
     } catch {
-      setError("Could not load conversations.");
+      if (req.isLatest()) setError("Could not load conversations.");
     } finally {
-      setLoading(false);
+      if (req.isLatest()) { setLoading(false); setSearching(false); }
     }
-  }, []);
+  }, [beginLoad]);
 
   useEffect(() => {
-    const t = setTimeout(() => load(search.trim()), search ? 300 : 0);
+    const t = setTimeout(() => load(search.trim()), search.trim() ? SEARCH_DEBOUNCE_MS : 0);
     return () => clearTimeout(t);
   }, [search, load]);
 
@@ -95,9 +104,22 @@ export default function ChatInbox({ selectedFranchiseId, onSelect }: ChatInboxPr
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search franchises"
             aria-label="Search franchises"
-            className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-3 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
+            className="w-full rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 pl-9 pr-8 py-2 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/50"
           />
+          {search && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
+        {searching && !loading && search.trim() && (
+          <p role="status" aria-live="polite" className="mt-2 text-[11px] text-slate-400">{SEARCHING_TEXT}</p>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
@@ -110,7 +132,7 @@ export default function ChatInbox({ selectedFranchiseId, onSelect }: ChatInboxPr
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
             <Store size={28} />
-            <p className="text-sm">{search ? "No franchises match your search." : "No franchises yet."}</p>
+            <p className="text-sm">{search.trim() ? NO_MATCH_TEXT : "No franchises yet."}</p>
           </div>
         ) : (
           items.map((item) => {

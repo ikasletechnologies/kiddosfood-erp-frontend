@@ -14,6 +14,8 @@ import { formatDate, shareText } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 import AccountFormModal from "@/components/modals/AccountFormModal";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -272,7 +274,6 @@ export default function PurchaseBillsPage() {
   // form
   const [selectedVendor, setSelectedVendor] = useState<any>(null);
   const [vendorSearch, setVendorSearch] = useState("");
-  const [showVendorDrop, setShowVendorDrop] = useState(false);
   const [vendorPhone, setVendorPhone] = useState("");
   const [billDate, setBillDate] = useState(new Date().toISOString().split("T")[0]);
   const [billNumber, setBillNumber] = useState("Auto");
@@ -298,7 +299,6 @@ export default function PurchaseBillsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const calendarRef = useRef<HTMLDivElement>(null);
-  const vendorDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
   const priceDropRef = useRef<HTMLDivElement>(null);
 
@@ -499,7 +499,6 @@ export default function PurchaseBillsPage() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (vendorDropRef.current && !vendorDropRef.current.contains(e.target as Node)) setShowVendorDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(e.target as Node)) setShowShareDrop(false);
       if (priceDropRef.current && !priceDropRef.current.contains(e.target as Node)) setShowPriceDrop(false);
       if (calendarRef.current && !calendarRef.current.contains(e.target as Node)) setShowCalendar(false);
@@ -791,14 +790,17 @@ export default function PurchaseBillsPage() {
     setShowPaymentModal(true);
   };
 
-  const filteredVendors = vendors.filter(v =>
-    !vendorSearch || v.name?.toLowerCase().includes(vendorSearch.toLowerCase())
+  // While a vendor is selected its own name is in the box: list all vendors
+  // then, otherwise filter (trimmed, case-insensitive) on name / code / GSTIN / phone.
+  const vendorQuery = selectedVendor && vendorSearch === selectedVendor.name ? "" : vendorSearch;
+  const filteredVendors = dedupeById(vendors).filter(v =>
+    matchesSearch(vendorQuery, v.name, v.vendorCode, v.gstNumber, v.contact, v.phone)
   );
 
   const filtered = bills.filter(b => {
     const matchSearch = !search ||
-      b.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ||
-      b.vendor?.name?.toLowerCase().includes(search.toLowerCase());
+      b.invoiceNumber?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      b.vendor?.name?.toLowerCase().includes(search.trim().toLowerCase());
     const matchStatus = statusFilter === "ALL" || b.status === statusFilter;
     const targetDate = b.billDate || b.invoiceDate;
     let matchDate = true;
@@ -841,62 +843,45 @@ export default function PurchaseBillsPage() {
               <div className="space-y-3 min-w-0">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-slate-400 mb-1.5">Vendor / Party *</label>
-                  <div className="relative" ref={vendorDropRef}>
-                    <div
-                      className={clsx(
-                        "flex items-center gap-2 border rounded-lg px-3 py-2 bg-white dark:bg-white/5 transition-colors",
-                        isLockedFromGrn ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-                        showVendorDrop ? "border-orange-400 ring-1 ring-orange-100 dark:ring-orange-950/40" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
-                      )}
-                      onClick={() => { if (!isLockedFromGrn) setShowVendorDrop(v => !v); }}
-                    >
-                      <input
-                        className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500 disabled:cursor-not-allowed"
-                        placeholder="Search by vendor name..."
-                        value={vendorSearch}
-                        disabled={isLockedFromGrn}
-                        onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
-                        onClick={e => { e.stopPropagation(); setShowVendorDrop(true); }}
-                      />
-                      {!isLockedFromGrn && (vendorSearch || selectedVendor) && (
-                        <X
-                          size={14}
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setVendorSearch("");
-                            setSelectedVendor(null);
-                            setVendorPhone("");
-                          }}
-                        />
-                      )}
-                      {!isLockedFromGrn && <ChevronDown size={13} className="text-gray-400 shrink-0" />}
-                    </div>
-                    {!isLockedFromGrn && showVendorDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                          {filteredVendors.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
-                          ) : filteredVendors.map(v => (
-                            <button key={v.id}
-                              className="w-full flex items-start px-3 py-2 hover:bg-orange-50/50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 text-left"
-                              onClick={() => { 
-                                setSelectedVendor(v); 
-                                setVendorSearch(v.name); 
-                                setVendorPhone(v.contact || v.phone || ""); 
-                                if (v.state) setStateOfSupply(v.state);
-                                setShowVendorDrop(false); 
-                              }}
-                            >
-                              <div>
-                                <div className="text-sm font-medium text-gray-800 dark:text-white">{v.name}</div>
-                                <div className="text-xs text-gray-400 dark:text-slate-500">{v.contact || v.phone || "—"}</div>
-                              </div>
-                            </button>
-                          ))}
+                  <div>
+                    <SearchAutocomplete<any>
+                      id="bill-vendor-search"
+                      label="Vendor / Party"
+                      placeholder="Search vendor name, code, GSTIN or phone..."
+                      minChars={0}
+                      disabled={isLockedFromGrn}
+                      value={vendorSearch}
+                      onInputChange={text => {
+                        setVendorSearch(text);
+                        // Editing the text un-selects the vendor: the saved
+                        // vendorId must always match the name shown.
+                        if (selectedVendor && text !== selectedVendor.name) { setSelectedVendor(null); setVendorPhone(""); }
+                      }}
+                      onClear={() => { setVendorSearch(""); setSelectedVendor(null); setVendorPhone(""); }}
+                      options={filteredVendors}
+                      getOptionKey={v => v.id}
+                      inputClassName="border-gray-300 text-sm"
+                      onSelect={v => {
+                        setSelectedVendor(v);
+                        setVendorSearch(v.name);
+                        setVendorPhone(v.contact || v.phone || "");
+                        if (v.state) setStateOfSupply(v.state);
+                      }}
+                      renderOption={v => (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-gray-800 dark:text-white truncate">{v.name}</div>
+                            <div className="text-xs text-gray-400 dark:text-slate-500 truncate">
+                              {[v.vendorCode, v.contact || v.phone].filter(Boolean).join(" · ") || "—"}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-[10px] font-mono text-gray-400">{v.gstNumber || "Unregistered"}</div>
+                            {v.status && v.status !== "ACTIVE" && <div className="text-[10px] font-bold text-rose-600">{v.status}</div>}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    />
                   </div>
                 </div>
                 <div>
@@ -1382,7 +1367,7 @@ export default function PurchaseBillsPage() {
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-end gap-3 w-full">
           <div className="relative w-full sm:w-[320px] sm:flex-none lg:w-[360px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
+            <input aria-label="Search bill no. or vendor" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search bill no. or vendor..."
               className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm outline-none focus:border-[#f58220] bg-white dark:bg-card text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500"
             />

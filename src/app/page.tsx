@@ -461,7 +461,7 @@ export default function Dashboard() {
   }));
 
   const filteredOutletList = outlets.filter((o) =>
-    o.name?.toLowerCase().includes(outletSearch.toLowerCase())
+    o.name?.toLowerCase().includes(outletSearch.trim().toLowerCase())
   );
 
   return (
@@ -499,7 +499,7 @@ export default function Dashboard() {
             {outletDropdownOpen && (
               <div className="absolute right-0 sm:left-0 sm:right-auto z-50 mt-1.5 w-56 xs:w-60 sm:w-64 max-w-[calc(100vw-2rem)] bg-white dark:bg-[#12141c] border border-slate-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden p-1.5 animate-in zoom-in-95 duration-150">
                 <div className="p-1 border-b border-slate-100 dark:border-white/5">
-                  <input
+                  <input aria-label="Search outlet"
                     type="text"
                     placeholder="Search outlet..."
                     value={outletSearch}

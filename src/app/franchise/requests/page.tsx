@@ -518,7 +518,7 @@ function FranchiseRequestsContent() {
       if (new Date(req.createdAt) > end) return false;
     }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
       const matchName = (req.franchise?.name ?? "").toLowerCase().includes(q);
       const matchReqNum = (req.requestNumber ?? "").toLowerCase().includes(q);
       const matchId = (req.id ?? "").toLowerCase().includes(q);
@@ -676,7 +676,7 @@ function FranchiseRequestsContent() {
 
           <div className="relative w-full md:w-72">
             <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
+            <input aria-label="Search request #, product, branch"
               type="text"
               placeholder="Search request #, product, branch..."
               value={searchQuery}

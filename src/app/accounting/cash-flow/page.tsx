@@ -657,7 +657,7 @@ export default function CashFlowPage() {
           {/* Search Box */}
           <div className="relative flex-1 min-w-[180px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search Name, Ref No, Category"
               type="text"
               placeholder="Search Name, Ref No, Category..."
               value={searchQuery}

@@ -11,6 +11,8 @@ import { vendorsApi, purchaseReturnsApi, settingsApi } from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { formatDate, shareText } from "@/lib/utils";
 import GSTInvoice from "@/components/documents/GSTInvoice";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 // ── Types & Constants ─────────────────────────────────────────────────────────
 
@@ -161,7 +163,6 @@ export default function DebitNotesPage() {
   // form state
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
   const [vendorSearch, setVendorSearch] = useState("");
-  const [showVendorDrop, setShowVendorDrop] = useState(false);
   const [returnNo, setReturnNo] = useState("1");
   const [billNumber, setBillNumber] = useState("");
   const [billDate, setBillDate] = useState("");
@@ -188,7 +189,6 @@ export default function DebitNotesPage() {
   const [showBillDateCal, setShowBillDateCal] = useState(false);
 
   // refs for click-outside
-  const vendorDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
   const fromCalRef = useRef<HTMLDivElement>(null);
   const toCalRef = useRef<HTMLDivElement>(null);
@@ -203,7 +203,6 @@ export default function DebitNotesPage() {
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       const t = e.target as Node;
-      if (vendorDropRef.current && !vendorDropRef.current.contains(t)) setShowVendorDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(t)) setShowShareDrop(false);
       if (fromCalRef.current && !fromCalRef.current.contains(t)) setShowFromCal(false);
       if (toCalRef.current && !toCalRef.current.contains(t)) setShowToCal(false);
@@ -281,20 +280,23 @@ export default function DebitNotesPage() {
     if (!validItems.length) { toast.error("Add at least one item"); return; }
     setSaving(true);
     try {
+      // The server's purchase-return contract: { itemName, quantity, unit, rate }.
+      // This page used to send name/qty/priceWithoutTax, which the server never
+      // read, so every save was rejected. The server re-derives the rate and
+      // tax from the original purchase; the return is created PENDING and is
+      // completed from Purchase Returns.
       await purchaseReturnsApi.create({
         vendorId: selectedVendor.id,
         reason: `${noteType} ${returnNo}`,
+        returnSource: "MANUAL",
         items: validItems.map(it => ({
-          name: it.name,
-          qty: parseFloat(it.qty) || 0,
+          itemName: it.name,
+          quantity: parseFloat(it.qty) || 0,
           unit: it.unit,
-          priceWithoutTax: parseFloat(it.priceWithoutTax) || 0,
-          taxPercent: parseFloat(it.taxPercent) || 0,
-          taxAmount: it.taxAmount,
-          amount: it.amount,
+          rate: parseFloat(it.priceWithoutTax) || 0,
         })),
       });
-      toast.success(`${noteType} saved`);
+      toast.success(`${noteType} saved as a pending purchase return`);
       setView("list");
       resetForm();
       fetchData();
@@ -307,8 +309,8 @@ export default function DebitNotesPage() {
 
   const filtered = notes.filter(n => {
     const matchSearch = !search ||
-      n.returnNo?.toLowerCase().includes(search.toLowerCase()) ||
-      n.vendor?.name?.toLowerCase().includes(search.toLowerCase());
+      n.returnNo?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      n.vendor?.name?.toLowerCase().includes(search.trim().toLowerCase());
     const matchType = typeFilter === "All" || !typeFilter;
     return matchSearch && matchType;
   });
@@ -317,8 +319,9 @@ export default function DebitNotesPage() {
   const totalBalance = filtered.reduce((s, n) => s + (n.balance ?? n.total), 0);
   const totalSettled = filtered.reduce((s, n) => s + (n.receivedPaid || 0), 0);
 
-  const filteredVendors = vendors.filter(v =>
-    !vendorSearch || v.name.toLowerCase().includes(vendorSearch.toLowerCase())
+  const vendorQuery = selectedVendor && vendorSearch === selectedVendor.name ? "" : vendorSearch;
+  const filteredVendors = dedupeById(vendors).filter(v =>
+    matchesSearch(vendorQuery, v.name, (v as any).vendorCode, v.phone, v.gst)
   );
 
   // ── CREATE VIEW ──────────────────────────────────────────────────────────────
@@ -361,59 +364,34 @@ export default function DebitNotesPage() {
               {/* Left: Vendor Selector */}
               <div className="min-w-0">
                 <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">Vendor / Party</label>
-                <div className="relative" ref={vendorDropRef}>
-                  <div
-                    className={clsx(
-                      "flex items-center gap-2 border rounded-xl px-3 py-2.5 bg-white dark:bg-white/5 cursor-pointer transition-all",
-                      showVendorDrop ? "border-orange-400 ring-2 ring-orange-100 dark:ring-orange-950/40" : "border-gray-200 dark:border-white/10 hover:border-gray-300 dark:hover:border-white/20"
-                    )}
-                    onClick={() => setShowVendorDrop(true)}
-                  >
-                    <div className="w-7 h-7 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
-                      <span className="text-orange-600 dark:text-orange-400 font-bold text-xs">
-                        {selectedVendor ? selectedVendor.name[0].toUpperCase() : "V"}
-                      </span>
-                    </div>
-                    <input
-                      value={showVendorDrop ? vendorSearch : (selectedVendor?.name || "")}
-                      onChange={e => { setVendorSearch(e.target.value); setShowVendorDrop(true); }}
-                      onFocus={() => setShowVendorDrop(true)}
-                      placeholder="Search or select vendor..."
-                      className="flex-1 text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                    />
-                    {(vendorSearch || selectedVendor) && (
-                      <X 
-                        size={14} 
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVendorSearch("");
-                          setSelectedVendor(null);
-                        }} 
-                      />
-                    )}
-                    <ChevronDown size={14} className="text-gray-400 shrink-0" />
-                  </div>
-                  {showVendorDrop && (
-                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl z-50 max-h-52 overflow-y-auto custom-scrollbar">
-                      {filteredVendors.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-400 dark:text-slate-500 text-center">No vendors found</div>
-                      ) : filteredVendors.map(v => (
-                        <button key={v.id} onClick={() => { setSelectedVendor(v); setVendorSearch(""); setShowVendorDrop(false); }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-orange-50 dark:hover:bg-white/5 text-sm transition-colors flex items-center gap-2"
-                        >
-                          <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
-                            <span className="text-orange-600 dark:text-orange-400 font-bold text-[10px]">{v.name[0].toUpperCase()}</span>
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-800 dark:text-white">{v.name}</p>
-                            {v.phone && <p className="text-xs text-gray-400 dark:text-slate-500">{v.phone}</p>}
-                          </div>
-                        </button>
-                      ))}
+                <SearchAutocomplete<Vendor>
+                  id="debit-note-vendor-search"
+                  label="Vendor / Party"
+                  placeholder="Search vendor name or phone..."
+                  minChars={0}
+                  value={vendorSearch}
+                  onInputChange={text => {
+                    setVendorSearch(text);
+                    // Typing a different name un-selects the vendor (saved vendorId must match the name shown).
+                    if (selectedVendor && text !== selectedVendor.name) setSelectedVendor(null);
+                  }}
+                  onClear={() => { setVendorSearch(""); setSelectedVendor(null); }}
+                  options={filteredVendors}
+                  getOptionKey={v => v.id}
+                  inputClassName="rounded-xl py-2.5"
+                  onSelect={v => { setSelectedVendor(v); setVendorSearch(v.name); }}
+                  renderOption={v => (
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
+                        <span className="text-orange-600 dark:text-orange-400 font-bold text-[10px]">{v.name?.[0]?.toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-800 dark:text-white truncate">{v.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-slate-500 truncate">{[(v as any).vendorCode, v.phone, v.gst].filter(Boolean).join(" · ") || "—"}</p>
+                      </div>
                     </div>
                   )}
-                </div>
+                />
                 {selectedVendor?.gst && (
                   <p className="mt-1 text-xs text-gray-400 dark:text-slate-500">GST: {selectedVendor.gst}</p>
                 )}
@@ -787,7 +765,7 @@ export default function DebitNotesPage() {
         <div className="ml-auto flex items-center gap-2">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
+            <input aria-label="Search vendor, ref no"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search vendor, ref no..."

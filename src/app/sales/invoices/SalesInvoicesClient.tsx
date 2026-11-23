@@ -27,6 +27,8 @@ import { exportReportToExcel } from "@/lib/excelExport";
 import LotSelector, { LotLineControl } from "@/components/sales/LotSelector";
 import { applyLotSelection, catalogPrice, currentLotQuantities, LotAllocation } from "@/lib/lot-pricing";
 import { canViewCost } from "@/lib/profit-estimate";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch, NO_MATCH_TEXT } from "@/lib/search";
 
 const PARTY_TYPES: { value: "CUSTOMER" | "DEALER" | "FRANCHISE"; label: string }[] = [
   { value: "CUSTOMER", label: "Customer" },
@@ -389,7 +391,6 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // create form
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
   const [stateOfSupply, setStateOfSupply] = useState("");
@@ -459,7 +460,6 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   const [showCalendar, setShowCalendar] = useState(false);
   const calendarRef = useRef<HTMLDivElement>(null);
 
-  const customerDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef    = useRef<HTMLDivElement>(null);
   const priceDropRef    = useRef<HTMLDivElement>(null);
 
@@ -962,8 +962,6 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
   // Close popups on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node))
-        setShowCustomerDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(e.target as Node))
         setShowShareDrop(false);
       if (priceDropRef.current && !priceDropRef.current.contains(e.target as Node))
@@ -1039,7 +1037,6 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setCustomerPhone(partyObj.phone);
     if (partyObj.state) setStateOfSupply(partyObj.state);
     if (isFr && c.id) setSelectedFranchiseId(c.id);
-    setShowCustomerDrop(false);
   };
 
   // Channel prices default to 0 (unconfigured, not "genuinely free") on
@@ -1490,24 +1487,22 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
     setPrintingInvoice(inv);
   };
 
+  // Back discards unsaved edits. It used to auto-save a server draft whenever
+  // anything was entered; a draft is now created only by the explicit
+  // "Save Draft" button (openCreate resets the form for the next invoice).
   const handleBack = () => {
-    const hasAnyData = !!selectedCustomer || !!customerSearch.trim() || items.some(i => i.productId || i.itemSearch.trim());
-    if (hasAnyData) {
-      handleSave(true);
+    if (initialView === "create") {
+      router.push("/sales/invoices");
     } else {
-      if (initialView === "create") {
-        router.push("/sales/invoices");
-      } else {
-        setView("list");
-      }
+      setView("list");
     }
   };
 
   const filtered = invoices.filter(inv => {
     const partyName = getPartyDisplayName(inv.order, inv);
     const matchSearch = !search ||
-      (inv.order?.invoiceNum || "").toLowerCase().includes(search.toLowerCase()) ||
-      partyName.toLowerCase().includes(search.toLowerCase());
+      (inv.order?.invoiceNum || "").toLowerCase().includes(search.trim().toLowerCase()) ||
+      partyName.toLowerCase().includes(search.trim().toLowerCase());
     // Match on the payment status derived from confirmed payments, so the
     // filter always agrees with the Status column.
     const matchStatus = statusFilter === "ALL" || invoiceFigures(inv).status === statusFilter;
@@ -1547,14 +1542,10 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
       if (hq?.id) setSelectedFranchiseId(hq.id);
     }
   }, [franchises, isFranchiseUser, selectedFranchiseId]);
-  const filteredCustomers = currentPartyList.filter((c: any) =>
-    !customerSearch ||
-    (c.name || "").toLowerCase().includes(customerSearch.toLowerCase()) ||
-    (c.contact && String(c.contact).includes(customerSearch)) ||
-    (c.contactNum && String(c.contactNum).includes(customerSearch)) ||
-    (c.phone && String(c.phone).includes(customerSearch)) ||
-    (c.location && String(c.location).toLowerCase().includes(customerSearch.toLowerCase())) ||
-    (c.address && String(c.address).toLowerCase().includes(customerSearch.toLowerCase()))
+  // While a party is selected its own name is in the box: list all then.
+  const partyQuery = selectedCustomer && customerSearch === selectedCustomer.name ? "" : customerSearch;
+  const filteredCustomers = dedupeById(currentPartyList).filter((c: any) =>
+    matchesSearch(partyQuery, c.name, c.customerCode, c.code, c.contact, c.contactNum, c.phone, c.location, c.address, c.gstNumber)
   );
 
   // ── Print / Download dialog ──────────────────────────────────────────────
@@ -2043,85 +2034,64 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
                     {partyType === "FRANCHISE" ? "Franchise *" : partyType === "DEALER" ? "Dealer *" : "Customer *"}
                   </label>
-                  <div className="relative" ref={customerDropRef}>
-                    <div
-                      className={clsx(
-                        "flex items-center gap-2 border rounded-xl px-3 py-2 cursor-pointer bg-white dark:bg-[#13151f] transition-all",
-                        showCustomerDrop ? "border-orange-400 ring-1 ring-orange-200 dark:ring-orange-500/20" : "border-gray-300 dark:border-white/10 hover:border-gray-400 dark:hover:border-white/20"
-                      )}
-                      onClick={() => setShowCustomerDrop(v => !v)}
-                    >
-                      <User size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                      <input
-                        className="flex-1 text-xs sm:text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500"
-                        placeholder={
-                          partyType === "FRANCHISE"
-                            ? "Search Franchise by Name/Phone"
-                            : partyType === "DEALER"
-                            ? "Search Dealer by Name/Phone"
-                            : "Search by Name/Phone"
-                        }
-                        value={customerSearch}
-                        onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                        onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                      />
-                      {customerSearch && (
-                        <X 
-                          size={14} 
-                          className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                          onClick={() => { setCustomerSearch(""); setSelectedCustomer(null); setCustomerPhone(""); }} 
-                        />
-                      )}
-                      <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                    </div>
-                    {showCustomerDrop && (
-                      <div className="absolute top-full left-0 z-50 mt-1 w-full max-w-[calc(100vw-2rem)] bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-xl shadow-xl overflow-hidden">
-                        {partyType !== "FRANCHISE" && (
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 border-b border-gray-100 dark:border-white/5 font-semibold"
-                            onClick={() => {
-                              const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
-                              setNewParty(prev => ({
-                                ...prev,
-                                name: isPhone ? "" : customerSearch.trim(),
-                                phone: isPhone ? customerSearch.trim() : "",
-                              }));
-                              setShowAddParty(true);
-                              setShowCustomerDrop(false);
-                            }}
-                          >
-                            <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
-                            Add {partyType === "DEALER" ? "Dealer" : "Party"}
-                          </button>
-                        )}
-                        <div className="max-h-48 overflow-y-auto custom-scrollbar">
-                          {filteredCustomers.length === 0 ? (
-                            <div className="px-3 py-4 text-xs sm:text-sm text-gray-400 dark:text-slate-500 text-center">
-                              No {partyType === "FRANCHISE" ? "franchises" : partyType === "DEALER" ? "dealers" : "customers"} found
-                            </div>
-                          ) : (
-                            filteredCustomers.map((c: any) => (
-                              <button
-                                key={c.id}
-                                className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0 transition-colors"
-                                onClick={() => selectCustomer(c)}
-                              >
-                                <div className="text-left">
-                                  <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                                  <div className="text-[11px] text-gray-400 dark:text-slate-500">{c.phone || c.contact || c.contactNum || c.location || c.address || "—"}</div>
-                                </div>
-                                {(c.balance !== undefined && c.balance !== 0) && (
-                                  <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded">
-                                    ₹{c.balance}<Check size={10} />
-                                  </div>
-                                )}
-                              </button>
-                            ))
-                          )}
+                  <SearchAutocomplete<any>
+                    id="inv-party-search"
+                    label={partyType === "FRANCHISE" ? "Franchise" : partyType === "DEALER" ? "Dealer" : "Customer"}
+                    placeholder={
+                      partyType === "FRANCHISE"
+                        ? "Search Franchise by Name/Phone"
+                        : partyType === "DEALER"
+                        ? "Search Dealer by Name/Phone"
+                        : "Search by Name/Phone"
+                    }
+                    minChars={0}
+                    value={customerSearch}
+                    onInputChange={text => {
+                      setCustomerSearch(text);
+                      // The invoice is saved with selectedCustomer.id: editing the
+                      // name away from it must drop that id.
+                      if (selectedCustomer && text !== selectedCustomer.name) { setSelectedCustomer(null); setCustomerPhone(""); }
+                    }}
+                    onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); setCustomerPhone(""); }}
+                    options={filteredCustomers}
+                    getOptionKey={(c: any) => c.id}
+                    inputClassName="rounded-xl text-xs sm:text-sm border-gray-300"
+                    onSelect={selectCustomer}
+                    renderOption={(c: any) => (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-left min-w-0">
+                          <div className="text-xs sm:text-sm font-medium text-gray-800 dark:text-white truncate">{c.name}</div>
+                          <div className="text-[11px] text-gray-400 dark:text-slate-500 truncate">
+                            {[c.customerCode || c.code, c.phone || c.contact || c.contactNum || c.location || c.address].filter(Boolean).join(" · ") || "—"}
+                          </div>
                         </div>
+                        {(c.balance !== undefined && c.balance !== 0) && (
+                          <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded shrink-0" title="Balance">
+                            ₹{c.balance}<Check size={10} />
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+                    footer={partyType !== "FRANCHISE" ? (close => (
+                      <button
+                        type="button"
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs sm:text-sm text-[#f58220] dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10"
+                        onClick={() => {
+                          const isPhone = /^[\d\s\-+()]{6,}$/.test(customerSearch.trim());
+                          setNewParty(prev => ({
+                            ...prev,
+                            name: isPhone ? "" : customerSearch.trim(),
+                            phone: isPhone ? customerSearch.trim() : "",
+                          }));
+                          close();
+                          setShowAddParty(true);
+                        }}
+                      >
+                        <span className="w-5 h-5 rounded-full bg-orange-100 dark:bg-orange-500/20 flex items-center justify-center text-[#f58220] font-bold text-base leading-none">+</span>
+                        Add {partyType === "DEALER" ? "Dealer" : "Party"}
+                      </button>
+                    )) : undefined}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 dark:text-slate-400 mb-1.5">Phone</label>
@@ -2260,8 +2230,9 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                       for (const allocation of peer.lotAllocations ?? (peer.lotId ? [{ lotId: peer.lotId, quantity: peer.qty }] : [])) manualClaims[allocation.lotId] = (manualClaims[allocation.lotId] || 0) + allocation.quantity * peerFactor / factor;
                     }
                     const { discAmt, taxAmt, amount } = computeRow(item, withTax);
-                    const filtProd = products.filter(p =>
-                      !item.itemSearch || [p.name, p.sku, p.inventorySku, p.barcode].some(value => String(value || "").toLowerCase().includes(item.itemSearch.toLowerCase()))
+                    // Trimmed, case-insensitive; one row per product id.
+                    const filtProd = dedupeById(products).filter(p =>
+                      matchesSearch(item.productId ? "" : item.itemSearch, p.name, p.sku, p.inventorySku, p.barcode)
                     ).slice(0, 10);
 
                     return (
@@ -2271,7 +2242,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                         {/* ITEM */}
                         <td className="px-3 py-2" style={{ position: "relative", overflow: "visible" }}>
                           <div className="flex items-center gap-1 w-full">
-                            <input
+                            <input aria-label="Search item"
                               className="flex-1 text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder:text-slate-500 min-w-0"
                               placeholder="Search item..."
                               value={item.itemSearch}
@@ -2287,7 +2258,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               <X
                                 size={12}
                                 className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
-                                onClick={() => updateItem(idx, "itemSearch", "")}
+                                onClick={() => { updateItem(idx, "itemSearch", ""); updateItem(idx, "productId", ""); }}
                               />
                             )}
                             <ChevronDown
@@ -2344,7 +2315,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
                               </div>
                               <div className="max-h-48 overflow-y-auto custom-scrollbar">
                                 {filtProd.length === 0 ? (
-                                  <div className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">No matching products</div>
+                                  <div role="status" className="px-3 py-4 text-xs text-gray-400 dark:text-slate-500 text-center">{NO_MATCH_TEXT}</div>
                                 ) : (
                                   filtProd.map(p => (
                                     <button
@@ -3227,7 +3198,7 @@ export default function SalesInvoicesClient({ initialView = "list" }: { initialV
         <div className="flex flex-wrap items-center gap-3 w-full min-w-0">
           <div className="relative flex-1 min-w-[200px] sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search invoice or customer"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search invoice or customer..."

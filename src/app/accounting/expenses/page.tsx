@@ -220,7 +220,7 @@ export default function ExpensesPage() {
   };
 
   const filtered = expenses.filter(e =>
-    !search || e.category?.toLowerCase().includes(search.toLowerCase()) || e.payee?.toLowerCase().includes(search.toLowerCase())
+    !search || e.category?.toLowerCase().includes(search.trim().toLowerCase()) || e.payee?.toLowerCase().includes(search.trim().toLowerCase())
   );
   const totalExpenses = filtered.reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -570,7 +570,7 @@ export default function ExpensesPage() {
         <div className="flex items-center gap-2">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none" />
-            <input
+            <input aria-label="Search category, payee"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search category, payee..."

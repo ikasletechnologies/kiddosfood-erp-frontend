@@ -5,6 +5,7 @@ import { Plus, Search, FileText, FileDown, CheckCircle2, XCircle } from "lucide-
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
 
 const STATUS_COLORS: Record<string, string> = {
   OPEN: "bg-blue-100 text-blue-700",
@@ -18,6 +19,9 @@ export default function RequestForQuotationPage() {
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Debounced (300 ms) + trimmed term actually sent to the API.
+  const searchTerm = useSearchTerm(search);
+  const beginLoad = useLatestRequest();
   const [statusFilter, setStatusFilter] = useState("");
   
   const [showRFQForm, setShowRFQForm] = useState(false);
@@ -30,21 +34,24 @@ export default function RequestForQuotationPage() {
   });
 
   async function loadData() {
+    // Ignore responses of older requests (stale results must not win).
+    const req = beginLoad();
     setLoading(true);
     try {
       const [rRes, pRes, vRes] = await Promise.all([
-        api.get("/api/purchase/rfqs", { params: { search, status: statusFilter } }),
+        api.get("/api/purchase/rfqs", { params: { search: searchTerm || undefined, status: statusFilter } }),
         api.get("/api/purchase-requests", { params: { status: "APPROVED" } }),
         api.get("/api/vendors")
       ]);
+      if (!req.isLatest()) return;
       setRFQs(rRes.data);
       setPRs(pRes.data);
       setVendors(vRes.data);
     } catch {}
-    setLoading(false);
+    if (req.isLatest()) setLoading(false);
   }
 
-  useEffect(() => { loadData(); }, [search, statusFilter]);
+  useEffect(() => { loadData(); }, [searchTerm, statusFilter]);
 
   async function handleCreateRFQ(e: React.FormEvent) {
      e.preventDefault();

@@ -5,6 +5,7 @@ import { Plus, Search, FileText, CheckCircle2, XCircle, X } from "lucide-react";
 import api from "@/lib/api";
 import { toast } from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-700",
@@ -18,6 +19,9 @@ export default function PurchaseRequestsPage() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Debounced (300 ms) + trimmed term actually sent to the API.
+  const searchTerm = useSearchTerm(search);
+  const beginLoad = useLatestRequest();
   const [statusFilter, setStatusFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -27,19 +31,22 @@ export default function PurchaseRequestsPage() {
   });
 
   async function loadData() {
+    // Ignore responses of older requests (stale results must not win).
+    const req = beginLoad();
     setLoading(true);
     try {
       const [rRes, iRes] = await Promise.all([
-        api.get("/api/purchase-requests", { params: { search, status: statusFilter } }),
+        api.get("/api/purchase-requests", { params: { search: searchTerm || undefined, status: statusFilter } }),
         api.get("/api/inventory")
       ]);
+      if (!req.isLatest()) return;
       setRequests(rRes.data);
       setInventory(iRes.data);
     } catch {}
-    setLoading(false);
+    if (req.isLatest()) setLoading(false);
   }
 
-  useEffect(() => { loadData(); }, [search, statusFilter]);
+  useEffect(() => { loadData(); }, [searchTerm, statusFilter]);
 
   function addItem() { setForm({ ...form, items: [...form.items, { inventoryItemId: "", quantity: "1", unit: "pcs", notes: "" }] }); }
   function removeItem(i: number) { setForm({ ...form, items: form.items.filter((_, idx) => idx !== i) }); }
@@ -80,7 +87,7 @@ export default function PurchaseRequestsPage() {
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-slate-500" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests..." className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 outline-none focus:border-[#f58220]" />
+          <input aria-label="Search requests" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search requests..." className="w-full pl-9 pr-3 py-2 border border-gray-200 dark:border-white/10 rounded-lg text-sm bg-white dark:bg-[#13151f] text-gray-800 dark:text-white placeholder:text-gray-400 dark:placeholder:text-slate-500 outline-none focus:border-[#f58220]" />
             {search && (
               <X 
                 size={14} 

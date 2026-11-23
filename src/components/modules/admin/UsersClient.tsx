@@ -146,8 +146,8 @@ export default function UsersClient() {
   };
 
   const filteredUsers = users.filter(u => 
-    u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    u.fullName.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    u.email.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   return (
@@ -167,7 +167,7 @@ export default function UsersClient() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 w-full min-w-0">
         <div className="sm:col-span-3 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input
+          <input aria-label="Search by name or email"
             type="text"
             placeholder="Search by name or email..."
             value={searchQuery}

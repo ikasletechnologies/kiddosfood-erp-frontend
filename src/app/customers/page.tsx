@@ -472,7 +472,7 @@ export default function PartiesPage() {
         <div className="p-3 border-b border-slate-100 dark:border-slate-800/80 space-y-2.5">
           <div className="relative flex items-center">
             <Search size={14} className="absolute left-3 text-slate-400 pointer-events-none" />
-            <input
+            <input aria-label="Search party name, phone, GSTIN"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -872,7 +872,7 @@ export default function PartiesPage() {
                       {isTransactionSearchOpen ? (
                         <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
                           <Search size={13} className="text-slate-400 shrink-0" />
-                          <input
+                          <input aria-label="Search invoice number, type"
                             type="text"
                             autoFocus
                             placeholder="Search invoice number, type..."
@@ -927,7 +927,7 @@ export default function PartiesPage() {
                       {isItemSearchOpen ? (
                         <div className="flex items-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-2.5 py-1.5 relative shadow-2xs">
                           <Search size={13} className="text-slate-400 shrink-0" />
-                          <input
+                          <input aria-label="Search product name, SKU"
                             type="text"
                             autoFocus
                             placeholder="Search product name, SKU..."

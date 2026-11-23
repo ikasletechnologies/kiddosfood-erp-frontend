@@ -76,7 +76,7 @@ export default function BatchExpiryReport() {
               </button>
               <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999]" />
-                 <input 
+                 <input aria-label="Search Items" 
                    type="text" 
                    placeholder="Search Items..."
                    className="w-full pl-9 pr-3 py-2 border border-[#F0EAF0] dark:border-slate-800 rounded-xl text-xs sm:text-sm font-medium outline-none focus:border-[#7C3AED] transition-colors bg-white dark:bg-slate-900 shadow-sm"

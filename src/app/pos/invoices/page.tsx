@@ -86,8 +86,8 @@ function InvoicesPageContent() {
   };
 
   const filteredInvoices = invoices.filter(inv => 
-    (inv.orderNumber || '').toLowerCase().includes(search.toLowerCase()) ||
-    (inv.customer?.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (inv.orderNumber || '').toLowerCase().includes(search.trim().toLowerCase()) ||
+    (inv.customer?.name || '').toLowerCase().includes(search.trim().toLowerCase()) ||
     (inv.customer?.phone || '').includes(search)
   );
 
@@ -153,7 +153,7 @@ function InvoicesPageContent() {
         <div className="flex items-center gap-4">
            <div className="relative group min-w-[300px]">
               <SearchIcon size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-orange-500 transition-colors" />
-              <input 
+              <input aria-label="Search Invoice #, Customer" 
                 type="text" 
                 placeholder="Search Invoice #, Customer..." 
                 value={search}

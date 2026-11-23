@@ -78,7 +78,7 @@ export default function RecipeUploadsTab() {
         <div className="flex flex-col gap-2 border-b border-gray-100 p-3 dark:border-white/5 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:max-w-xs">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search document name..." className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-[#f58220] dark:border-white/10 dark:bg-white/5" />
+            <input aria-label="Search document name" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search document name..." className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-8 pr-3 text-xs outline-none focus:border-[#f58220] dark:border-white/10 dark:bg-white/5" />
           </div>
           <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1 dark:bg-white/5">
             {(["ALL", "PROCESSING", "SUCCESS"] as const).map((status) => (

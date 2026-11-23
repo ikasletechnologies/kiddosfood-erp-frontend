@@ -83,7 +83,7 @@ export default function CentralSaleOrderItemReport({
   const filteredOrders = orders.filter((order) => {
     const matchesSearch = (order.customerName || "")
       .toLowerCase()
-      .includes(partySearch.toLowerCase());
+      .includes(partySearch.trim().toLowerCase());
 
     if (statusFilter === "ALL") return matchesSearch;
     if (statusFilter === "OPEN") {

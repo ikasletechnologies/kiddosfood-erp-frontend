@@ -209,11 +209,11 @@ export default function WastagePage() {
   };
 
   const filteredLogs = wasteLogs.filter(log =>
-    log.inventoryItem?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.reason.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    log.inventoryItem?.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (log.note && log.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (log.warehouse?.name && log.warehouse.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    log.inventoryItem?.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    log.reason.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    log.inventoryItem?.sku.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    (log.note && log.note.toLowerCase().includes(searchQuery.trim().toLowerCase())) ||
+    (log.warehouse?.name && log.warehouse.name.toLowerCase().includes(searchQuery.trim().toLowerCase()))
   );
 
   return (
@@ -390,7 +390,7 @@ export default function WastagePage() {
 
                 <div className="relative w-full sm:w-64">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-                  <input
+                  <input aria-label="Search logs"
                     type="text"
                     placeholder="Search logs..."
                     value={searchQuery}

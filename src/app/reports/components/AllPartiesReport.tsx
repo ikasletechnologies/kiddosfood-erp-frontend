@@ -454,7 +454,7 @@ export default function CentralAllPartiesReport({
         <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0 no-print">
           <div className="relative max-w-sm">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input
+            <input aria-label="Search name, phone or email"
               type="text"
               placeholder="Search name, phone or email..."
               value={searchQuery}

@@ -60,8 +60,8 @@ export default function AttendancePage() {
   };
 
   const filtered = employees.filter((e) =>
-    (e.user?.fullName || "").toLowerCase().includes(search.toLowerCase()) ||
-    (e.employeeCode || "").toLowerCase().includes(search.toLowerCase())
+    (e.user?.fullName || "").toLowerCase().includes(search.trim().toLowerCase()) ||
+    (e.employeeCode || "").toLowerCase().includes(search.trim().toLowerCase())
   );
 
   const fmtTime = (iso?: string) => iso ? new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : null;
@@ -71,7 +71,7 @@ export default function AttendancePage() {
       <div className="flex items-center justify-end w-full min-w-0">
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400 dark:text-slate-500" />
-          <input
+          <input aria-label="Search employee"
             type="text"
             placeholder="Search employee..."
             value={search}

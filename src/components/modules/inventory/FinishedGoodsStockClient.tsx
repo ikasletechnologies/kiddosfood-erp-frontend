@@ -667,7 +667,7 @@ export default function FinishedGoodsStockClient() {
 
   // Filters
   const filtered = demandItems.filter((item) => {
-    const q = searchTerm.toLowerCase();
+    const q = searchTerm.trim().toLowerCase();
     const matchSearch =
       !searchTerm ||
       item.productName.toLowerCase().includes(q) ||
@@ -821,7 +821,7 @@ export default function FinishedGoodsStockClient() {
         {/* Search */}
         <div className="flex items-center gap-2.5 px-3.5 sm:px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl w-full lg:w-80 shadow-sm">
           <Search size={15} className="text-slate-400 shrink-0" />
-          <input
+          <input aria-label="Search by Product Name or SKU"
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}

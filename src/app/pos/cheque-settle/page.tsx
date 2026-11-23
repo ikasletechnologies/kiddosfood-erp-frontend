@@ -84,9 +84,9 @@ export default function ChequeSettlePage() {
 
   const filteredCheques = cheques.filter((c) => {
     const matchesSearch =
-      c.chequeNumber.toLowerCase().includes(search.toLowerCase()) ||
-      c.payeeName.toLowerCase().includes(search.toLowerCase()) ||
-      c.bankName.toLowerCase().includes(search.toLowerCase());
+      c.chequeNumber.toLowerCase().includes(search.trim().toLowerCase()) ||
+      c.payeeName.toLowerCase().includes(search.trim().toLowerCase()) ||
+      c.bankName.toLowerCase().includes(search.trim().toLowerCase());
     const matchesFilter = filter === "ALL" || c.status === filter;
     return matchesSearch && matchesFilter;
   });

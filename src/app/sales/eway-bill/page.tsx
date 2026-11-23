@@ -9,6 +9,7 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import EWayBillForm from "./EWayBillForm";
 import EWayBillDetail from "./EWayBillDetail";
 import { S, Masters, STATUS_BADGE, STATUS_LABEL, SOURCE_LABELS, timeLeft, apiError, formatEwbNo, downloadJson } from "./ewaybill-ui";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
 
 // E-Way Bill register (Sales menu).
 // the Sale Invoice screen. EWB numbers come from the NIC portal — drafts are
@@ -36,6 +37,8 @@ export default function EWayBillPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("ALL");
   const [search, setSearch] = useState("");
+  const searchTerm = useSearchTerm(search); // debounced (300 ms) + trimmed
+  const beginLoad = useLatestRequest();
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -46,25 +49,28 @@ export default function EWayBillPage() {
   }, []);
 
   const load = useCallback(async () => {
+    const req = beginLoad();
     setLoading(true);
     try {
       const [list, st] = await Promise.all([
-        ewayBillApi.getAll({ status: tab, search: search || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }),
+        ewayBillApi.getAll({ status: tab, search: searchTerm || undefined, fromDate: fromDate || undefined, toDate: toDate || undefined }),
         ewayBillApi.getStats(),
       ]);
+      if (!req.isLatest()) return; // stale response
       setRows(list.data || []);
       setStats(st.data);
       setSelected(new Set());
     } catch (e) {
-      showToast(apiError(e, "Failed to load E-Way Bills"), "error");
+      if (req.isLatest()) showToast(apiError(e, "Failed to load E-Way Bills"), "error");
     } finally {
-      setLoading(false);
+      if (req.isLatest()) setLoading(false);
     }
-  }, [tab, search, fromDate, toDate]);
+  }, [tab, searchTerm, fromDate, toDate, beginLoad]);
 
   useEffect(() => {
     if (view.name !== "list") return;
-    const t = setTimeout(load, 250);
+    // The search term is already debounced; filters apply immediately.
+    const t = setTimeout(load, 0);
     return () => clearTimeout(t);
   }, [load, view.name]);
 
@@ -204,7 +210,7 @@ export default function EWayBillPage() {
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
           <div className="relative flex-1 min-w-0 sm:max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search EWB no., document, party, vehicle"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search EWB no., document, party, vehicle..."

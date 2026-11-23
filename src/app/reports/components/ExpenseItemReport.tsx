@@ -113,8 +113,8 @@ export default function CentralExpenseItemReport({
 
   // Search Filter
   const searchedExpenses = expenses.filter((e) => {
-    const matchesCategory = (e.category || "").toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDesc = (e.expenseItem || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = (e.category || "").toLowerCase().includes(searchQuery.trim().toLowerCase());
+    const matchesDesc = (e.expenseItem || "").toLowerCase().includes(searchQuery.trim().toLowerCase());
     return matchesCategory || matchesDesc;
   });
 
@@ -220,7 +220,7 @@ export default function CentralExpenseItemReport({
         <div className="flex items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800/60 pt-3">
           <div className="relative">
             <SearchIcon size={12} className="absolute left-3 top-2.5 text-slate-400" />
-            <input
+            <input aria-label="Search expense item"
               type="text"
               placeholder="Search expense item..."
               value={searchQuery}

@@ -345,7 +345,7 @@ export default function ProfitLossPage() {
             {/* Search Input */}
             <div className="relative flex-1 min-w-[180px] max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-              <input
+              <input aria-label="Search account / category"
                 type="text"
                 placeholder="Search account / category..."
                 value={searchQuery}

@@ -5,6 +5,7 @@ import { X,
   FileTextIcon, PrinterIcon, AlertCircleIcon, SearchIcon
 } from "lucide-react";
 import { reportsApi } from "@/lib/api/accounting.api";
+import { searchParam, SEARCH_DEBOUNCE_MS } from "@/lib/search";
 
 interface ItemDetailRow {
   date: string;
@@ -23,6 +24,7 @@ export default function ItemDetailReport() {
   const [hideInactive, setHideInactive] = useState(false);
 
   useEffect(() => {
+    let stale = false; // set when a newer search/date change supersedes this one
     async function fetchData() {
       try {
         setLoading(true);
@@ -32,7 +34,8 @@ export default function ItemDetailReport() {
         if (franchiseId) params.append("franchiseId", franchiseId);
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
-        if (searchTerm) params.append("itemName", searchTerm);
+        const term = searchParam(searchTerm);
+        if (term) params.append("itemName", term);
         const res = await reportsApi.getItemDetail(Object.fromEntries(params.entries()));
         const data = res.data;
         const rows = Array.isArray(data) ? data : (data?.rows || []);
@@ -45,21 +48,20 @@ export default function ItemDetailReport() {
           closingQuantity: Number(r.closingQuantity || 0)
         }));
 
-        setReportData(formatted);
+        if (!stale) setReportData(formatted);
       } catch (err) {
         console.error(err);
-        setReportData([]);
+        if (!stale) setReportData([]);
       } finally {
-        setLoading(false);
+        if (!stale) setLoading(false);
       }
     }
-    
-    // Slight debounce for search term if needed, but simple fetch works
+
     const timeoutId = setTimeout(() => {
       fetchData();
-    }, 500);
-    
-    return () => clearTimeout(timeoutId);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => { stale = true; clearTimeout(timeoutId); };
   }, [startDate, endDate, searchTerm]);
 
   const handlePrint = () => {

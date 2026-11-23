@@ -210,7 +210,7 @@ function LegacyManageWarehousesPage() {
         {/* Search */}
         <div className="relative flex-1 min-w-0">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
+          <input aria-label="Search by warehouse name, code, or location"
             type="text"
             placeholder="Search by warehouse name, code, or location..."
             value={searchQuery}

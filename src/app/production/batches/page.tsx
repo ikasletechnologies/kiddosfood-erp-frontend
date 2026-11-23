@@ -164,7 +164,7 @@ function ProductBatchesRegistry() {
   };
 
   const filtered = batches.filter((b) => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     const matchSearch = !search ||
       b.batchCode?.toLowerCase().includes(q) ||
       b.product?.name?.toLowerCase().includes(q) ||
@@ -238,7 +238,7 @@ function ProductBatchesRegistry() {
           {/* ── Filters Row ── */}
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
             <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
-              <input
+              <input aria-label="Search batch, product, date"
                 type="text"
                 placeholder="Search batch, product, date..."
                 value={search}

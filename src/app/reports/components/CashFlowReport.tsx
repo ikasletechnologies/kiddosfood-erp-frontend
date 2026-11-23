@@ -49,8 +49,8 @@ export default function CentralCashFlowReport({
 
   const rows = reportData?.rows || [];
   const filteredRows = rows.filter(r => {
-    const matchesQuery = String(r.partyName || "").toLowerCase().includes(filterQuery.toLowerCase()) || 
-                         String(r.refNo || "").toLowerCase().includes(filterQuery.toLowerCase());
+    const matchesQuery = String(r.partyName || "").toLowerCase().includes(filterQuery.trim().toLowerCase()) || 
+                         String(r.refNo || "").toLowerCase().includes(filterQuery.trim().toLowerCase());
     const matchesZero = showZero ? true : ((r.cashIn || 0) > 0 || (r.cashOut || 0) > 0);
     return matchesQuery && matchesZero;
   });
@@ -82,7 +82,7 @@ export default function CentralCashFlowReport({
 
           <div className="relative w-full sm:w-64 max-w-full min-w-0">
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500" />
-            <input 
+            <input aria-label="Search party or ref" 
               type="text" 
               placeholder="Search party or ref..." 
               value={filterQuery}

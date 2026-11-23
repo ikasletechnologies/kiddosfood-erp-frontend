@@ -52,7 +52,7 @@ export default function InventoryItemsPage() {
   
   const filteredItems = STOCK_DATA.filter(item => {
     const matchesCategory = activeCategory === "All" || item.category === activeCategory;
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.sku.includes(search.toUpperCase());
+    const matchesSearch = item.name.toLowerCase().includes(search.trim().toLowerCase()) || item.sku.includes(search.toUpperCase());
     return matchesCategory && matchesSearch;
   });
 

@@ -130,8 +130,8 @@ export default function RawMaterialStockDashboard() {
 
   const filtered = items.filter((it) => {
     const matchSearch = !search ||
-      it.name?.toLowerCase().includes(search.toLowerCase()) ||
-      it.sku?.toLowerCase().includes(search.toLowerCase());
+      it.name?.toLowerCase().includes(search.trim().toLowerCase()) ||
+      it.sku?.toLowerCase().includes(search.trim().toLowerCase());
     return matchSearch;
   });
 
@@ -234,7 +234,7 @@ export default function RawMaterialStockDashboard() {
           </select>
           <div className="relative flex-1 min-w-[180px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search SKU / Product Name"
               type="text"
               placeholder="Search SKU / Product Name..."
               value={search}

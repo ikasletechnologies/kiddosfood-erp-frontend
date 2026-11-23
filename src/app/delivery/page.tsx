@@ -115,7 +115,7 @@ export default function DispatchTrackingPage() {
   const filtered = rows.filter((r) => {
     if (!activeFilter.match(r.status)) return false;
     if (!search) return true;
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return (
       r.challanNumber?.toLowerCase().includes(q) ||
       r.dispatchId?.toLowerCase().includes(q) ||
@@ -163,7 +163,7 @@ export default function DispatchTrackingPage() {
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           <div className="flex items-center bg-white dark:bg-card border border-slate-200 dark:border-white/10 rounded-lg p-1 shadow-sm">
             <div className="flex items-center px-2 text-slate-400 dark:text-slate-500"><Search size={14} /></div>
-            <input
+            <input aria-label="Search DC, invoice, party, vehicle, driver"
               type="text"
               placeholder="Search DC, invoice, party, vehicle, driver..."
               value={search}

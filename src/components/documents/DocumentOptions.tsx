@@ -36,12 +36,10 @@ export default function DocumentOptions({ type }: DocumentOptionsProps) {
       };
       
       if (editId) {
-        try {
-          await purchaseOrdersApi.delete(editId);
-        } catch (e) {
-          console.error("Failed to delete old PO", e);
-        }
-        await purchaseOrdersApi.create(payload);
+        // Edit in place. The old delete-then-recreate silently produced a
+        // duplicate PO whenever the delete was refused (only untouched Draft
+        // POs can be deleted).
+        await purchaseOrdersApi.update(editId, payload);
         toast.success("Purchase Order updated successfully!");
       } else {
         await purchaseOrdersApi.create(payload);

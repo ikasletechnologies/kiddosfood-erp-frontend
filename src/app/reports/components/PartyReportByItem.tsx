@@ -63,7 +63,7 @@ export default function CentralPartyReportByItem({
   const fmt = (val: number) => `₹ ${val.toFixed(2)}`;
 
   const filtered = rows.filter((r) =>
-    r.partyName.toLowerCase().includes(searchQuery.toLowerCase())
+    r.partyName.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const totalSaleQty = filtered.reduce((s, r) => s + r.saleQty, 0);

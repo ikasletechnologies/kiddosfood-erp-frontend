@@ -48,7 +48,7 @@ export default function FranchiseDocuments({franchiseId,franchiseName,manage=fal
     }catch{setError('Could not access this document. Please refresh and try again.');}
   };
   const uploaded=new Set(documents.filter(d=>d.status==='ACTIVE').map(d=>d.category)).size;
-  const visibleCategories=DOCUMENT_CATEGORIES.filter(([category,name])=>name.toLowerCase().includes(search.toLowerCase())||documents.some(d=>d.category===category&&d.originalFileName.toLowerCase().includes(search.toLowerCase())));
+  const visibleCategories=DOCUMENT_CATEGORIES.filter(([category,name])=>name.toLowerCase().includes(search.trim().toLowerCase())||documents.some(d=>d.category===category&&d.originalFileName.toLowerCase().includes(search.trim().toLowerCase())));
   return <section aria-label="Franchise documents" className="space-y-4 min-w-0">
     <div className="space-y-1"><h3 className="font-bold text-slate-900 dark:text-white">{manage?'UPDATE DOCUMENTS':'Branch Documents'}</h3>{franchiseName&&<p className="break-words text-sm font-semibold text-orange-600">{franchiseName}</p>}<p className="text-xs leading-relaxed text-slate-500">{manage?'Upload files for this branch. All categories are optional, and files stay private unless you share them.':'View and download documents shared with your franchise by Super Admin.'}</p></div>
     {manage&&loaded&&<div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 text-xs text-orange-900"><div className="flex flex-wrap justify-between gap-2"><span>Total Categories: 9</span><span>Uploaded Categories: {uploaded}</span><span>Pending Categories: {9-uploaded}</span></div><progress className="mt-2 h-1.5 w-full accent-orange-500" value={uploaded} max={9} aria-label="Uploaded categories" /></div>}

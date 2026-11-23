@@ -12,6 +12,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { clsx } from "clsx";
 import { formatDate } from "@/lib/utils";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
 
 interface Employee {
   id: string;
@@ -108,6 +109,9 @@ export default function EmployeesClient() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Debounced (300 ms) + trimmed term actually sent to the API.
+  const searchTerm = useSearchTerm(search);
+  const beginLoad = useLatestRequest();
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState(1);
@@ -119,20 +123,23 @@ export default function EmployeesClient() {
   const [assigningId, setAssigningId] = useState<string | null>(null);
 
   async function loadData() {
+    // Ignore responses of older requests (stale results must not win).
+    const req = beginLoad();
     setLoading(true);
     try {
       const [empRes, userRes, structRes] = await Promise.all([
-        api.get("/api/employees", { params: { search, department: departmentFilter } }),
+        api.get("/api/employees", { params: { search: searchTerm || undefined, department: departmentFilter } }),
         api.get("/api/users"),
         api.get("/api/payroll/structures").catch(() => ({ data: [] }))
       ]);
+      if (!req.isLatest()) return;
       setEmployees(empRes.data);
       setUsers(userRes.data);
       setStructures(structRes.data || []);
     } catch (e) {
       console.error(e);
     }
-    setLoading(false);
+    if (req.isLatest()) setLoading(false);
   }
 
   async function handleAssignStructure(employeeId: string, salaryStructureId: string) {
@@ -149,7 +156,7 @@ export default function EmployeesClient() {
 
   useEffect(() => {
     loadData();
-  }, [search, departmentFilter]);
+  }, [searchTerm, departmentFilter]);
 
   const handleOpenForm = (emp: Employee | null = null) => {
     if (emp) {
@@ -318,7 +325,7 @@ export default function EmployeesClient() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input 
+          <input aria-label="Search by name, code" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)} 
             placeholder="Search by name, code..." 

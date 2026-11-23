@@ -66,7 +66,7 @@ export default function CentralSalePurchaseByParty({
   const fmtZero = (val: number) => `₹ ${val.toFixed(2)}`;
 
   const filtered = rows.filter((r) =>
-    r.partyName.toLowerCase().includes(searchQuery.toLowerCase())
+    r.partyName.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const totalSaleAmt = filtered.reduce((s, r) => s + (r.totalSale || 0), 0);

@@ -19,6 +19,8 @@ import { formatERPNumber, formatDate, calculateSalesDocumentTotals } from "@/lib
 import GSTInvoice from "@/components/documents/GSTInvoice";
 import { LotChip } from "@/components/sales/LotSelector";
 import InvoiceLotAllocation from "@/components/sales/InvoiceLotAllocation";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 const FALLBACK_COMPANY = {
   name: "My Restaurant",
@@ -267,7 +269,6 @@ export default function DeliveryChallanPage() {
   const [selectedDealer, setSelectedDealer] = useState<any>(null);
   const [selectedFranchise, setSelectedFranchise] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
   // Scoped to the logged-in franchise branch for franchise users, or HQ for super admins
   const [sourceFranchiseId, setSourceFranchiseId] = useState("");
@@ -398,7 +399,6 @@ export default function DeliveryChallanPage() {
   const currentCompany = companyProfile || FALLBACK_COMPANY;
 
   // Refs for closing dropdowns
-  const customerDropRef = useRef<HTMLDivElement>(null);
   const priceDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
   const exportDropRef = useRef<HTMLDivElement>(null);
@@ -408,9 +408,6 @@ export default function DeliveryChallanPage() {
     const handleDocClick = (e: MouseEvent) => {
       if (exportDropRef.current && !exportDropRef.current.contains(e.target as Node)) {
         setExportDropdownOpen(false);
-      }
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node)) {
-        setShowCustomerDrop(false);
       }
     };
     document.addEventListener("mousedown", handleDocClick);
@@ -738,9 +735,6 @@ export default function DeliveryChallanPage() {
   // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node)) {
-        setShowCustomerDrop(false);
-      }
       if (priceDropRef.current && !priceDropRef.current.contains(e.target as Node)) {
         setShowPriceDrop(false);
       }
@@ -838,7 +832,6 @@ export default function DeliveryChallanPage() {
     }
     setCustomerSearch(c.name);
     setCustomerPhone(c.phone || "");
-    setShowCustomerDrop(false);
   };
 
   // Channel prices default to 0 (unconfigured, not "genuinely free") on
@@ -1199,8 +1192,8 @@ export default function DeliveryChallanPage() {
   const getFilteredChallans = () => {
     return challans.filter(dc => {
       const matchSearch = !search ||
-        dc.challanNo.toLowerCase().includes(search.toLowerCase()) ||
-        dc.customerName.toLowerCase().includes(search.toLowerCase());
+        dc.challanNo.toLowerCase().includes(search.trim().toLowerCase()) ||
+        dc.customerName.toLowerCase().includes(search.trim().toLowerCase());
 
       const matchStatus = statusFilter === "ALL" || dc.status === statusFilter;
       
@@ -1222,24 +1215,17 @@ export default function DeliveryChallanPage() {
 
   const filteredChallans = getFilteredChallans();
 
-  const filteredCustomers = customers.filter(c => {
+  // While a destination is selected its own name is in the box: list all then.
+  const selectedDest = destType === "CUSTOMER" ? selectedCustomer : destType === "DEALER" ? selectedDealer : selectedFranchise;
+  const destQuery = selectedDest && customerSearch === selectedDest.name ? "" : customerSearch;
+  const filteredCustomers = dedupeById(customers).filter(c => {
     if (isFranchiseUser && c.franchiseId && c.franchiseId !== franchiseBranchId) return false;
-    return (
-      !customerSearch ||
-      c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.phone?.includes(customerSearch)
-    );
+    return matchesSearch(destQuery, c.name, c.phone, c.customerCode, c.email);
   });
 
-  const filteredDealers = dealers.filter(d =>
-    !customerSearch ||
-    d.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    d.phone?.includes(customerSearch)
-  );
+  const filteredDealers = dedupeById(dealers).filter(d => matchesSearch(destQuery, d.name, d.phone, d.code));
 
-  const filteredFranchisesForDest = franchises.filter(f =>
-    !customerSearch || f.name.toLowerCase().includes(customerSearch.toLowerCase())
-  );
+  const filteredFranchisesForDest = dedupeById(franchises).filter(f => matchesSearch(destQuery, f.name, f.code, f.phone));
 
   // Which destination-master list backs the picker dropdown for the
   // currently selected destination type.
@@ -1468,41 +1454,41 @@ export default function DeliveryChallanPage() {
               </div>
 
               {/* Recipient Search Input */}
-              <div className="relative" ref={customerDropRef}>
-                <label className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">
+              <div>
+                <label htmlFor="dc-destination-search" className="block text-xs font-semibold text-gray-600 dark:text-slate-300 mb-1.5">
                   {destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise Branch"} <span className="text-red-500">*</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <div
-                    className={clsx(
-                      "flex-1 flex items-center gap-2 border rounded-xl px-3.5 py-2.5 bg-white dark:bg-[#13151f] transition-all cursor-pointer",
-                      showCustomerDrop ? "border-orange-400 ring-2 ring-orange-100 dark:ring-orange-500/10" : "border-gray-300 dark:border-white/10 hover:border-gray-400"
+                <div className="flex items-start gap-2">
+                  <SearchAutocomplete<any>
+                    id="dc-destination-search"
+                    label={destType === "CUSTOMER" ? "Customer" : destType === "DEALER" ? "Dealer" : "Franchise Branch"}
+                    className="flex-1 min-w-0"
+                    placeholder={`Search / select ${destType === "CUSTOMER" ? "customer" : destType === "DEALER" ? "dealer" : "franchise"} (name or phone)...`}
+                    minChars={0}
+                    value={customerSearch}
+                    onInputChange={text => {
+                      setCustomerSearch(text);
+                      // Editing the name drops the previously selected record (its id
+                      // must never be saved under a different name).
+                      const current = destType === "CUSTOMER" ? selectedCustomer : destType === "DEALER" ? selectedDealer : selectedFranchise;
+                      if (current && text !== current.name) { setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }
+                    }}
+                    onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); setSelectedDealer(null); setSelectedFranchise(null); }}
+                    options={destinationOptions}
+                    getOptionKey={(c: any) => c.id}
+                    inputClassName="rounded-xl py-2.5 border-gray-300"
+                    onSelect={selectCustomer}
+                    renderOption={(c: any) => (
+                      <div className="min-w-0">
+                        <div className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white truncate">{c.name}</div>
+                        <div className="text-[11px] text-gray-400 dark:text-slate-400 mt-0.5 flex items-center gap-3 flex-wrap">
+                          {(c.customerCode || c.code) && <span className="font-mono">{c.customerCode || c.code}</span>}
+                          {c.phone && <span>Phone: <strong className="font-mono text-gray-600 dark:text-slate-300">{c.phone}</strong></span>}
+                          {c.state && <span>State: {c.state}</span>}
+                        </div>
+                      </div>
                     )}
-                    onClick={() => setShowCustomerDrop(v => !v)}
-                  >
-                    <Search size={16} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                    <input
-                      className="flex-1 text-xs sm:text-sm text-gray-800 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                      placeholder={`Search / select ${destType === "CUSTOMER" ? "customer" : destType === "DEALER" ? "dealer" : "franchise"}...`}
-                      value={customerSearch}
-                      onChange={e => { setCustomerSearch(e.target.value); setShowCustomerDrop(true); }}
-                      onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                    />
-                    {customerSearch && (
-                      <X
-                        size={15}
-                        className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCustomerSearch("");
-                          setSelectedCustomer(null);
-                          setSelectedDealer(null);
-                          setSelectedFranchise(null);
-                        }}
-                      />
-                    )}
-                    <ChevronDown size={15} className="text-gray-400 dark:text-slate-500 shrink-0" />
-                  </div>
+                  />
                   <button
                     type="button"
                     onClick={() => openQuickAdd(destType)}
@@ -1514,34 +1500,6 @@ export default function DeliveryChallanPage() {
                   </button>
                 </div>
 
-                {showCustomerDrop && (
-                  <div className="absolute top-full left-0 z-50 mt-1.5 w-full bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded-2xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                    <div className="max-h-60 overflow-y-auto custom-scrollbar divide-y divide-gray-50 dark:divide-white/5">
-                      {destinationOptions.length === 0 ? (
-                        <div className="px-4 py-5 text-xs text-gray-400 dark:text-slate-500 text-center">
-                          No {destType.toLowerCase()}s found matching &quot;{customerSearch}&quot;
-                        </div>
-                      ) : destinationOptions.map(c => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-orange-50/70 dark:hover:bg-white/5 text-left transition-colors"
-                          onClick={() => selectCustomer(c)}
-                        >
-                          <div>
-                            <div className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{c.name}</div>
-                            <div className="text-[11px] text-gray-400 dark:text-slate-400 mt-0.5 flex items-center gap-3">
-                              {c.phone && <span>Phone: <strong className="font-mono text-gray-600 dark:text-slate-300">{c.phone}</strong></span>}
-                              {c.email && <span>{c.email}</span>}
-                              {c.state && <span>State: {c.state}</span>}
-                            </div>
-                          </div>
-                          <div className="text-xs text-orange-500 font-semibold shrink-0">Select</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1718,7 +1676,7 @@ export default function DeliveryChallanPage() {
                         {/* Product Column */}
                         <td className="px-3 py-2.5 align-top min-w-[280px]">
                           <div className="relative">
-                            <input
+                            <input aria-label="Search product by name or SKU"
                               value={it.itemSearch}
                               onFocus={(e) => {
                                 setActiveItemIndex(idx);
@@ -2253,7 +2211,7 @@ export default function DeliveryChallanPage() {
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full min-w-0">
           <div className="relative flex-1 min-w-[160px] xs:min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-slate-500" />
-            <input
+            <input aria-label="Search challan or party"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search challan or party..."

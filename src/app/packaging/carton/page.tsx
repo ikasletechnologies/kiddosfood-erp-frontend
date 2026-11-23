@@ -113,8 +113,8 @@ export default function CartonPackingPage() {
 
   const filtered = batches.filter(
     (b) =>
-      b.batchCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.productName.toLowerCase().includes(searchQuery.toLowerCase())
+      b.batchCode.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+      b.productName.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const handleGenerateCarton = async () => {
@@ -158,7 +158,7 @@ export default function CartonPackingPage() {
         {/* Search Toolbar */}
         <div className="relative w-full md:w-80">
           <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
+          <input aria-label="Search approved batches"
             type="text"
             placeholder="Search approved batches..."
             value={searchQuery}

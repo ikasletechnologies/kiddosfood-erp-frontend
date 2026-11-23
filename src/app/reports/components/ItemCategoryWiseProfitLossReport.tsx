@@ -43,7 +43,7 @@ export default function ItemCategoryWiseProfitLossReport() {
           {/* Search */}
           <div className="relative flex-1 md:flex-initial">
             <SearchIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
+            <input aria-label="Search categories"
               type="text"
               placeholder="Search categories..."
               value={searchTerm}

@@ -127,8 +127,8 @@ export default function TCSReceivableReport({
 
   // Filter
   const filteredData = data.filter((r) =>
-    r.partyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    r.billNo.toLowerCase().includes(searchQuery.toLowerCase())
+    r.partyName.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+    r.billNo.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   // Sort
@@ -215,7 +215,7 @@ export default function TCSReceivableReport({
         <div className="flex items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800/60 pt-3">
           <div className="relative">
             <SearchIcon size={12} className="absolute left-3 top-2.5 text-slate-400" />
-            <input
+            <input aria-label="Search party or bill"
               type="text"
               placeholder="Search party or bill..."
               value={searchQuery}

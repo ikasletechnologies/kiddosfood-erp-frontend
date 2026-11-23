@@ -14,6 +14,8 @@ import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/context/ToastContext";
 import { formatERPNumber, formatDate } from "@/lib/utils";
 import api from "@/lib/api/base";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, matchesSearch } from "@/lib/search";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -216,7 +218,6 @@ export default function PaymentInPage() {
   const [franchises, setFranchises] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [customerSearch, setCustomerSearch] = useState("");
-  const [showCustomerDrop, setShowCustomerDrop] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState<string>(() => crypto.randomUUID());
   // One receipt can be allocated across several invoices for the same
   // party — replaces the old single `selectedInvoiceId`. A single selected
@@ -238,7 +239,6 @@ export default function PaymentInPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
 
   const periodDropRef = useRef<HTMLDivElement>(null);
-  const customerDropRef = useRef<HTMLDivElement>(null);
   const shareDropRef = useRef<HTMLDivElement>(null);
 
 
@@ -476,8 +476,6 @@ export default function PaymentInPage() {
     const handler = (e: MouseEvent) => {
       if (periodDropRef.current && !periodDropRef.current.contains(e.target as Node))
         setShowPeriodDrop(false);
-      if (customerDropRef.current && !customerDropRef.current.contains(e.target as Node))
-        setShowCustomerDrop(false);
       if (shareDropRef.current && !shareDropRef.current.contains(e.target as Node))
         setShowShareDrop(false);
       if (fromCalRef.current && !fromCalRef.current.contains(e.target as Node))
@@ -798,10 +796,10 @@ export default function PaymentInPage() {
     setView("create");
   };
 
-  const filteredParties = partySourceList.filter((c: any) =>
-    !customerSearch ||
-    c.name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-    c.phone?.includes(customerSearch)
+  // While a party is selected its own name is in the box: list all then.
+  const partyQuery = selectedCustomer && customerSearch === selectedCustomer.name ? "" : customerSearch;
+  const filteredParties = dedupeById(partySourceList).filter((c: any) =>
+    matchesSearch(partyQuery, c.name, c.phone, c.customerCode, c.code)
   );
 
 
@@ -813,7 +811,7 @@ export default function PaymentInPage() {
       if (statusFilter === "PAID" && !((p.status === "PAID" || p.status === "SUCCESS") && !p.isCancelled)) return false;
     }
     if (search) {
-      const q = search.toLowerCase();
+      const q = search.trim().toLowerCase();
       const entityName = (typeof p.entity === "string" ? p.entity : p.entity?.name || "").toLowerCase();
       const num = (p.paymentNumber || "").toLowerCase();
       if (!entityName.includes(q) && !num.includes(q)) return false;
@@ -889,74 +887,46 @@ export default function PaymentInPage() {
           <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-white/5 shadow-sm px-6 py-5 flex flex-wrap gap-4 items-start">
 
             {/* Party dropdown */}
-            <div className="relative" ref={customerDropRef}>
-              <div
-                className={clsx(
-                  "flex items-center gap-1 min-w-[220px] bg-white dark:bg-[#13151f] border rounded px-3 py-2 cursor-pointer",
-                  showCustomerDrop ? "border-[#f58220]" : "border-slate-300 dark:border-white/10"
-                )}
-                onClick={() => setShowCustomerDrop(v => !v)}
-              >
-                <div className="flex-1">
-                  <div className="text-[10px] text-[#f58220] font-medium leading-none mb-0.5">Party *</div>
-                  <input
-                    className="w-full text-sm text-gray-700 dark:text-white outline-none bg-transparent placeholder-gray-400 dark:placeholder-slate-500"
-                    placeholder={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} by Name/Phone`}
-                    value={customerSearch}
-                    onChange={e => {
-                      setCustomerSearch(e.target.value);
-                      setShowCustomerDrop(true);
-                      // Editing the text away from the chosen party un-selects
-                      // it — otherwise its invoices/allocations stayed active
-                      // behind an empty or different party field.
-                      if (selectedCustomer && e.target.value !== selectedCustomer.name) {
-                        setSelectedCustomer(null);
-                        setAllocations([]);
-                        setAddInvoiceSel("");
-                      }
-                    }}
-                    onClick={e => { e.stopPropagation(); setShowCustomerDrop(true); }}
-                  />
-                </div>
-                {customerSearch && (
-                  <X 
-                    size={14} 
-                    className="text-slate-400 cursor-pointer hover:text-slate-600 dark:hover:text-slate-200 transition-colors shrink-0" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCustomerSearch("");
-                      setSelectedCustomer(null);
-                    }} 
-                  />
-                )}
-                <ChevronDown size={14} className="text-gray-400 dark:text-slate-500 shrink-0" />
-              </div>
-
-              {showCustomerDrop && (
-                <div className="absolute top-full left-0 z-50 mt-1 w-72 bg-white dark:bg-[#13151f] border border-gray-200 dark:border-white/10 rounded shadow-lg max-h-56 overflow-y-auto custom-scrollbar">
-                  {filteredParties.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-gray-400 dark:text-slate-500 text-center">
-                      No {partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} found
+            <div className="w-full sm:w-auto sm:min-w-[260px]">
+              <label htmlFor="payin-party-search" className="block text-[10px] text-[#f58220] font-medium leading-none mb-1">Party *</label>
+              <SearchAutocomplete<any>
+                id="payin-party-search"
+                label={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"}`}
+                placeholder={`Search ${partyType === "CUSTOMER" ? "customers" : partyType === "DEALER" ? "dealers" : "franchises"} by Name/Phone`}
+                minChars={0}
+                value={customerSearch}
+                onInputChange={text => {
+                  setCustomerSearch(text);
+                  // Editing the text away from the chosen party un-selects it —
+                  // otherwise its invoices/allocations stay active behind a
+                  // different party name.
+                  if (selectedCustomer && text !== selectedCustomer.name) {
+                    setSelectedCustomer(null);
+                    setAllocations([]);
+                    setAddInvoiceSel("");
+                  }
+                }}
+                // Clear resets the text, the selected party id and its allocations.
+                onClear={() => { setCustomerSearch(""); setSelectedCustomer(null); setAllocations([]); setAddInvoiceSel(""); }}
+                options={filteredParties}
+                getOptionKey={(c: any) => c.id}
+                inputClassName="rounded text-sm border-slate-300"
+                listClassName="sm:w-80 sm:right-auto"
+                onSelect={(c: any) => { setSelectedCustomer(c); setCustomerSearch(c.name); setAllocations([]); setAddInvoiceSel(""); setAmount(""); }}
+                renderOption={(c: any) => (
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-left min-w-0">
+                      <div className="text-sm font-medium text-gray-800 dark:text-white truncate">{c.name}</div>
+                      <div className="text-xs text-gray-400 dark:text-slate-500 truncate">{[c.customerCode || c.code, c.phone].filter(Boolean).join(" · ") || "—"}</div>
                     </div>
-                  ) : filteredParties.map((c: any) => (
-                    <button
-                      key={c.id}
-                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-50 dark:border-white/5 last:border-0"
-                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(c.name); setShowCustomerDrop(false); setAllocations([]); setAddInvoiceSel(""); setAmount(""); }}
-                    >
-                      <div className="text-left">
-                        <div className="text-sm font-medium text-gray-800 dark:text-white">{c.name}</div>
-                        <div className="text-xs text-gray-400 dark:text-slate-500">{c.phone || "—"}</div>
+                    {c.balance > 0 && (
+                      <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded shrink-0" title="Outstanding balance">
+                        ₹{Number(c.balance).toLocaleString("en-IN")} <Check size={10} />
                       </div>
-                      {c.balance > 0 && (
-                        <div className="flex items-center gap-1 bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded">
-                          {c.balance} <Check size={10} />
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              />
             </div>
 
             {/* Receipt No (auto) */}
@@ -1334,7 +1304,7 @@ export default function PaymentInPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search payment or customer"
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search payment or customer..."

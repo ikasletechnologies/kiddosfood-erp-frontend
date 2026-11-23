@@ -1,12 +1,14 @@
 "use client";
 
-import { Edit3, X, Plus, Search, User, Phone, Building2, AlertTriangle } from "lucide-react";
+import { Edit3, X, Plus, User, Phone, Building2, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { usePurchaseOrder, Vendor } from "@/context/PurchaseOrderContext";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { vendorsApi } from "@/lib/api";
 import Link from "next/link";
 import { clsx } from "clsx";
+import SearchAutocomplete from "@/components/ui/SearchAutocomplete";
+import { dedupeById, formatQty, matchesSearch } from "@/lib/search";
 
 interface BillingSectionProps {
   fromLabel: string;
@@ -25,63 +27,56 @@ export default function BillingSection({
 }: BillingSectionProps) {
   const { user } = useAuth();
   const { selectedVendor, setSelectedVendor } = usePurchaseOrder();
-  const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Vendors are loaded once per form (the vendor list API has no server-side
+  // search); re-focusing the field must not re-download the whole list.
+  const loadState = useRef<"idle" | "loading" | "done">("idle");
 
-  const searchContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setShowSearch(false);
-      }
+  const loadVendors = useCallback(async () => {
+    if (loadState.current !== "idle") return; // already loaded / in flight: no duplicate request
+    loadState.current = "loading";
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await vendorsApi.getAll();
+      const mappedVendors: Vendor[] = (Array.isArray(response.data) ? response.data : []).map((v: any) => ({
+        id: v.id,
+        name: v.name,
+        status: v.status || 'ACTIVE',
+        phone: v.phone || v.mobile || v.contact,
+        email: v.email,
+        gstNumber: v.gstNumber,
+        advanceBalance: v.advanceBalance || (v.balance < 0 ? Math.abs(v.balance) : 0),
+        balanceDue: v.balanceDue || (v.balance > 0 ? v.balance : 0),
+        creditLimit: v.creditLimit || 0,
+        vendorCode: v.vendorCode,
+        suppliedMaterials: v.suppliedMaterials?.map((sm: any) => ({
+          materialId: sm.materialId,
+          price: sm.price,
+          name: sm.material?.name || "Material"
+        })) || [],
+      }));
+      setVendors(dedupeById(mappedVendors));
+      loadState.current = "done";
+    } catch (error: any) {
+      console.error("Failed to fetch vendors", error);
+      loadState.current = "idle"; // allow a retry on next focus
+      setLoadError(error?.response?.data?.error || "Could not load vendors");
+    } finally {
+      setLoading(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (showSearch) {
-      const fetchVendors = async () => {
-        setLoading(true);
-        try {
-          const response = await vendorsApi.getAll();
-          const mappedVendors = response.data.map((v: any) => ({
-            id: v.id,
-            name: v.name,
-            status: v.status || 'ACTIVE',
-            phone: v.phone || v.mobile || v.contact,
-            email: v.email,
-            gstNumber: v.gstNumber,
-            advanceBalance: v.advanceBalance || (v.balance < 0 ? Math.abs(v.balance) : 0),
-            balanceDue: v.balanceDue || (v.balance > 0 ? v.balance : 0),
-            creditLimit: v.creditLimit || 0,
-            vendorCode: v.vendorCode,
-            suppliedMaterials: v.suppliedMaterials?.map((sm: any) => ({
-              materialId: sm.materialId,
-              price: sm.price,
-              name: sm.material?.name || "Material"
-            })) || [], 
-          }));
-          setVendors(mappedVendors);
-        } catch (error) {
-          console.error("Failed to fetch vendors", error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchVendors();
-    }
-  }, [showSearch]);
-
-  const filteredVendors = vendors.filter(v => 
-    (v.status === 'ACTIVE' || !v.status) && (
-      v.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      v.vendorCode?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+  // Trimmed, case-insensitive match on name, code, GSTIN and phone. Blocked
+  // vendors are listed (so a search does not falsely say "not found") but
+  // cannot be selected.
+  const filteredVendors = vendors.filter(v =>
+    matchesSearch(searchQuery, v.name, v.vendorCode, v.gstNumber, v.phone)
   );
+  const isBlocked = (v: Vendor) => !!v.status && v.status !== "ACTIVE";
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -213,78 +208,58 @@ export default function BillingSection({
           </div>
         ) : (
           <div className="p-3.5 sm:p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl shadow-2xs flex flex-col justify-center min-h-[96px] relative group">
-            <div className="w-full relative z-10" ref={searchContainerRef}>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  type="text"
-                  placeholder="Search vendor name or code..."
-                  className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg py-2 pl-9 pr-8 text-xs font-medium text-slate-800 dark:text-white outline-none focus:border-[#f58220] focus:ring-2 focus:ring-orange-100 transition-all"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    if (!showSearch) setShowSearch(true);
-                  }}
-                  onFocus={() => setShowSearch(true)}
-                />
-                {searchQuery && (
-                  <button 
-                    type="button"
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                  >
-                    <X size={13} />
-                  </button>
-                )}
-              </div>
-
-              {showSearch && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-                  <div className="max-h-52 overflow-y-auto">
-                    {loading ? (
-                      <div className="p-4 text-xs text-slate-400 font-medium text-center animate-pulse">Loading vendors...</div>
-                    ) : filteredVendors.length > 0 ? (
-                      filteredVendors.map(v => (
-                        <div 
-                          key={v.id}
-                          onClick={() => {
-                            setSelectedVendor(v);
-                            setShowSearch(false);
-                          }}
-                          className="p-3 hover:bg-orange-50/70 dark:hover:bg-slate-800 cursor-pointer transition-colors flex justify-between items-center"
-                        >
-                          <div className="flex flex-col text-left">
-                            <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight">{v.name}</span>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-mono font-bold text-slate-400">{v.vendorCode || "V-000"}</span>
-                              <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
-                                {v.suppliedMaterials?.length || 0} Items
-                              </span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-[11px] font-mono text-slate-500">{v.gstNumber || "GST UNREGISTERED"}</span>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="p-4 text-xs text-slate-400 text-center flex flex-col items-center gap-2">
-                        <span>No vendors found for &quot;{searchQuery}&quot;</span>
-                        <button 
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onAddTarget) onAddTarget();
-                          }}
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#f58220] hover:text-[#e8740e] bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1.5 rounded-lg border border-orange-200 transition-colors cursor-pointer"
-                        >
-                          <Plus size={12} /> Create Vendor
-                        </button>
+            <div className="w-full relative z-10">
+              <SearchAutocomplete<Vendor>
+                id="po-vendor-search"
+                label="Search vendor"
+                placeholder="Search vendor name, code, GSTIN or phone..."
+                minChars={0}
+                value={searchQuery}
+                onFocus={loadVendors}
+                onInputChange={text => { setSearchQuery(text); loadVendors(); }}
+                onClear={() => setSearchQuery("")}
+                options={filteredVendors}
+                loading={loading}
+                error={loadError}
+                getOptionKey={v => v.id}
+                isOptionDisabled={isBlocked}
+                inputClassName="bg-slate-50 dark:bg-slate-900 text-xs font-medium"
+                // Stores the full vendor record (its database id), not just the name.
+                onSelect={v => { setSelectedVendor(v); setSearchQuery(""); }}
+                renderOption={v => (
+                  <div className="flex justify-between items-center gap-3 min-w-0">
+                    <div className="flex flex-col text-left min-w-0">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-tight truncate">{v.name}</span>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-[10px] font-mono font-bold text-slate-400">{v.vendorCode || "No code"}</span>
+                        <span className="text-[9px] font-bold text-purple-700 bg-purple-50 px-1.5 rounded border border-purple-200">
+                          {v.suppliedMaterials?.length || 0} Items
+                        </span>
+                        {isBlocked(v) && (
+                          <span className="text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 rounded border border-rose-200">{v.status}</span>
+                        )}
                       </div>
-                    )}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="block text-[10px] font-mono text-slate-500">{v.gstNumber || "GST UNREGISTERED"}</span>
+                      {(v.balanceDue > 0 || v.advanceBalance > 0) && (
+                        <span className={clsx("block text-[10px] font-semibold", v.balanceDue > 0 ? "text-rose-600" : "text-emerald-600")}>
+                          {v.balanceDue > 0 ? `Due ₹${formatQty(v.balanceDue)}` : `Advance ₹${formatQty(v.advanceBalance)}`}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+                footer={close => onAddTarget ? (
+                  <button
+                    type="button"
+                    onClick={() => { close(); onAddTarget(); }}
+                    className="w-full flex items-center gap-1 px-3 py-2 text-[11px] font-bold text-[#f58220] hover:bg-orange-50 dark:hover:bg-orange-950/40"
+                  >
+                    <Plus size={12} /> Create Vendor{searchQuery.trim() ? ` "${searchQuery.trim()}"` : ""}
+                  </button>
+                ) : null}
+              />
             </div>
           </div>
         )}

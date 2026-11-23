@@ -1514,7 +1514,7 @@ function EditItemForm() {
             </div>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
+              <input aria-label="Search by description or code"
                 autoFocus
                 placeholder="Search by description or code..."
                 value={hsnSearchQuery}

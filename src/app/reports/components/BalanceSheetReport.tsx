@@ -108,7 +108,7 @@ export default function CentralBalanceSheetReport({
   const liabilities = rawApiData?.liabilities || [];
 
   const findAmt = (arr: any[], search: string) => {
-    const row = arr.find((r: any) => r.name?.toLowerCase().includes(search.toLowerCase()));
+    const row = arr.find((r: any) => r.name?.toLowerCase().includes(search.trim().toLowerCase()));
     return row?.amount ?? 0;
   };
 

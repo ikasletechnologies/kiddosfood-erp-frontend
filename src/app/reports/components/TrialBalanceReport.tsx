@@ -694,7 +694,7 @@ export default function CentralTrialBalanceReport({
                   </button>
                 </div>
                 <div className="relative">
-                  <input 
+                  <input aria-label="Search transaction" 
                     type="text" 
                     placeholder="Search transaction..." 
                     className="pl-3 pr-8 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold focus:border-orange-500 outline-none w-44" 

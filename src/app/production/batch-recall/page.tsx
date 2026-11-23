@@ -822,7 +822,7 @@ function BatchRecallContent() {
         </div>
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search batch code or product…" className={clsx(inputCls, "pl-9 pr-8")} />
+          <input aria-label="Search batch code or product" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search batch code or product…" className={clsx(inputCls, "pl-9 pr-8")} />
           {search && <X className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 cursor-pointer" onClick={() => setSearch("")} />}
         </div>
       </div>

@@ -171,8 +171,8 @@ export default function ChequeRegistryPage() {
   };
 
   const filteredCheques = cheques.filter(c => {
-    const matchesSearch = c.chequeNumber.toLowerCase().includes(search.toLowerCase()) || 
-                         c.payeeName.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = c.chequeNumber.toLowerCase().includes(search.trim().toLowerCase()) || 
+                         c.payeeName.toLowerCase().includes(search.trim().toLowerCase());
     const matchesTab = activeTab === "ALL" || c.status === activeTab;
     return matchesSearch && matchesTab;
   });
@@ -240,7 +240,7 @@ export default function ChequeRegistryPage() {
         </div>
         <div className="relative group w-full md:w-80">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" size={18} />
-          <input
+          <input aria-label="Search cheque # or payee"
             type="text"
             placeholder="Search cheque # or payee..."
             value={search}

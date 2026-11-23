@@ -19,6 +19,8 @@ import {
   ArrowRight
 } from "lucide-react";
 import { clsx } from "clsx";
+import { useLatestRequest, useSearchTerm } from "@/lib/hooks/useSearch";
+import { matchesSearch } from "@/lib/search";
 
 interface AlertItem {
   id: string;
@@ -144,9 +146,14 @@ export default function AlertsPage() {
   const [backendSummary, setBackendSummary] = useState<any>(null);
   const [activeChip, setActiveChip] = useState<"all" | "stock" | "orders" | "unread">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  // Debounced (300 ms) + trimmed term sent to the API: one request per pause
+  // in typing instead of one per keystroke.
+  const searchTerm = useSearchTerm(searchQuery);
+  const beginLoad = useLatestRequest();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const fetchAlerts = useCallback(async () => {
+    const req = beginLoad();
     setIsRefreshing(true);
     try {
       const effectiveBranchId = user?.franchiseId;
@@ -154,13 +161,14 @@ export default function AlertsPage() {
 
       const queryParams: any = {};
       if (effectiveBranchId) queryParams.franchiseId = effectiveBranchId;
-      if (searchQuery.trim()) queryParams.search = searchQuery.trim();
+      if (searchTerm) queryParams.search = searchTerm;
 
       const [alertsRes, summaryRes] = await Promise.all([
         alertsApi.getAlerts(queryParams).catch(() => ({ data: { data: [] } })),
         alertsApi.getSummary(effectiveBranchId ? { franchiseId: effectiveBranchId } : undefined).catch(() => ({ data: null }))
       ]);
 
+      if (!req.isLatest()) return; // a newer search is in flight
       const rawData = alertsRes?.data?.data || (Array.isArray(alertsRes?.data) ? alertsRes.data : []);
       
       const loadedAlerts: AlertItem[] = rawData.map((a: any) => ({
@@ -183,9 +191,9 @@ export default function AlertsPage() {
     } catch (e) {
       console.error("Failed to load alerts:", e);
     } finally {
-      setIsRefreshing(false);
+      if (req.isLatest()) setIsRefreshing(false);
     }
-  }, [user, searchQuery]);
+  }, [user, searchTerm, beginLoad]);
 
   useEffect(() => {
     fetchAlerts();
@@ -207,12 +215,7 @@ export default function AlertsPage() {
       if (activeChip === "orders" && a.type !== "order") return false;
       if (activeChip === "unread" && a.read) return false;
 
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchTitle = a.title.toLowerCase().includes(q);
-        const matchMsg = a.message.toLowerCase().includes(q);
-        if (!matchTitle && !matchMsg) return false;
-      }
+      if (!matchesSearch(searchQuery, a.title, a.message)) return false;
       return true;
     });
   }, [alerts, activeChip, searchQuery]);
@@ -325,7 +328,7 @@ export default function AlertsPage() {
 
           <div className="relative flex-1 max-w-xs min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
+            <input aria-label="Search alerts"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search alerts..."

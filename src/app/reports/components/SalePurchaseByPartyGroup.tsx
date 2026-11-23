@@ -64,7 +64,7 @@ export default function CentralSalePurchaseByPartyGroup({
   };
   
   const filtered = rows.filter((r) =>
-    r.groupName.toLowerCase().includes(searchQuery.toLowerCase())
+    r.groupName.toLowerCase().includes(searchQuery.trim().toLowerCase())
   );
 
   const totalSaleAmt = filtered.reduce((s, r) => s + (r.totalSale || 0), 0);

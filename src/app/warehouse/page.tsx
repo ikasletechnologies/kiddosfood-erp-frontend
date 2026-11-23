@@ -142,7 +142,7 @@ export default function WarehousePage() {
   const filteredStock = useMemo(() => {
     return stock.filter(s => {
       if (search) {
-        const q = search.toLowerCase();
+        const q = search.trim().toLowerCase();
         const matchName = s.itemName?.toLowerCase().includes(q);
         const matchSku = s.itemSku?.toLowerCase().includes(q);
         const matchBatch = s.batchCode?.toLowerCase().includes(q);
@@ -342,7 +342,7 @@ export default function WarehousePage() {
             {/* Search Stock Input */}
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
+              <input aria-label="Search stock by item name, SKU, batch, or bin"
                 type="text"
                 placeholder="Search stock by item name, SKU, batch, or bin..."
                 value={search}
